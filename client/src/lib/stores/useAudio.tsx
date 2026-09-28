@@ -1,4 +1,13 @@
 import { create } from "zustand";
+import {
+  bindPowerAudioMute,
+  installPowerAudioGestureResume,
+  playExplosion as playExplosionSound,
+  playPowerUnlock as playPowerUnlockSound,
+  playStunEnd as playStunEndSound,
+  playStunZap as playStunZapSound,
+  playWolfDash as playWolfDashSound,
+} from "../powerSounds";
 
 type IntensityLevel = "calm" | "active" | "intense";
 
@@ -39,6 +48,11 @@ interface AudioState {
   playHit: (playbackRate?: number, volume?: number) => void;
   playSuccess: () => void;
   playSound: (type: SoundType, intensity?: number) => void;
+  playPowerUnlock: () => void;
+  playWolfDash: () => void;
+  playExplosion: () => void;
+  playStunZap: () => void;
+  playStunEnd: () => void;
   
   setIntensity: (level: IntensityLevel) => void;
   updateIntensityFromGameState: (playerSpeed: number, recentCollisions: number, nearbyEnemies: number) => void;
@@ -461,5 +475,24 @@ export const useAudio = create<AudioState>((set, get) => ({
     } catch (e) {
       console.log("Sound synthesis error:", e);
     }
+  },
+
+  playPowerUnlock: () => {
+    playPowerUnlockSound();
+  },
+  playWolfDash: () => {
+    playWolfDashSound();
+  },
+  playExplosion: () => {
+    playExplosionSound();
+  },
+  playStunZap: () => {
+    playStunZapSound();
+  },
+  playStunEnd: () => {
+    playStunEndSound();
   }
 }));
+
+bindPowerAudioMute(() => useAudio.getState().isMuted);
+installPowerAudioGestureResume();
