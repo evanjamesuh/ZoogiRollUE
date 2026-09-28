@@ -8,7 +8,8 @@ import { PhysicsManager } from "./PhysicsManager";
 import { GameUI } from "./GameUI";
 import { Lights } from "./Lights";
 import { GameCamera } from "./GameCamera";
-import { WolfClones, ExplosionEffect, MotionTrails, LaunchBurst, WindParticles, ImpactSparks, CollisionBurstEffects } from "./Effects";
+import { WolfClones, MotionTrails, LaunchBurst, WindParticles, ImpactSparks, CollisionBurstEffects } from "./Effects";
+import { ExplosionBlast, PowerUnlockFlash, StunBurst } from "./PowerEffects";
 import { OrbCaptureEffects } from "./OrbCaptureEffect";
 import { FallingEntities } from "./FallingEntities";
 import { DeveloperMoveControls } from "./DeveloperMoveControls";
@@ -109,6 +110,42 @@ function ArcPeakOverlayWrapper() {
   );
 }
 
+function MatchPowerVisuals() {
+  const showExplosion = useZoogiGame((state) => state.showExplosion);
+  const powerUnlocks = useZoogiGame((state) => state.powerUnlocks);
+  const now = Date.now();
+
+  return (
+    <>
+      {showExplosion && showExplosion.color === "yellow" && (
+        <StunBurst
+          key={showExplosion.timestamp}
+          position={showExplosion.position}
+          startTime={showExplosion.timestamp}
+          radius={showExplosion.radius ?? 8}
+        />
+      )}
+      {showExplosion && showExplosion.color !== "yellow" && (
+        <ExplosionBlast
+          key={showExplosion.timestamp}
+          position={showExplosion.position}
+          startTime={showExplosion.timestamp}
+          radius={showExplosion.radius ?? 8}
+        />
+      )}
+      {powerUnlocks.filter((flash) => now - flash.startTime < 700).map((flash) => (
+        <PowerUnlockFlash
+          key={flash.id}
+          position={flash.position}
+          startTime={flash.startTime}
+          radius={5.2}
+          color={flash.color}
+        />
+      ))}
+    </>
+  );
+}
+
 class OptionalSceneBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   state = { hasError: false };
   static getDerivedStateFromError() {
@@ -205,7 +242,7 @@ export function Game() {
           {gameMode !== "map_editor" && <OrbManager />}
           
           <WolfClones />
-          <ExplosionEffect />
+          <MatchPowerVisuals />
           <OrbCaptureEffects />
           
           <FallingEntities />

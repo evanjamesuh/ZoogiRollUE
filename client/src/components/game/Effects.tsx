@@ -3,6 +3,7 @@ import { useRef, useMemo, useState, useEffect } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { useGameFeel } from "@/lib/stores/useGameFeel";
+import { WolfCloneLook } from "./PowerEffects";
 
 const ZOOGI_COLORS: Record<string, string> = {
   wolfgang: "#6B7280",
@@ -493,120 +494,8 @@ export function WolfClones() {
 }
 
 function WolfClone({ clone }: { clone: { id: string; position: [number, number, number]; velocity: [number, number, number]; isActive: boolean } }) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  
-  useFrame(() => {
-    if (meshRef.current) {
-      meshRef.current.position.set(clone.position[0], clone.position[1], clone.position[2]);
-      const speed = Math.sqrt(clone.velocity[0] ** 2 + clone.velocity[2] ** 2);
-      if (speed > 0.01) {
-        meshRef.current.rotation.x += speed * 0.5;
-      }
-    }
-  });
-  
   if (!clone.isActive) return null;
-  
-  return (
-    <group>
-      <mesh ref={meshRef} position={clone.position} castShadow>
-        <sphereGeometry args={[0.5, 16, 16]} />
-        <meshStandardMaterial
-          color="#9CA3AF"
-          emissive="#6B7280"
-          emissiveIntensity={0.3}
-          transparent
-          opacity={0.8}
-        />
-      </mesh>
-      <pointLight
-        position={[clone.position[0], clone.position[1] + 0.5, clone.position[2]]}
-        color="#6B7280"
-        intensity={0.2}
-        distance={2}
-      />
-    </group>
-  );
-}
-
-export function ExplosionEffect() {
-  const showExplosion = useZoogiGame((state) => state.showExplosion);
-  const scaleRef = useRef(0);
-  const opacityRef = useRef(1);
-  const meshRef = useRef<THREE.Mesh>(null);
-  const lightningRef = useRef<THREE.Group>(null);
-  
-  useFrame((_, delta) => {
-    if (!showExplosion || !meshRef.current) return;
-    
-    const elapsed = (Date.now() - showExplosion.timestamp) / 1000;
-    
-    if (elapsed < 0.8) {
-      scaleRef.current = Math.min(6, elapsed * 12);
-      opacityRef.current = 1 - elapsed * 1.25;
-      
-      meshRef.current.scale.setScalar(scaleRef.current);
-      (meshRef.current.material as THREE.MeshBasicMaterial).opacity = Math.max(0, opacityRef.current);
-      
-      if (lightningRef.current) {
-        lightningRef.current.rotation.y += delta * 20;
-      }
-    }
-  });
-  
-  if (!showExplosion) return null;
-  
-  const elapsed = (Date.now() - showExplosion.timestamp) / 1000;
-  if (elapsed > 0.8) return null;
-  
-  const isYellow = showExplosion.color === "yellow";
-  const primaryColor = isYellow ? "#FFFF00" : "#FF4500";
-  const secondaryColor = isYellow ? "#00BFFF" : "#FFD700";
-  
-  return (
-    <group position={showExplosion.position}>
-      <mesh ref={meshRef}>
-        <sphereGeometry args={[1, 16, 16]} />
-        <meshBasicMaterial
-          color={primaryColor}
-          transparent
-          opacity={0.8}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
-      <mesh scale={[scaleRef.current * 0.8, scaleRef.current * 0.8, scaleRef.current * 0.8]}>
-        <sphereGeometry args={[1, 16, 16]} />
-        <meshBasicMaterial
-          color={secondaryColor}
-          transparent
-          opacity={0.5}
-        />
-      </mesh>
-      {isYellow && (
-        <group ref={lightningRef}>
-          {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => {
-            const angle = (i / 8) * Math.PI * 2;
-            const length = 4 + Math.random() * 2;
-            return (
-              <mesh
-                key={i}
-                position={[Math.cos(angle) * length * 0.5, 0.5, Math.sin(angle) * length * 0.5]}
-                rotation={[0, 0, Math.PI / 2 + angle]}
-              >
-                <boxGeometry args={[length, 0.15, 0.15]} />
-                <meshBasicMaterial color="#FFFF00" transparent opacity={0.95} />
-              </mesh>
-            );
-          })}
-        </group>
-      )}
-      <pointLight
-        color={primaryColor}
-        intensity={isYellow ? 6 : 4}
-        distance={isYellow ? 15 : 12}
-      />
-    </group>
-  );
+  return <WolfCloneLook position={clone.position} velocity={clone.velocity} />;
 }
 
 

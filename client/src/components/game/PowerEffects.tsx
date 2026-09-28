@@ -405,10 +405,13 @@ export function StunnedIndicator({
   position,
   remaining,
   duration,
+  pulse = false,
 }: {
   position: Vec3;
   remaining: number;
   duration: number;
+  /** Turn-based stuns have no countdown. Pulse the ring until the stun is cleared. */
+  pulse?: boolean;
 }) {
   const group = useRef<THREE.Group>(null);
   const orbit = useRef<THREE.Group>(null);
@@ -437,18 +440,31 @@ export function StunnedIndicator({
   };
 
   useLayoutEffect(() => {
+    if (pulse) return;
     apply(remaining);
     // The layout pass only needs the latest props; apply closes over the refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [remaining, duration]);
+  }, [remaining, duration, pulse]);
 
   useFrame((_, delta) => {
+    if (pulse) {
+      const wobble = 0.5 + 0.5 * Math.sin(Date.now() / 170);
+      const scale = 1.35 + wobble * 0.75;
+      if (ring.current) {
+        ring.current.scale.setScalar(scale);
+        ring.current.visible = true;
+      }
+      if (ringMat.current) ringMat.current.opacity = 0.55 + wobble * 0.4;
+      if (group.current) group.current.visible = true;
+      if (orbit.current) orbit.current.rotation.y += delta * 2.4;
+      return;
+    }
     const shown = Math.max(0, baseRemaining.current - (Date.now() - stamp.current) / 1000);
     apply(shown);
     if (orbit.current) orbit.current.rotation.y += delta * 2.4;
   });
 
-  if (remaining <= 0 && duration <= 0) return null;
+  if (!pulse && remaining <= 0 && duration <= 0) return null;
 
   const sparks = [0, 1, 2, 3, 4, 5];
 

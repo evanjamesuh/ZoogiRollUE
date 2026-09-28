@@ -482,7 +482,7 @@ test("knockouts score, falling costs points, and a flick off the edge ends the t
     wolfClones: [],
     orbs: [makeStillOrb("home-target", 0.8, 1.5)],
   });
-  useZoogiGame.getState().activateWolfgangAbility();
+  useZoogiGame.getState().activateWolfgangAbility("player");
   const packed = useZoogiGame.getState();
   assert.equal(packed.wolfClones.length, 3, "Pack should send three clones");
   assert.equal(packed.playerEntity?.wolfgangAbilityUnlocked, false);
@@ -504,7 +504,7 @@ test("knockouts score, falling costs points, and a flick off the edge ends the t
     },
     orbs: [makeStillOrb("ricochet-target", 4, 1)],
   });
-  useZoogiGame.getState().activateLarsAbility();
+  useZoogiGame.getState().activateLarsAbility("player");
   const ricochet = useZoogiGame.getState().playerEntity;
   assert.ok(ricochet);
   assert.ok(ricochet.larsRicochetBoost > 1, "Ricochet should arm a homing bounce");
@@ -528,7 +528,7 @@ test("knockouts score, falling costs points, and a flick off the edge ends the t
       isRespawning: false,
     }],
   });
-  useZoogiGame.getState().activateWrapsAbility();
+  useZoogiGame.getState().activateWrapsAbility("player");
   const bound = useZoogiGame.getState();
   assert.ok((bound.playerEntity?.wrapsBindUntil ?? 0) > Date.now(), "Bind should arm contact slow");
   assert.ok((bound.enemies[0]?.slowUntil ?? 0) > Date.now(), "a nearby opponent should be slowed");
@@ -597,7 +597,7 @@ test("hotstreak pushes player 1 when another local player casts it", async () =>
       hotstreakAbilityUnlocked: true,
     }],
   });
-  useZoogiGame.getState().activateHotstreakAbility();
+  useZoogiGame.getState().activateHotstreakAbility("player-2");
   const blasted = useZoogiGame.getState();
   assert.ok((blasted.playerEntity?.velocity[0] ?? 0) > 0.4, "player 1 should be pushed by the explosion");
   assert.equal(blasted.enemies[0]?.velocity[0], 0, "the caster should stay put");
@@ -638,6 +638,130 @@ test("a stun lasts until the next turn is skipped", async () => {
   const skipped = useZoogiGame.getState();
   assert.equal(skipped.isPlayerTurn, true, "the stunned opponent's turn should be skipped");
   assert.equal(skipped.enemies[0]?.isStunned, false, "skipping the turn should use up the stun");
+});
+
+test("an AI opponent casts an unlocked power", async () => {
+  const { useZoogiGame, ZOOGI_ROSTER } = await loadGame();
+  const hotstreak = ZOOGI_ROSTER.find((zoogi) => zoogi.id === "hotstreak");
+  assert.ok(hotstreak);
+  useZoogiGame.getState().selectZoogi(ZOOGI_ROSTER.find((zoogi) => zoogi.id === "lars") ?? ZOOGI_ROSTER[0]);
+  useZoogiGame.setState({ aiPlayerCount: 1, gameMode: "classic", zoneEditorConfigs: [], phase: "menu" });
+  useZoogiGame.getState().startGame();
+  const player = useZoogiGame.getState().playerEntity;
+  assert.ok(player);
+  useZoogiGame.setState({
+    phase: "playing",
+    isPlayerTurn: false,
+    turnIndex: 0,
+    orbs: [],
+    abilityNotice: null,
+    showExplosion: null,
+    playerEntity: {
+      ...player,
+      position: [3, 0.5, 0],
+      velocity: [0, 0, 0],
+      isStunned: false,
+    },
+    enemies: [{
+      ...player,
+      id: "ai-hotstreak",
+      isPlayer: false,
+      zoogi: hotstreak,
+      position: [0, 0.5, 0],
+      velocity: [0, 0, 0],
+      hotstreakAbilityUnlocked: true,
+      isStunned: false,
+      isKnockedOut: false,
+    }],
+  });
+  const cast = useZoogiGame.getState().useAiPower("ai-hotstreak");
+  assert.equal(cast, "hotstreak", "the AI should cast Explosion when a foe is inside the blast");
+  const after = useZoogiGame.getState();
+  assert.equal(after.enemies[0]?.hotstreakAbilityUnlocked, false, "the power stays one-shot");
+  assert.equal(after.abilityNotice?.text, "Explosion!");
+  assert.ok(after.showExplosion, "the match should show the blast");
+  assert.ok((after.playerEntity?.velocity[0] ?? 0) > 0.4, "the blast should push the human");
+  assert.equal(useZoogiGame.getState().useAiPower("ai-hotstreak"), null, "a spent power cannot be cast again");
+});
+
+test("an AI opponent cannot cast a locked power", async () => {
+  const { useZoogiGame, ZOOGI_ROSTER } = await loadGame();
+  const bolt = ZOOGI_ROSTER.find((zoogi) => zoogi.id === "bolt");
+  assert.ok(bolt);
+  useZoogiGame.getState().selectZoogi(ZOOGI_ROSTER[0]);
+  useZoogiGame.setState({ aiPlayerCount: 1, gameMode: "classic", zoneEditorConfigs: [], phase: "menu" });
+  useZoogiGame.getState().startGame();
+  const player = useZoogiGame.getState().playerEntity;
+  assert.ok(player);
+  useZoogiGame.setState({
+    phase: "playing",
+    orbs: [makeStillOrb("nearby-orb", 2, 0)],
+    playerEntity: {
+      ...player,
+      position: [3, 0.5, 0],
+      velocity: [0, 0, 0],
+      isStunned: false,
+    },
+    enemies: [{
+      ...player,
+      id: "ai-bolt-locked",
+      isPlayer: false,
+      zoogi: bolt,
+      position: [0, 0.5, 0],
+      velocity: [0, 0, 0],
+      boltAbilityUnlocked: false,
+      isStunned: false,
+      isKnockedOut: false,
+    }],
+  });
+  assert.equal(useZoogiGame.getState().useAiPower("ai-bolt-locked"), null);
+  const after = useZoogiGame.getState();
+  assert.equal(after.playerEntity?.isStunned, false, "a locked shock should not stun the human");
+  assert.equal(after.playerEntity?.velocity[0], 0);
+  assert.equal(after.enemies[0]?.boltAbilityUnlocked, false);
+  assert.equal(after.showExplosion, null);
+});
+
+test("a power cast by the AI stuns the human", async () => {
+  const { useZoogiGame, ZOOGI_ROSTER } = await loadGame();
+  const bolt = ZOOGI_ROSTER.find((zoogi) => zoogi.id === "bolt");
+  assert.ok(bolt);
+  useZoogiGame.getState().selectZoogi(ZOOGI_ROSTER.find((zoogi) => zoogi.id === "wraps") ?? ZOOGI_ROSTER[0]);
+  useZoogiGame.setState({ aiPlayerCount: 1, gameMode: "classic", zoneEditorConfigs: [], phase: "menu" });
+  useZoogiGame.getState().startGame();
+  const player = useZoogiGame.getState().playerEntity;
+  assert.ok(player);
+  useZoogiGame.setState({
+    phase: "playing",
+    isPlayerTurn: false,
+    turnIndex: 0,
+    orbs: [],
+    playerEntity: {
+      ...player,
+      position: [3, 0.5, 0],
+      velocity: [0, 0, 0],
+      isStunned: false,
+      stunTimer: 0,
+    },
+    enemies: [{
+      ...player,
+      id: "ai-bolt",
+      isPlayer: false,
+      zoogi: bolt,
+      position: [0, 0.5, 0],
+      velocity: [0, 0, 0],
+      boltAbilityUnlocked: true,
+      isStunned: false,
+      isKnockedOut: false,
+    }],
+  });
+  const cast = useZoogiGame.getState().useAiPower("ai-bolt");
+  assert.equal(cast, "bolt");
+  const shocked = useZoogiGame.getState();
+  assert.equal(shocked.playerEntity?.isStunned, true, "Shock should stun the human");
+  assert.ok((shocked.playerEntity?.stunTimer ?? 0) > 0);
+  assert.equal(shocked.enemies[0]?.boltAbilityUnlocked, false);
+  assert.equal(shocked.enemies[0]?.isStunned, false, "the caster should not stun itself");
 });
 
 test("practice mode places star orbs", async () => {
