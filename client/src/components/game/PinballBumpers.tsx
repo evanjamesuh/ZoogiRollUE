@@ -1,10 +1,28 @@
 import * as THREE from "three";
-import { useRef, useState, useEffect, useMemo } from "react";
+import { useRef, useState, useEffect, useMemo, Suspense, Component, ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { useAudio } from "@/lib/stores/useAudio";
-import { BUMPER_MODEL_URL } from "@/lib/arenaColliders";
+import { BUMPER_MODEL_URL, BUMPER_RADIUS } from "@/lib/arenaColliders";
+
+class BumperErrorBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode; fallback: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() { return this.state.hasError ? this.props.fallback : this.props.children; }
+}
+
+function FallbackBumper({ position }: { position: [number, number, number] }) {
+  return (
+    <mesh position={[position[0], 0.55, position[2]]} castShadow>
+      <cylinderGeometry args={[BUMPER_RADIUS, BUMPER_RADIUS * 0.85, 1.1, 20]} />
+      <meshStandardMaterial color="#ff4fd8" metalness={0.35} roughness={0.35} />
+    </mesh>
+  );
+}
 
 export function PinballBumpers() {
   const { pinballBumpers } = useZoogiGame();
@@ -12,7 +30,11 @@ export function PinballBumpers() {
   return (
     <group>
       {pinballBumpers.map((bumper) => (
-        <PinballBumper key={bumper.id} bumper={bumper} />
+        <BumperErrorBoundary key={bumper.id} fallback={<FallbackBumper position={bumper.position} />}>
+          <Suspense fallback={<FallbackBumper position={bumper.position} />}>
+            <PinballBumper bumper={bumper} />
+          </Suspense>
+        </BumperErrorBoundary>
       ))}
     </group>
   );
