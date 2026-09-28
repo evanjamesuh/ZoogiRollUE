@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { useRef, useMemo, Suspense } from "react";
+import { useRef, useMemo, Suspense, Component, ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
@@ -286,18 +286,25 @@ function FallbackAnimal({ animal }: { animal: AnimalData }) {
   );
 }
 
-function AnimalWithFallback({ animal }: { animal: AnimalData }) {
-  if (animal.type === "penguin") {
-    return (
-      <Suspense fallback={<FallbackAnimal animal={animal} />}>
-        <SkatingPenguin animal={animal} />
-      </Suspense>
-    );
+class AnimalErrorBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode; fallback: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
   }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() { return this.state.hasError ? this.props.fallback : this.props.children; }
+}
+
+function AnimalWithFallback({ animal }: { animal: AnimalData }) {
+  const model = animal.type === "penguin"
+    ? <SkatingPenguin animal={animal} />
+    : <AnimalModel animal={animal} />;
   return (
-    <Suspense fallback={<FallbackAnimal animal={animal} />}>
-      <AnimalModel animal={animal} />
-    </Suspense>
+    <AnimalErrorBoundary fallback={<FallbackAnimal animal={animal} />}>
+      <Suspense fallback={<FallbackAnimal animal={animal} />}>
+        {model}
+      </Suspense>
+    </AnimalErrorBoundary>
   );
 }
 

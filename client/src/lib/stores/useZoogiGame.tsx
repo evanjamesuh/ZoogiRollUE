@@ -1128,7 +1128,7 @@ const initializeGame = (
   // Player spawns at spawn point 0 (using zone editor spawn points if available)
   const playerSpawnIndex = 0;
   const playerSpawnPos = getSpawnPointPosition(playerSpawnIndex, spawnZones, mapTheme);
-  console.log("Player spawn position:", playerSpawnPos, "from layout:", layout?.id ?? "none");
+  console.log("Player spawn position:", playerSpawnPos[0].toFixed(2), playerSpawnPos[2].toFixed(2), "from layout:", layout?.id ?? "none");
   
   const playerEntity: GameEntity = {
     id: "player",
