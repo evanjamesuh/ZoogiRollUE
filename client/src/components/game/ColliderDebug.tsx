@@ -1,6 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
-import { collectMatchSolids, getMapLayout, type SolidKind } from "@/lib/arenaColliders";
+import { collectMatchSolids, getMapLayout, getWinterCampVersion, subscribeWinterCamp, type SolidKind } from "@/lib/arenaColliders";
 
 const KIND_COLOR: Record<SolidKind, string> = {
   bumper: "#ff00ff",
@@ -24,6 +24,8 @@ export function ColliderDebug() {
   const editorPlacedModels = useZoogiGame((state) => state.editorPlacedModels);
   const knockoff = useZoogiGame((state) => state.wallSettings.knockoffBoundaryRadius);
   const knockoffOffset = useZoogiGame((state) => state.elementTransforms.knockoffBoundaryOffset);
+  // Camp solids flip on after winter_location.glb mounts. That flag is not React state.
+  useSyncExternalStore(subscribeWinterCamp, getWinterCampVersion, getWinterCampVersion);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);

@@ -37,46 +37,47 @@ export const WINTER_STAGE = {
 };
 
 /**
- * cosmos_arena.glb. The arena floor rim is ~15.75 local and the wall stands on
- * that rim. Scale 1.08 brings the rim to ~17 so a full flick still leaves the
- * platform. The wall is the visual edge; a closed collider ring would make
- * knockouts impossible, so the knockoff line sits on the rim instead.
- * Floor mesh is at local y=-0.02.
+ * cosmos_arena.glb. Scale 1.08. The playable floor ends at the inner face of
+ * the lip wall (about 15.6). That wall is drawn only, so the knockoff line is
+ * the inner face: a marble is out where the floor visibly ends, not after it
+ * has rolled through the wall. Floor mesh is at local y=-0.02.
  */
 export const COSMOS_STAGE = {
   modelScale: 1.08,
   modelOffsetY: 0.02 * 1.08,
-  floorRadius: 16.6,
-  knockoffRadius: 17.5,
+  floorRadius: 15.2,
+  knockoffRadius: 15.6,
 };
 
 /**
  * arabian_nights_stage.glb is authored around (-656.5, 556.6, 11). The anchor
- * puts one courtyard point at the origin and the floor on y=0. With the stage
- * loaded, the open plaza is centered near (-9.9, -4.8), not on that point.
- * An east wall about 6 tall stands 13.5 from the origin (due east), inside the
- * old 17.2 line. The out-line is the circle around the plaza that meets that wall.
+ * puts one courtyard point at the origin and the floor on y=0. The clean plaza
+ * (about radius 15.5) sat near (-4, -16). Shifting the stage +4 x and +16 z
+ * lands that circle on the origin, so the standard spawns, bumpers, and score
+ * zones stay centred on flat plaza inside the knockoff line.
  */
-const ARABIAN_PLAZA_CENTER: [number, number] = [-9.9, -4.8];
-const ARABIAN_EAST_WALL = { x: 13.5, z: 0 };
-const ARABIAN_KNOCKOFF = Math.hypot(
-  ARABIAN_EAST_WALL.x - ARABIAN_PLAZA_CENTER[0],
-  ARABIAN_EAST_WALL.z - ARABIAN_PLAZA_CENTER[1],
-);
+const ARABIAN_PLAZA_SHIFT: [number, number] = [4, 16];
 
 export const ARABIAN_STAGE = {
   modelScale: 0.48,
   floorCenter: [-656.5, 556.6, 11] as [number, number, number],
   plazaAnchor: [-526.5, 556.6, 11] as [number, number, number],
-  plazaCenter: ARABIAN_PLAZA_CENTER,
-  floorRadius: Number((ARABIAN_KNOCKOFF - 0.35).toFixed(2)),
-  knockoffRadius: Number(ARABIAN_KNOCKOFF.toFixed(2)),
+  plazaShift: ARABIAN_PLAZA_SHIFT,
+  plazaCenter: [0, 0] as [number, number],
+  floorRadius: 15.15,
+  knockoffRadius: 15.5,
 };
 
 export function arabianPlayTransform(): { x: number; y: number; z: number; scale: number } {
   const scale = ARABIAN_STAGE.modelScale;
   const [x, y, z] = ARABIAN_STAGE.plazaAnchor;
-  return { x: -scale * x, y: -scale * y, z: -scale * z, scale };
+  const [shiftX, shiftZ] = ARABIAN_STAGE.plazaShift;
+  return { x: -scale * x + shiftX, y: -scale * y, z: -scale * z + shiftZ, scale };
+}
+
+/** Every map's out-line is centred on the origin. Callers must apply this on each map so a previous map cannot leave a leftover shift. */
+export function knockoffOffsetForMap(_mapId: string | null | undefined): { x: number; y: number; z: number } {
+  return { x: 0, y: 0, z: 0 };
 }
 
 export type SolidKind = "bumper" | "rock" | "bush" | "snowman" | "hoodoo" | "prop";
@@ -107,37 +108,41 @@ export interface MapLayout {
   bumpers: { id: string; x: number; z: number }[];
 }
 
-interface LocalCircle {
-  id: string;
-  x: number;
-  z: number;
-  radius: number;
-  kind: SolidKind;
-}
-
-// Footprints sampled from floating_island_stage.glb at scale 1.
-const GRASS_LOCAL: LocalCircle[] = [
-  { id: "S_7_rock_0", x: 0.12, z: 0.2, radius: 0.075, kind: "rock" },
-  { id: "S_6_rock_0", x: -0.21, z: 0.08, radius: 0.0725, kind: "rock" },
-  { id: "S_5_rock_0", x: -0.19, z: -0.14, radius: 0.065, kind: "rock" },
-  { id: "S_8_rock_0", x: 0.23, z: 0, radius: 0.055, kind: "rock" },
-  { id: "S_4_rock_0", x: 0.18, z: -0.14, radius: 0.0475, kind: "rock" },
-  { id: "S_1_rock_0", x: -0.01, z: -0.23, radius: 0.05, kind: "rock" },
-  { id: "Tree2_Leavs_0", x: -0.03, z: 0.2, radius: 0.0385, kind: "bush" },
-  { id: "Tree1_Leavs_0", x: 0.11, z: -0.16, radius: 0.0275, kind: "bush" },
-  { id: "Tree3_Leavs_0", x: -0.2, z: -0.07, radius: 0.0248, kind: "bush" },
-  { id: "Tree8_Leavs_0", x: 0.16, z: 0.1, radius: 0.0193, kind: "bush" },
-];
-
+/**
+ * Rim rocks and trees on floating_island_stage.glb at GRASS_STAGE.modelScale.
+ * Each big rock is split along its long axis so the circle follows the stone
+ * instead of a single disk that was mostly empty air. Tree1's leaves sit above
+ * marble height; the collider is the trunk.
+ */
 function grassScenery(): SolidCircle[] {
   const scale = GRASS_STAGE.modelScale;
-  return GRASS_LOCAL.map((item) => ({
-    id: item.id,
-    x: item.x * scale,
-    z: item.z * scale,
-    radius: item.radius * scale,
-    kind: item.kind,
-  }));
+  const tree = (id: string, x: number, z: number, radius: number): SolidCircle => ({
+    id,
+    x: x * scale,
+    z: z * scale,
+    radius: radius * scale,
+    kind: "bush",
+  });
+  return [
+    { id: "S_7_rock_a", x: 4.7, z: 13.2, radius: 2.9, kind: "rock" },
+    { id: "S_7_rock_b", x: 9.6, z: 11.2, radius: 2.5, kind: "rock" },
+    { id: "S_6_rock_a", x: -13.7, z: 2.7, radius: 2.8, kind: "rock" },
+    { id: "S_6_rock_b", x: -12.1, z: 7.8, radius: 2.5, kind: "rock" },
+    { id: "S_5_rock_a", x: -10.5, z: -9.9, radius: 2.5, kind: "rock" },
+    { id: "S_5_rock_b", x: -12.8, z: -6.4, radius: 2.3, kind: "rock" },
+    { id: "S_8_rock_a", x: 14.0, z: -3.0, radius: 1.75, kind: "rock" },
+    { id: "S_8_rock_b", x: 14.0, z: 0.1, radius: 1.75, kind: "rock" },
+    { id: "S_8_rock_c", x: 14.0, z: 2.9, radius: 1.45, kind: "rock" },
+    { id: "S_4_rock_a", x: 9.6, z: -9.9, radius: 2.0, kind: "rock" },
+    { id: "S_4_rock_b", x: 11.5, z: -7.4, radius: 2.0, kind: "rock" },
+    { id: "S_1_rock_a", x: -3.2, z: -13.9, radius: 1.6, kind: "rock" },
+    { id: "S_1_rock_b", x: -0.7, z: -13.9, radius: 1.6, kind: "rock" },
+    { id: "S_1_rock_c", x: 1.8, z: -13.9, radius: 1.6, kind: "rock" },
+    { id: "Tree1_Leavs_0", x: 6.6, z: -9.6, radius: 0.35, kind: "bush" },
+    tree("Tree2_Leavs_0", -0.03, 0.2, 0.0385),
+    tree("Tree3_Leavs_0", -0.2, -0.07, 0.0248),
+    tree("Tree8_Leavs_0", 0.16, 0.1, 0.0193),
+  ];
 }
 
 function polar(id: string, angle: number, distance: number): { id: string; x: number; z: number } {
@@ -175,11 +180,12 @@ export interface HoodooDecor {
 }
 
 /**
- * stylized_desert_hoodoo.glb at scale 1: XZ size 0.579 x 0.525, ymin -0.367.
- * Radius is the mean horizontal half-extent (the same measure as the grass rocks).
+ * stylized_desert_hoodoo.glb at scale 1: full XZ size 0.579 x 0.525, ymin -0.367.
+ * At marble height the stone is about 0.51 across (half-extent 0.25). The old
+ * mean of the bounding box (0.276) left an empty rim around the rock.
  * The mesh is centered on the origin, so the group is lifted until the base sits on y=0.
  */
-const HOODOO_FOOTPRINT = (0.579 + 0.525) / 4;
+const HOODOO_FOOTPRINT = 0.25;
 const HOODOO_BASE_LIFT = 0.367;
 
 export function getHoodooDecor(): HoodooDecor[] {
@@ -190,7 +196,6 @@ export function getHoodooDecor(): HoodooDecor[] {
     const distance = 10 + (i % 2) * 4;
     const x = Math.cos(angle) * distance;
     const z = Math.sin(angle) * distance;
-    if (z > 8 && Math.abs(x) < 5) continue;
     const scale = 2.0 + (i % 3) * 0.4;
     decor.push({
       id: `hoodoo-${i}`,
@@ -238,11 +243,11 @@ function flatBumpers(distance: number, angles: number[]): { id: string; x: numbe
 
 /**
  * Camp props in winter_location.glb that rise through marble height.
- * Crates, the barrel, and rails use the mean of the mesh's X/Z half-extents;
- * those circles sit on the props. The towers and wall-16 do not: each tower
- * box is about 1 unit wider than the stone, and wall-16's face is about 2.5
- * where the box average is 3.7. Skating penguins are omitted. Stacked crates
- * whose bottoms are above the marble are omitted.
+ * Crates, the barrel, and rails use the mean of the mesh's X/Z half-extents.
+ * The three rink towers are about 4.0 across at marble height, so the circle
+ * is 2.05. wall-16 is a diagonal bar about 2.2 wide; three circles follow it
+ * instead of one disk around the bar's bounding box. Skating penguins are
+ * omitted. Stacked crates whose bottoms are above the marble are omitted.
  * Off until the winter mesh mounts, so a missing model leaves no camp walls.
  */
 const ICE_CAMP: SolidCircle[] = [
@@ -254,19 +259,36 @@ const ICE_CAMP: SolidCircle[] = [
   { id: "box-16", x: 14.12, z: -1.02, radius: 1.05, kind: "prop" },
   { id: "barrel-15", x: 15.46, z: -0.3, radius: 0.67, kind: "prop" },
   { id: "box-17", x: -14.32, z: -6.24, radius: 1.05, kind: "prop" },
-  { id: "wall-16", x: 10.94, z: 11.5, radius: 2.5, kind: "prop" },
+  { id: "wall-16a", x: 10.94, z: 11.5, radius: 1.15, kind: "prop" },
+  { id: "wall-16b", x: 12.64, z: 9.95, radius: 1.15, kind: "prop" },
+  { id: "wall-16c", x: 9.24, z: 13.05, radius: 1.15, kind: "prop" },
   { id: "rail-16", x: 14.12, z: -8.7, radius: 1.19, kind: "prop" },
   { id: "box-18", x: -15.48, z: -6.89, radius: 0.6, kind: "prop" },
-  { id: "tower-17a", x: 14.67, z: 8.25, radius: 1.87, kind: "prop" },
-  { id: "tower-17b", x: 7.25, z: 14.99, radius: 1.87, kind: "prop" },
-  { id: "tower-19", x: -4.83, z: 19.01, radius: 1.38, kind: "prop" },
+  { id: "tower-17a", x: 14.67, z: 8.25, radius: 2.05, kind: "prop" },
+  { id: "tower-17b", x: 7.25, z: 14.99, radius: 2.05, kind: "prop" },
+  { id: "tower-19", x: -4.83, z: 19.01, radius: 2.05, kind: "prop" },
 ];
 
 let winterCampActive = false;
+let winterCampVersion = 0;
+const winterCampListeners = new Set<() => void>();
 
 /** True only after winter_location.glb has mounted. A failed load leaves this false. */
 export function setWinterCampActive(active: boolean) {
+  if (winterCampActive === active) return;
   winterCampActive = active;
+  winterCampVersion += 1;
+  winterCampListeners.forEach((listener) => listener());
+}
+
+export function getWinterCampVersion(): number {
+  return winterCampVersion;
+}
+
+/** Collider overlay subscribes so camp solids appear when the winter mesh mounts. */
+export function subscribeWinterCamp(listener: () => void): () => void {
+  winterCampListeners.add(listener);
+  return () => winterCampListeners.delete(listener);
 }
 
 function iceScenery(): SolidCircle[] {
@@ -307,17 +329,24 @@ const LAYOUTS: Record<string, MapLayout> = {
   grass: {
     id: "grass",
     floorRadius: GRASS_STAGE.groundRadius,
-    // Just past the outermost rock so the white ring is the drop after the rim, not empty void.
-    knockoffRadius: 19.2,
+    // Grass edge is about 13.2–15 (typically 13.5). 15.5 is just past the outer
+    // lobes, so a marble still on grass is in, and leaving the island is out
+    // without the old flight across empty air out to 19.2.
+    knockoffRadius: 15.5,
     orbRingRadius: 4.2,
     scenery: grassScenery(),
     bumpers: flatBumpers(6.4, DIAGONAL),
     zones: zones(
-      CARDINAL.map((angle) => ({ angle, distance: 8.1 })),
-      // Angles that stay clear of the rim rocks and bushes all the way to the drop.
-      // Far enough from the cardinal spawns that a radius-4 zone does not cover the spawn,
-      // and still on a ray that misses the rim rocks.
-      [20, 120, 240, 290].map((deg) => ({ angle: (deg * Math.PI) / 180, distance: 11 })),
+      // South spawn (105°) sits in front of the big tree canopy, which covers
+      // about x -5.7..2.5 and z 7.7..15.9. The four outward-lane counts match.
+      [
+        { angle: (350 * Math.PI) / 180, distance: 8 },
+        { angle: (105 * Math.PI) / 180, distance: 7 },
+        { angle: (190 * Math.PI) / 180, distance: 8 },
+        { angle: (270 * Math.PI) / 180, distance: 8.2 },
+      ],
+      // Radius-4 zones at 9.4 end near 13.4, on the grass (edge ~13.5).
+      [45, 150, 230, 315].map((deg) => ({ angle: (deg * Math.PI) / 180, distance: 9.4 })),
     ),
   },
   ice: buildLayout(

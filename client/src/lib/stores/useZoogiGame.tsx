@@ -29,7 +29,7 @@ import { setCurrentMap } from "@/lib/treeOffsets";
 import { triggerKnockoffFeel, triggerCollisionFeel, triggerCollectFeel, triggerAbilityFeel, triggerWallHitFeel, useGameFeel } from "./useGameFeel";
 import { triggerAbilityCameraEffect, triggerKnockoffCameraEffect, triggerCollisionCameraEffect, triggerTargetFocusCameraEffect } from "./useCameraEffects";
 import { getDeviceId } from "@/lib/deviceId";
-import { ARABIAN_STAGE, COSMOS_STAGE, GRASS_STAGE, arabianPlayTransform, collectMatchSolids, getIcePatches, getMapLayout, resolveSolidCollision } from "../arenaColliders";
+import { COSMOS_STAGE, GRASS_STAGE, arabianPlayTransform, collectMatchSolids, getIcePatches, getMapLayout, knockoffOffsetForMap, resolveSolidCollision } from "../arenaColliders";
 
 export const DEFAULT_BACKGROUND_SETTINGS = {
   distance: 200,
@@ -136,7 +136,7 @@ export const DEFAULT_ELEMENT_TRANSFORMS = {
   innerWallRotation: { x: 0, y: 0, z: 0 },
   zonesOffset: { x: 0.7, y: 0, z: 0 },
   zonesRotation: { x: 0, y: 0, z: 0 },
-  knockoffBoundaryOffset: { x: 0.9, y: 0, z: 0.2 },
+  knockoffBoundaryOffset: { x: 0, y: 0, z: 0 },
   knockoffBoundaryRotation: { x: 0, y: 0, z: 0 },
 };
 
@@ -1097,14 +1097,11 @@ function playfieldSettings(
   const patch: Partial<ZoogiGameState> = {
     zoneEditorConfigs: zones,
     wallSettings: { ...wallSettings, knockoffBoundaryRadius: layout.knockoffRadius },
-  };
-  if (map === "saturn") {
-    const [x, z] = ARABIAN_STAGE.plazaCenter;
-    patch.elementTransforms = {
+    elementTransforms: {
       ...elementTransforms,
-      knockoffBoundaryOffset: { x, y: 0, z },
-    };
-  }
+      knockoffBoundaryOffset: knockoffOffsetForMap(map),
+    },
+  };
   const stage =
     map === "grass"
       ? { x: 0, y: GRASS_STAGE.modelOffsetY, z: 0, scale: GRASS_STAGE.modelScale }

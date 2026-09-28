@@ -343,3 +343,32 @@ test("marble comes to rest within a reasonable time after a flick and collision"
   assert.equal(planarSpeed(stayed.velocity), 0, "a stopped marble should not start moving again");
   assert.ok(Math.abs(stayed.position[0] - done.position[0]) < 1e-6, "a stopped marble should hold its ground");
 });
+
+test("a knockoff offset does not carry from one map into the next", async () => {
+  const { useZoogiGame, ZOOGI_ROSTER } = await loadGame();
+  useZoogiGame.getState().selectZoogi(ZOOGI_ROSTER[0]);
+  const dirty = {
+    ...useZoogiGame.getState().elementTransforms,
+    knockoffBoundaryOffset: { x: -9.9, y: 0, z: -4.8 },
+  };
+  useZoogiGame.setState({
+    aiPlayerCount: 0,
+    gameMode: "classic",
+    selectedMap: "saturn",
+    elementTransforms: dirty,
+  });
+  useZoogiGame.getState().startGame();
+  assert.deepEqual(useZoogiGame.getState().elementTransforms.knockoffBoundaryOffset, { x: 0, y: 0, z: 0 });
+  assert.equal(useZoogiGame.getState().wallSettings.knockoffBoundaryRadius, 15.5);
+
+  useZoogiGame.setState({
+    selectedMap: "grass",
+    elementTransforms: {
+      ...useZoogiGame.getState().elementTransforms,
+      knockoffBoundaryOffset: { x: -9.9, y: 0, z: -4.8 },
+    },
+  });
+  useZoogiGame.getState().startGame();
+  assert.deepEqual(useZoogiGame.getState().elementTransforms.knockoffBoundaryOffset, { x: 0, y: 0, z: 0 });
+  assert.equal(useZoogiGame.getState().wallSettings.knockoffBoundaryRadius, 15.5);
+});
