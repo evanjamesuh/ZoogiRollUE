@@ -99,7 +99,8 @@ export function GroundPlane() {
     ice: { color: "#1a4a6a", emissive: "#0a2a3a" },
     lava: { color: "#1a0a0a", emissive: "#3a1a0a" },
     space: { color: "#0a0a1a", emissive: "#1a0a3a" },
-    saturn: { color: "#1a1a0a", emissive: "#0a0a0a" }
+    saturn: { color: "#1a1a0a", emissive: "#0a0a0a" },
+    tomb: { color: "#3a2818", emissive: "#1a1008" }
   };
   
   const theme = selectedMap || "grass";

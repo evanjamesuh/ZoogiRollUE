@@ -144,7 +144,7 @@ export const DEFAULT_ELEMENT_TRANSFORMS = {
 
 export type GamePhase = "menu" | "shop" | "zoogipedia" | "arena_editor" | "character_selection" | "local_setup" | "map_selection" | "playing" | "round_end" | "game_over" | "feature_hub" | "music_visualizer" | "ringer_creator" | "ringer_trials_loading" | "ringer_trials";
 export type GameMode = "classic" | "ringer_royale" | "local_multiplayer" | "practice" | "map_editor";
-export type MapTheme = "grass" | "ice" | "lava" | "space" | "saturn";
+export type MapTheme = "grass" | "ice" | "lava" | "space" | "saturn" | "tomb";
 
 export interface ZoogiStats {
   speed: number;
@@ -232,7 +232,8 @@ export const MAP_OPTIONS: { id: MapTheme; name: string; description: string; col
   { id: "ice", name: "Frozen Ring", description: "Slippery ice platform", color: "#81D4FA" },
   { id: "lava", name: "Volcanic Pit", description: "Fiery lava arena", color: "#FF5722" },
   { id: "space", name: "Cosmic Platform", description: "Floating in the void", color: "#7C4DFF" },
-  { id: "saturn", name: "Arabian Nights", description: "Magical palace arena", color: "#FFA726" }
+  { id: "saturn", name: "Arabian Nights", description: "Magical palace arena", color: "#FFA726" },
+  { id: "tomb", name: "Pharaoh's Tomb", description: "Sandstone hieroglyph court", color: "#E0B88A" }
 ];
 
 interface Orb {

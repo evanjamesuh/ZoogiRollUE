@@ -11,6 +11,8 @@ import {
   countClearLanes,
   getIcePatches,
   getMapLayout,
+  getTombBackdrop,
+  getTombBlocks,
   getWinterCampVersion,
   knockoffOffsetForMap,
   laneIsClear,
@@ -20,7 +22,7 @@ import {
   subscribeWinterCamp,
 } from "./arenaColliders.ts";
 
-const MAPS = ["grass", "ice", "lava", "space", "saturn"] as const;
+const MAPS = ["grass", "ice", "lava", "space", "saturn", "tomb"] as const;
 const SCORE_ZONE_RADIUS = 4;
 
 test("every map keeps goals, spawns, and orbs off the solids", () => {
@@ -65,8 +67,12 @@ test("every map keeps goals, spawns, and orbs off the solids", () => {
       );
       assert.equal(hit, null, `${id} orb ${i} overlaps a solid`);
     }
-    assert.ok(layout.knockoffRadius > layout.floorRadius);
-    assert.ok(layout.knockoffRadius < layout.floorRadius + 6);
+    if (id === "tomb") {
+      assert.equal(layout.knockoffRadius, layout.floorRadius, "tomb knockoff is the sandstone edge");
+    } else {
+      assert.ok(layout.knockoffRadius > layout.floorRadius);
+    }
+    assert.ok(layout.knockoffRadius <= layout.floorRadius + 6);
   }
 });
 
@@ -238,4 +244,128 @@ test("an editor-placed bumper collides at the bumper radius", () => {
   assert.equal(solids[0]?.radius, BUMPER_RADIUS);
   assert.equal(solids[0]?.x, 3);
   assert.equal(solids[0]?.z, 1);
+});
+
+const PR9_LAYOUTS: Record<string, { knockoffRadius: number; scenery: number; zones: { id: string; angle: number; distance: number; isSpawn: boolean }[] }> = {
+  grass: {
+    knockoffRadius: 15.5,
+    scenery: 18,
+    zones: [
+      { id: "spawn-0", angle: (350 * Math.PI) / 180, distance: 8, isSpawn: true },
+      { id: "spawn-1", angle: (105 * Math.PI) / 180, distance: 7, isSpawn: true },
+      { id: "spawn-2", angle: (190 * Math.PI) / 180, distance: 8, isSpawn: true },
+      { id: "spawn-3", angle: (270 * Math.PI) / 180, distance: 8.2, isSpawn: true },
+      { id: "score-0", angle: (45 * Math.PI) / 180, distance: 9.4, isSpawn: false },
+      { id: "score-1", angle: (150 * Math.PI) / 180, distance: 9.4, isSpawn: false },
+      { id: "score-2", angle: (230 * Math.PI) / 180, distance: 9.4, isSpawn: false },
+      { id: "score-3", angle: (315 * Math.PI) / 180, distance: 9.4, isSpawn: false },
+    ],
+  },
+  ice: {
+    knockoffRadius: 18.4,
+    scenery: 8,
+    zones: [
+      { id: "spawn-0", angle: 0, distance: 7.6, isSpawn: true },
+      { id: "spawn-1", angle: Math.PI / 2, distance: 7.6, isSpawn: true },
+      { id: "spawn-2", angle: Math.PI, distance: 7.6, isSpawn: true },
+      { id: "spawn-3", angle: Math.PI * 1.5, distance: 7.6, isSpawn: true },
+      { id: "score-0", angle: 0.35, distance: 11.2, isSpawn: false },
+      { id: "score-1", angle: 1.9, distance: 11.2, isSpawn: false },
+      { id: "score-2", angle: 3.5, distance: 11.2, isSpawn: false },
+      { id: "score-3", angle: 5.1, distance: 11.2, isSpawn: false },
+    ],
+  },
+  lava: {
+    knockoffRadius: 18.6,
+    scenery: 6,
+    zones: [
+      { id: "spawn-0", angle: 0, distance: 7.6, isSpawn: true },
+      { id: "spawn-1", angle: Math.PI / 2, distance: 7.6, isSpawn: true },
+      { id: "spawn-2", angle: Math.PI, distance: 7.6, isSpawn: true },
+      { id: "spawn-3", angle: Math.PI * 1.5, distance: 7.6, isSpawn: true },
+      { id: "score-0", angle: (55 * Math.PI) / 180, distance: 11.2, isSpawn: false },
+      { id: "score-1", angle: (115 * Math.PI) / 180, distance: 11.2, isSpawn: false },
+      { id: "score-2", angle: (210 * Math.PI) / 180, distance: 11.2, isSpawn: false },
+      { id: "score-3", angle: (300 * Math.PI) / 180, distance: 11.2, isSpawn: false },
+    ],
+  },
+  space: {
+    knockoffRadius: 15.6,
+    scenery: 0,
+    zones: [
+      { id: "spawn-0", angle: 0, distance: 7.6, isSpawn: true },
+      { id: "spawn-1", angle: Math.PI / 2, distance: 7.6, isSpawn: true },
+      { id: "spawn-2", angle: Math.PI, distance: 7.6, isSpawn: true },
+      { id: "spawn-3", angle: Math.PI * 1.5, distance: 7.6, isSpawn: true },
+      { id: "score-0", angle: 0.35, distance: 11.2, isSpawn: false },
+      { id: "score-1", angle: 1.9, distance: 11.2, isSpawn: false },
+      { id: "score-2", angle: 3.5, distance: 11.2, isSpawn: false },
+      { id: "score-3", angle: 5.1, distance: 11.2, isSpawn: false },
+    ],
+  },
+  saturn: {
+    knockoffRadius: 15.5,
+    scenery: 0,
+    zones: [
+      { id: "spawn-0", angle: 0, distance: 7.6, isSpawn: true },
+      { id: "spawn-1", angle: Math.PI / 2, distance: 7.6, isSpawn: true },
+      { id: "spawn-2", angle: Math.PI, distance: 7.6, isSpawn: true },
+      { id: "spawn-3", angle: Math.PI * 1.5, distance: 7.6, isSpawn: true },
+      { id: "score-0", angle: 0.35, distance: 11.2, isSpawn: false },
+      { id: "score-1", angle: 1.9, distance: 11.2, isSpawn: false },
+      { id: "score-2", angle: 3.5, distance: 11.2, isSpawn: false },
+      { id: "score-3", angle: 5.1, distance: 11.2, isSpawn: false },
+    ],
+  },
+};
+
+test("existing maps keep the PR #9 knockoff, zones, and scenery count", () => {
+  for (const [id, expected] of Object.entries(PR9_LAYOUTS)) {
+    const layout = getMapLayout(id);
+    assert.ok(layout, id);
+    assert.equal(layout.knockoffRadius, expected.knockoffRadius, id);
+    assert.equal(layout.scenery.length, expected.scenery, id);
+    assert.equal(layout.zones.length, expected.zones.length, id);
+    expected.zones.forEach((zone, i) => {
+      const actual = layout.zones[i];
+      assert.ok(actual, `${id} zone ${i}`);
+      assert.equal(actual.id, zone.id);
+      assert.ok(Math.abs(actual.angle - zone.angle) < 1e-9, `${id} ${zone.id} angle`);
+      assert.equal(actual.distance, zone.distance);
+      assert.equal(actual.isSpawn, zone.isSpawn);
+    });
+  }
+});
+
+test("pharaoh's tomb is a centred sandstone ring with matching rim blocks", () => {
+  const layout = getMapLayout("tomb");
+  assert.ok(layout);
+  assert.equal(layout.floorRadius, 15.5);
+  assert.equal(layout.knockoffRadius, 15.5);
+  assert.deepEqual(knockoffOffsetForMap("tomb"), { x: 0, y: 0, z: 0 });
+  assert.equal(layout.zones.filter((zone) => zone.isSpawn).length, 4);
+  const scores = layout.zones.filter((zone) => !zone.isSpawn);
+  assert.equal(scores.length, 4);
+  for (const score of scores) {
+    assert.ok(score.distance + SCORE_ZONE_RADIUS <= layout.floorRadius, `${score.id} leaves the sandstone`);
+  }
+  const blocks = getTombBlocks();
+  assert.equal(layout.scenery.length, blocks.length);
+  for (const block of blocks) {
+    const solid = layout.scenery.find((item) => item.id === block.id);
+    assert.ok(solid, block.id);
+    assert.equal(solid.kind, "rock");
+    assert.equal(solid.radius, block.radius);
+    assert.ok(Math.abs(solid.x - block.x) < 1e-9);
+    assert.ok(Math.abs(solid.z - block.z) < 1e-9);
+    assert.ok(Math.hypot(solid.x, solid.z) + solid.radius <= layout.knockoffRadius + 1e-6, `${block.id} crosses the edge`);
+  }
+  for (const piece of getTombBackdrop()) {
+    const inner = Math.hypot(piece.x, piece.z) - piece.radius;
+    assert.ok(inner > layout.knockoffRadius + 0.4, `${piece.id} enters the ring (${inner.toFixed(2)})`);
+  }
+  for (const spawn of layout.zones.filter((zone) => zone.isSpawn)) {
+    assert.equal(laneIsClear(layout, spawn.angle), true, `${spawn.id} lane is blocked`);
+  }
+  assert.ok(countClearLanes(layout, 36) >= 6, "tomb should keep open lanes to the drop");
 });

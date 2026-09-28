@@ -41,6 +41,7 @@ const THEME_WALL_COLORS: Record<string, string> = {
   lava: "#FF5722",
   space: "#00FFFF",
   saturn: "#FFA726",
+  tomb: "#E0B88A",
 };
 
 function createCurvedWallGeometry(

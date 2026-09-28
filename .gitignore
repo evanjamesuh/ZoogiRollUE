@@ -6,5 +6,6 @@ vite.config.ts.*
 *.tar.gz
 .env
 client/public/models/
-client/public/textures/
+client/public/textures/*
+!client/public/textures/comic/
 client/public/geometries/
