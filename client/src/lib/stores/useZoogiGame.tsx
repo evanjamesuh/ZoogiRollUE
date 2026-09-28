@@ -1097,13 +1097,14 @@ function playfieldSettings(
   const patch: Partial<ZoogiGameState> = {
     zoneEditorConfigs: zones,
     wallSettings: { ...wallSettings, knockoffBoundaryRadius: layout.knockoffRadius },
-    // The floor and the layout are centered on the origin. A saved editor nudge
-    // would slide the out line across the sand.
-    elementTransforms: {
-      ...elementTransforms,
-      knockoffBoundaryOffset: { x: 0, y: 0, z: 0 },
-    },
   };
+  if (map === "saturn") {
+    const [x, z] = ARABIAN_STAGE.plazaCenter;
+    patch.elementTransforms = {
+      ...elementTransforms,
+      knockoffBoundaryOffset: { x, y: 0, z },
+    };
+  }
   const stage =
     map === "grass"
       ? { x: 0, y: GRASS_STAGE.modelOffsetY, z: 0, scale: GRASS_STAGE.modelScale }

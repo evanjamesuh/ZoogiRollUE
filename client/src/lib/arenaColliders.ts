@@ -26,9 +26,8 @@ export const GRASS_STAGE = {
 
 /**
  * winter_location.glb at the transform WinterLocationScene draws.
- * Ground tops sit on y=0. Camp crates, rails, the wall, and towers are measured
- * from the loaded mesh and only become solid after that mesh is on screen.
- * Snow past the knockoff is backdrop, same as the grass map's outer islands.
+ * Ground tops sit on y=0. The open rink is inside the camp props (~radius 12);
+ * snow past the knockoff is backdrop, same as the grass map's outer islands.
  */
 export const WINTER_STAGE = {
   modelScale: 0.9,
@@ -52,18 +51,26 @@ export const COSMOS_STAGE = {
 };
 
 /**
- * arabian_nights_stage.glb is authored around (-656.5, 556.6, 11). The walkable
- * sand is a ring around the palace, about local radius 116 to 166. The anchor
- * is the middle of that ring. Scale 0.8 fits a 16.8 disk inside the ring.
- * Flat floor past that disk is clipped, so the sand you see ends where the
- * fallback disk ends, and the knockoff sits on that edge.
+ * arabian_nights_stage.glb is authored around (-656.5, 556.6, 11). The anchor
+ * puts one courtyard point at the origin and the floor on y=0. With the stage
+ * loaded, the open plaza is centered near (-9.9, -4.8), not on that point.
+ * An east wall about 6 tall stands 13.5 from the origin (due east), inside the
+ * old 17.2 line. The out-line is the circle around the plaza that meets that wall.
  */
+const ARABIAN_PLAZA_CENTER: [number, number] = [-9.9, -4.8];
+const ARABIAN_EAST_WALL = { x: 13.5, z: 0 };
+const ARABIAN_KNOCKOFF = Math.hypot(
+  ARABIAN_EAST_WALL.x - ARABIAN_PLAZA_CENTER[0],
+  ARABIAN_EAST_WALL.z - ARABIAN_PLAZA_CENTER[1],
+);
+
 export const ARABIAN_STAGE = {
-  modelScale: 0.8,
+  modelScale: 0.48,
   floorCenter: [-656.5, 556.6, 11] as [number, number, number],
-  plazaAnchor: [-515.5, 556.6, 11] as [number, number, number],
-  floorRadius: 16.8,
-  knockoffRadius: 17.15,
+  plazaAnchor: [-526.5, 556.6, 11] as [number, number, number],
+  plazaCenter: ARABIAN_PLAZA_CENTER,
+  floorRadius: Number((ARABIAN_KNOCKOFF - 0.35).toFixed(2)),
+  knockoffRadius: Number(ARABIAN_KNOCKOFF.toFixed(2)),
 };
 
 export function arabianPlayTransform(): { x: number; y: number; z: number; scale: number } {
@@ -229,6 +236,39 @@ function flatBumpers(distance: number, angles: number[]): { id: string; x: numbe
   return angles.map((angle, i) => polar(`bumper-${i}`, angle, distance));
 }
 
+/**
+ * Camp props in winter_location.glb that rise through marble height.
+ * Crates, the barrel, and rails use the mean of the mesh's X/Z half-extents;
+ * those circles sit on the props. The towers and wall-16 do not: each tower
+ * box is about 1 unit wider than the stone, and wall-16's face is about 2.5
+ * where the box average is 3.7. Skating penguins are omitted. Stacked crates
+ * whose bottoms are above the marble are omitted.
+ * Off until the winter mesh mounts, so a missing model leaves no camp walls.
+ */
+const ICE_CAMP: SolidCircle[] = [
+  { id: "box-12", x: 12.28, z: -3.39, radius: 0.61, kind: "prop" },
+  { id: "box-13", x: 12.8, z: -2.1, radius: 1.05, kind: "prop" },
+  { id: "box-14", x: -12.37, z: -3.96, radius: 0.61, kind: "prop" },
+  { id: "rail-12", x: 11.67, z: -6.49, radius: 1.19, kind: "prop" },
+  { id: "box-15", x: -12.94, z: -5.22, radius: 1.05, kind: "prop" },
+  { id: "box-16", x: 14.12, z: -1.02, radius: 1.05, kind: "prop" },
+  { id: "barrel-15", x: 15.46, z: -0.3, radius: 0.67, kind: "prop" },
+  { id: "box-17", x: -14.32, z: -6.24, radius: 1.05, kind: "prop" },
+  { id: "wall-16", x: 10.94, z: 11.5, radius: 2.5, kind: "prop" },
+  { id: "rail-16", x: 14.12, z: -8.7, radius: 1.19, kind: "prop" },
+  { id: "box-18", x: -15.48, z: -6.89, radius: 0.6, kind: "prop" },
+  { id: "tower-17a", x: 14.67, z: 8.25, radius: 1.87, kind: "prop" },
+  { id: "tower-17b", x: 7.25, z: 14.99, radius: 1.87, kind: "prop" },
+  { id: "tower-19", x: -4.83, z: 19.01, radius: 1.38, kind: "prop" },
+];
+
+let winterCampActive = false;
+
+/** True only after winter_location.glb has mounted. A failed load leaves this false. */
+export function setWinterCampActive(active: boolean) {
+  winterCampActive = active;
+}
+
 function iceScenery(): SolidCircle[] {
   return getSnowmanPositions().map((snowman, i) => ({
     id: `snowman-${i}`,
@@ -237,139 +277,6 @@ function iceScenery(): SolidCircle[] {
     radius: SNOWMAN_RADIUS,
     kind: "snowman" as const,
   }));
-}
-
-export interface PropCloud {
-  name: string;
-  /** Vertices already in play space (the same coordinates the mesh is drawn at). */
-  points: { x: number; y: number; z: number }[];
-}
-
-/**
- * Camp solids measured from the loaded winter mesh. Empty until that mesh is
- * on screen, so a missing winter_location.glb cannot leave invisible walls.
- */
-let winterCampSolids: SolidCircle[] | null = null;
-
-export function setWinterCampSolids(solids: SolidCircle[] | null) {
-  winterCampSolids = solids;
-}
-
-export function getWinterCampSolids(): SolidCircle[] {
-  return winterCampSolids ?? [];
-}
-
-const CAMP_SKIP = /penguin|coin|ring_001|snowflake|fish|snowman|character/i;
-
-function slugName(name: string): string {
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  return slug || "prop";
-}
-
-/**
- * Circles that stay inside a prop's footprint.
- * A long crate or wall gets a row of circles as wide as the prop is thick,
- * so the marble stops on the prop and not on the open ice beside it.
- * A round tower or barrel gets one circle about as wide as the mesh.
- */
-function circlesInsideFootprint(points: { x: number; z: number }[]): { x: number; z: number; radius: number }[] {
-  let cx = 0;
-  let cz = 0;
-  for (const point of points) {
-    cx += point.x;
-    cz += point.z;
-  }
-  cx /= points.length;
-  cz /= points.length;
-
-  let cxx = 0;
-  let czz = 0;
-  let cxz = 0;
-  for (const point of points) {
-    const dx = point.x - cx;
-    const dz = point.z - cz;
-    cxx += dx * dx;
-    czz += dz * dz;
-    cxz += dx * dz;
-  }
-  const theta = 0.5 * Math.atan2(2 * cxz, cxx - czz);
-  const ux = Number.isFinite(theta) ? Math.cos(theta) : 1;
-  const uz = Number.isFinite(theta) ? Math.sin(theta) : 0;
-  const px = -uz;
-  const pz = ux;
-
-  let minAlong = Infinity;
-  let maxAlong = -Infinity;
-  const perps: number[] = [];
-  for (const point of points) {
-    const dx = point.x - cx;
-    const dz = point.z - cz;
-    const along = dx * ux + dz * uz;
-    perps.push(Math.abs(dx * px + dz * pz));
-    if (along < minAlong) minAlong = along;
-    if (along > maxAlong) maxAlong = along;
-  }
-  perps.sort((a, b) => a - b);
-  const halfThick = (perps[perps.length - 1] ?? 0) * 0.92;
-  const length = maxAlong - minAlong;
-  if (length > 18 || halfThick > 6 || halfThick < 0.08) return [];
-
-  const thickRadius = halfThick;
-  if (length <= thickRadius * 2.6) {
-    const dists = points.map((point) => Math.hypot(point.x - cx, point.z - cz)).sort((a, b) => a - b);
-    const p90 = dists[Math.min(dists.length - 1, Math.floor(dists.length * 0.9))] ?? thickRadius;
-    const radius = Math.min(p90 * 0.98, Math.max(halfThick, 0.08));
-    if (radius < 0.08) return [];
-    return [{ x: cx, z: cz, radius }];
-  }
-
-  const start = minAlong + thickRadius;
-  const end = maxAlong - thickRadius;
-  if (end <= start) {
-    const mid = (minAlong + maxAlong) / 2;
-    return [{ x: cx + ux * mid, z: cz + uz * mid, radius: Math.min(thickRadius, length / 2) }];
-  }
-  const circles: { x: number; z: number; radius: number }[] = [];
-  const step = thickRadius * 1.35;
-  for (let along = start; along <= end + 1e-6; along += step) {
-    circles.push({ x: cx + ux * along, z: cz + uz * along, radius: thickRadius });
-  }
-  return circles;
-}
-
-/** Fit solids to prop meshes. Empty when the stage model is not loaded. */
-export function fitPropFootprints(clouds: PropCloud[]): SolidCircle[] {
-  const solids: SolidCircle[] = [];
-  const used = new Map<string, number>();
-  for (const cloud of clouds) {
-    if (!cloud.points.length || CAMP_SKIP.test(cloud.name)) continue;
-    let ymin = Infinity;
-    let ymax = -Infinity;
-    for (const point of cloud.points) {
-      if (point.y < ymin) ymin = point.y;
-      if (point.y > ymax) ymax = point.y;
-    }
-    if (ymax < 0.35 || ymin > 1.15) continue;
-    const band = cloud.points.filter((point) => point.y >= -0.4 && point.y <= 1.8);
-    if (band.length < 6) continue;
-    const base = slugName(cloud.name);
-    const count = used.get(base) ?? 0;
-    used.set(base, count + 1);
-    const id = count === 0 ? base : `${base}-${count}`;
-    const circles = circlesInsideFootprint(band);
-    circles.forEach((circle, index) => {
-      const dist = Math.hypot(circle.x, circle.z);
-      if (dist - circle.radius > WINTER_STAGE.knockoffRadius + 0.4) return;
-      solids.push({
-        id: circles.length === 1 ? id : `${id}-${index}`,
-        x: circle.x,
-        z: circle.z,
-        radius: circle.radius,
-        kind: "prop",
-      });
-    });
-  }
-  return solids;
 }
 
 function buildLayout(
@@ -420,8 +327,6 @@ const LAYOUTS: Record<string, MapLayout> = {
     iceScenery(),
     6.6,
     DIAGONAL,
-    // Clear of the snowmen and the diagonal bumpers, one toward each side of the rink.
-    [28, 118, 208, 298].map((deg) => (deg * Math.PI) / 180),
   ),
   lava: buildLayout(
     "lava",
@@ -485,7 +390,7 @@ export function collectMatchSolids(input: {
   editorModels: EditorProp[];
 }): SolidCircle[] {
   const layout = getMapLayout(input.map);
-  const camp = input.map === "ice" ? getWinterCampSolids() : [];
+  const camp = input.map === "ice" && winterCampActive ? ICE_CAMP : [];
   const scenery = [...(layout?.scenery ?? []), ...camp];
   const bumpers: SolidCircle[] = input.bumpers.map((bumper) => ({
     id: bumper.id,

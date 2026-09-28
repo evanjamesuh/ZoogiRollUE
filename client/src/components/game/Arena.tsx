@@ -25,7 +25,7 @@ import { EditorScoringZones } from "./EditorScoringZones";
 import { ScoringZones } from "./ScoringZones";
 import { PinballBumpers } from "./PinballBumpers";
 import { ARENA_RADIUS } from "@/lib/arenaConstants";
-import { ARABIAN_STAGE, COSMOS_STAGE, GRASS_STAGE, WINTER_STAGE, arabianPlayTransform, fitPropFootprints, getMapLayout, setWinterCampSolids, type PropCloud } from "@/lib/arenaColliders";
+import { ARABIAN_STAGE, COSMOS_STAGE, GRASS_STAGE, WINTER_STAGE, arabianPlayTransform, getMapLayout, setWinterCampActive } from "@/lib/arenaColliders";
 
 export { ARENA_RADIUS };
 
@@ -112,54 +112,12 @@ function ArabianNightsScene() {
       }
     });
   }, [scene]);
-
-  // The courtyard sand continues far past a circle. Clip the flat floor so the
-  // sand you can stand on ends at the same edge as the fallback disk.
-  useLayoutEffect(() => {
-    if (editing) return;
-    scene.updateMatrixWorld(true);
-    const invScene = scene.matrixWorld.clone().invert();
-    const radius = ARABIAN_STAGE.floorRadius;
-    const scale = ARABIAN_STAGE.modelScale;
-    scene.traverse((child) => {
-      if (!(child instanceof THREE.Mesh) || child.userData.playDiskClipped) return;
-      const geometry = child.geometry;
-      if (!geometry.boundingBox) geometry.computeBoundingBox();
-      const local = geometry.boundingBox;
-      if (!local) return;
-      const rel = new THREE.Matrix4().copy(child.matrixWorld).premultiply(invScene);
-      const box = local.clone().applyMatrix4(rel);
-      const height = (box.max.y - box.min.y) * scale;
-      const wide = Math.max(box.max.x - box.min.x, box.max.z - box.min.z) * scale;
-      if (height > 1.5 || wide < 4) return;
-      const materials = Array.isArray(child.material) ? child.material : [child.material];
-      child.material = materials.map((material) => clipMaterialToDisk(material, radius));
-      child.userData.playDiskClipped = true;
-    });
-  }, [scene, editing]);
   
   return (
     <group ref={groupRef} position={[modelX, modelY, modelZ]} scale={[modelScale, modelScale, modelScale]} rotation={modelRotation}>
       <primitive object={scene} />
     </group>
   );
-}
-
-function clipMaterialToDisk(material: THREE.Material, radius: number): THREE.Material {
-  const clipped = material.clone();
-  clipped.onBeforeCompile = (shader) => {
-    if (!shader.vertexShader.includes("#include <worldpos_vertex>")) return;
-    if (!shader.fragmentShader.includes("#include <dithering_fragment>")) return;
-    shader.uniforms.uPlayDisk = { value: radius };
-    shader.vertexShader = shader.vertexShader
-      .replace("#include <common>", "#include <common>\nvarying vec3 vPlayWorld;")
-      .replace("#include <worldpos_vertex>", "#include <worldpos_vertex>\nvPlayWorld = worldPosition.xyz;");
-    shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\nuniform float uPlayDisk;\nvarying vec3 vPlayWorld;")
-      .replace("#include <dithering_fragment>", "if (dot(vPlayWorld.xz, vPlayWorld.xz) > uPlayDisk * uPlayDisk) discard;\n#include <dithering_fragment>");
-  };
-  clipped.needsUpdate = true;
-  return clipped;
 }
 
 interface SkatingPenguinData {
@@ -384,37 +342,11 @@ function WinterLocationScene() {
 
   const winterScale = WINTER_STAGE.modelScale;
 
-  // Solids come from this mesh, in the same pose it is drawn. A missing model
-  // never gets here, so those walls are not invisible obstacles on the fallback ice.
+  // Camp solids match this mesh. If the file fails to load, this never runs.
   useLayoutEffect(() => {
-    scene.updateMatrixWorld(true);
-    const invScene = scene.matrixWorld.clone().invert();
-    const scale = WINTER_STAGE.modelScale;
-    const offsetY = WINTER_STAGE.modelOffsetY;
-    const clouds: PropCloud[] = [];
-    const vertex = new THREE.Vector3();
-    scene.traverse((child) => {
-      if (!(child instanceof THREE.Mesh)) return;
-      const attr = child.geometry?.getAttribute("position");
-      if (!attr) return;
-      const points: PropCloud["points"] = [];
-      const stride = Math.max(1, Math.floor(attr.count / 400));
-      for (let i = 0; i < attr.count; i += stride) {
-        vertex.fromBufferAttribute(attr, i);
-        vertex.applyMatrix4(child.matrixWorld).applyMatrix4(invScene);
-        points.push({
-          x: vertex.x * scale,
-          y: vertex.y * scale + offsetY,
-          z: vertex.z * scale,
-        });
-      }
-      clouds.push({ name: child.name || "prop", points });
-    });
-    const solids = fitPropFootprints(clouds);
-    setWinterCampSolids(solids);
-    console.log(`[ICE] camp colliders fitted to the winter model: ${solids.length}`);
-    return () => setWinterCampSolids(null);
-  }, [scene]);
+    setWinterCampActive(true);
+    return () => setWinterCampActive(false);
+  }, []);
 
   return (
     <group ref={groupRef} position={[0, WINTER_STAGE.modelOffsetY, 0]} scale={[winterScale, winterScale, winterScale]}>
@@ -822,7 +754,10 @@ export function Arena({ theme = "grass" }: ArenaProps) {
 
   const isIceTheme = currentTheme === "ice";
   const floorRadius = getMapLayout(currentTheme)?.floorRadius ?? ARENA_RADIUS;
-  const stageFallback = <PlayfieldDisk radius={floorRadius} color={colors.platform} />;
+  const floorCenter: [number, number, number] = currentTheme === "saturn"
+    ? [ARABIAN_STAGE.plazaCenter[0], 0, ARABIAN_STAGE.plazaCenter[1]]
+    : [0, 0, 0];
+  const stageFallback = <PlayfieldDisk radius={floorRadius} color={colors.platform} center={floorCenter} />;
   
   return (
     <group>
@@ -845,7 +780,7 @@ export function Arena({ theme = "grass" }: ArenaProps) {
         </MeshyArenaErrorBoundary>
       )}
       {isIceTheme && (
-        <MeshyArenaErrorBoundary fallback={stageFallback} onError={() => setWinterCampSolids(null)}>
+        <MeshyArenaErrorBoundary fallback={stageFallback} onError={() => setWinterCampActive(false)}>
           <Suspense fallback={null}>
             <WinterLocationScene />
           </Suspense>
@@ -933,9 +868,9 @@ export function Arena({ theme = "grass" }: ArenaProps) {
   );
 }
 
-function PlayfieldDisk({ radius, color }: { radius: number; color: string }) {
+function PlayfieldDisk({ radius, color, center = [0, 0, 0] }: { radius: number; color: string; center?: [number, number, number] }) {
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={center} receiveShadow>
       <circleGeometry args={[radius, 64]} />
       <meshStandardMaterial color={color} />
     </mesh>
