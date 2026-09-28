@@ -170,15 +170,18 @@ export function getTreePositions(): { position: [number, number, number]; radius
 }
 
 export function getSnowmanPositions(): { position: [number, number, number]; radius: number }[] {
+  // Four on the open ice near the cardinals (radius 10). The other four used to
+  // sit at radius 16, which is inside the winter camp walls and towers, so they
+  // now stand on open ice between those and the bumpers.
   return [
-    { position: [9.55, 0, 2.96], radius: 3.0 },
-    { position: [7.46, 0, 14.15], radius: 3.0 },
-    { position: [-2.96, 0, 9.55], radius: 3.0 },
-    { position: [-14.15, 0, 7.46], radius: 3.0 },
-    { position: [-9.55, 0, -2.96], radius: 3.0 },
-    { position: [-7.46, 0, -14.15], radius: 3.0 },
-    { position: [2.96, 0, -9.55], radius: 3.0 },
-    { position: [14.15, 0, -7.46], radius: 3.0 }
+    { position: [9.55, 0, 2.96], radius: 0.55 },
+    { position: [4.23, 0, 7.95], radius: 0.55 },
+    { position: [-2.96, 0, 9.55], radius: 0.55 },
+    { position: [-7.95, 0, 4.23], radius: 0.55 },
+    { position: [-9.55, 0, -2.96], radius: 0.55 },
+    { position: [-4.23, 0, -7.95], radius: 0.55 },
+    { position: [2.96, 0, -9.55], radius: 0.55 },
+    { position: [7.95, 0, -4.23], radius: 0.55 }
   ];
 }
 

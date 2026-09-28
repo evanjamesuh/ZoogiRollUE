@@ -1,9 +1,10 @@
 import * as THREE from "three";
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { useAudio } from "@/lib/stores/useAudio";
+import { BUMPER_MODEL_URL } from "@/lib/arenaColliders";
 
 export function PinballBumpers() {
   const { pinballBumpers } = useZoogiGame();
@@ -34,7 +35,8 @@ function PinballBumper({ bumper }: PinballBumperProps) {
   const [glowIntensity, setGlowIntensity] = useState(0);
   const lastHitTimeRef = useRef(0);
   const { playSound } = useAudio();
-  const { scene } = useGLTF("/models/bumper.glb");
+  const { scene } = useGLTF(BUMPER_MODEL_URL);
+  const cloned = useMemo(() => scene.clone(true), [scene]);
 
   useEffect(() => {
     if (bumper.lastHitTime && bumper.lastHitTime > lastHitTimeRef.current) {
@@ -49,13 +51,13 @@ function PinballBumper({ bumper }: PinballBumperProps) {
     if (groupRef.current && jiggleIntensity > 0) {
       const jiggle = Math.sin(Date.now() * 0.03) * jiggleIntensity * 0.2;
       groupRef.current.scale.set(
-        1.5 + jiggle,
-        1.5 - jiggle * 0.5,
-        1.5 + jiggle
+        1 + jiggle,
+        1 - jiggle * 0.5,
+        1 + jiggle
       );
       setJiggleIntensity(prev => Math.max(0, prev - delta * 4));
     } else if (groupRef.current) {
-      groupRef.current.scale.set(1.5, 1.5, 1.5);
+      groupRef.current.scale.set(1, 1, 1);
     }
 
     if (glowRef.current) {
@@ -72,9 +74,9 @@ function PinballBumper({ bumper }: PinballBumperProps) {
     <group
       ref={groupRef}
       position={[bumper.position[0], bumper.position[1], bumper.position[2]]}
-      scale={[1.5, 1.5, 1.5]}
+      scale={[1, 1, 1]}
     >
-      <primitive object={scene.clone()} />
+      <primitive object={cloned} />
       <pointLight
         ref={glowRef}
         position={[0, 1, 0]}
@@ -86,4 +88,4 @@ function PinballBumper({ bumper }: PinballBumperProps) {
   );
 }
 
-useGLTF.preload("/models/bumper.glb");
+useGLTF.preload(BUMPER_MODEL_URL);

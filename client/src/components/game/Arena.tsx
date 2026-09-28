@@ -25,6 +25,7 @@ import { EditorScoringZones } from "./EditorScoringZones";
 import { ScoringZones } from "./ScoringZones";
 import { PinballBumpers } from "./PinballBumpers";
 import { ARENA_RADIUS } from "@/lib/arenaConstants";
+import { ARABIAN_STAGE, COSMOS_STAGE, GRASS_STAGE, WINTER_STAGE, arabianPlayTransform, getMapLayout } from "@/lib/arenaColliders";
 
 export { ARENA_RADIUS };
 
@@ -35,10 +36,12 @@ function FloatingIslandScene() {
   const backgroundSettings = useZoogiGame((state) => state.backgroundSettings);
   const elementTransforms = useZoogiGame((state) => state.elementTransforms);
   
-  const modelX = backgroundSettings.modelPositionX ?? 0;
-  const modelY = backgroundSettings.modelPositionY ?? -0.5;
-  const modelZ = backgroundSettings.modelPositionZ ?? 0;
-  const modelScale = backgroundSettings.modelScale ?? 3;
+  const gameMode = useZoogiGame((state) => state.gameMode);
+  const editing = gameMode === "map_editor";
+  const modelX = editing ? (backgroundSettings.modelPositionX ?? 0) : 0;
+  const modelY = editing ? (backgroundSettings.modelPositionY ?? -0.5) : GRASS_STAGE.modelOffsetY;
+  const modelZ = editing ? (backgroundSettings.modelPositionZ ?? 0) : 0;
+  const modelScale = editing ? (backgroundSettings.modelScale ?? 3) : GRASS_STAGE.modelScale;
   const arenaRotation = elementTransforms.arenaModelRotation;
   const modelRotation: [number, number, number] = [
     arenaRotation?.x ?? 0,
@@ -78,17 +81,18 @@ function ArabianNightsScene() {
   const { actions } = useAnimations(animations, groupRef);
   const backgroundSettings = useZoogiGame((state) => state.backgroundSettings);
   const elementTransforms = useZoogiGame((state) => state.elementTransforms);
-  
-  const modelX = backgroundSettings.modelPositionX ?? 0;
-  const modelY = backgroundSettings.modelPositionY ?? -0.5;
-  const modelZ = backgroundSettings.modelPositionZ ?? 0;
-  const modelScale = backgroundSettings.modelScale ?? 1.8;
+  const gameMode = useZoogiGame((state) => state.gameMode);
+  const editing = gameMode === "map_editor";
+  const placed = arabianPlayTransform();
+
+  const modelX = editing ? (backgroundSettings.modelPositionX ?? 0) : placed.x;
+  const modelY = editing ? (backgroundSettings.modelPositionY ?? -0.5) : placed.y;
+  const modelZ = editing ? (backgroundSettings.modelPositionZ ?? 0) : placed.z;
+  const modelScale = editing ? (backgroundSettings.modelScale ?? ARABIAN_STAGE.modelScale) : placed.scale;
   const arenaRotation = elementTransforms.arenaModelRotation;
-  const modelRotation: [number, number, number] = [
-    arenaRotation?.x ?? 0,
-    arenaRotation?.y ?? 0,
-    arenaRotation?.z ?? 0
-  ];
+  const modelRotation: [number, number, number] = editing
+    ? [arenaRotation?.x ?? 0, arenaRotation?.y ?? 0, arenaRotation?.z ?? 0]
+    : [0, 0, 0];
   
   useMemo(() => {
     if (actions && Object.keys(actions).length > 0) {
@@ -336,8 +340,9 @@ function WinterLocationScene() {
     });
   });
 
+  const winterScale = WINTER_STAGE.modelScale;
   return (
-    <group ref={groupRef} position={[0, -4.2, 0]} scale={[0.9, 0.9, 0.9]}>
+    <group ref={groupRef} position={[0, WINTER_STAGE.modelOffsetY, 0]} scale={[winterScale, winterScale, winterScale]}>
       <primitive object={scene} />
     </group>
   );
@@ -350,12 +355,14 @@ function CosmosArenaModel() {
   const { scene } = useGLTF("/models/cosmos_arena.glb");
   const backgroundSettings = useZoogiGame((state) => state.backgroundSettings);
   const elementTransforms = useZoogiGame((state) => state.elementTransforms);
-  
+  const gameMode = useZoogiGame((state) => state.gameMode);
+  const editing = gameMode === "map_editor";
+
   const arenaOffset = elementTransforms.arenaModelOffset;
-  const modelX = (backgroundSettings.modelPositionX ?? 0) + arenaOffset.x;
-  const modelY = (backgroundSettings.modelPositionY ?? -0.5) + arenaOffset.y;
-  const modelZ = (backgroundSettings.modelPositionZ ?? 0) + arenaOffset.z;
-  const scale = backgroundSettings.modelScale ?? 3;
+  const modelX = editing ? (backgroundSettings.modelPositionX ?? 0) + arenaOffset.x : 0;
+  const modelY = editing ? (backgroundSettings.modelPositionY ?? -0.5) + arenaOffset.y : COSMOS_STAGE.modelOffsetY;
+  const modelZ = editing ? (backgroundSettings.modelPositionZ ?? 0) + arenaOffset.z : 0;
+  const scale = editing ? (backgroundSettings.modelScale ?? COSMOS_STAGE.modelScale) : COSMOS_STAGE.modelScale;
   const modelScale: [number, number, number] = [scale, scale, scale];
   const modelPosition: [number, number, number] = [modelX, modelY, modelZ];
   
@@ -375,11 +382,9 @@ function CosmosArenaModel() {
   }, [scene]);
   
   const arenaRotation = elementTransforms.arenaModelRotation;
-  const modelRotation: [number, number, number] = [
-    arenaRotation?.x ?? 0,
-    arenaRotation?.y ?? 0,
-    arenaRotation?.z ?? 0
-  ];
+  const modelRotation: [number, number, number] = editing
+    ? [arenaRotation?.x ?? 0, arenaRotation?.y ?? 0, arenaRotation?.z ?? 0]
+    : [0, 0, 0];
   
   return (
     <group ref={groupRef} position={modelPosition} scale={modelScale} rotation={modelRotation}>
@@ -722,7 +727,6 @@ export function Arena({ theme = "grass" }: ArenaProps) {
   const selectedMap = useZoogiGame(state => state.selectedMap);
   const customArenaId = useZoogiGame(state => state.customArenaId);
   const meshyArenaModelUrl = useZoogiGame(state => state.meshyArenaModelUrl);
-  const backgroundSettings = useZoogiGame(state => state.backgroundSettings);
   const wallSettings = useZoogiGame(state => state.wallSettings);
   const elementTransforms = useZoogiGame(state => state.elementTransforms);
   const gameMode = useZoogiGame(state => state.gameMode);
@@ -738,51 +742,55 @@ export function Arena({ theme = "grass" }: ArenaProps) {
   
   const colors = themeColors[currentTheme as keyof typeof themeColors] || themeColors.grass;
 
-  const isSpaceTheme = currentTheme === "space";
-  const isGrassTheme = currentTheme === "grass";
   const isIceTheme = currentTheme === "ice";
-  const useGLBFloor = isSpaceTheme || isGrassTheme || isIceTheme;
+  const floorRadius = getMapLayout(currentTheme)?.floorRadius ?? ARENA_RADIUS;
+  const stageFallback = <PlayfieldDisk radius={floorRadius} color={colors.platform} />;
   
   return (
     <group>
-      {/* Hide ground plane for themes using GLB model floor */}
-      {!useGLBFloor && (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-          <circleGeometry args={[ARENA_RADIUS * (backgroundSettings.groundScale ?? 3), 64]} />
-          <meshStandardMaterial color={colors.platform} />
-        </mesh>
+      {/* Lava has no stage model. The disk is the playfield, the same size as the knockoff ring. */}
+      {currentTheme === "lava" && (
+        <>
+          <PlayfieldDisk radius={floorRadius} color={colors.platform} />
+          <EdgeRing radius={floorRadius} color={colors.edge} />
+          <DangerZone radius={floorRadius} color={colors.edge} />
+        </>
       )}
-
-      {!useGLBFloor && <EdgeRing radius={ARENA_RADIUS} color={colors.edge} />}
-
-      {!useGLBFloor && <DangerZone radius={ARENA_RADIUS} color={colors.edge} />}
       
       {currentTheme === "lava" && <FallingRocks />}
       {currentTheme === "lava" && <DesertHoodoos />}
       {currentTheme === "grass" && (
-        <Suspense fallback={null}>
-          <FloatingIslandScene />
-        </Suspense>
+        <MeshyArenaErrorBoundary fallback={stageFallback}>
+          <Suspense fallback={null}>
+            <FloatingIslandScene />
+          </Suspense>
+        </MeshyArenaErrorBoundary>
       )}
       {isIceTheme && (
-        <Suspense fallback={null}>
-          <WinterLocationScene />
-        </Suspense>
+        <MeshyArenaErrorBoundary fallback={stageFallback}>
+          <Suspense fallback={null}>
+            <WinterLocationScene />
+          </Suspense>
+        </MeshyArenaErrorBoundary>
       )}
       {isIceTheme && <IcePatches />}
       {isIceTheme && <Snowmen />}
       {isIceTheme && <SnowfallEffect />}
       {isIceTheme && <WinterAnimals />}
       {currentTheme === "space" && (
-        <Suspense fallback={null}>
-          <CosmosArenaModel />
-        </Suspense>
+        <MeshyArenaErrorBoundary fallback={stageFallback}>
+          <Suspense fallback={null}>
+            <CosmosArenaModel />
+          </Suspense>
+        </MeshyArenaErrorBoundary>
       )}
       {currentTheme === "space" && <SpaceBackground />}
       {currentTheme === "saturn" && (
-        <Suspense fallback={null}>
-          <ArabianNightsScene />
-        </Suspense>
+        <MeshyArenaErrorBoundary fallback={stageFallback}>
+          <Suspense fallback={null}>
+            <ArabianNightsScene />
+          </Suspense>
+        </MeshyArenaErrorBoundary>
       )}
       
       {customArenaId && <CustomDecorations />}
@@ -844,6 +852,15 @@ export function Arena({ theme = "grass" }: ArenaProps) {
         />
       )}
     </group>
+  );
+}
+
+function PlayfieldDisk({ radius, color }: { radius: number; color: string }) {
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+      <circleGeometry args={[radius, 64]} />
+      <meshStandardMaterial color={color} />
+    </mesh>
   );
 }
 

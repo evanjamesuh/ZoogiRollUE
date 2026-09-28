@@ -1,15 +1,20 @@
 import * as THREE from "three";
-import { useMemo, useRef, Suspense } from "react";
+import { useMemo, useRef, Suspense, Component, ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { useAudio } from "@/lib/stores/useAudio";
+import { getHoodooDecor, type HoodooDecor } from "@/lib/arenaColliders";
 
-interface HoodooData {
-  id: string;
-  position: [number, number, number];
-  scale: number;
-  rotation: number;
+type HoodooData = HoodooDecor;
+
+class HoodooErrorBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode; fallback: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() { return this.state.hasError ? this.props.fallback : this.props.children; }
 }
 
 function StylizedHoodoo({ hoodoo }: { hoodoo: HoodooData }) {
@@ -31,7 +36,7 @@ function StylizedHoodoo({ hoodoo }: { hoodoo: HoodooData }) {
       const dx = pos[0] - hoodoo.position[0];
       const dz = pos[2] - hoodoo.position[2];
       const dist = Math.sqrt(dx * dx + dz * dz);
-      return dist < 1.8;
+      return dist < hoodoo.radius + 0.5;
     };
     
     let wasHit = false;
@@ -91,36 +96,16 @@ function FallbackHoodoo({ hoodoo }: { hoodoo: HoodooData }) {
 
 function HoodooWithFallback({ hoodoo }: { hoodoo: HoodooData }) {
   return (
-    <Suspense fallback={<FallbackHoodoo hoodoo={hoodoo} />}>
-      <StylizedHoodoo hoodoo={hoodoo} />
-    </Suspense>
+    <HoodooErrorBoundary fallback={<FallbackHoodoo hoodoo={hoodoo} />}>
+      <Suspense fallback={<FallbackHoodoo hoodoo={hoodoo} />}>
+        <StylizedHoodoo hoodoo={hoodoo} />
+      </Suspense>
+    </HoodooErrorBoundary>
   );
 }
 
 export function DesertHoodoos() {
-  const hoodooData = useMemo<HoodooData[]>(() => {
-    const positions: HoodooData[] = [];
-    const count = 6;
-    
-    for (let i = 0; i < count; i++) {
-      const angle = (i / count) * Math.PI * 2 + 0.3;
-      const radius = 10 + (i % 2) * 4;
-      const x = Math.cos(angle) * radius;
-      const z = Math.sin(angle) * radius;
-      
-      if (z > 8 && Math.abs(x) < 5) continue;
-      
-      const scale = 2.0 + (i % 3) * 0.4;
-      positions.push({
-        id: `hoodoo-${i}`,
-        position: [x, 0, z],
-        scale,
-        rotation: (i * 1.8) % (Math.PI * 2)
-      });
-    }
-    
-    return positions;
-  }, []);
+  const hoodooData = useMemo<HoodooData[]>(() => getHoodooDecor(), []);
 
   return (
     <group>
@@ -132,24 +117,10 @@ export function DesertHoodoos() {
 }
 
 export function getHoodooPositions(): { position: [number, number, number]; radius: number }[] {
-  const positions: { position: [number, number, number]; radius: number }[] = [];
-  const count = 6;
-  
-  for (let i = 0; i < count; i++) {
-    const angle = (i / count) * Math.PI * 2 + 0.3;
-    const radius = 10 + (i % 2) * 4;
-    const x = Math.cos(angle) * radius;
-    const z = Math.sin(angle) * radius;
-    
-    if (z > 8 && Math.abs(x) < 5) continue;
-    
-    positions.push({
-      position: [x, 0, z],
-      radius: 1.2
-    });
-  }
-  
-  return positions;
+  return getHoodooDecor().map((hoodoo) => ({
+    position: hoodoo.position,
+    radius: hoodoo.radius,
+  }));
 }
 
 useGLTF.preload("/models/stylized_desert_hoodoo.glb");

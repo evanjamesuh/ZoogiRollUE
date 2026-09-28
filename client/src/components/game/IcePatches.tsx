@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
+import { getIcePatches } from "@/lib/arenaColliders";
 
 interface IcePatch {
   id: string;
@@ -11,25 +12,12 @@ interface IcePatch {
 
 export function IcePatches() {
   const patches = useMemo<IcePatch[]>(() => {
-    const result: IcePatch[] = [];
-    const patchCount = 4;
-    
-    for (let i = 0; i < patchCount; i++) {
-      const angle = (i / patchCount) * Math.PI * 2 + 0.3;
-      const distFromCenter = 8 + (i % 2) * 4;
-      const x = Math.cos(angle) * distFromCenter;
-      const z = Math.sin(angle) * distFromCenter;
-      const radius = 3.0 + (i % 2) * 0.5;
-      
-      result.push({
-        id: `ice-${i}`,
-        position: [x, 0.02, z],
-        radius,
-        rotation: angle
-      });
-    }
-    
-    return result;
+    return getIcePatches().map((patch) => ({
+      id: patch.id,
+      position: [patch.x, 0.02, patch.z] as [number, number, number],
+      radius: patch.radius,
+      rotation: patch.rotation,
+    }));
   }, []);
 
   return (
@@ -72,21 +60,8 @@ function IcePatchMesh({ patch }: { patch: IcePatch }) {
 }
 
 export function getIcePatchPositions(): { position: [number, number, number]; radius: number }[] {
-  const patches: { position: [number, number, number]; radius: number }[] = [];
-  const patchCount = 4;
-  
-  for (let i = 0; i < patchCount; i++) {
-    const angle = (i / patchCount) * Math.PI * 2 + 0.3;
-    const distFromCenter = 8 + (i % 2) * 4;
-    const x = Math.cos(angle) * distFromCenter;
-    const z = Math.sin(angle) * distFromCenter;
-    const radius = 3.0 + (i % 2) * 0.5;
-    
-    patches.push({
-      position: [x, 0.02, z],
-      radius
-    });
-  }
-  
-  return patches;
+  return getIcePatches().map((patch) => ({
+    position: [patch.x, 0.02, patch.z],
+    radius: patch.radius,
+  }));
 }
