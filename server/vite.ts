@@ -35,7 +35,7 @@ export async function setupVite(server: Server, app: Express) {
 
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
-    const pathname = req.path;
+    const pathname = url.split("?")[0];
     const isAssetRequest = MISSING_ASSET_PREFIXES.some(
       (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
     );

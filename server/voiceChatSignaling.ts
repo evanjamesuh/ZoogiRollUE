@@ -19,6 +19,11 @@ const rooms: Map<string, VoiceChatRoom> = new Map();
 export function setupVoiceChatSignaling(server: Server) {
   const wss = new WebSocketServer({ server, path: "/voice-chat" });
 
+  wss.on("error", (error: NodeJS.ErrnoException) => {
+    if (error.code === "EADDRINUSE") return;
+    console.error("Voice chat signaling error:", error);
+  });
+
   wss.on("connection", (ws: WebSocket) => {
     let currentRoomId: string | null = null;
     let currentPeerId: string | null = null;
