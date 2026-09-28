@@ -743,17 +743,21 @@ export function Arena({ theme = "grass" }: ArenaProps) {
   const colors = themeColors[currentTheme as keyof typeof themeColors] || themeColors.grass;
 
   const isIceTheme = currentTheme === "ice";
-  const floorRadius = getMapLayout(currentTheme)?.floorRadius ?? ARENA_RADIUS;
-  const stageFallback = <PlayfieldDisk radius={floorRadius} color={colors.platform} />;
+  const layout = getMapLayout(currentTheme);
+  const floorRadius = layout?.floorRadius ?? ARENA_RADIUS;
+  // The stand-in disk matches the knockout line, so rolling off what you
+  // see is the same as crossing the scoring ring.
+  const standInRadius = layout?.knockoffRadius ?? floorRadius;
+  const stageFallback = <PlayfieldDisk radius={standInRadius} color={colors.platform} />;
   
   return (
     <group>
       {/* Lava has no stage model. The disk is the playfield, the same size as the knockoff ring. */}
       {currentTheme === "lava" && (
         <>
-          <PlayfieldDisk radius={floorRadius} color={colors.platform} />
-          <EdgeRing radius={floorRadius} color={colors.edge} />
-          <DangerZone radius={floorRadius} color={colors.edge} />
+          <PlayfieldDisk radius={standInRadius} color={colors.platform} />
+          <EdgeRing radius={standInRadius} color={colors.edge} />
+          <DangerZone radius={standInRadius} color={colors.edge} />
         </>
       )}
       

@@ -142,6 +142,7 @@ const ZOOGI_TRAJECTORY_COLORS: Record<string, string> = {
   wolfgang: "#6B7280",   // gray
   hotstreak: "#F97316",  // orange
   lars: "#3B82F6",       // blue
+  wraps: "#D4C4B0",
   pinpoint: "#8B5CF6",   // purple
   bolt: "#FBBF24",       // yellow
 };
@@ -730,6 +731,30 @@ export function PlayerZoogi() {
     <group>
       <group ref={meshRef} position={pos} visible={!firstPersonView}>
         <ZoogiModelSwitch zoogiId={playerEntity.zoogi.id} hasShield={playerEntity.hasShield} hasSpawnImmunity={playerEntity.spawnImmunity} color={playerEntity.zoogi.color} customModelUrl={playerEntity.customModelUrl} isPlayer={true} />
+        {playerEntity.larsRicochetBoost > 1 && (
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
+            <ringGeometry args={[1.1, 1.35, 24]} />
+            <meshBasicMaterial color="#3B82F6" transparent opacity={0.85} />
+          </mesh>
+        )}
+        {(playerEntity.boltPhasingUntil || 0) > Date.now() && (
+          <mesh>
+            <sphereGeometry args={[1.15, 16, 16]} />
+            <meshBasicMaterial color="#FDE047" transparent opacity={0.35} />
+          </mesh>
+        )}
+        {(playerEntity.wrapsBindUntil || 0) > Date.now() && (
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.08, 0]}>
+            <ringGeometry args={[1.2, 1.55, 24]} />
+            <meshBasicMaterial color="#D4C4B0" transparent opacity={0.9} />
+          </mesh>
+        )}
+        {playerEntity.speedBoost > 1 && (
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+            <ringGeometry args={[0.9, 1.15, 20]} />
+            <meshBasicMaterial color="#e5e7eb" transparent opacity={0.8} />
+          </mesh>
+        )}
       </group>
       
       {/* Floating player icon */}
@@ -1181,7 +1206,7 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
             0,
             Math.sin(angle) * launchSpeed * accuracy
           ];
-          updateEnemy(entityId, { velocity: newVel });
+          updateEnemy(entityId, { velocity: newVel, lastHitByPlayer: false });
           setMovementStopped(false);
           
           
@@ -1254,6 +1279,16 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
         >
           {enemy.zoogi.name?.charAt(0)?.toUpperCase() || 'E'}
         </div>
+        {(enemy.slowUntil || 0) > Date.now() && (
+          <div style={{ marginTop: 4, background: "#D4C4B0", color: "#3f2e22", fontWeight: 700, fontSize: 11, padding: "2px 6px", borderRadius: 6 }}>
+            Slowed
+          </div>
+        )}
+        {enemy.isStunned && (
+          <div style={{ marginTop: 4, background: "#FDE047", color: "#3f2e22", fontWeight: 700, fontSize: 11, padding: "2px 6px", borderRadius: 6 }}>
+            Stunned
+          </div>
+        )}
       </Html>
 
       {isMyTurn && !isFreeForAll && (

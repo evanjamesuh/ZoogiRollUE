@@ -343,3 +343,189 @@ test("marble comes to rest within a reasonable time after a flick and collision"
   assert.equal(planarSpeed(stayed.velocity), 0, "a stopped marble should not start moving again");
   assert.ok(Math.abs(stayed.position[0] - done.position[0]) < 1e-6, "a stopped marble should hold its ground");
 });
+
+test("knockouts score, falling costs points, and a flick off the edge ends the turn", async () => {
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  const { ZOOGI_ROSTER } = await loadGame();
+  const useZoogiGame = await playingMarble();
+  const player = useZoogiGame.getState().playerEntity;
+  assert.ok(player);
+  const cpuZoogi = ZOOGI_ROSTER.find((zoogi) => zoogi.id === "hotstreak") ?? ZOOGI_ROSTER[1];
+  const lars = ZOOGI_ROSTER.find((zoogi) => zoogi.id === "lars");
+  const wraps = ZOOGI_ROSTER.find((zoogi) => zoogi.id === "wraps");
+  assert.ok(lars && wraps, "Lars and Wraps should both be on the roster");
+
+  const cpu = {
+    ...player,
+    id: "cpu",
+    isPlayer: false,
+    zoogi: cpuZoogi,
+    position: [0, 0.5, 0] as [number, number, number],
+    velocity: [0, 0, 0] as [number, number, number],
+    score: 100,
+    isKnockedOut: false,
+    isRespawning: false,
+    respawnAt: null,
+    spawnImmunity: false,
+    lastHitByPlayer: false,
+  };
+
+  useZoogiGame.setState({
+    phase: "playing",
+    gameMode: "classic",
+    isPlayerTurn: true,
+    turnIndex: 0,
+    score: 100,
+    zoneEditorConfigs: [],
+    mushrooms: [],
+    pinballBumpers: [],
+    orbs: [],
+    wallSettings: { ...useZoogiGame.getState().wallSettings, knockoffBoundaryRadius: 50 },
+    playerEntity: {
+      ...player,
+      position: [60, 0.5, 0],
+      velocity: [1.2, 0, 0],
+      isKnockedOut: false,
+      isRespawning: false,
+      respawnAt: null,
+      spawnImmunity: false,
+      lastHitByEnemyId: null,
+    },
+    enemies: [cpu],
+  });
+
+  useZoogiGame.getState().physicsTick(1 / 60);
+  const fell = useZoogiGame.getState();
+  assert.equal(fell.score, 25, "falling off should cost 75 points");
+  assert.equal(fell.isPlayerTurn, false, "a flick off the edge should end the player's turn");
+  assert.equal(fell.playerEntity?.isKnockedOut, true);
+  assert.equal(fell.playerEntity?.velocity[0], 0, "the marble should stop instead of rolling forever");
+  assert.ok((fell.playerEntity?.respawnAt ?? 0) > Date.now(), "respawn waits a short beat");
+
+  useZoogiGame.setState({
+    playerEntity: fell.playerEntity
+      ? { ...fell.playerEntity, respawnAt: Date.now() - 20 }
+      : null,
+  });
+  useZoogiGame.getState().physicsTick(1 / 60);
+  const back = useZoogiGame.getState().playerEntity;
+  assert.ok(back);
+  assert.equal(back.isKnockedOut, false, "the marble should be back in play");
+  assert.equal(back.isRespawning, false);
+  assert.ok(
+    Math.hypot(back.position[0], back.position[2]) < 48,
+    `respawn should land on the playfield, distance=${Math.hypot(back.position[0], back.position[2])}`
+  );
+
+  useZoogiGame.setState({
+    orbs: [{
+      ...makeStillOrb("star-out", 60, 0),
+      lastHitBy: "player" as const,
+      isStarOrb: true,
+      starOrbType: "wolfgang" as const,
+    }],
+  });
+  useZoogiGame.getState().physicsTick(1 / 60);
+  const orbKnock = useZoogiGame.getState();
+  assert.equal(orbKnock.score, 75, "knocking an orb off should score 50");
+  assert.equal(orbKnock.orbs[0]?.isOutOfRing, true);
+  assert.equal(orbKnock.playerEntity?.wolfgangAbilityUnlocked, true, "a star orb unlocks the hitter's ability");
+
+  useZoogiGame.setState({
+    orbs: [{
+      ...makeStillOrb("cpu-orb", 62, 0),
+      lastHitBy: "enemy" as const,
+      lastHitByEnemyId: "cpu",
+    }],
+  });
+  useZoogiGame.getState().physicsTick(1 / 60);
+  const cpuScored = useZoogiGame.getState();
+  assert.equal(cpuScored.score, 75, "an opponent's orb should not add to the player's score");
+  assert.equal(cpuScored.enemies[0]?.score, 150, "the computer should score for knocking an orb off");
+
+  useZoogiGame.setState({
+    orbs: [],
+    enemies: cpuScored.enemies.map((enemy) => ({
+      ...enemy,
+      position: [64, 0.5, 0] as [number, number, number],
+      velocity: [0.4, 0, 0] as [number, number, number],
+      isKnockedOut: false,
+      isRespawning: false,
+      respawnAt: null,
+      lastHitByPlayer: true,
+      score: 150,
+    })),
+  });
+  useZoogiGame.getState().physicsTick(1 / 60);
+  const ko = useZoogiGame.getState();
+  assert.equal(ko.score, 175, "knocking an opponent off should score 100");
+  assert.equal(ko.enemies[0]?.score, 75, "the opponent should lose 75 for falling off");
+  assert.equal(ko.enemies[0]?.isKnockedOut, true);
+
+  const ready = useZoogiGame.getState().playerEntity;
+  assert.ok(ready);
+  useZoogiGame.setState({
+    isPlayerTurn: true,
+    playerEntity: {
+      ...ready,
+      position: [0, 0.5, 0],
+      velocity: [0, 0, 0],
+      wolfgangAbilityUnlocked: true,
+      isKnockedOut: false,
+      isRespawning: false,
+    },
+    enemies: ko.enemies.map((enemy) => ({
+      ...enemy,
+      position: [4, 0.5, 0] as [number, number, number],
+      isKnockedOut: false,
+      isRespawning: false,
+    })),
+    orbs: [],
+  });
+  useZoogiGame.getState().activateWolfgangAbility();
+  const dashed = useZoogiGame.getState().playerEntity;
+  assert.ok(dashed);
+  assert.ok(planarSpeed(dashed.velocity) > 1, "Dash should burst the marble forward");
+  assert.equal(dashed.wolfgangAbilityUnlocked, false);
+
+  useZoogiGame.setState({
+    playerEntity: {
+      ...dashed,
+      zoogi: lars,
+      position: [0, 0.5, 0],
+      velocity: [0.3, 0, 0],
+      larsAbilityUnlocked: true,
+      larsRicochetBoost: 1,
+    },
+    orbs: [makeStillOrb("ricochet-target", 4, 1)],
+  });
+  useZoogiGame.getState().activateLarsAbility();
+  const ricochet = useZoogiGame.getState().playerEntity;
+  assert.ok(ricochet);
+  assert.ok(ricochet.larsRicochetBoost > 1, "Ricochet should arm a homing bounce");
+  assert.equal(ricochet.larsAbilityUnlocked, false);
+
+  useZoogiGame.setState({
+    playerEntity: {
+      ...ricochet,
+      zoogi: wraps,
+      position: [0, 0.5, 0],
+      velocity: [0, 0, 0],
+      wrapsAbilityUnlocked: true,
+      wrapsBindUntil: 0,
+    },
+    enemies: [{
+      ...cpu,
+      position: [2, 0.5, 0],
+      velocity: [0.5, 0, 0],
+      slowUntil: 0,
+      isKnockedOut: false,
+      isRespawning: false,
+    }],
+  });
+  useZoogiGame.getState().activateWrapsAbility();
+  const bound = useZoogiGame.getState();
+  assert.ok((bound.playerEntity?.wrapsBindUntil ?? 0) > Date.now(), "Bind should arm contact slow");
+  assert.ok((bound.enemies[0]?.slowUntil ?? 0) > Date.now(), "a nearby opponent should be slowed");
+  assert.ok(planarSpeed(bound.enemies[0]?.velocity ?? [0, 0, 0]) < 0.5, "Bind should cut the opponent's speed");
+});
