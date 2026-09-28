@@ -31,8 +31,18 @@ export async function setupVite(server: Server, app: Express) {
 
   app.use(vite.middlewares);
 
+  const MISSING_ASSET_PREFIXES = ["/models", "/sounds", "/videos", "/textures"];
+
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
+    const pathname = req.path;
+    const isAssetRequest = MISSING_ASSET_PREFIXES.some(
+      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+    );
+    if (isAssetRequest) {
+      res.status(404).type("text/plain").send("Not found");
+      return;
+    }
 
     try {
       const clientTemplate = path.resolve(
