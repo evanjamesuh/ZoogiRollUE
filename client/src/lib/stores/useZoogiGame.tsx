@@ -29,7 +29,7 @@ import { setCurrentMap } from "@/lib/treeOffsets";
 import { triggerKnockoffFeel, triggerCollisionFeel, triggerCollectFeel, triggerAbilityFeel, triggerWallHitFeel, useGameFeel } from "./useGameFeel";
 import { triggerAbilityCameraEffect, triggerKnockoffCameraEffect, triggerCollisionCameraEffect, triggerTargetFocusCameraEffect } from "./useCameraEffects";
 import { getDeviceId } from "@/lib/deviceId";
-import { GRASS_STAGE, collectMatchSolids, getIcePatches, getMapLayout, resolveSolidCollision } from "../arenaColliders";
+import { ARABIAN_STAGE, COSMOS_STAGE, GRASS_STAGE, arabianPlayTransform, collectMatchSolids, getIcePatches, getMapLayout, resolveSolidCollision } from "../arenaColliders";
 
 export const DEFAULT_BACKGROUND_SETTINGS = {
   distance: 200,
@@ -1097,13 +1097,21 @@ function playfieldSettings(
     zoneEditorConfigs: zones,
     wallSettings: { ...wallSettings, knockoffBoundaryRadius: layout.knockoffRadius },
   };
-  if (map === "grass") {
+  const stage =
+    map === "grass"
+      ? { x: 0, y: GRASS_STAGE.modelOffsetY, z: 0, scale: GRASS_STAGE.modelScale }
+      : map === "space"
+        ? { x: 0, y: COSMOS_STAGE.modelOffsetY, z: 0, scale: COSMOS_STAGE.modelScale }
+        : map === "saturn"
+          ? arabianPlayTransform()
+          : null;
+  if (stage) {
     patch.backgroundSettings = {
       ...backgroundSettings,
-      modelScale: GRASS_STAGE.modelScale,
-      modelPositionX: 0,
-      modelPositionY: GRASS_STAGE.modelOffsetY,
-      modelPositionZ: 0,
+      modelScale: stage.scale,
+      modelPositionX: stage.x,
+      modelPositionY: stage.y,
+      modelPositionZ: stage.z,
     };
   }
   return patch;

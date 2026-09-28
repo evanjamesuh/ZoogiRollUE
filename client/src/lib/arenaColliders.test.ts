@@ -130,6 +130,20 @@ test("a marble aimed at a visible grass rock bounces off it", () => {
   assert.ok(pos[0] < rock.x - rock.radius, "the marble should stay outside the rock");
 });
 
+test("fitted stages keep the knockoff on the measured floor", () => {
+  const space = getMapLayout("space");
+  const saturn = getMapLayout("saturn");
+  const lava = getMapLayout("lava");
+  assert.ok(space);
+  assert.ok(saturn);
+  assert.ok(lava);
+  assert.ok(space.floorRadius > 14 && space.knockoffRadius < 20);
+  assert.ok(saturn.floorRadius > 14 && saturn.knockoffRadius < 22);
+  for (const hoodoo of lava.scenery) {
+    assert.ok(hoodoo.radius < 0.9, `${hoodoo.id} still uses the fallback cap radius`);
+  }
+});
+
 test("an editor-placed bumper collides at the bumper radius", () => {
   const solids = collectMatchSolids({
     map: null,

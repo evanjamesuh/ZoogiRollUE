@@ -24,6 +24,52 @@ export const GRASS_STAGE = {
   groundRadius: 0.225 * 60,
 };
 
+/**
+ * winter_location.glb at the transform WinterLocationScene draws.
+ * Ground tops sit on y=0. The open rink is inside the camp props (~radius 12);
+ * snow past the knockoff is backdrop, same as the grass map's outer islands.
+ */
+export const WINTER_STAGE = {
+  modelScale: 0.9,
+  modelOffsetY: -4.2,
+  floorRadius: 17.5,
+  knockoffRadius: 18.4,
+};
+
+/**
+ * cosmos_arena.glb. The arena floor rim is ~15.75 local and the wall stands on
+ * that rim. Scale 1.08 brings the rim to ~17 so a full flick still leaves the
+ * platform. The wall is the visual edge; a closed collider ring would make
+ * knockouts impossible, so the knockoff line sits on the rim instead.
+ * Floor mesh is at local y=-0.02.
+ */
+export const COSMOS_STAGE = {
+  modelScale: 1.08,
+  modelOffsetY: 0.02 * 1.08,
+  floorRadius: 16.6,
+  knockoffRadius: 17.5,
+};
+
+/**
+ * arabian_nights_stage.glb is authored around (-656.5, 556.6, 11), thousands of
+ * units from the origin. The open plaza is the ring of floor outside the palace
+ * (local radius ~120–166). The anchor is a point on that plaza; the play
+ * transform maps it to the origin and the floor onto y=0.
+ */
+export const ARABIAN_STAGE = {
+  modelScale: 0.48,
+  floorCenter: [-656.5, 556.6, 11] as [number, number, number],
+  plazaAnchor: [-526.5, 556.6, 11] as [number, number, number],
+  floorRadius: 16.2,
+  knockoffRadius: 17.2,
+};
+
+export function arabianPlayTransform(): { x: number; y: number; z: number; scale: number } {
+  const scale = ARABIAN_STAGE.modelScale;
+  const [x, y, z] = ARABIAN_STAGE.plazaAnchor;
+  return { x: -scale * x, y: -scale * y, z: -scale * z, scale };
+}
+
 export type SolidKind = "bumper" | "rock" | "bush" | "snowman" | "hoodoo" | "prop";
 
 export interface SolidCircle {
@@ -119,7 +165,14 @@ export interface HoodooDecor {
   radius: number;
 }
 
-/** Same placement the lava map draws. Radius matches the wide cap of the fallback hoodoo (0.6 * scale), slightly inset. */
+/**
+ * stylized_desert_hoodoo.glb at scale 1: XZ size 0.579 x 0.525, ymin -0.367.
+ * Radius is the mean horizontal half-extent (the same measure as the grass rocks).
+ * The mesh is centered on the origin, so the group is lifted until the base sits on y=0.
+ */
+const HOODOO_FOOTPRINT = (0.579 + 0.525) / 4;
+const HOODOO_BASE_LIFT = 0.367;
+
 export function getHoodooDecor(): HoodooDecor[] {
   const decor: HoodooDecor[] = [];
   const count = 6;
@@ -132,10 +185,10 @@ export function getHoodooDecor(): HoodooDecor[] {
     const scale = 2.0 + (i % 3) * 0.4;
     decor.push({
       id: `hoodoo-${i}`,
-      position: [x, 0, z],
+      position: [x, HOODOO_BASE_LIFT * scale, z],
       scale,
       rotation: (i * 1.8) % (Math.PI * 2),
-      radius: 0.55 * scale,
+      radius: HOODOO_FOOTPRINT * scale,
     });
   }
   return decor;
@@ -172,6 +225,40 @@ const DIAGONAL = [Math.PI / 4, (3 * Math.PI) / 4, (5 * Math.PI) / 4, (7 * Math.P
 
 function flatBumpers(distance: number, angles: number[]): { id: string; x: number; z: number }[] {
   return angles.map((angle, i) => polar(`bumper-${i}`, angle, distance));
+}
+
+/**
+ * Static camp props in winter_location.glb that rise through marble height
+ * inside the knockoff, measured at WINTER_STAGE. Skating penguins are omitted
+ * (they move). Stacked crates whose bottoms are above the marble are omitted.
+ * Radius is the mean of the mesh's X/Z half-extents.
+ */
+const ICE_CAMP: SolidCircle[] = [
+  { id: "box-12", x: 12.28, z: -3.39, radius: 0.61, kind: "prop" },
+  { id: "box-13", x: 12.8, z: -2.1, radius: 1.05, kind: "prop" },
+  { id: "box-14", x: -12.37, z: -3.96, radius: 0.61, kind: "prop" },
+  { id: "rail-12", x: 11.67, z: -6.49, radius: 1.19, kind: "prop" },
+  { id: "box-15", x: -12.94, z: -5.22, radius: 1.05, kind: "prop" },
+  { id: "box-16", x: 14.12, z: -1.02, radius: 1.05, kind: "prop" },
+  { id: "barrel-15", x: 15.46, z: -0.3, radius: 0.67, kind: "prop" },
+  { id: "box-17", x: -14.32, z: -6.24, radius: 1.05, kind: "prop" },
+  { id: "wall-16", x: 10.94, z: 11.5, radius: 3.7, kind: "prop" },
+  { id: "rail-16", x: 14.12, z: -8.7, radius: 1.19, kind: "prop" },
+  { id: "box-18", x: -15.48, z: -6.89, radius: 0.6, kind: "prop" },
+  { id: "tower-17a", x: 14.67, z: 8.25, radius: 2.87, kind: "prop" },
+  { id: "tower-17b", x: 7.25, z: 14.99, radius: 2.87, kind: "prop" },
+  { id: "tower-19", x: -4.83, z: 19.01, radius: 2.38, kind: "prop" },
+];
+
+function iceScenery(): SolidCircle[] {
+  const snowmen = getSnowmanPositions().map((snowman, i) => ({
+    id: `snowman-${i}`,
+    x: snowman.position[0],
+    z: snowman.position[2],
+    radius: SNOWMAN_RADIUS,
+    kind: "snowman" as const,
+  }));
+  return [...snowmen, ...ICE_CAMP];
 }
 
 function buildLayout(
@@ -217,15 +304,9 @@ const LAYOUTS: Record<string, MapLayout> = {
   },
   ice: buildLayout(
     "ice",
-    17.5,
-    18.4,
-    getSnowmanPositions().map((snowman, i) => ({
-      id: `snowman-${i}`,
-      x: snowman.position[0],
-      z: snowman.position[2],
-      radius: SNOWMAN_RADIUS,
-      kind: "snowman" as const,
-    })),
+    WINTER_STAGE.floorRadius,
+    WINTER_STAGE.knockoffRadius,
+    iceScenery(),
     6.6,
     DIAGONAL,
   ),
@@ -244,8 +325,8 @@ const LAYOUTS: Record<string, MapLayout> = {
     DIAGONAL,
     [55, 115, 210, 300].map((deg) => (deg * Math.PI) / 180),
   ),
-  space: buildLayout("space", 18, 18.6, [], 8.5, DIAGONAL),
-  saturn: buildLayout("saturn", 18, 18.6, [], 8.5, DIAGONAL),
+  space: buildLayout("space", COSMOS_STAGE.floorRadius, COSMOS_STAGE.knockoffRadius, [], 8.5, DIAGONAL),
+  saturn: buildLayout("saturn", ARABIAN_STAGE.floorRadius, ARABIAN_STAGE.knockoffRadius, [], 8.5, DIAGONAL),
 };
 
 export function getMapLayout(mapId: string | null | undefined): MapLayout | null {
