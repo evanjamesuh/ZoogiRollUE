@@ -5,16 +5,18 @@ A browser marble battler. One Node server serves the page and the API. A match i
 ## What you need
 
 - Node.js 20 or newer
-- Docker, for Postgres
+- Docker Desktop, for Postgres
+
+These commands are for Windows PowerShell. On macOS or Linux, use `cp .env.example .env` instead of `Copy-Item`.
 
 ## First-time setup
 
 1. Copy the game art from the Replit project into `client/public`. This snapshot does not include those files. You want the `models`, `sounds`, `videos`, and `textures` folders, plus `main-bg-video.mp4` at the root of `client/public`. The menu loads without them. A grass-map match needs `models/floating_island_stage.glb` or the arena cannot draw that stage. Do not commit those binaries unless you have decided to store them in git.
 
-2. Create your env file and start the database:
+2. In PowerShell, from the project folder:
 
-```sh
-cp .env.example .env
+```powershell
+Copy-Item .env.example .env -Force
 docker compose up -d
 npm install
 npm run db:push
@@ -23,7 +25,7 @@ npm run dev
 
 3. Open http://127.0.0.1:5000
 
-`npm run dev` loads `.env` before the server reads any settings. Postgres from Compose listens only on `127.0.0.1:5432`. The default login in `.env.example` matches `docker-compose.yml` (`zoogi` / `zoogi`, database `zoogiroll`). Change both files together if this machine is shared.
+`npm run dev` loads `.env` before the server reads any settings. That works the same on Windows and Mac. Postgres from Compose listens only on `127.0.0.1:5432`. The default login in `.env.example` matches `docker-compose.yml` (`zoogi` / `zoogi`, database `zoogiroll`). Change both files together if this machine is shared.
 
 ## Day to day
 
@@ -62,6 +64,7 @@ Create Zoogi and Create Arena call Meshy. Put a key in `MESHY_API_KEY` inside `.
 | Command | What it does |
 | --- | --- |
 | `npm run dev` | Game and API with live reload |
+| `npm test` | Headless check of launch, collision, and scoring |
 | `npm run check` | Typecheck |
 | `npm run build` | Production bundle in `dist/` |
 | `npm start` | Serve the production bundle |
