@@ -12,7 +12,7 @@ Import the visuals from `client/src/components/game/PowerEffects.tsx`. Play soun
 | `playStunZap()` | `StunBurst` | Bolt's radius-8 shock |
 | `playStunEnd()` | `StunnedIndicator` | Marble is stunned, then shakes it off |
 
-`ExplosionBlast`, `StunBurst`, and `PowerUnlockFlash` take `position`, `startTime` (ms from `Date.now()`), and `radius`. They animate in `useFrame` and unmount themselves after about 0.9s, 0.9s, and 0.55s. `StunnedIndicator` takes `position`, `remaining`, and `duration`. `WolfCloneLook` takes `position` and `velocity`.
+`ExplosionBlast`, `StunBurst`, and `PowerUnlockFlash` take `position`, `startTime` (ms from `Date.now()`), and `radius`. They animate in `useFrame` and unmount themselves after about 0.9s, 0.9s, and 0.55s. Pass `radius={8}` for the Hotstreak and Bolt blasts so the ring matches the push. Pass about `radius={5.2}` for the unlock flash so it still reads from the wide follow camera. `StunnedIndicator` takes `position`, `remaining`, and `duration`. `WolfCloneLook` takes `position` and `velocity`.
 
 ## Star coin unlock
 
@@ -37,7 +37,7 @@ In `Game.tsx`, next to `<ExplosionEffect />`, render:
     key={flash.id}
     position={flash.position}
     startTime={flash.startTime}
-    radius={2.6}
+    radius={5.2}
     color={flash.color}
   />
 ))}

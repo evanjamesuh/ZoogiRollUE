@@ -58,7 +58,7 @@ function MovingClone({ angle, startTime }: { angle: number; startTime: number })
   const ref = useRef<THREE.Group>(null);
   const velocity: Vec3 = [Math.cos(angle), 0, Math.sin(angle)];
   useFrame(() => {
-    const travel = Math.min((Date.now() - startTime) / 1000, 1.25) * 3.4;
+    const travel = Math.min((Date.now() - startTime) / 1000, 1.15) * 6.2;
     ref.current?.position.set(Math.cos(angle) * travel, 0, Math.sin(angle) * travel);
   });
   return (
@@ -157,7 +157,7 @@ export function PowerPreview() {
               key={blast.id}
               position={blast.position}
               startTime={blast.startTime}
-              radius={2.6}
+              radius={5.2}
               color="#ffd700"
             />
           );
@@ -172,7 +172,7 @@ export function PowerPreview() {
         )}
         {wolfStart !== null && (
           <group key={wolfStart}>
-            {[-Math.PI / 3, 0, Math.PI / 3].map((angle) => (
+            {[Math.PI / 2 - 0.9, Math.PI / 2, Math.PI / 2 + 0.9].map((angle) => (
               <MovingClone key={angle} angle={angle} startTime={wolfStart} />
             ))}
           </group>

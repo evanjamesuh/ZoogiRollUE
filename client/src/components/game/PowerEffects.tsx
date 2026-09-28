@@ -561,12 +561,12 @@ export function WolfCloneLook({
   return (
     <group ref={group} position={position}>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.42, 0]}>
-        <circleGeometry args={[1.55, 28]} />
-        <meshBasicMaterial color="#7ec8ff" opacity={0.55} {...additive} side={THREE.DoubleSide} />
+        <circleGeometry args={[2.15, 28]} />
+        <meshBasicMaterial color="#7ec8ff" opacity={0.7} {...additive} side={THREE.DoubleSide} />
       </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, -1.15]}>
-        <coneGeometry args={[0.42, 2.7, 10]} />
-        <meshBasicMaterial color="#b9e4ff" opacity={0.55} {...additive} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, -1.55]}>
+        <coneGeometry args={[0.55, 3.6, 10]} />
+        <meshBasicMaterial color="#b9e4ff" opacity={0.7} {...additive} />
       </mesh>
       {[0, 1, 2, 3, 4, 5].map((i) => (
         <mesh key={i} position={[0, 0.05, -0.7 - i * 0.42]} scale={0.46 - i * 0.05}>
@@ -611,7 +611,7 @@ export function WolfCloneLook({
         <meshBasicMaterial color="#ffffff" toneMapped={false} />
       </mesh>
       {badge && (
-        <sprite position={[0, 0.95, 0]} scale={[0.95, 0.95, 1]}>
+        <sprite position={[0, 1.15, 0]} scale={[1.45, 1.45, 1]}>
           <spriteMaterial map={badge} transparent depthWrite={false} toneMapped={false} />
         </sprite>
       )}
@@ -638,6 +638,7 @@ export function PowerUnlockFlash({
   const root = useRef<THREE.Group>(null);
   const ring = useRef<THREE.Mesh>(null);
   const ringMat = useRef<THREE.MeshBasicMaterial>(null);
+  const discMat = useRef<THREE.MeshBasicMaterial>(null);
   const core = useRef<THREE.Mesh>(null);
   const coreMat = useRef<THREE.MeshBasicMaterial>(null);
   const rayRefs = useRef<(THREE.Mesh | null)[]>([]);
@@ -662,14 +663,15 @@ export function PowerUnlockFlash({
     if (root.current) root.current.rotation.y = elapsed * 2.5;
     if (ring.current) ring.current.scale.setScalar(Math.max(0.2, radius * smoothstep(elapsed / 0.28)));
     if (ringMat.current) ringMat.current.opacity = 0.9 * life;
-    const coreScale = 0.3 + pop * 1.15;
+    if (discMat.current) discMat.current.opacity = 0.5 * life;
+    const coreScale = 0.45 + pop * 1.7;
     if (core.current) core.current.scale.setScalar(coreScale);
     if (coreMat.current) coreMat.current.opacity = 0.95 * life;
     for (let i = 0; i < rays; i++) {
       const mesh = rayRefs.current[i];
       if (!mesh) continue;
       const len = 0.35 + pop * radius;
-      mesh.scale.set(len, 0.12, 0.12);
+      mesh.scale.set(len, 0.28, 0.28);
       mesh.position.set(Math.cos((i / rays) * Math.PI * 2) * (len * 0.5), 0.15, Math.sin((i / rays) * Math.PI * 2) * (len * 0.5));
       const mat = mesh.material;
       if (!Array.isArray(mat)) mat.opacity = 0.9 * life;
@@ -693,6 +695,10 @@ export function PowerUnlockFlash({
 
   return (
     <group ref={root} position={position}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
+        <circleGeometry args={[radius * 0.92, 48]} />
+        <meshBasicMaterial ref={discMat} color={color} transparent opacity={0.42} depthWrite={false} side={THREE.DoubleSide} toneMapped={false} />
+      </mesh>
       <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.06, 0]}>
         <ringGeometry args={[0.82, 1, 40]} />
         <meshBasicMaterial
@@ -703,12 +709,12 @@ export function PowerUnlockFlash({
           side={THREE.DoubleSide}
         />
       </mesh>
-      <mesh ref={core} position={[0, 0.7, 0]}>
-        <sphereGeometry args={[0.55, 18, 18]} />
+      <mesh ref={core} position={[0, 1.1, 0]}>
+        <sphereGeometry args={[0.85, 18, 18]} />
         <meshBasicMaterial ref={coreMat} color={color} opacity={0.95} {...additive} />
       </mesh>
-      <mesh position={[0, 0.7, 0]}>
-        <sphereGeometry args={[0.22, 12, 12]} />
+      <mesh position={[0, 1.1, 0]}>
+        <sphereGeometry args={[0.34, 12, 12]} />
         <meshBasicMaterial color="#ffffff" opacity={0.9} {...additive} />
       </mesh>
       {Array.from({ length: rays }).map((_, i) => (
