@@ -762,14 +762,19 @@ export function InnerBarrierWalls({
           triggerWallHitFeel(feedbackIntensity * 0.3);
         }
         
-        // Walls are solid - just bounce the orb
-        const bounceFactor = 0.8; // Solid bounce strength
-        const minBounceVelocity = 1.5;
-        
-        // For slow orbs, ensure minimum bounce velocity away from wall
-        const effectiveRadialVel = Math.max(Math.abs(radialVel), minBounceVelocity);
-        const bounceVelX = orb.velocity[0] - 2 * effectiveRadialVel * normalX * bounceFactor;
-        const bounceVelZ = orb.velocity[2] - 2 * effectiveRadialVel * normalZ * bounceFactor;
+        // Reflect only while moving into the wall, and lose speed. A minimum
+        // bounce used to cannon slow orbs back toward the center of the ring.
+        const bounceFactor = 0.55;
+        let bounceVelX = orb.velocity[0];
+        let bounceVelZ = orb.velocity[2];
+        if (radialVel > 0) {
+          bounceVelX = orb.velocity[0] - 2 * radialVel * normalX * bounceFactor;
+          bounceVelZ = orb.velocity[2] - 2 * radialVel * normalZ * bounceFactor;
+        }
+        if (Math.hypot(bounceVelX, bounceVelZ) < 0.02) {
+          bounceVelX = 0;
+          bounceVelZ = 0;
+        }
         
         // Clamp orb to inner edge of wall ring (midRadius - wallThickness/2 - margin)
         const clampedOrbRadius = midRadius - wallThickness / 2 - ORB_RADIUS - 0.3;
