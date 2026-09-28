@@ -25,7 +25,7 @@ import { resolveUnlockSpot, useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { Sky, Environment } from "@react-three/drei";
 import * as THREE from "three";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
-import { useCallback, useEffect, useRef, useMemo } from "react";
+import { useCallback, useEffect, useRef, useMemo, useState } from "react";
 import { triggerArcPeakCameraEffect, triggerArcPeakFreezeOnly, clearArcPeakCameraEffect } from "@/lib/stores/useCameraEffects";
 import { useMapDecorations } from "@/hooks/useMapDecorations";
 
@@ -113,11 +113,12 @@ function ArcPeakOverlayWrapper() {
 const unlockProbe = new THREE.Vector3();
 
 function exitIsOnScreen(camera: THREE.Camera, position: [number, number, number]): boolean {
-  camera.updateMatrixWorld();
-  unlockProbe.set(position[0], Math.max(position[1], 0.5) + 0.8, position[2]);
+  camera.updateWorldMatrix(true, false);
+  unlockProbe.set(position[0], Math.max(position[1], 0.5) + 0.9, position[2]);
+  const dist = unlockProbe.distanceTo(camera.position);
+  if (dist < 1.2 || dist > 36) return false;
   unlockProbe.project(camera);
-  if (unlockProbe.z < -1 || unlockProbe.z > 1) return false;
-  return Math.abs(unlockProbe.x) < 0.86 && Math.abs(unlockProbe.y) < 0.8;
+  return unlockProbe.z >= -1 && unlockProbe.z <= 0.98 && Math.abs(unlockProbe.x) < 0.78 && Math.abs(unlockProbe.y) < 0.7;
 }
 
 function MatchUnlockFlash({
@@ -129,16 +130,34 @@ function MatchUnlockFlash({
   const playerEntity = useZoogiGame((state) => state.playerEntity);
   const enemies = useZoogiGame((state) => state.enemies);
   const spot = useRef<[number, number, number] | null>(null);
-  if (!spot.current) {
-    const anchor = playerEntity?.id === flash.anchorId
-      ? playerEntity
-      : enemies.find((enemy) => enemy.id === flash.anchorId) ?? null;
-    spot.current = resolveUnlockSpot(flash.position, anchor ? anchor.position : null, exitIsOnScreen(camera, flash.position));
-  }
+  const [, setVersion] = useState(0);
+  const anchor = playerEntity?.id === flash.anchorId
+    ? playerEntity
+    : enemies.find((enemy) => enemy.id === flash.anchorId) ?? null;
+
+  useFrame(() => {
+    if (spot.current) return;
+    const state = useZoogiGame.getState();
+    const live = state.playerEntity?.id === flash.anchorId
+      ? state.playerEntity
+      : state.enemies.find((enemy) => enemy.id === flash.anchorId) ?? null;
+    const anchorPos = live ? [live.position[0], live.position[1], live.position[2]] as [number, number, number] : null;
+    const onScreen = exitIsOnScreen(camera, flash.position);
+    spot.current = resolveUnlockSpot(flash.position, anchorPos, onScreen);
+    setVersion((version) => version + 1);
+  });
+
+  // Until the follow camera has been sampled, keep the burst on the unlocking marble
+  // so an exit point behind the camera cannot be the only thing we draw.
+  const position = spot.current ?? resolveUnlockSpot(
+    flash.position,
+    anchor ? [anchor.position[0], anchor.position[1], anchor.position[2]] : null,
+    false,
+  );
 
   return (
     <PowerUnlockFlash
-      position={spot.current}
+      position={position}
       startTime={flash.startTime}
       radius={5.6}
       color={flash.color}
