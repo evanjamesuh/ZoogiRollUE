@@ -720,6 +720,58 @@ test("a launched flick ends the turn when the marble stops, even if no render sa
   assert.equal(playerTurnAgain, true, "the computer's turn should end when its marble stops");
 });
 
+test("a computer marble that is only coasting does not skip its shot, and a later roll does end the turn", async () => {
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  const useZoogiGame = await playingMarble();
+  const player = useZoogiGame.getState().playerEntity;
+  assert.ok(player);
+  const enemy = {
+    ...player,
+    id: "coast-cpu",
+    isPlayer: false,
+    position: [4, 0.5, 0] as [number, number, number],
+    velocity: [0.35, 0, 0] as [number, number, number],
+    isKnockedOut: false,
+    isRespawning: false,
+  };
+  useZoogiGame.setState({
+    phase: "playing",
+    gameMode: "classic",
+    currentRound: 4,
+    isPlayerTurn: false,
+    turnIndex: 0,
+    turnHasLaunched: false,
+    gameTimer: 200,
+    orbs: [],
+    mushrooms: [],
+    pinballBumpers: [],
+    zoneEditorConfigs: [],
+    wallSettings: { ...useZoogiGame.getState().wallSettings, knockoffBoundaryRadius: 50 },
+    playerEntity: { ...player, position: [0, 0.5, 0], velocity: [0, 0, 0], isKnockedOut: false, isRespawning: false },
+    enemies: [enemy],
+  });
+
+  for (let frame = 0; frame < 80; frame++) {
+    useZoogiGame.getState().physicsTick(1 / 60);
+  }
+  const coasted = useZoogiGame.getState();
+  assert.equal(coasted.isPlayerTurn, false, "sliding in from the last hit should not use up the computer's turn");
+  assert.equal(planarSpeed(coasted.enemies[0]?.velocity ?? [1, 0, 0]), 0);
+
+  useZoogiGame.setState({
+    enemies: coasted.enemies.map((marble) => ({ ...marble, velocity: [0.3, 0, 0] as [number, number, number] })),
+  });
+  let handedBack = false;
+  for (let frame = 0; frame < 100; frame++) {
+    useZoogiGame.getState().physicsTick(1 / 60);
+    if (useZoogiGame.getState().isPlayerTurn) {
+      handedBack = true;
+      break;
+    }
+  }
+  assert.equal(handedBack, true, "once the computer actually rolls, stopping should hand the turn back");
+});
+
 test("a tied final round is not a loss", async () => {
   await new Promise((resolve) => setTimeout(resolve, 500));
   const useZoogiGame = await playingMarble();

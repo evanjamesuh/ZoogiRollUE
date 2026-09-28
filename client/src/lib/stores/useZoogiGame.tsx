@@ -1305,6 +1305,25 @@ const initializeGame = (
 };
 
 let lastTurnEndedAt = 0;
+let turnWatchKey = "";
+let turnReadyForLaunch = false;
+let turnSlowFrames = 0;
+
+function actorTakingTurn(state: {
+  gameMode: string;
+  isPlayerTurn: boolean;
+  turnIndex: number;
+  currentLocalPlayerIndex: number;
+  playerEntity: { velocity: [number, number, number]; isKnockedOut?: boolean } | null;
+  enemies: { velocity: [number, number, number]; isKnockedOut?: boolean }[];
+}) {
+  if (state.gameMode === "local_multiplayer") {
+    if (state.currentLocalPlayerIndex <= 0) return state.playerEntity;
+    return state.enemies[state.currentLocalPlayerIndex - 1] ?? null;
+  }
+  if (state.isPlayerTurn) return state.playerEntity;
+  return state.enemies[state.turnIndex] ?? state.enemies[0] ?? null;
+}
 
 function unlockPatchForZoogi(zoogiId: string): Partial<GameEntity> {
   switch (zoogiId) {
@@ -3005,6 +3024,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         turnHasLaunched: false,
         turnIndex: 0,
         allMovementStopped: true,
+        wolfClones: [],
         ...playfieldSettings(roundMap, get().wallSettings, get().backgroundSettings),
         playerEntity: playerEntity ? {
           ...playerEntity,
@@ -3056,6 +3076,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         turnIndex: 0,
         allMovementStopped: true,
         gameTimer: 300,
+        wolfClones: [],
         showTutorial: false,
         tutorialStep: 0,
         developerMoveMode: false,
@@ -6073,16 +6094,37 @@ export const useZoogiGame = create<ZoogiGameState>()(
       // components only noticed a flick was over when one frame saw the speed
       // fall through 0.02. If physics finished the whole roll before that
       // render committed, the shot lock stayed on and the computer never moved.
+      // A launch is real once this marble has been still on this turn and then
+      // rolled. Coasting in from the previous hit does not count, so the
+      // computer still gets to take its own shot.
       const settled = get();
-      if (settled.phase === "playing" && settled.gameMode !== "ringer_royale" && settled.turnHasLaunched) {
-        const actor = settled.gameMode === "local_multiplayer"
-          ? (settled.currentLocalPlayerIndex <= 0
-            ? settled.playerEntity
-            : settled.enemies[settled.currentLocalPlayerIndex - 1] ?? null)
-          : (settled.isPlayerTurn ? settled.playerEntity : settled.enemies[settled.turnIndex] ?? null);
-        const actorSpeed = actor ? Math.hypot(actor.velocity[0], actor.velocity[2]) : 1;
-        if (actor && !actor.isKnockedOut && !actor.isRespawning && actorSpeed < 0.02) {
-          get().endTurn();
+      if (settled.phase === "playing" && settled.gameMode !== "ringer_royale") {
+        const watchKey = settled.gameMode === "local_multiplayer"
+          ? `L${settled.currentRound}:${settled.currentLocalPlayerIndex}`
+          : `C${settled.currentRound}:${settled.isPlayerTurn ? "p" : "e"}${settled.turnIndex}`;
+        if (watchKey !== turnWatchKey) {
+          turnWatchKey = watchKey;
+          turnReadyForLaunch = false;
+          turnSlowFrames = 0;
+        }
+        const actor = actorTakingTurn(settled);
+        if (actor && !actor.isKnockedOut) {
+          const actorSpeed = Math.hypot(actor.velocity[0], actor.velocity[2]);
+          if (!turnReadyForLaunch) {
+            if (actorSpeed < 0.02) turnReadyForLaunch = true;
+          } else if (actorSpeed > 0.08 && !settled.turnHasLaunched) {
+            set({ turnHasLaunched: true });
+            turnSlowFrames = 0;
+          } else if (get().turnHasLaunched) {
+            if (actorSpeed < 0.02) {
+              get().endTurn();
+            } else if (actorSpeed < 0.12) {
+              turnSlowFrames += 1;
+              if (turnSlowFrames > 40) get().endTurn();
+            } else {
+              turnSlowFrames = 0;
+            }
+          }
         }
       }
     }
