@@ -89,7 +89,7 @@ function HoldButton({ onAction, className, title, children }: HoldButtonProps) {
 
 const getAbilityTriggerText = (zoogiId: string): string => {
   switch (zoogiId) {
-    case "wolfgang": return "Tap Dash to burst forward";
+    case "wolfgang": return "Tap Pack while moving to send homing clones";
     case "hotstreak": return "Tap Explosion to blast everything nearby";
     case "lars": return "Tap Ricochet, then hit something to home in";
     case "pinpoint": return "Tap Lock-On, then tap an orb or opponent";
@@ -140,7 +140,7 @@ function CharacterAbilityButton({ zoogiId, entity }: {
   const lockOnEnabled = useZoogiGame((state) => state.lockOnEnabled);
 
   const spec: Record<string, { label: string; unlocked: boolean; onClick: () => void; active?: boolean }> = {
-    wolfgang: { label: "Dash", unlocked: entity.wolfgangAbilityUnlocked, onClick: activateWolfgangAbility },
+    wolfgang: { label: "Pack", unlocked: entity.wolfgangAbilityUnlocked, onClick: activateWolfgangAbility },
     hotstreak: { label: "Explosion", unlocked: entity.hotstreakAbilityUnlocked, onClick: activateHotstreakAbility },
     lars: { label: "Ricochet", unlocked: entity.larsAbilityUnlocked, onClick: activateLarsAbility },
     bolt: { label: "Shock", unlocked: entity.boltAbilityUnlocked, onClick: activateBoltAbility },

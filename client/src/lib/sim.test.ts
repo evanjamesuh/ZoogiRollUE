@@ -469,8 +469,7 @@ test("knockouts score, falling costs points, and a flick off the edge ends the t
     playerEntity: {
       ...ready,
       position: [0, 0.5, 0],
-      velocity: [0, 0, 0],
-      wolfgangAbilityUnlocked: true,
+      velocity: [0.4, 0, 0],
       isKnockedOut: false,
       isRespawning: false,
     },
@@ -480,17 +479,23 @@ test("knockouts score, falling costs points, and a flick off the edge ends the t
       isKnockedOut: false,
       isRespawning: false,
     })),
-    orbs: [],
+    wolfClones: [],
+    orbs: [makeStillOrb("home-target", 0.8, 1.5)],
   });
   useZoogiGame.getState().activateWolfgangAbility();
-  const dashed = useZoogiGame.getState().playerEntity;
-  assert.ok(dashed);
-  assert.ok(planarSpeed(dashed.velocity) > 1, "Dash should burst the marble forward");
-  assert.equal(dashed.wolfgangAbilityUnlocked, false);
+  const packed = useZoogiGame.getState();
+  assert.equal(packed.wolfClones.length, 3, "Pack should send three clones");
+  assert.equal(packed.playerEntity?.wolfgangAbilityUnlocked, false);
+  useZoogiGame.getState().physicsTick(1 / 60);
+  const clones = useZoogiGame.getState().wolfClones;
+  const center = clones.reduce((best, clone) => (
+    Math.abs(clone.position[2]) < Math.abs(best.position[2]) ? clone : best
+  ));
+  assert.ok(center.velocity[2] > 0.05, "the forward clone should steer toward the orb");
 
   useZoogiGame.setState({
     playerEntity: {
-      ...dashed,
+      ...ready,
       zoogi: lars,
       position: [0, 0.5, 0],
       velocity: [0.3, 0, 0],
@@ -528,4 +533,120 @@ test("knockouts score, falling costs points, and a flick off the edge ends the t
   assert.ok((bound.playerEntity?.wrapsBindUntil ?? 0) > Date.now(), "Bind should arm contact slow");
   assert.ok((bound.enemies[0]?.slowUntil ?? 0) > Date.now(), "a nearby opponent should be slowed");
   assert.ok(planarSpeed(bound.enemies[0]?.velocity ?? [0, 0, 0]) < 0.5, "Bind should cut the opponent's speed");
+});
+
+test("an opponent past the ring is knocked out", async () => {
+  const useZoogiGame = await playingMarble();
+  const player = useZoogiGame.getState().playerEntity;
+  assert.ok(player);
+  useZoogiGame.setState({
+    gameTimer: 200,
+    wallSettings: { ...useZoogiGame.getState().wallSettings, knockoffBoundaryRadius: 21 },
+    playerEntity: {
+      ...player,
+      position: [0, 0.5, 0],
+      velocity: [0, 0, 0],
+      isKnockedOut: false,
+      isRespawning: false,
+      spawnImmunity: false,
+      invulnerableUntil: null,
+    },
+    enemies: [{
+      ...player,
+      id: "edge-enemy",
+      isPlayer: false,
+      position: [30, 0.5, 0],
+      velocity: [0.2, 0, 0],
+      isKnockedOut: false,
+      isRespawning: false,
+      spawnImmunity: false,
+      invulnerableUntil: null,
+      score: 40,
+    }],
+  });
+  useZoogiGame.getState().physicsTick(1 / 60);
+  const knocked = useZoogiGame.getState().enemies[0];
+  assert.ok(knocked);
+  assert.equal(knocked.isKnockedOut, true, "a character at x=30 should leave play when the ring is 21");
+  assert.equal(knocked.score, 0, "falling off should cost the opponent 75, floored at 0");
+});
+
+test("hotstreak pushes player 1 when another local player casts it", async () => {
+  const useZoogiGame = await playingMarble();
+  const player = useZoogiGame.getState().playerEntity;
+  assert.ok(player);
+  const hotstreak = (await loadGame()).ZOOGI_ROSTER.find((zoogi) => zoogi.id === "hotstreak");
+  assert.ok(hotstreak);
+  useZoogiGame.setState({
+    gameMode: "local_multiplayer",
+    currentLocalPlayerIndex: 1,
+    phase: "playing",
+    playerEntity: {
+      ...player,
+      id: "player-1",
+      position: [3, 0.5, 0],
+      velocity: [0, 0, 0],
+    },
+    enemies: [{
+      ...player,
+      id: "player-2",
+      isPlayer: false,
+      zoogi: hotstreak,
+      position: [0, 0.5, 0],
+      velocity: [0, 0, 0],
+      hotstreakAbilityUnlocked: true,
+    }],
+  });
+  useZoogiGame.getState().activateHotstreakAbility();
+  const blasted = useZoogiGame.getState();
+  assert.ok((blasted.playerEntity?.velocity[0] ?? 0) > 0.4, "player 1 should be pushed by the explosion");
+  assert.equal(blasted.enemies[0]?.velocity[0], 0, "the caster should stay put");
+  assert.equal(blasted.enemies[0]?.hotstreakAbilityUnlocked, false);
+});
+
+test("a stun lasts until the next turn is skipped", async () => {
+  const useZoogiGame = await playingMarble();
+  const player = useZoogiGame.getState().playerEntity;
+  assert.ok(player);
+  useZoogiGame.setState({
+    gameMode: "classic",
+    phase: "playing",
+    gameTimer: 200,
+    isPlayerTurn: true,
+    turnIndex: 0,
+    playerEntity: {
+      ...player,
+      isStunned: false,
+      stunTimer: 0,
+      position: [0, 0.5, 0],
+      velocity: [0, 0, 0],
+    },
+    enemies: [{
+      ...player,
+      id: "stunned-enemy",
+      isPlayer: false,
+      isStunned: true,
+      stunTimer: 2,
+      position: [3, 0.5, 0],
+      velocity: [0, 0, 0],
+    }],
+  });
+  useZoogiGame.getState().tickTimers(3);
+  assert.equal(useZoogiGame.getState().enemies[0]?.isStunned, true, "three real seconds should not clear a stun");
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  useZoogiGame.getState().endTurn();
+  const skipped = useZoogiGame.getState();
+  assert.equal(skipped.isPlayerTurn, true, "the stunned opponent's turn should be skipped");
+  assert.equal(skipped.enemies[0]?.isStunned, false, "skipping the turn should use up the stun");
+});
+
+test("practice mode places star orbs", async () => {
+  const { useZoogiGame, ZOOGI_ROSTER } = await loadGame();
+  useZoogiGame.getState().selectZoogi(ZOOGI_ROSTER[0]);
+  useZoogiGame.setState({ orbMultiplier: 1, selectedCustomZoogi: null });
+  useZoogiGame.getState().startPracticeGame();
+  const stars = useZoogiGame.getState().orbs.filter((orb) => orb.isStarOrb);
+  assert.equal(stars.length, 3, "practice should include the same three star orbs as a classic match");
+  const kinds = new Set(stars.map((orb) => orb.starOrbType));
+  assert.equal(kinds.size, 3);
 });
