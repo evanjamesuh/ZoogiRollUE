@@ -1,7 +1,10 @@
+import "./server/env";
 import { defineConfig } from "drizzle-kit";
 
 if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL, ensure the database is provisioned");
+  throw new Error(
+    "DATABASE_URL is required. Copy .env.example to .env and set it to your local Postgres URL."
+  );
 }
 
 export default defineConfig({

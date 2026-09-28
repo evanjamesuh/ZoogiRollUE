@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, jsonb, varchar, json, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -224,6 +224,16 @@ export const challengeProgress = pgTable("challenge_progress", {
   rewardClaimed: boolean("reward_claimed").default(false).notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+// Login cookies. connect-pg-simple creates this table at runtime; it is declared
+// here so `npm run db:push` keeps it instead of offering to drop it.
+export const userSessions = pgTable("user_sessions", {
+  sid: varchar("sid").primaryKey(),
+  sess: json("sess").notNull(),
+  expire: timestamp("expire", { precision: 6, withTimezone: false, mode: "date" }).notNull(),
+}, (table) => [
+  index("IDX_session_expire").on(table.expire),
+]);
 
 export const replays = pgTable("replays", {
   id: serial("id").primaryKey(),

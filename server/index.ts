@@ -1,34 +1,33 @@
+import "./env";
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
-import pg from "pg";
+import { databaseConfigured, pool } from "./db";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { execSync } from "child_process";
-import { storage } from "./storage";
 
 const app = express();
 const httpServer = createServer(app);
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
+const DATABASE_UNAVAILABLE_MESSAGE =
+  "Database is not available. Set DATABASE_URL in .env and start Postgres to use accounts, leaderboards, and saved data.";
+
 function createSessionStore() {
-  if (process.env.DATABASE_URL) {
+  if (databaseConfigured && pool) {
     const PgSession = connectPgSimple(session);
-    const pgPool = new pg.Pool({
-      connectionString: process.env.DATABASE_URL,
-    });
     console.log("Using PostgreSQL session store for persistent sessions");
     return new PgSession({
-      pool: pgPool,
-      tableName: 'user_sessions',
+      pool,
+      tableName: "user_sessions",
       createTableIfMissing: true,
     });
-  } else {
-    console.log("No DATABASE_URL - using in-memory session store (sessions will not persist across restarts)");
-    return undefined;
   }
+
+  console.log("Using in-memory session store (sessions reset when the server stops)");
+  return new session.MemoryStore();
 }
 
 app.use(
@@ -42,13 +41,13 @@ app.use(
       secure: process.env.NODE_ENV === "production",
       httpOnly: true,
       maxAge: THIRTY_DAYS_MS,
-      sameSite: 'lax',
+      sameSite: "lax",
     },
   })
 );
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: false, limit: '50mb' }));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: false, limit: "50mb" }));
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -88,6 +87,12 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  if (!databaseConfigured) {
+    app.use("/api", (_req, res) => {
+      res.status(503).json({ error: DATABASE_UNAVAILABLE_MESSAGE });
+    });
+  }
+
   await registerRoutes(httpServer, app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
@@ -98,9 +103,6 @@ app.use((req, res, next) => {
     throw err;
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
@@ -108,35 +110,19 @@ app.use((req, res, next) => {
     await setupVite(httpServer, app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
+  const host = process.env.HOST || "127.0.0.1";
 
-  // Proactively kill any process holding this port before we try to listen
-  try {
-    const portHex = port.toString(16).toUpperCase().padStart(4, "0");
-    const tcpData = execSync(`cat /proc/net/tcp 2>/dev/null || true`, { encoding: "utf8" });
-    const match = tcpData.split("\n").find((line) => line.includes(`:${portHex}`));
-    if (match) {
-      const inode = match.trim().split(/\s+/)[9];
-      if (inode) {
-        const fdSearch = execSync(
-          `grep -rl "socket:\\[${inode}\\]" /proc/[0-9]*/fd 2>/dev/null | grep -oP '/proc/\\K[0-9]+' | head -1 || true`,
-          { encoding: "utf8", shell: "/bin/sh" }
-        ).trim();
-        if (fdSearch) {
-          log(`Killing PID ${fdSearch} holding port ${port}`);
-          execSync(`kill -9 ${fdSearch} 2>/dev/null || true`, { shell: "/bin/sh" });
-          // Wait for the port to be released
-          execSync("sleep 1");
-        }
-      }
+  httpServer.on("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE") {
+      log(`Port ${port} is already in use. Stop the other program using that port, or set PORT in .env to a free port.`);
+      process.exit(1);
     }
-  } catch (_) {}
+    console.error(err);
+    process.exit(1);
+  });
 
-  httpServer.listen({ port, host: "0.0.0.0" }, () => {
-    log(`serving on port ${port}`);
+  httpServer.listen({ port, host }, () => {
+    log(`serving on http://${host}:${port}`);
   });
 })();
