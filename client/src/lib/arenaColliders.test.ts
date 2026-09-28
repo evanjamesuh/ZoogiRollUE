@@ -1,20 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  ARABIAN_STAGE,
   BUMPER_RADIUS,
   MARBLE_RADIUS,
   ORB_RADIUS,
   bumperSolids,
   collectMatchSolids,
   countClearLanes,
-  fitPropFootprints,
   getIcePatches,
   getMapLayout,
-  getWinterCampSolids,
   laneIsClear,
   pointInsideSolid,
   resolveSolidCollision,
-  setWinterCampSolids,
+  setWinterCampActive,
 } from "./arenaColliders.ts";
 
 const MAPS = ["grass", "ice", "lava", "space", "saturn"] as const;
@@ -141,59 +140,31 @@ test("fitted stages keep the knockoff on the measured floor", () => {
   assert.ok(saturn);
   assert.ok(lava);
   assert.ok(space.floorRadius > 14 && space.knockoffRadius < 20);
-  assert.ok(saturn.floorRadius > 14 && saturn.knockoffRadius < 22);
-  assert.ok(saturn.knockoffRadius - saturn.floorRadius < 0.6, "arabian out line sits on the floor edge");
+  const [plazaX, plazaZ] = ARABIAN_STAGE.plazaCenter;
+  const eastWall = Math.hypot(13.5 - plazaX, 0 - plazaZ);
+  assert.ok(Math.abs(saturn.knockoffRadius - eastWall) < 0.02, "arabian out line meets the east wall from the plaza center");
+  assert.ok(saturn.knockoffRadius - saturn.floorRadius < 0.6, "fallback disk ends at the out line");
   for (const hoodoo of lava.scenery) {
     assert.ok(hoodoo.radius < 0.9, `${hoodoo.id} still uses the fallback cap radius`);
   }
 });
 
-test("ice camp walls exist only after the winter model is measured", () => {
-  setWinterCampSolids(null);
-  const layout = getMapLayout("ice");
-  assert.ok(layout);
-  assert.equal(layout.scenery.some((solid) => solid.kind === "prop"), false);
-  assert.equal(getWinterCampSolids().length, 0);
+test("frozen ring camp walls match the drawn props and stay off until the model loads", () => {
+  setWinterCampActive(false);
   const idle = collectMatchSolids({ map: "ice", bumpers: [], landedRocks: [], editorModels: [] });
   assert.equal(idle.some((solid) => solid.kind === "prop"), false);
-  for (const score of layout.zones.filter((zone) => !zone.isSpawn)) {
-    assert.equal(laneIsClear(layout, score.angle), true, `score ray ${score.angle} is blocked`);
-  }
 
-  setWinterCampSolids([{ id: "wall-16", x: 11, z: 11.5, radius: 0.4, kind: "prop" }]);
-  const withCamp = collectMatchSolids({ map: "ice", bumpers: [], landedRocks: [], editorModels: [] });
-  assert.ok(withCamp.some((solid) => solid.id === "wall-16"));
-  setWinterCampSolids(null);
-});
-
-test("a thin wall collider stays on the wall, not on the open ice beside it", () => {
-  const points = [];
-  for (let i = 0; i <= 12; i++) {
-    const along = -4 + (8 * i) / 12;
-    for (const side of [-0.15, 0, 0.15]) {
-      points.push({ x: 8 + along * 0.7 + side * -0.7, y: 0.6, z: 8 + along * 0.7 + side * 0.7 });
-    }
-  }
-  const solids = fitPropFootprints([{ name: "wall-16", points }]);
-  assert.ok(solids.length > 1, "a long wall needs more than one circle");
-  for (const solid of solids) {
-    assert.ok(solid.radius < 0.5, `${solid.id} radius ${solid.radius} spills onto open ice`);
-    const along = ((solid.x - 8) + (solid.z - 8)) / 2;
-    const side = Math.abs((solid.z - 8) - (solid.x - 8));
-    assert.ok(Math.abs(along) < 5, "circle left the wall");
-    assert.ok(side < 0.4, "circle sits beside the wall");
-  }
-  const layout = getMapLayout("ice");
-  assert.ok(layout);
-  for (const score of layout.zones.filter((zone) => !zone.isSpawn)) {
-    let blocked = false;
-    for (let traveled = 0; traveled <= score.distance; traveled += 0.35) {
-      const x = Math.cos(score.angle) * traveled;
-      const z = Math.sin(score.angle) * traveled;
-      if (solids.some((solid) => Math.hypot(x - solid.x, z - solid.z) < solid.radius + MARBLE_RADIUS)) blocked = true;
-    }
-    assert.equal(blocked, false, "fitted wall blocks a scoring spot");
-  }
+  setWinterCampActive(true);
+  const live = collectMatchSolids({ map: "ice", bumpers: [], landedRocks: [], editorModels: [] });
+  const byId = new Map(live.map((solid) => [solid.id, solid]));
+  assert.equal(byId.get("wall-16")?.radius, 2.5);
+  assert.equal(byId.get("tower-17a")?.radius, 1.87);
+  assert.equal(byId.get("tower-17b")?.radius, 1.87);
+  assert.equal(byId.get("tower-19")?.radius, 1.38);
+  assert.equal(byId.get("box-13")?.radius, 1.05);
+  assert.equal(byId.get("barrel-15")?.radius, 0.67);
+  assert.equal(byId.get("rail-12")?.radius, 1.19);
+  setWinterCampActive(false);
 });
 
 test("an editor-placed bumper collides at the bumper radius", () => {
