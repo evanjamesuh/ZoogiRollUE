@@ -241,13 +241,16 @@ function VolcanicPitModel() {
     const size = new THREE.Vector3();
     box.getSize(size);
     const span = Math.max(size.x, size.z, 1);
-    const scale = 56 / span;
+    const scale = 42 / span;
     cloned.scale.setScalar(scale);
     cloned.updateMatrixWorld(true);
     const fitted = new THREE.Box3().setFromObject(cloned);
-    const sphere = fitted.getBoundingSphere(new THREE.Sphere());
-    const centerDist = 18.6 + sphere.radius + 10;
-    cloned.position.set(-sphere.center.x, -fitted.min.y - 1.5, -sphere.center.z - centerDist);
+    const center = new THREE.Vector3();
+    fitted.getCenter(center);
+    // Nearest face sits just past the 18.6 knockoff so the pit reads in the
+    // gameplay and birds-eye cameras, while every point stays outside the ring.
+    const nearZ = -(18.6 + 4);
+    cloned.position.set(-center.x, -fitted.min.y, nearZ - fitted.max.z);
   }, [cloned]);
 
   return <primitive object={cloned} />;
@@ -340,7 +343,8 @@ export function ArabianNightDressing() {
   );
 }
 
-const COSMIC_BACKDROP = /Sphere_Sky|City Floor|City Facade|City Towers|Entrance Facade|Buildings|Glow Blue|Windows|polygon3_Glow Cyan/i;
+// GLTFLoader rewrites spaces to underscores, so both forms have to match.
+const COSMIC_BACKDROP = /Sphere_Sky|City[_ ]Floor|City[_ ]Facade|City[_ ]Towers|Entrance[_ ]Facade|Buildings|Glow[_ ]Blue|Windows|polygon3_Glow[_ ]Cyan|polygon1_Glow[_ ]White/i;
 
 function CosmicAccent() {
   const { scene } = useGLTF("/models/cosmos_arena.glb");

@@ -64,11 +64,11 @@ export function Lights() {
   if (selectedMap === "saturn") {
     return (
       <>
-        <ambientLight intensity={0.22} color="#1a1030" />
+        <ambientLight intensity={0.36} color="#2a1848" />
         <directionalLight
           position={[-8, 22, 6]}
-          intensity={0.38}
-          color="#c8c4ff"
+          intensity={0.72}
+          color="#d4d0ff"
           castShadow
           shadow-mapSize-width={2048}
           shadow-mapSize-height={2048}
