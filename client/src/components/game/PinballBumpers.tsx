@@ -1,10 +1,35 @@
 import * as THREE from "three";
-import { useRef, useState, useEffect, useMemo } from "react";
+import { useRef, useState, useEffect, useMemo, Suspense, Component, ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { useAudio } from "@/lib/stores/useAudio";
 import { BUMPER_MODEL_URL } from "@/lib/arenaColliders";
+
+class BumperModelErrorBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  render() {
+    return this.state.hasError ? this.props.fallback : this.props.children;
+  }
+}
+
+function BumperStandIn() {
+  return (
+    <mesh position={[0, 0.55, 0]} castShadow>
+      <cylinderGeometry args={[0.9, 1.05, 1.1, 20]} />
+      <meshStandardMaterial color="#F59E0B" emissive="#F59E0B" emissiveIntensity={0.35} />
+    </mesh>
+  );
+}
+
+function BumperModel() {
+  const { scene } = useGLTF(BUMPER_MODEL_URL);
+  const cloned = useMemo(() => scene.clone(true), [scene]);
+  return <primitive object={cloned} />;
+}
 
 export function PinballBumpers() {
   const { pinballBumpers } = useZoogiGame();
@@ -35,8 +60,6 @@ function PinballBumper({ bumper }: PinballBumperProps) {
   const [glowIntensity, setGlowIntensity] = useState(0);
   const lastHitTimeRef = useRef(0);
   const { playSound } = useAudio();
-  const { scene } = useGLTF(BUMPER_MODEL_URL);
-  const cloned = useMemo(() => scene.clone(true), [scene]);
 
   useEffect(() => {
     if (bumper.lastHitTime && bumper.lastHitTime > lastHitTimeRef.current) {
@@ -76,7 +99,11 @@ function PinballBumper({ bumper }: PinballBumperProps) {
       position={[bumper.position[0], bumper.position[1], bumper.position[2]]}
       scale={[1, 1, 1]}
     >
-      <primitive object={cloned} />
+      <BumperModelErrorBoundary fallback={<BumperStandIn />}>
+        <Suspense fallback={<BumperStandIn />}>
+          <BumperModel />
+        </Suspense>
+      </BumperModelErrorBoundary>
       <pointLight
         ref={glowRef}
         position={[0, 1, 0]}
@@ -87,5 +114,3 @@ function PinballBumper({ bumper }: PinballBumperProps) {
     </group>
   );
 }
-
-useGLTF.preload(BUMPER_MODEL_URL);

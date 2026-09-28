@@ -1,5 +1,5 @@
 import { Canvas, useThree, useFrame } from "@react-three/fiber";
-import { Suspense } from "react";
+import { Component, ReactNode, Suspense } from "react";
 import { Arena } from "./Arena";
 import { ColliderDebug } from "./ColliderDebug";
 import { PlayerZoogi, EnemyZoogi, LocalMultiplayerZoogi } from "./Zoogi";
@@ -109,6 +109,16 @@ function ArcPeakOverlayWrapper() {
   );
 }
 
+class OptionalSceneBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  render() {
+    return this.state.hasError ? null : this.props.children;
+  }
+}
+
 export function Game() {
   const { enemies, selectedMap, gameMode, localPlayers } = useZoogiGame();
   
@@ -147,11 +157,14 @@ export function Game() {
         
         {selectedMap === "ice" && <fog attach="fog" args={['#c8e6f8', 60, 150]} />}
         
-        <Suspense fallback={null}>
-          {selectedMap === "ice" && <GradientSky />}
-          {selectedMap !== "ice" && <Sky sunPosition={currentSky.sunPosition} />}
-          {selectedMap !== "ice" && <Environment preset="sunset" background={false} />}
-          
+        <OptionalSceneBoundary>
+          <Suspense fallback={null}>
+            {selectedMap === "ice" && <GradientSky />}
+            {selectedMap !== "ice" && <Sky sunPosition={currentSky.sunPosition} />}
+            {selectedMap !== "ice" && <Environment preset="sunset" background={false} />}
+          </Suspense>
+        </OptionalSceneBoundary>
+
           <Lights />
           
           <Arena theme={selectedMap || "grass"} />
@@ -227,7 +240,6 @@ export function Game() {
           <DeveloperMoveControls key={`dev-controls-${selectedMap || "grass"}`} />
           
           <GameCamera />
-        </Suspense>
       </Canvas>
       
       <GameUI />
