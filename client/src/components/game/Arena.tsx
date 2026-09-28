@@ -25,6 +25,7 @@ import { EditorScoringZones } from "./EditorScoringZones";
 import { ScoringZones } from "./ScoringZones";
 import { PinballBumpers } from "./PinballBumpers";
 import { ARENA_RADIUS } from "@/lib/arenaConstants";
+import { GRASS_STAGE, getMapLayout } from "@/lib/arenaColliders";
 
 export { ARENA_RADIUS };
 
@@ -35,10 +36,12 @@ function FloatingIslandScene() {
   const backgroundSettings = useZoogiGame((state) => state.backgroundSettings);
   const elementTransforms = useZoogiGame((state) => state.elementTransforms);
   
-  const modelX = backgroundSettings.modelPositionX ?? 0;
-  const modelY = backgroundSettings.modelPositionY ?? -0.5;
-  const modelZ = backgroundSettings.modelPositionZ ?? 0;
-  const modelScale = backgroundSettings.modelScale ?? 3;
+  const gameMode = useZoogiGame((state) => state.gameMode);
+  const editing = gameMode === "map_editor";
+  const modelX = editing ? (backgroundSettings.modelPositionX ?? 0) : 0;
+  const modelY = editing ? (backgroundSettings.modelPositionY ?? -0.5) : GRASS_STAGE.modelOffsetY;
+  const modelZ = editing ? (backgroundSettings.modelPositionZ ?? 0) : 0;
+  const modelScale = editing ? (backgroundSettings.modelScale ?? 3) : GRASS_STAGE.modelScale;
   const arenaRotation = elementTransforms.arenaModelRotation;
   const modelRotation: [number, number, number] = [
     arenaRotation?.x ?? 0,
@@ -722,7 +725,6 @@ export function Arena({ theme = "grass" }: ArenaProps) {
   const selectedMap = useZoogiGame(state => state.selectedMap);
   const customArenaId = useZoogiGame(state => state.customArenaId);
   const meshyArenaModelUrl = useZoogiGame(state => state.meshyArenaModelUrl);
-  const backgroundSettings = useZoogiGame(state => state.backgroundSettings);
   const wallSettings = useZoogiGame(state => state.wallSettings);
   const elementTransforms = useZoogiGame(state => state.elementTransforms);
   const gameMode = useZoogiGame(state => state.gameMode);
@@ -738,51 +740,55 @@ export function Arena({ theme = "grass" }: ArenaProps) {
   
   const colors = themeColors[currentTheme as keyof typeof themeColors] || themeColors.grass;
 
-  const isSpaceTheme = currentTheme === "space";
-  const isGrassTheme = currentTheme === "grass";
   const isIceTheme = currentTheme === "ice";
-  const useGLBFloor = isSpaceTheme || isGrassTheme || isIceTheme;
+  const floorRadius = getMapLayout(currentTheme)?.floorRadius ?? ARENA_RADIUS;
+  const stageFallback = <PlayfieldDisk radius={floorRadius} color={colors.platform} />;
   
   return (
     <group>
-      {/* Hide ground plane for themes using GLB model floor */}
-      {!useGLBFloor && (
-        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
-          <circleGeometry args={[ARENA_RADIUS * (backgroundSettings.groundScale ?? 3), 64]} />
-          <meshStandardMaterial color={colors.platform} />
-        </mesh>
+      {/* Lava has no stage model. The disk is the playfield, the same size as the knockoff ring. */}
+      {currentTheme === "lava" && (
+        <>
+          <PlayfieldDisk radius={floorRadius} color={colors.platform} />
+          <EdgeRing radius={floorRadius} color={colors.edge} />
+          <DangerZone radius={floorRadius} color={colors.edge} />
+        </>
       )}
-
-      {!useGLBFloor && <EdgeRing radius={ARENA_RADIUS} color={colors.edge} />}
-
-      {!useGLBFloor && <DangerZone radius={ARENA_RADIUS} color={colors.edge} />}
       
       {currentTheme === "lava" && <FallingRocks />}
       {currentTheme === "lava" && <DesertHoodoos />}
       {currentTheme === "grass" && (
-        <Suspense fallback={null}>
-          <FloatingIslandScene />
-        </Suspense>
+        <MeshyArenaErrorBoundary fallback={stageFallback}>
+          <Suspense fallback={null}>
+            <FloatingIslandScene />
+          </Suspense>
+        </MeshyArenaErrorBoundary>
       )}
       {isIceTheme && (
-        <Suspense fallback={null}>
-          <WinterLocationScene />
-        </Suspense>
+        <MeshyArenaErrorBoundary fallback={stageFallback}>
+          <Suspense fallback={null}>
+            <WinterLocationScene />
+          </Suspense>
+        </MeshyArenaErrorBoundary>
       )}
       {isIceTheme && <IcePatches />}
       {isIceTheme && <Snowmen />}
       {isIceTheme && <SnowfallEffect />}
       {isIceTheme && <WinterAnimals />}
       {currentTheme === "space" && (
-        <Suspense fallback={null}>
-          <CosmosArenaModel />
-        </Suspense>
+        <MeshyArenaErrorBoundary fallback={stageFallback}>
+          <Suspense fallback={null}>
+            <CosmosArenaModel />
+          </Suspense>
+        </MeshyArenaErrorBoundary>
       )}
       {currentTheme === "space" && <SpaceBackground />}
       {currentTheme === "saturn" && (
-        <Suspense fallback={null}>
-          <ArabianNightsScene />
-        </Suspense>
+        <MeshyArenaErrorBoundary fallback={stageFallback}>
+          <Suspense fallback={null}>
+            <ArabianNightsScene />
+          </Suspense>
+        </MeshyArenaErrorBoundary>
       )}
       
       {customArenaId && <CustomDecorations />}
@@ -844,6 +850,15 @@ export function Arena({ theme = "grass" }: ArenaProps) {
         />
       )}
     </group>
+  );
+}
+
+function PlayfieldDisk({ radius, color }: { radius: number; color: string }) {
+  return (
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+      <circleGeometry args={[radius, 64]} />
+      <meshStandardMaterial color={color} />
+    </mesh>
   );
 }
 

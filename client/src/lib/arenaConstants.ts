@@ -171,14 +171,14 @@ export function getTreePositions(): { position: [number, number, number]; radius
 
 export function getSnowmanPositions(): { position: [number, number, number]; radius: number }[] {
   return [
-    { position: [9.55, 0, 2.96], radius: 3.0 },
-    { position: [7.46, 0, 14.15], radius: 3.0 },
-    { position: [-2.96, 0, 9.55], radius: 3.0 },
-    { position: [-14.15, 0, 7.46], radius: 3.0 },
-    { position: [-9.55, 0, -2.96], radius: 3.0 },
-    { position: [-7.46, 0, -14.15], radius: 3.0 },
-    { position: [2.96, 0, -9.55], radius: 3.0 },
-    { position: [14.15, 0, -7.46], radius: 3.0 }
+    { position: [9.55, 0, 2.96], radius: 0.55 },
+    { position: [7.46, 0, 14.15], radius: 0.55 },
+    { position: [-2.96, 0, 9.55], radius: 0.55 },
+    { position: [-14.15, 0, 7.46], radius: 0.55 },
+    { position: [-9.55, 0, -2.96], radius: 0.55 },
+    { position: [-7.46, 0, -14.15], radius: 0.55 },
+    { position: [2.96, 0, -9.55], radius: 0.55 },
+    { position: [14.15, 0, -7.46], radius: 0.55 }
   ];
 }
 

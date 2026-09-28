@@ -75,7 +75,7 @@ export function FallingRocks() {
     addLandedRock({
       id: rock.id,
       position: finalPos,
-      radius: rock.size * 1.2,
+      radius: rock.size,
       repelForce: 0.3
     });
   };

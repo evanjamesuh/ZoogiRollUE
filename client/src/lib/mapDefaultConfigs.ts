@@ -1,4 +1,5 @@
 import type { WallSegmentConfig } from "./stores/useZoogiGame";
+import { getMapLayout } from "./arenaColliders";
 
 export interface ZoneEditorConfig {
   id: string;
@@ -100,7 +101,7 @@ export const SPACE_MAP_DEFAULT_CONFIG: MapDefaultConfig = {
     innerWallRadiusPercent: 70,
     innerWallRows: 2,
     innerWallBlocksPerRow: 36,
-    knockoffBoundaryRadius: 21,
+    knockoffBoundaryRadius: getMapLayout("space")?.knockoffRadius ?? 18.6,
     knockoffBoundaryWidth: 0.5
   },
   wallSegmentConfigs: [
@@ -203,14 +204,13 @@ export const SPACE_MAP_DEFAULT_CONFIG: MapDefaultConfig = {
     globalScale: 1,
     zonesVisible: true
   },
-  zoneEditorConfigs: [
-    { id: "control-zone-0", angle: 0, distance: 27, visible: true, isSpawn: true },
-    { id: "control-zone-1", angle: 1.0471975511965976, distance: 27, visible: true, isSpawn: false },
-    { id: "control-zone-2", angle: 2.0943951023931953, distance: 27, visible: true, isSpawn: false },
-    { id: "control-zone-3", angle: 3.141592653589793, distance: 27, visible: true, isSpawn: true },
-    { id: "control-zone-4", angle: 4.1887902047863905, distance: 27, visible: true, isSpawn: false },
-    { id: "control-zone-5", angle: 5.235987755982989, distance: 27, visible: true, isSpawn: false }
-  ]
+  zoneEditorConfigs: (getMapLayout("space")?.zones ?? []).map((zone) => ({
+    id: zone.id,
+    angle: zone.angle,
+    distance: zone.distance,
+    visible: zone.visible,
+    isSpawn: zone.isSpawn,
+  }))
 };
 
 export const MAP_DEFAULT_CONFIGS: Record<string, MapDefaultConfig> = {

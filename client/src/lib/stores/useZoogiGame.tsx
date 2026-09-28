@@ -29,6 +29,7 @@ import { setCurrentMap } from "@/lib/treeOffsets";
 import { triggerKnockoffFeel, triggerCollisionFeel, triggerCollectFeel, triggerAbilityFeel, triggerWallHitFeel, useGameFeel } from "./useGameFeel";
 import { triggerAbilityCameraEffect, triggerKnockoffCameraEffect, triggerCollisionCameraEffect, triggerTargetFocusCameraEffect } from "./useCameraEffects";
 import { getDeviceId } from "@/lib/deviceId";
+import { GRASS_STAGE, collectMatchSolids, getIcePatches, getMapLayout, resolveSolidCollision } from "../arenaColliders";
 
 export const DEFAULT_BACKGROUND_SETTINGS = {
   distance: 200,
@@ -625,6 +626,7 @@ interface ZoogiGameState {
   developerDragActive: boolean;
   isAiming: boolean;
   devToolsVisible: boolean;
+  colliderDebug: boolean;
   ioControlsVisible: boolean;
   selectedMoveElement: { type: string; index: number } | null;
   moveUpdateCounter: number;
@@ -713,6 +715,7 @@ interface ZoogiGameState {
   toggleDeveloperMoveMode: () => void;
   setDeveloperMoveMode: (enabled: boolean) => void;
   toggleDevToolsVisible: () => void;
+  toggleColliderDebug: () => void;
   toggleIoControlsVisible: () => void;
   setMapForEditing: (map: MapTheme) => void;
   setSelectedMoveElement: (element: { type: string; index: number } | null) => void;
@@ -911,13 +914,13 @@ const createEnemy = (zoogi: Zoogi, position: [number, number, number], spawnPoin
   spawnPointIndex
 });
 
-const createOrbs = (): Orb[] => {
+const createOrbs = (ringRadius = 5): Orb[] => {
   const orbs: Orb[] = [];
   const orbColor = "#87CEEB"; // Light blue for all orbs
   
   // Spawn 15 orbs in a circular pattern
   const orbCount = 15;
-  const radius = 5;
+  const radius = ringRadius;
   
   // Randomly select 3 orbs to be star orbs (unlock different abilities)
   const indices = Array.from({ length: orbCount }, (_, i) => i);
@@ -956,33 +959,27 @@ const createOrbs = (): Orb[] => {
 };
 
 const createMushrooms = (): Mushroom[] => {
-  return [
-    {
-      id: "mushroom-white-1",
-      position: [8, 0, -8],
-      color: "white",
-      repelForce: 0.25
-    },
-    {
-      id: "mushroom-white-2",
-      position: [8, 0, 8],
-      color: "white",
-      repelForce: 0.25
-    }
-  ];
+  // Mushrooms are not drawn and are not solids. Keep the array empty so no
+  // leftover positions can be mistaken for colliders.
+  return [];
 };
 
-const createPinballBumpers = (): PinballBumper[] => {
-  const positions: [number, number, number][] = [
-    [10, 0, 0],
-    [-10, 0, 0],
-    [0, 0, 10],
-    [0, 0, -10],
-    [7, 0, 7],
-    [-7, 0, 7],
-    [7, 0, -7],
-    [-7, 0, -7],
-  ];
+const LEGACY_BUMPER_POSITIONS: [number, number, number][] = [
+  [10, 0, 0],
+  [-10, 0, 0],
+  [0, 0, 10],
+  [0, 0, -10],
+  [7, 0, 7],
+  [-7, 0, 7],
+  [7, 0, -7],
+  [-7, 0, -7],
+];
+
+const createPinballBumpers = (map?: string | null): PinballBumper[] => {
+  const layout = map ? getMapLayout(map) : null;
+  const positions: [number, number, number][] = layout
+    ? layout.bumpers.map((bumper) => [bumper.x, 0, bumper.z])
+    : LEGACY_BUMPER_POSITIONS;
   return positions.map((pos, i) => ({
     id: `bumper-${i}`,
     position: pos,
@@ -1000,7 +997,7 @@ const createPracticeOrbs = (multiplier: 1 | 2 | 3 = 1): Orb[] => {
   
   // Spawn orbs in expanding rings based on multiplier
   for (let ring = 1; ring <= multiplier; ring++) {
-    const radius = ring * 3; // Each ring is 3 units further out
+    const radius = ring * 1.8; // Stay inside the bumper ring on the scaled playfield
     const orbsInRing = 4 + (ring - 1) * 4; // 4, 8, 12 orbs per ring
     
     for (let i = 0; i < orbsInRing; i++) {
@@ -1072,8 +1069,45 @@ const initializePracticeGame = (selectedZoogi: Zoogi, orbMultiplier: 1 | 2 | 3 =
   
   const orbs = createPracticeOrbs(orbMultiplier);
   
-  return { playerEntity, enemies: [], orbs, mushrooms: [], pinballBumpers: [] };
+  return { playerEntity, enemies: [], orbs, mushrooms: [], pinballBumpers: createPinballBumpers("grass") };
 };
+
+function zonesFromLayout(map: string | null | undefined): ZoneEditorConfig[] | null {
+  const layout = getMapLayout(map);
+  if (!layout) return null;
+  return layout.zones.map((zone) => ({
+    id: zone.id,
+    angle: zone.angle,
+    distance: zone.distance,
+    visible: zone.visible,
+    isSpawn: zone.isSpawn,
+  }));
+}
+
+/** Knockoff ring, scoring zones, and grass stage scale for a match. Null map keeps the caller's settings. */
+function playfieldSettings(
+  map: string | null | undefined,
+  wallSettings: ZoogiGameState["wallSettings"],
+  backgroundSettings: ZoogiGameState["backgroundSettings"],
+) {
+  const layout = getMapLayout(map);
+  const zones = zonesFromLayout(map);
+  if (!layout || !zones) return {};
+  const patch: Partial<ZoogiGameState> = {
+    zoneEditorConfigs: zones,
+    wallSettings: { ...wallSettings, knockoffBoundaryRadius: layout.knockoffRadius },
+  };
+  if (map === "grass") {
+    patch.backgroundSettings = {
+      ...backgroundSettings,
+      modelScale: GRASS_STAGE.modelScale,
+      modelPositionX: 0,
+      modelPositionY: GRASS_STAGE.modelOffsetY,
+      modelPositionZ: 0,
+    };
+  }
+  return patch;
+}
 
 const initializeGame = (
   selectedZoogi: Zoogi, 
@@ -1084,11 +1118,17 @@ const initializeGame = (
 ) => {
   // Set active map theme so all getSpawnPointPosition calls use the right radius
   if (mapTheme) setActiveMapTheme(mapTheme);
+
+  // A selected map owns its spawns. Saved or leftover zone configs are ignored
+  // so a marble does not start outside the playfield. A null map (tests) keeps
+  // the configs the caller passed in.
+  const layout = getMapLayout(mapTheme);
+  const spawnZones = layout ? zonesFromLayout(mapTheme) ?? undefined : zoneEditorConfigs;
   
   // Player spawns at spawn point 0 (using zone editor spawn points if available)
   const playerSpawnIndex = 0;
-  const playerSpawnPos = getSpawnPointPosition(playerSpawnIndex, zoneEditorConfigs, mapTheme);
-  console.log("Player spawn position:", playerSpawnPos, "from zone configs:", !!zoneEditorConfigs);
+  const playerSpawnPos = getSpawnPointPosition(playerSpawnIndex, spawnZones, mapTheme);
+  console.log("Player spawn position:", playerSpawnPos, "from layout:", layout?.id ?? "none");
   
   const playerEntity: GameEntity = {
     id: "player",
@@ -1141,13 +1181,13 @@ const initializeGame = (
   // Each enemy spawns at their own spawn point (using zone editor spawn points if available)
   const enemies = selectedEnemies.map((zoogi, i) => {
     const spawnIndex = i + 1; // Player is at 0, enemies at 1, 2, 3, ...
-    const spawnPos = getSpawnPointPosition(spawnIndex, zoneEditorConfigs, mapTheme);
+    const spawnPos = getSpawnPointPosition(spawnIndex, spawnZones, mapTheme);
     return createEnemy(zoogi, spawnPos, spawnIndex, false);
   });
   
-  const orbs = createOrbs();
+  const orbs = createOrbs(layout?.orbRingRadius ?? 5);
   const mushrooms = createMushrooms();
-  const pinballBumpers = createPinballBumpers();
+  const pinballBumpers = createPinballBumpers(mapTheme);
   
   return { playerEntity, enemies, orbs, mushrooms, pinballBumpers };
 };
@@ -1420,6 +1460,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
     developerDragActive: false,
     isAiming: false,
     devToolsVisible: true,
+    colliderDebug: false,
     ioControlsVisible: true,
     selectedMoveElement: null,
     moveUpdateCounter: 0,
@@ -1711,6 +1752,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
       ioControlsVisible: enabled ? true : state.ioControlsVisible
     })),
     toggleDevToolsVisible: () => set((state) => ({ devToolsVisible: !state.devToolsVisible })),
+    toggleColliderDebug: () => set((state) => ({ colliderDebug: !state.colliderDebug })),
     toggleIoControlsVisible: () => set((state) => ({ ioControlsVisible: !state.ioControlsVisible })),
     setMapForEditing: (map) => {
       setCurrentMap(map);
@@ -2578,7 +2620,8 @@ export const useZoogiGame = create<ZoogiGameState>()(
         return;
       }
       
-      const { playerEntity, enemies, orbs, mushrooms, pinballBumpers } = initializeGame(zoogiToUse, gameMode, get().aiPlayerCount, get().zoneEditorConfigs, get().selectedMap ?? undefined);
+      const selectedMap = get().selectedMap;
+      const { playerEntity, enemies, orbs, mushrooms, pinballBumpers } = initializeGame(zoogiToUse, gameMode, get().aiPlayerCount, get().zoneEditorConfigs, selectedMap ?? undefined);
       
       if (isCustomZoogi) {
         playerEntity.customModelUrl = customModelUrl;
@@ -2637,7 +2680,8 @@ export const useZoogiGame = create<ZoogiGameState>()(
         outerWallBlocks: [],
         editorPlacedModels: get().editorPlacedModels.filter(m => 
           !m.modelUrl.includes('zoogi_town') && !m.modelUrl.includes('workshop')
-        )
+        ),
+        ...playfieldSettings(selectedMap, get().wallSettings, get().backgroundSettings),
       });
       
       // Classic mode now uses same free roam mechanics as local_multiplayer
@@ -2727,6 +2771,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         developerCamera: false,
         selectedMoveElement: null,
         selectedMap: "grass",
+        ...playfieldSettings("grass", get().wallSettings, get().backgroundSettings),
         orbMultiplier: 1 as 1 | 2 | 3,
         restrictionPhaseActive: false,
         restrictionPhaseStartTime: Date.now(),
@@ -2771,9 +2816,12 @@ export const useZoogiGame = create<ZoogiGameState>()(
         return;
       }
       
-      const newOrbs = createOrbs();
+      const roundMap = get().selectedMap;
+      const roundLayout = getMapLayout(roundMap);
+      const roundZones = zonesFromLayout(roundMap) ?? get().zoneEditorConfigs;
+      const newOrbs = createOrbs(roundLayout?.orbRingRadius ?? 5);
       const newMushrooms = createMushrooms();
-      const newPinballBumpers = createPinballBumpers();
+      const newPinballBumpers = createPinballBumpers(roundMap);
       
       set({
         phase: "playing",
@@ -2789,9 +2837,10 @@ export const useZoogiGame = create<ZoogiGameState>()(
         isPlayerTurn: true,
         turnIndex: 0,
         allMovementStopped: true,
+        ...playfieldSettings(roundMap, get().wallSettings, get().backgroundSettings),
         playerEntity: playerEntity ? {
           ...playerEntity,
-          position: [0, 0.5, 8],
+          position: getSpawnPointPosition(playerEntity.spawnPointIndex ?? 0, roundZones, roundMap ?? undefined),
           velocity: [0, 0, 0],
           score: 0,
           isKnockedOut: false,
@@ -2799,11 +2848,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         } : null,
         enemies: enemies.map((e, i) => ({
           ...e,
-          position: [
-            [-7, 0.5, -5],
-            [7, 0.5, -5],
-            [0, 0.5, -9]
-          ][i] as [number, number, number],
+          position: getSpawnPointPosition(e.spawnPointIndex ?? i + 1, roundZones, roundMap ?? undefined),
           velocity: [0, 0, 0],
           score: 0,
           isKnockedOut: false,
@@ -2820,12 +2865,13 @@ export const useZoogiGame = create<ZoogiGameState>()(
       
       if (!zoogiToUse) return;
       
-      const gameState = initializeGame(zoogiToUse, gameMode, get().aiPlayerCount, get().zoneEditorConfigs, get().selectedMap ?? undefined);
+      const gameState = initializeGame(zoogiToUse, gameMode, get().aiPlayerCount, get().zoneEditorConfigs, selectedMap ?? undefined);
       
       set({
         phase: "playing",
         selectedZoogi: zoogiToUse,
         selectedMap: selectedMap,
+        ...playfieldSettings(selectedMap, get().wallSettings, get().backgroundSettings),
         playerEntity: gameState.playerEntity,
         enemies: gameState.enemies,
         orbs: gameState.orbs,
@@ -3400,9 +3446,11 @@ export const useZoogiGame = create<ZoogiGameState>()(
       const { localPlayers, selectedMap, customArenaId, customArenaDecorations } = get();
       if (localPlayers.some(p => !p.zoogi)) return;
       
-      // Each local player spawns at their own spawn point outside the ring
+      const localLayout = getMapLayout(selectedMap);
+      const localZones = zonesFromLayout(selectedMap) ?? get().zoneEditorConfigs;
+      // Each local player spawns at their own spawn point on the playfield
       const entities: GameEntity[] = localPlayers.map((player, i) => {
-        const spawnPos = getSpawnPointPosition(i);
+        const spawnPos = getSpawnPointPosition(i, localZones, selectedMap ?? undefined);
         return {
           id: `local-player-${player.id}`,
           zoogi: player.zoogi!,
@@ -3445,7 +3493,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         };
       });
       
-      const orbs = createOrbs();
+      const orbs = createOrbs(localLayout?.orbRingRadius ?? 5);
       const mushrooms = createMushrooms();
       
       const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -3458,7 +3506,8 @@ export const useZoogiGame = create<ZoogiGameState>()(
         enemies: entities.slice(1),
         orbs,
         mushrooms,
-        pinballBumpers: createPinballBumpers(),
+        pinballBumpers: createPinballBumpers(selectedMap),
+        ...playfieldSettings(selectedMap, get().wallSettings, get().backgroundSettings),
         score: 0,
         isVictory: false,
         currentRound: 1,
@@ -3812,6 +3861,18 @@ export const useZoogiGame = create<ZoogiGameState>()(
             set({ zoneEditorConfigs: defaultConfig.zoneEditorConfigs });
           }
         }
+      }
+
+      // Saved decorations can arrive after the match has already placed spawns.
+      // Put the playfield (knockoff, zones, grass scale) back so those saves
+      // cannot leave zones outside the drop or shrink the island under the marbles.
+      const afterLoad = get();
+      if (
+        afterLoad.phase === "playing" &&
+        afterLoad.gameMode !== "map_editor" &&
+        afterLoad.selectedMap === mapId
+      ) {
+        set(playfieldSettings(mapId, afterLoad.wallSettings, afterLoad.backgroundSettings));
       }
     },
     
@@ -4188,21 +4249,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         return vel;
       };
       
-      const icePatchPositions: { x: number; z: number; radius: number }[] = [];
-      const currentMapForPatches = state.selectedMap || "grass";
-      if (currentMapForPatches === "ice") {
-        const patchCount = 8;
-        for (let i = 0; i < patchCount; i++) {
-          const angle = (i / patchCount) * Math.PI * 2 + 0.3;
-          const distFromCenter = 6 + (i % 3) * 3;
-          const radius = 2 + (i % 3) * 0.5;
-          icePatchPositions.push({
-            x: Math.cos(angle) * distFromCenter,
-            z: Math.sin(angle) * distFromCenter,
-            radius
-          });
-        }
-      }
+      const icePatchPositions = state.selectedMap === "ice" ? getIcePatches() : [];
       
       const isOnIce = (pos: [number, number, number]): boolean => {
         for (const patch of icePatchPositions) {
@@ -4860,6 +4907,13 @@ export const useZoogiGame = create<ZoogiGameState>()(
         }
       }
       
+      const matchSolids = collectMatchSolids({
+        map: state.selectedMap,
+        bumpers: state.pinballBumpers,
+        landedRocks: state.landedRocks,
+        editorModels: state.editorPlacedModels,
+      });
+
       let wolfClonesUpdated = state.wolfClones.map(c => ({ ...c }));
       
       wolfClonesUpdated.forEach((clone, ci) => {
@@ -4867,65 +4921,22 @@ export const useZoogiGame = create<ZoogiGameState>()(
         
         const CLONE_RADIUS = 0.5;
         const CLONE_BOUNCE = 0.75;
-        const cloneMaxDist = ARENA_RADIUS - CLONE_RADIUS;
         
         const prevX = clone.position[0];
         const prevZ = clone.position[2];
-        const prevDist = Math.sqrt(prevX * prevX + prevZ * prevZ);
         
         const dampedClone = applyFriction(clone.velocity);
         let vx = dampedClone[0];
         let vz = dampedClone[2];
-        
-        let newX = prevX + vx;
-        let newZ = prevZ + vz;
-        let newDist = Math.sqrt(newX * newX + newZ * newZ);
-        
-        if (newDist > cloneMaxDist && newDist > 0.1) {
-          const dx = newX - prevX;
-          const dz = newZ - prevZ;
-          const a = dx * dx + dz * dz;
-          const b = 2 * (prevX * dx + prevZ * dz);
-          const c = prevX * prevX + prevZ * prevZ - cloneMaxDist * cloneMaxDist;
-          const discriminant = b * b - 4 * a * c;
-          
-          let hitT = 1;
-          if (discriminant >= 0 && a > 0) {
-            const t1 = (-b - Math.sqrt(discriminant)) / (2 * a);
-            const t2 = (-b + Math.sqrt(discriminant)) / (2 * a);
-            if (t1 >= 0 && t1 <= 1) hitT = t1;
-            else if (t2 >= 0 && t2 <= 1) hitT = t2;
-          }
-          
-          const hitX = prevX + dx * hitT;
-          const hitZ = prevZ + dz * hitT;
-          const hitDist = Math.sqrt(hitX * hitX + hitZ * hitZ) || 1;
-          
-          const nx = hitX / hitDist;
-          const nz = hitZ / hitDist;
-          const dot = vx * nx + vz * nz;
-          
-          const reflectedVx = (vx - 2 * dot * nx) * CLONE_BOUNCE;
-          const reflectedVz = (vz - 2 * dot * nz) * CLONE_BOUNCE;
-          
-          const remaining = 1 - hitT;
-          newX = hitX + reflectedVx * remaining;
-          newZ = hitZ + reflectedVz * remaining;
-          
-          newDist = Math.sqrt(newX * newX + newZ * newZ);
-          if (newDist > cloneMaxDist) {
-            const clampN = cloneMaxDist / newDist;
-            newX *= clampN;
-            newZ *= clampN;
-          }
-          
-          vx = reflectedVx;
-          vz = reflectedVz;
-          console.log("Wolf clone bounced off wall!");
-        }
+
+        const clonePrev: [number, number, number] = [prevX, clone.position[1], prevZ];
+        const cloneNext: [number, number, number] = [prevX + vx, clone.position[1], prevZ + vz];
+        const cloneHit = resolveSolidCollision(clonePrev, cloneNext, [vx, 0, vz], CLONE_RADIUS, matchSolids, CLONE_BOUNCE);
+        vx = cloneHit.vel[0];
+        vz = cloneHit.vel[2];
         
         clone.velocity = [vx, 0, vz];
-        clone.position = [newX, clone.position[1], newZ];
+        clone.position = cloneHit.pos;
         
         enemies.forEach((enemy, ei) => {
           if (enemy.id === clone.spawnedByPlayerId) return;
@@ -4955,7 +4966,8 @@ export const useZoogiGame = create<ZoogiGameState>()(
         
         const finalDist = Math.sqrt(clone.position[0] ** 2 + clone.position[2] ** 2);
         const speed = Math.sqrt(clone.velocity[0] ** 2 + clone.velocity[2] ** 2);
-        clone.isActive = speed > 0.015 && finalDist <= ARENA_RADIUS + 0.5;
+        const cloneKnockoff = state.wallSettings.knockoffBoundaryRadius ?? 50;
+        clone.isActive = speed > 0.015 && finalDist <= cloneKnockoff + 0.5;
         
         wolfClonesUpdated[ci] = clone;
       });
@@ -4964,58 +4976,41 @@ export const useZoogiGame = create<ZoogiGameState>()(
       
       const mushroomsUpdated = state.mushrooms;
       
-      const BUMPER_COLLISION_RADIUS = 2.0;
       const bumperHits: { bumperId: string; hitTime: number }[] = [];
 
-      const checkBumperCollision = (
+      const applySolidHits = (
+        prev: [number, number, number],
         pos: [number, number, number],
         vel: [number, number, number],
-        entityRadius: number = 0.5
-      ): { pos: [number, number, number]; vel: [number, number, number]; hitBumper: string | null } => {
-        for (const bumper of state.pinballBumpers) {
-          const dx = pos[0] - bumper.position[0];
-          const dz = pos[2] - bumper.position[2];
-          const dist = Math.sqrt(dx * dx + dz * dz);
-          const minDist = BUMPER_COLLISION_RADIUS + entityRadius;
-          
-          if (dist < minDist && dist > 0) {
-            const nx = dx / dist;
-            const nz = dz / dist;
-            
-            const speed = Math.sqrt(vel[0] * vel[0] + vel[2] * vel[2]);
-            // Redirect off the bumper at a loss. A speed multiplier launched marbles back toward the orbs.
-            const bounceSpeed = speed * 0.72;
-            
-            const newVel: [number, number, number] = bounceSpeed < REST_SPEED
-              ? [0, vel[1], 0]
-              : [nx * bounceSpeed, vel[1], nz * bounceSpeed];
-            
-            const newPos: [number, number, number] = [
-              bumper.position[0] + nx * (minDist + 0.1),
-              pos[1],
-              bumper.position[2] + nz * (minDist + 0.1)
-            ];
-            
-            bumperHits.push({ bumperId: bumper.id, hitTime: Date.now() });
-            return { pos: newPos, vel: newVel, hitBumper: bumper.id };
-          }
+        entityRadius: number,
+        awardPoints: boolean,
+      ): { pos: [number, number, number]; vel: [number, number, number] } => {
+        const resolved = resolveSolidCollision(prev, pos, vel, entityRadius, matchSolids);
+        const seen = new Set<string>();
+        for (const id of resolved.hits) {
+          if (seen.has(id)) continue;
+          seen.add(id);
+          const solid = matchSolids.find((item) => item.id === id);
+          if (solid?.kind !== "bumper") continue;
+          bumperHits.push({ bumperId: id, hitTime: Date.now() });
+          if (awardPoints) get().addScore(50);
         }
-        return { pos, vel, hitBumper: null };
+        return { pos: resolved.pos, vel: resolved.vel };
       };
 
-      const playerBumperResult = checkBumperCollision(player.position, player.velocity, COLLISION_RADIUS);
-      if (playerBumperResult.hitBumper) {
-        player.position = playerBumperResult.pos;
-        player.velocity = playerBumperResult.vel;
-        get().addScore(50);
-      }
+      const playerSolid = applySolidHits(prevPlayerPos, player.position, player.velocity, COLLISION_RADIUS, true);
+      player.position = playerSolid.pos;
+      player.velocity = playerSolid.vel;
 
-      enemies = enemies.map(enemy => {
-        const result = checkBumperCollision(enemy.position, enemy.velocity, COLLISION_RADIUS);
-        if (result.hitBumper) {
-          return { ...enemy, position: result.pos, velocity: result.vel };
-        }
-        return enemy;
+      enemies = enemies.map((enemy, ei) => {
+        const result = applySolidHits(prevEnemyPositions[ei], enemy.position, enemy.velocity, COLLISION_RADIUS, false);
+        return { ...enemy, position: result.pos, velocity: result.vel };
+      });
+
+      orbs = orbs.map((orb, oi) => {
+        if (!orb.isActive) return orb;
+        const result = applySolidHits(prevOrbPositions[oi], orb.position, orb.velocity, 0.4, false);
+        return { ...orb, position: result.pos, velocity: result.vel };
       });
 
       const BOUNCE_FACTOR = 0.7;
