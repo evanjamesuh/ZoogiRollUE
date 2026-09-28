@@ -4,7 +4,6 @@ import { Arena } from "./Arena";
 import { PlayerZoogi, EnemyZoogi, LocalMultiplayerZoogi } from "./Zoogi";
 import { OrbManager } from "./Orb";
 import { PhysicsManager } from "./PhysicsManager";
-import { RapierPhysicsManager } from "./RapierPhysicsManager";
 import { GameUI } from "./GameUI";
 import { Lights } from "./Lights";
 import { GameCamera } from "./GameCamera";
@@ -222,7 +221,6 @@ export function Game() {
           </EffectComposer>
           
           <PhysicsManager />
-          <RapierPhysicsManager />
           
           <DeveloperMoveControls key={`dev-controls-${selectedMap || "grass"}`} />
           

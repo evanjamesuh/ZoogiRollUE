@@ -1,9 +1,8 @@
 import * as THREE from "three";
-import { useRef, useMemo, useEffect, Suspense, Component, ReactNode } from "react";
+import { useRef, useMemo, Suspense, Component, ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGLTF, useAnimations, Center } from "@react-three/drei";
 import { useZoogiGame, CustomArenaDecoration } from "@/lib/stores/useZoogiGame";
-import { usePhysicsWorld } from "@/lib/physics/usePhysicsWorld";
 import { Trees } from "./Trees";
 import { IcePatches } from "./IcePatches";
 import { Clouds } from "./Clouds";
@@ -164,99 +163,6 @@ let _winterPenguinsReady = false;
 function WinterLocationScene() {
   const groupRef = useRef<THREE.Group>(null);
   const { scene } = useGLTF("/models/winter_location.glb");
-  const { createTrimeshCollider, removeBody, isInitialized } = usePhysicsWorld();
-  const colliderCreated = useRef(false);
-
-  useEffect(() => {
-    if (!isInitialized || colliderCreated.current) return;
-
-    const Y_THRESHOLD = 14;
-    const rawVertices: number[] = [];
-    const rawIndices: number[] = [];
-    let vertexOffset = 0;
-
-    scene.updateMatrixWorld(true);
-    const sceneInverse = scene.matrixWorld.clone().invert();
-
-    scene.traverse((child) => {
-      if (!(child instanceof THREE.Mesh) || !child.geometry) return;
-      const geometry = child.geometry;
-      const positionAttr = geometry.getAttribute('position');
-      if (!positionAttr) return;
-
-      const meshToSceneMatrix = sceneInverse.clone().multiply(child.matrixWorld);
-
-      for (let i = 0; i < positionAttr.count; i++) {
-        const vertex = new THREE.Vector3(
-          positionAttr.getX(i),
-          positionAttr.getY(i),
-          positionAttr.getZ(i)
-        );
-        vertex.applyMatrix4(meshToSceneMatrix);
-        rawVertices.push(vertex.x, vertex.y, vertex.z);
-      }
-
-      const indexAttr = geometry.getIndex();
-      if (indexAttr) {
-        for (let i = 0; i < indexAttr.count; i++) {
-          rawIndices.push(indexAttr.getX(i) + vertexOffset);
-        }
-      } else {
-        for (let i = 0; i < positionAttr.count; i++) {
-          rawIndices.push(i + vertexOffset);
-        }
-      }
-      vertexOffset += positionAttr.count;
-    });
-
-    const usedVertexSet = new Set<number>();
-    const filteredTriIndices: number[] = [];
-    for (let i = 0; i < rawIndices.length; i += 3) {
-      const i0 = rawIndices[i], i1 = rawIndices[i + 1], i2 = rawIndices[i + 2];
-      const y0 = rawVertices[i0 * 3 + 1];
-      const y1 = rawVertices[i1 * 3 + 1];
-      const y2 = rawVertices[i2 * 3 + 1];
-      if (y0 > Y_THRESHOLD && y1 > Y_THRESHOLD && y2 > Y_THRESHOLD) continue;
-      filteredTriIndices.push(i0, i1, i2);
-      usedVertexSet.add(i0);
-      usedVertexSet.add(i1);
-      usedVertexSet.add(i2);
-    }
-
-    const oldToNew = new Map<number, number>();
-    const compactedVerts: number[] = [];
-    let newIdx = 0;
-    for (const oldIdx of usedVertexSet) {
-      oldToNew.set(oldIdx, newIdx++);
-      compactedVerts.push(
-        rawVertices[oldIdx * 3],
-        rawVertices[oldIdx * 3 + 1],
-        rawVertices[oldIdx * 3 + 2]
-      );
-    }
-    const compactedIndices = filteredTriIndices.map(idx => oldToNew.get(idx)!);
-
-    if (compactedVerts.length > 0 && compactedIndices.length > 0) {
-      const vertices = new Float32Array(compactedVerts);
-      const indices = new Uint32Array(compactedIndices);
-      createTrimeshCollider(
-        "winter-terrain",
-        vertices,
-        indices,
-        [0, -4.2, 0],
-        [0.9, 0.9, 0.9]
-      );
-      colliderCreated.current = true;
-      console.log("[ICE] Winter terrain trimesh collider created with", compactedVerts.length / 3, "vertices (filtered from", rawVertices.length / 3, ")");
-    }
-
-    return () => {
-      if (colliderCreated.current) {
-        removeBody("winter-terrain");
-        colliderCreated.current = false;
-      }
-    };
-  }, [isInitialized, scene, createTrimeshCollider, removeBody]);
 
   const spinObjects = useRef<{ obj: THREE.Object3D; baseY: number; phase: number }[]>([]);
   const swayObjects = useRef<{ obj: THREE.Object3D; baseY: number; baseRotY: number; phase: number }[]>([]);
@@ -442,8 +348,6 @@ useGLTF.preload("/models/winter_location.glb");
 function CosmosArenaModel() {
   const groupRef = useRef<THREE.Group>(null);
   const { scene } = useGLTF("/models/cosmos_arena.glb");
-  const { createTrimeshCollider, removeBody, isInitialized, getBody } = usePhysicsWorld();
-  const colliderCreated = useRef(false);
   const backgroundSettings = useZoogiGame((state) => state.backgroundSettings);
   const elementTransforms = useZoogiGame((state) => state.elementTransforms);
   
@@ -469,157 +373,6 @@ function CosmosArenaModel() {
       }
     });
   }, [scene]);
-  
-  // Create trimesh collider from the GLB geometry - DISABLED to prevent invisible wall collision
-  // The game uses flat floor physics from RapierPhysicsManager instead
-  useEffect(() => {
-    if (!isInitialized) return;
-    
-    // Always remove existing collider first when settings change
-    removeBody("cosmos-arena-floor");
-    colliderCreated.current = false;
-    
-    // DISABLED: Don't create trimesh collider - it causes invisible walls from the 3D model geometry
-    console.log("Cosmos arena trimesh collider DISABLED - using flat floor physics only");
-    return;
-    
-    const allVertices: number[] = [];
-    const allIndices: number[] = [];
-    let vertexOffset = 0;
-    
-    // Find only floor-related meshes (not decorative elements)
-    scene.traverse((child) => {
-      if (child instanceof THREE.Mesh && child.geometry) {
-        const meshName = child.name.toLowerCase();
-        // Only include floor/arena surface meshes, not buildings or decorations
-        const isFloorMesh = meshName.includes('floor') || 
-                           meshName.includes('arena') ||
-                           meshName.includes('ground') ||
-                           meshName.includes('ramp');
-        
-        if (!isFloorMesh) return;
-        
-        const geometry = child.geometry;
-        const positionAttr = geometry.getAttribute('position');
-        
-        if (positionAttr) {
-          // Compute mesh's transform relative to scene root (not world)
-          // This avoids including our group's position/scale which is applied separately
-          const meshToSceneMatrix = new THREE.Matrix4();
-          let current: THREE.Object3D | null = child;
-          const matrices: THREE.Matrix4[] = [];
-          while (current && current !== scene) {
-            matrices.push(current.matrix.clone());
-            current = current.parent;
-          }
-          // Apply matrices in reverse order (from scene root to mesh)
-          for (let i = matrices.length - 1; i >= 0; i--) {
-            meshToSceneMatrix.multiply(matrices[i]);
-          }
-          
-          for (let i = 0; i < positionAttr.count; i++) {
-            const vertex = new THREE.Vector3(
-              positionAttr.getX(i),
-              positionAttr.getY(i),
-              positionAttr.getZ(i)
-            );
-            // Apply mesh transform within GLB (scene-local space)
-            vertex.applyMatrix4(meshToSceneMatrix);
-            // Apply our model scale and position
-            vertex.x = vertex.x * modelScale[0] + modelPosition[0];
-            vertex.y = vertex.y * modelScale[1] + modelPosition[1];
-            vertex.z = vertex.z * modelScale[2] + modelPosition[2];
-            
-            allVertices.push(vertex.x, vertex.y, vertex.z);
-          }
-          
-          // Get indices
-          const indexAttr = geometry.getIndex();
-          if (indexAttr) {
-            for (let i = 0; i < indexAttr.count; i++) {
-              allIndices.push(indexAttr.getX(i) + vertexOffset);
-            }
-          } else {
-            // Non-indexed geometry - create indices
-            for (let i = 0; i < positionAttr.count; i++) {
-              allIndices.push(i + vertexOffset);
-            }
-          }
-          
-          vertexOffset += positionAttr.count;
-        }
-      }
-    });
-    
-    if (allVertices.length > 0 && allIndices.length > 0) {
-      // Filter out triangles that are above floor level (Y > 1.5) to prevent wall collision
-      const MAX_FLOOR_Y = 1.5;
-      const filteredVertices: number[] = [];
-      const filteredIndices: number[] = [];
-      const vertexMap = new Map<number, number>();
-      
-      // Process triangles (every 3 indices)
-      for (let i = 0; i < allIndices.length; i += 3) {
-        const i0 = allIndices[i];
-        const i1 = allIndices[i + 1];
-        const i2 = allIndices[i + 2];
-        
-        // Get Y values for each vertex in the triangle
-        const y0 = allVertices[i0 * 3 + 1];
-        const y1 = allVertices[i1 * 3 + 1];
-        const y2 = allVertices[i2 * 3 + 1];
-        
-        // Skip triangles where ALL vertices are above floor level
-        if (y0 > MAX_FLOOR_Y && y1 > MAX_FLOOR_Y && y2 > MAX_FLOOR_Y) {
-          continue;
-        }
-        
-        // Add this triangle (map old indices to new)
-        for (const oldIdx of [i0, i1, i2]) {
-          if (!vertexMap.has(oldIdx)) {
-            const newIdx = filteredVertices.length / 3;
-            vertexMap.set(oldIdx, newIdx);
-            filteredVertices.push(
-              allVertices[oldIdx * 3],
-              allVertices[oldIdx * 3 + 1],
-              allVertices[oldIdx * 3 + 2]
-            );
-          }
-          filteredIndices.push(vertexMap.get(oldIdx)!);
-        }
-      }
-      
-      const vertices = new Float32Array(filteredVertices);
-      const indices = new Uint32Array(filteredIndices);
-      
-      // Debug: Calculate Y bounds of the floor collider
-      let minY = Infinity, maxY = -Infinity;
-      for (let i = 1; i < filteredVertices.length; i += 3) {
-        minY = Math.min(minY, filteredVertices[i]);
-        maxY = Math.max(maxY, filteredVertices[i]);
-      }
-      console.log("Floor collider Y bounds:", minY.toFixed(2), "to", maxY.toFixed(2), "(filtered from", allVertices.length / 3, "to", filteredVertices.length / 3, "vertices)");
-      
-      // Pass identity transform since vertices are already in final world space
-      createTrimeshCollider(
-        "cosmos-arena-floor",
-        vertices,
-        indices,
-        [0, 0, 0],
-        [1, 1, 1]
-      );
-      
-      colliderCreated.current = true;
-      console.log("Cosmos arena trimesh collider created with", filteredVertices.length / 3, "vertices");
-    }
-    
-    return () => {
-      if (colliderCreated.current) {
-        removeBody("cosmos-arena-floor");
-        colliderCreated.current = false;
-      }
-    };
-  }, [isInitialized, scene, modelX, modelY, modelZ, scale]);
   
   const arenaRotation = elementTransforms.arenaModelRotation;
   const modelRotation: [number, number, number] = [
