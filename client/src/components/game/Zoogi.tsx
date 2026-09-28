@@ -281,6 +281,7 @@ export function PlayerZoogi() {
     playerEntity, 
     updatePlayerVelocity,
     isPlayerTurn,
+    currentRound,
     endTurn,
     setMovementStopped,
     armHotstreakGrenade,
@@ -329,6 +330,15 @@ export function PlayerZoogi() {
     }
     prevIsPlayerTurnRef.current = isPlayerTurn;
   }, [isPlayerTurn]);
+
+  // A round can end while it is still this marble's turn (the clock hit 0).
+  // The turn flag never flips, so the shot lock from the previous round would
+  // otherwise stay on and the next round could not be flicked.
+  useEffect(() => {
+    launchCooldownRef.current = false;
+    hasLaunchedRef.current = false;
+    prevSpeedRef.current = 0;
+  }, [currentRound]);
 
   useEffect(() => {
     if (playerEntity && isPlayerTurn) {
@@ -780,7 +790,7 @@ export function PlayerZoogi() {
 
   return (
     <group>
-      <group ref={meshRef} position={pos} visible={!firstPersonView}>
+      <group ref={meshRef} position={pos} visible={!firstPersonView && !playerEntity.isKnockedOut && !playerEntity.isRespawning}>
         <ZoogiModelSwitch zoogiId={playerEntity.zoogi.id} hasShield={playerEntity.hasShield} hasSpawnImmunity={playerEntity.spawnImmunity} color={playerEntity.zoogi.color} customModelUrl={playerEntity.customModelUrl} isPlayer={true} />
         {playerEntity.larsRicochetBoost > 1 && (
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
@@ -809,7 +819,7 @@ export function PlayerZoogi() {
       </group>
       
       {/* Floating player icon */}
-      {!firstPersonView && (
+      {!firstPersonView && !playerEntity.isKnockedOut && !playerEntity.isRespawning && (
         <Html
           position={[pos[0], pos[1] + 3.2, pos[2]]}
           center
@@ -838,7 +848,7 @@ export function PlayerZoogi() {
       )}
       
       {/* Invisible hitbox for drag interaction - disabled in first person, over shoulder, and birds eye views */}
-      {(isPlayerTurn || isFreeForAll) && !launchCooldownRef.current && !firstPersonView && !overShoulderView && !birdsEyeView && (
+      {(isPlayerTurn || isFreeForAll) && !launchCooldownRef.current && !playerEntity.isKnockedOut && !playerEntity.isRespawning && !firstPersonView && !overShoulderView && !birdsEyeView && (
         <mesh 
           position={pos} 
           onPointerDown={handlePointerDown}
@@ -918,7 +928,7 @@ export function PlayerZoogi() {
         </>
       )}
 
-      {(isPlayerTurn || isFreeForAll) && !isDragging && (
+      {(isPlayerTurn || isFreeForAll) && !isDragging && !playerEntity.isKnockedOut && !playerEntity.isRespawning && (
         <mesh position={[pos[0], 0.05, pos[2]]} rotation={[-Math.PI / 2, 0, 0]}>
           <ringGeometry args={[0.7, 0.9, 32]} />
           <meshBasicMaterial color={isFreeForAll ? "#A855F7" : "#00FF00"} transparent opacity={0.5} />
@@ -940,12 +950,13 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
   const aiTimerRef = useRef(0);
   const hasLaunchedRef = useRef(false);
   const prevTurnRef = useRef(false);
+  const prevRoundRef = useRef(0);
   const prevSpeedRef = useRef(0);
   const stunRotationRef = useRef(0);
   const lastLaunchTimeRef = useRef(0);
   const ffaCooldownRef = useRef(1.5 + Math.random() * 1.5);
   
-  const { enemies, isPlayerTurn, turnIndex, playerEntity, orbs, updateEnemy, endTurn, setMovementStopped, spawnWolfClones, gameMode, lockOnEnabled, lockOnTargetId, setLockOnTarget, aiControls } = useZoogiGame();
+  const { enemies, isPlayerTurn, turnIndex, currentRound, playerEntity, orbs, updateEnemy, endTurn, setMovementStopped, spawnWolfClones, gameMode, lockOnEnabled, lockOnTargetId, setLockOnTarget, aiControls } = useZoogiGame();
   
   const enemy = enemies.find(e => e.id === entityId);
   const myIndex = enemies.findIndex(e => e.id === entityId);
@@ -976,6 +987,13 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
         console.log(`Enemy ${enemy.zoogi.name}'s turn starting`);
       }
       prevTurnRef.current = shouldBeMyTurn;
+    }
+
+    if (prevRoundRef.current !== currentRound) {
+      prevRoundRef.current = currentRound;
+      hasLaunchedRef.current = false;
+      prevSpeedRef.current = 0;
+      aiTimerRef.current = 0;
     }
     
     const canLaunchFFA = isFreeForAll && speed < 0.1 && !enemy.isStunned;
@@ -1286,11 +1304,12 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
 
   return (
     <group>
-      <group ref={meshRef} position={enemy.position} onClick={handleClick}>
+      <group ref={meshRef} position={enemy.position} onClick={handleClick} visible={!enemy.isKnockedOut && !enemy.isRespawning}>
         <ZoogiModelSwitch zoogiId={enemy.zoogi.id} hasShield={false} hasSpawnImmunity={enemy.spawnImmunity} color={enemy.zoogi.color} />
       </group>
 
       {/* Floating enemy icon */}
+      {!enemy.isKnockedOut && !enemy.isRespawning && (
       <Html
         position={[enemy.position[0], enemy.position[1] + 3.2, enemy.position[2]]}
         center
@@ -1326,6 +1345,7 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
           </div>
         )}
       </Html>
+      )}
 
       {isMyTurn && !isFreeForAll && (
         <mesh position={[enemy.position[0], 0.05, enemy.position[2]]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -1386,6 +1406,7 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
     enemies,
     orbs,
     currentLocalPlayerIndex,
+    currentRound,
     localPlayers,
     updateLocalPlayerVelocity,
     endTurn,
@@ -1418,6 +1439,12 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
   const localPlayer = localPlayers[playerIndex];
   const playerColors = ["#3B82F6", "#EF4444", "#22C55E", "#A855F7"];
   
+  useEffect(() => {
+    launchCooldownRef.current = false;
+    hasLaunchedRef.current = false;
+    prevSpeedRef.current = 0;
+  }, [currentRound]);
+
   useEffect(() => {
     if (currentLocalPlayerIndex === playerIndex && prevTurnRef.current !== playerIndex) {
       launchCooldownRef.current = false;
@@ -1699,7 +1726,7 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
 
   return (
     <group>
-      <group ref={meshRef} position={pos}>
+      <group ref={meshRef} position={pos} visible={!entity.isKnockedOut && !entity.isRespawning}>
         <ZoogiModelSwitch zoogiId={entity.zoogi.id} hasShield={false} color={entity.zoogi.color} />
       </group>
       
