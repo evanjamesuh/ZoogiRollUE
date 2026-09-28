@@ -133,7 +133,7 @@ function MatchPowerVisuals() {
           radius={showExplosion.radius ?? 8}
         />
       )}
-      {powerUnlocks.filter((flash) => now - flash.startTime < 700).map((flash) => (
+      {powerUnlocks.filter((flash) => now - flash.startTime < 4000).map((flash) => (
         <PowerUnlockFlash
           key={flash.id}
           position={flash.position}

@@ -36,9 +36,30 @@ function hashSeed(position: Vec3, startTime: number, salt: number): number {
   return (x ^ y ^ z ^ time ^ salt) >>> 0 || 1;
 }
 
-function elapsedSeconds(startTime: number, frozenElapsed?: number): number {
-  if (frozenElapsed !== undefined) return Math.max(0, frozenElapsed);
-  return Math.max(0, (Date.now() - startTime) / 1000);
+/** One rendered frame. A hitch must not skip the whole burst. */
+const FRAME_STEP = 1 / 30;
+
+/**
+ * Played time starts on the first useFrame, using that frame's clock.
+ * Wall-clock `Date.now()` runs ahead of the first paint, which used to
+ * expire the burst before it was drawn.
+ */
+function usePlayedTime(frozenElapsed?: number) {
+  const origin = useRef<number | null>(null);
+  const played = useRef(0);
+  return (clockElapsed: number) => {
+    if (frozenElapsed !== undefined) return Math.max(0, frozenElapsed);
+    if (origin.current === null) origin.current = clockElapsed;
+    const uncapped = Math.max(0, clockElapsed - origin.current);
+    const next = Math.min(uncapped, played.current + FRAME_STEP);
+    played.current = next;
+    return next;
+  };
+}
+
+/** Keep the burst above the floor the marble is standing on. */
+function aboveFloor(position: Vec3): Vec3 {
+  return [position[0], Math.max(position[1], 0.5) + 0.35, position[2]];
 }
 
 const additive = {
@@ -104,15 +125,16 @@ export function ExplosionBlast({
   const coreMat = useRef<THREE.MeshBasicMaterial>(null);
   const sparkRefs = useRef<(THREE.Mesh | null)[]>([]);
   const sparks = useSparkField(position, startTime, 18, 11);
+  const playedTime = usePlayedTime(frozenElapsed);
 
-  useFrame(() => {
-    const elapsed = elapsedSeconds(startTime, frozenElapsed);
-    const expand = smoothstep(elapsed / 0.34);
+  useFrame((state) => {
+    const elapsed = playedTime(state.clock.elapsedTime);
+    const expand = Math.max(0.62, smoothstep(elapsed / 0.22));
     const fade = 1 - smoothstep((elapsed - 0.38) / 0.57);
     const ringR = Math.max(0.4, radius * expand);
 
     if (discMat.current) {
-      const discIn = smoothstep(elapsed / 0.12);
+      const discIn = Math.max(0.85, smoothstep(elapsed / 0.12));
       discMat.current.opacity = 0.42 * discIn * Math.max(fade, 0.15 * (1 - smoothstep(elapsed / 0.95)));
     }
     if (ring.current) ring.current.scale.setScalar(ringR);
@@ -120,8 +142,8 @@ export function ExplosionBlast({
     if (edge.current) edge.current.scale.setScalar(ringR);
     if (edgeMat.current) edgeMat.current.opacity = 0.9 * fade;
 
-    const fireGrow = smoothstep(elapsed / 0.14);
-    const fireShrink = 1 - smoothstep((elapsed - 0.16) / 0.7);
+    const fireGrow = Math.max(0.72, smoothstep(elapsed / 0.1));
+    const fireShrink = 1 - smoothstep((elapsed - 0.42) / 0.5);
     const fireScale = Math.max(0.001, fireGrow * fireShrink * 4.6);
     if (fire.current) fire.current.scale.setScalar(fireScale);
     if (fireMat.current) fireMat.current.opacity = 0.9 * fireShrink;
@@ -152,8 +174,8 @@ export function ExplosionBlast({
   if (done) return null;
 
   return (
-    <group position={position}>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
+    <group position={aboveFloor(position)} renderOrder={3}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.2, 0]}>
         <circleGeometry args={[radius, 64]} />
         <meshBasicMaterial
           ref={discMat}
@@ -165,7 +187,7 @@ export function ExplosionBlast({
           toneMapped={false}
         />
       </mesh>
-      <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.08, 0]}>
+      <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.28, 0]}>
         <ringGeometry args={[0.9, 1, 72]} />
         <meshBasicMaterial
           ref={ringMat}
@@ -177,7 +199,7 @@ export function ExplosionBlast({
           toneMapped={false}
         />
       </mesh>
-      <mesh ref={edge} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.1, 0]}>
+      <mesh ref={edge} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.34, 0]}>
         <ringGeometry args={[0.96, 1, 72]} />
         <meshBasicMaterial
           ref={edgeMat}
@@ -187,11 +209,11 @@ export function ExplosionBlast({
           side={THREE.DoubleSide}
         />
       </mesh>
-      <mesh ref={fire} position={[0, 1.15, 0]}>
+      <mesh ref={fire} position={[0, 1.7, 0]}>
         <sphereGeometry args={[1, 24, 24]} />
         <meshBasicMaterial ref={fireMat} color="#ff6a00" opacity={0.9} {...additive} />
       </mesh>
-      <mesh ref={core} position={[0, 1.15, 0]}>
+      <mesh ref={core} position={[0, 1.7, 0]}>
         <sphereGeometry args={[1, 20, 20]} />
         <meshBasicMaterial ref={coreMat} color="#fff6d8" opacity={0.95} {...additive} />
       </mesh>
@@ -296,10 +318,11 @@ export function StunBurst({
   const washMat = useRef<THREE.MeshBasicMaterial>(null);
   const core = useRef<THREE.Mesh>(null);
   const coreMat = useRef<THREE.MeshBasicMaterial>(null);
+  const playedTime = usePlayedTime(frozenElapsed);
 
-  useFrame(() => {
-    const elapsed = elapsedSeconds(startTime, frozenElapsed);
-    const expand = smoothstep(elapsed / 0.28);
+  useFrame((state) => {
+    const elapsed = playedTime(state.clock.elapsedTime);
+    const expand = Math.max(0.62, smoothstep(elapsed / 0.2));
     const fade = 1 - smoothstep((elapsed - 0.34) / 0.56);
     const ringR = Math.max(0.4, radius * expand);
     if (ring.current) ring.current.scale.setScalar(ringR);
@@ -334,8 +357,8 @@ export function StunBurst({
   if (done) return null;
 
   return (
-    <group position={position}>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
+    <group position={aboveFloor(position)} renderOrder={3}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.2, 0]}>
         <circleGeometry args={[radius, 64]} />
         <meshBasicMaterial
           ref={washMat}
@@ -347,7 +370,7 @@ export function StunBurst({
           toneMapped={false}
         />
       </mesh>
-      <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.08, 0]}>
+      <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.28, 0]}>
         <ringGeometry args={[0.9, 1, 72]} />
         <meshBasicMaterial
           ref={ringMat}
@@ -359,7 +382,7 @@ export function StunBurst({
           toneMapped={false}
         />
       </mesh>
-      <mesh ref={ring2} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.09, 0]}>
+      <mesh ref={ring2} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.34, 0]}>
         <ringGeometry args={[0.92, 1, 64]} />
         <meshBasicMaterial
           ref={ring2Mat}
@@ -369,7 +392,7 @@ export function StunBurst({
           side={THREE.DoubleSide}
         />
       </mesh>
-      <mesh ref={core} position={[0, 0.8, 0]}>
+      <mesh ref={core} position={[0, 1.5, 0]}>
         <sphereGeometry args={[1, 20, 20]} />
         <meshBasicMaterial ref={coreMat} color="#e0f2fe" opacity={0.8} {...additive} />
       </mesh>
@@ -671,13 +694,14 @@ export function PowerUnlockFlash({
       dist: 0.4 + rand() * 0.6,
     }));
   }, [px, py, pz, startTime]);
+  const playedTime = usePlayedTime(frozenElapsed);
 
-  useFrame(() => {
-    const elapsed = elapsedSeconds(startTime, frozenElapsed);
+  useFrame((state) => {
+    const elapsed = playedTime(state.clock.elapsedTime);
     const life = 1 - smoothstep(elapsed / UNLOCK_DURATION);
-    const pop = Math.sin(clamp01(elapsed / 0.42) * Math.PI);
+    const pop = Math.max(0.72, Math.sin(clamp01(elapsed / 0.42) * Math.PI));
     if (root.current) root.current.rotation.y = elapsed * 2.5;
-    if (ring.current) ring.current.scale.setScalar(Math.max(0.2, radius * smoothstep(elapsed / 0.28)));
+    if (ring.current) ring.current.scale.setScalar(Math.max(radius * 0.55, radius * smoothstep(elapsed / 0.2)));
     if (ringMat.current) ringMat.current.opacity = 0.9 * life;
     if (discMat.current) discMat.current.opacity = 0.5 * life;
     const coreScale = 0.45 + pop * 1.7;
@@ -710,12 +734,12 @@ export function PowerUnlockFlash({
   if (done) return null;
 
   return (
-    <group ref={root} position={position}>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
+    <group ref={root} position={aboveFloor(position)} renderOrder={3}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.2, 0]}>
         <circleGeometry args={[radius * 0.92, 48]} />
         <meshBasicMaterial ref={discMat} color={color} transparent opacity={0.42} depthWrite={false} side={THREE.DoubleSide} toneMapped={false} />
       </mesh>
-      <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.06, 0]}>
+      <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.28, 0]}>
         <ringGeometry args={[0.82, 1, 40]} />
         <meshBasicMaterial
           ref={ringMat}
@@ -725,11 +749,11 @@ export function PowerUnlockFlash({
           side={THREE.DoubleSide}
         />
       </mesh>
-      <mesh ref={core} position={[0, 1.1, 0]}>
+      <mesh ref={core} position={[0, 1.6, 0]}>
         <sphereGeometry args={[0.85, 18, 18]} />
         <meshBasicMaterial ref={coreMat} color={color} opacity={0.95} {...additive} />
       </mesh>
-      <mesh position={[0, 1.1, 0]}>
+      <mesh position={[0, 1.6, 0]}>
         <sphereGeometry args={[0.34, 12, 12]} />
         <meshBasicMaterial color="#ffffff" opacity={0.9} {...additive} />
       </mesh>

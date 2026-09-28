@@ -1363,7 +1363,7 @@ function flashStarUnlock(
   const now = Date.now();
   set((state) => ({
     powerUnlocks: [
-      ...state.powerUnlocks.filter((flash) => now - flash.startTime < 700),
+      ...state.powerUnlocks.filter((flash) => now - flash.startTime < 4000),
       {
         id: orb.id,
         position: [orb.position[0], orb.position[1], orb.position[2]],
