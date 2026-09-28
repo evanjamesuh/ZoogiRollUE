@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useState } from "react";
-import { useZoogiGame } from "@/lib/stores/useZoogiGame";
+import { useZoogiGame, ZOOGI_ROSTER } from "@/lib/stores/useZoogiGame";
 import { useAudio } from "@/lib/stores/useAudio";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
@@ -78,6 +78,19 @@ function RingerTrialsLoading() {
 function App() {
   const powerPreview = usePowerPreview();
   const phase = useZoogiGame((state) => state.phase);
+
+  useEffect(() => {
+    const debug = new URLSearchParams(window.location.search).get("debug");
+    if (debug === null || debug === "colliders") return;
+    const debugWindow = window as unknown as {
+      __zoogi?: typeof useZoogiGame;
+      __roster?: typeof ZOOGI_ROSTER;
+      __audio?: typeof useAudio;
+    };
+    debugWindow.__zoogi = useZoogiGame;
+    debugWindow.__roster = ZOOGI_ROSTER;
+    debugWindow.__audio = useAudio;
+  }, []);
   const { setHitSound, setSuccessSound, setMenuMusic, menuMusic, isMuted, stopMenuMusic, initAudioContext } = useAudio();
 
   useEffect(() => {
