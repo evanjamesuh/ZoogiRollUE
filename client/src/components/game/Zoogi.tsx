@@ -1,8 +1,9 @@
 import * as THREE from "three";
-import { useRef, useState, useEffect, useMemo } from "react";
+import { useRef, useState, useEffect, useMemo, Suspense, Component, type ReactNode } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { Line, Html } from "@react-three/drei";
+import { Line, Html, useGLTF } from "@react-three/drei";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
+import { resolveZoogiModel, rollMarble, zoogiModelPreloadUrls, type ZoogiModelSettings } from "@/lib/zoogiModels";
 import { useAudio } from "@/lib/stores/useAudio";
 import { useProgression } from "@/lib/stores/useProgression";
 import { triggerLaunchFeel } from "@/lib/stores/useGameFeel";
@@ -41,9 +42,105 @@ const ZOOGI_MATERIAL_STYLES: Record<string, {
 
 const DEFAULT_MATERIAL_STYLE = { clearcoat: 1.0, clearcoatRoughness: 0.1, metalness: 0.8, roughness: 0.2, reflectivity: 0.9, sheen: 0.3, sheenRoughness: 0.2 };
 
-// Polished marble sphere for all Zoogi characters with clearcoat effect
+class ZoogiModelErrorBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: Error) {
+    console.warn("Zoogi model failed to load, showing the colored marble instead.", error.message);
+  }
+
+  render() {
+    return this.state.failed ? this.props.fallback : this.props.children;
+  }
+}
+
+function ColoredMarble({
+  radius,
+  color,
+  glowColor,
+  glowIntensity,
+  materialStyle,
+}: {
+  radius: number;
+  color: string;
+  glowColor: string;
+  glowIntensity: number;
+  materialStyle: typeof DEFAULT_MATERIAL_STYLE & { sheenColor?: string };
+}) {
+  return (
+    <mesh castShadow scale={[radius, radius, radius]}>
+      <sphereGeometry args={[1, 64, 32]} />
+      <meshPhysicalMaterial
+        color={color}
+        emissive={glowColor}
+        emissiveIntensity={glowIntensity}
+        metalness={materialStyle.metalness}
+        roughness={materialStyle.roughness}
+        clearcoat={materialStyle.clearcoat}
+        clearcoatRoughness={materialStyle.clearcoatRoughness}
+        reflectivity={materialStyle.reflectivity}
+        sheen={materialStyle.sheen}
+        sheenRoughness={materialStyle.sheenRoughness}
+        sheenColor={materialStyle.sheenColor || color}
+        envMapIntensity={1.2}
+      />
+    </mesh>
+  );
+}
+
+// Real character model, fitted to the marble and rested on the floor.
+// The colored ball stays up until this finishes loading.
+function FittedZoogiModel({ settings, marbleRadius }: { settings: ZoogiModelSettings; marbleRadius: number }) {
+  const { scene } = useGLTF(settings.url);
+  const cloned = useMemo(() => {
+    const copy = scene.clone(true);
+    copy.traverse((child) => {
+      const mesh = child as THREE.Mesh;
+      if (mesh.isMesh) {
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+      }
+    });
+    return copy;
+  }, [scene]);
+
+  const bounds = useMemo(() => {
+    const box = new THREE.Box3().setFromObject(cloned);
+    const size = new THREE.Vector3();
+    const center = new THREE.Vector3();
+    box.getSize(size);
+    box.getCenter(center);
+    return { size, center };
+  }, [cloned]);
+
+  const maxDimension = Math.max(bounds.size.x, bounds.size.y, bounds.size.z, 1e-4);
+  const uniform = ((marbleRadius * 2) / maxDimension) * settings.scale;
+  // After the fit, shift so the lowest point sits on the floor like the ball.
+  const bottom = -(bounds.size.y / 2) * uniform;
+  const restOnFloor = -marbleRadius - bottom;
+
+  return (
+    <group
+      position={[settings.offset[0], settings.offset[1] + restOnFloor, settings.offset[2]]}
+      rotation={settings.rotation}
+    >
+      <group scale={uniform}>
+        <group position={[-bounds.center.x, -bounds.center.y, -bounds.center.z]}>
+          <primitive object={cloned} />
+        </group>
+      </group>
+    </group>
+  );
+}
+
+// Character model for every Zoogi in a match. Falls back to the colored marble
+// while the file loads, and if the file is missing.
 function ZoogiModelSwitch({ zoogiId, hasShield = false, hasSpawnImmunity = false, color = "#888888", customModelUrl, isPlayer = false }: { zoogiId: string; hasShield?: boolean; hasSpawnImmunity?: boolean; color?: string; customModelUrl?: string; isPlayer?: boolean }) {
-  const scale = getGlobalZoogiScale();
+  const marbleRadius = getGlobalZoogiScale();
   const { equippedSkin } = useProgression();
   const skinEffect = isPlayer ? getSkinEffect(equippedSkin) : getSkinEffect(null);
   const timeRef = useRef(0);
@@ -65,29 +162,31 @@ function ZoogiModelSwitch({ zoogiId, hasShield = false, hasSpawnImmunity = false
   
   // Get per-character material style or use default
   const materialStyle = ZOOGI_MATERIAL_STYLES[zoogiId] || DEFAULT_MATERIAL_STYLE;
+  const model = resolveZoogiModel(zoogiId, customModelUrl);
+  const coloredMarble = (
+    <ColoredMarble
+      radius={marbleRadius}
+      color={displayColor}
+      glowColor={skinEffect.id === "skin_rainbow" ? skinGlowColor : baseGlowColor}
+      glowIntensity={glowIntensity}
+      materialStyle={materialStyle}
+    />
+  );
   
   return (
     <>
-      <mesh castShadow scale={[scale, scale, scale]}>
-        <sphereGeometry args={[1, 64, 32]} />
-        <meshPhysicalMaterial
-          color={displayColor}
-          emissive={skinEffect.id === "skin_rainbow" ? skinGlowColor : baseGlowColor}
-          emissiveIntensity={glowIntensity}
-          metalness={materialStyle.metalness}
-          roughness={materialStyle.roughness}
-          clearcoat={materialStyle.clearcoat}
-          clearcoatRoughness={materialStyle.clearcoatRoughness}
-          reflectivity={materialStyle.reflectivity}
-          sheen={materialStyle.sheen}
-          sheenRoughness={materialStyle.sheenRoughness}
-          sheenColor={materialStyle.sheenColor || displayColor}
-          envMapIntensity={1.2}
-        />
-      </mesh>
+      {model ? (
+        <ZoogiModelErrorBoundary key={model.url} fallback={coloredMarble}>
+          <Suspense fallback={coloredMarble}>
+            <FittedZoogiModel settings={model} marbleRadius={marbleRadius} />
+          </Suspense>
+        </ZoogiModelErrorBoundary>
+      ) : (
+        coloredMarble
+      )}
       {/* Skin glow effect */}
       {isPlayer && skinEffect.glowIntensity > 0.3 && (
-        <mesh scale={[scale * 1.3, scale * 1.3, scale * 1.3]}>
+        <mesh scale={[marbleRadius * 1.3, marbleRadius * 1.3, marbleRadius * 1.3]}>
           <sphereGeometry args={[1, 16, 16]} />
           <meshPhysicalMaterial
             color={skinEffect.id === "skin_rainbow" ? skinGlowColor : (skinEffect.glowColor || color)}
@@ -103,7 +202,7 @@ function ZoogiModelSwitch({ zoogiId, hasShield = false, hasSpawnImmunity = false
       )}
       {/* Spawn immunity visual - green pulsing ring */}
       {hasSpawnImmunity && (
-        <mesh scale={[scale * 1.5, scale * 1.5, scale * 1.5]}>
+        <mesh scale={[marbleRadius * 1.5, marbleRadius * 1.5, marbleRadius * 1.5]}>
           <sphereGeometry args={[1, 16, 16]} />
           <meshPhysicalMaterial
             color="#00FF88"
@@ -118,7 +217,7 @@ function ZoogiModelSwitch({ zoogiId, hasShield = false, hasSpawnImmunity = false
         </mesh>
       )}
       {hasShield && (
-        <mesh scale={[scale * 1.4, scale * 1.4, scale * 1.4]}>
+        <mesh scale={[marbleRadius * 1.4, marbleRadius * 1.4, marbleRadius * 1.4]}>
           <sphereGeometry args={[1, 16, 16]} />
           <meshPhysicalMaterial
             color="#00FFFF"
@@ -197,7 +296,6 @@ export function PlayerZoogi() {
     firstPersonView,
     overShoulderView,
     birdsEyeView,
-    playerFacingRotation,
     setIsAiming
   } = useZoogiGame();
   const { camera, gl } = useThree();
@@ -215,8 +313,6 @@ export function PlayerZoogi() {
   
   const [swipeStart, setSwipeStart] = useState<{ x: number; y: number; time: number } | null>(null);
   const lastBoostTimeRef = useRef(0);
-  const yawRef = useRef(0);
-  const dragDirectionRef = useRef<[number, number]>([0, 0]);
   const BOOST_COOLDOWN_MS = 800;
   const BOOST_POWER = 0.4;
   const TAP_THRESHOLD = 50;
@@ -257,7 +353,6 @@ export function PlayerZoogi() {
         
         if (intersection) {
           setDragEnd([intersection.x, intersection.z]);
-          dragDirectionRef.current = [dragStart[0] - intersection.x, dragStart[1] - intersection.z];
           
           const now = Date.now();
           if (now - lastPullSoundRef.current > 150) {
@@ -502,51 +597,7 @@ export function PlayerZoogi() {
     );
     
     const speed = Math.sqrt(playerEntity.velocity[0] ** 2 + playerEntity.velocity[2] ** 2);
-    const isGlbModel = false;
-    
-    if (isGlbModel) {
-      if (playerFacingRotation && lockOnEnabled) {
-        meshRef.current.rotation.set(playerFacingRotation.x, playerFacingRotation.y, 0);
-        yawRef.current = playerFacingRotation.y;
-      } else {
-        let targetYaw = yawRef.current;
-        
-        if (isDragging) {
-          if (lockOnEnabled && lockOnTargetId) {
-            let lockTarget: [number, number, number] | null = null;
-            if (lockOnTargetType === "orb") {
-              const targetOrb = orbs.find(o => o.id === lockOnTargetId && o.isActive);
-              if (targetOrb) lockTarget = targetOrb.position;
-            } else if (lockOnTargetType === "enemy") {
-              const targetEnemy = enemies.find(e => e.id === lockOnTargetId);
-              if (targetEnemy) lockTarget = targetEnemy.position;
-            }
-            if (lockTarget) {
-              const toDx = lockTarget[0] - playerEntity.position[0];
-              const toDz = lockTarget[2] - playerEntity.position[2];
-              targetYaw = Math.atan2(toDx, toDz) + Math.PI;
-            }
-          } else {
-            const [dx, dz] = dragDirectionRef.current;
-            if (Math.abs(dx) > 0.01 || Math.abs(dz) > 0.01) {
-              targetYaw = Math.atan2(dx, dz) + Math.PI;
-            }
-          }
-        } else if (speed > 0.02) {
-          targetYaw = Math.atan2(playerEntity.velocity[0], playerEntity.velocity[2]) + Math.PI;
-        }
-        
-        const yawDiff = targetYaw - yawRef.current;
-        const normalizedDiff = Math.atan2(Math.sin(yawDiff), Math.cos(yawDiff));
-        yawRef.current += normalizedDiff * 0.15;
-        
-        meshRef.current.rotation.set(0, yawRef.current, 0);
-      }
-    } else {
-      if (speed > 0.01) {
-        meshRef.current.rotation.x += speed * 0.5;
-      }
-    }
+    rollMarble(meshRef.current, playerEntity.position[0], playerEntity.position[2], getGlobalZoogiScale());
     
     meshRef.current.scale.set(1, 1, 1);
     
@@ -868,7 +919,6 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
   const stunRotationRef = useRef(0);
   const lastLaunchTimeRef = useRef(0);
   const ffaCooldownRef = useRef(1.5 + Math.random() * 1.5);
-  const yawRef = useRef(0);
   
   const { enemies, isPlayerTurn, turnIndex, playerEntity, orbs, updateEnemy, endTurn, setMovementStopped, spawnWolfClones, gameMode, lockOnEnabled, lockOnTargetId, setLockOnTarget, aiControls } = useZoogiGame();
   
@@ -883,21 +933,7 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
     meshRef.current.position.set(enemy.position[0], enemy.position[1], enemy.position[2]);
     
     const speed = Math.sqrt(enemy.velocity[0] ** 2 + enemy.velocity[2] ** 2);
-    const isGlbModel = false;
-    
-    if (isGlbModel) {
-      if (speed > 0.02) {
-        const targetYaw = Math.atan2(enemy.velocity[0], enemy.velocity[2]) + Math.PI;
-        const yawDiff = targetYaw - yawRef.current;
-        const normalizedDiff = Math.atan2(Math.sin(yawDiff), Math.cos(yawDiff));
-        yawRef.current += normalizedDiff * 0.15;
-      }
-      meshRef.current.rotation.set(0, yawRef.current, 0);
-    } else {
-      if (speed > 0.01) {
-        meshRef.current.rotation.x += speed * 0.5;
-      }
-    }
+    rollMarble(meshRef.current, enemy.position[0], enemy.position[2], getGlobalZoogiScale());
     
     meshRef.current.scale.set(1, 1, 1);
     
@@ -1450,11 +1486,7 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
     );
     
     const speed = Math.sqrt(entity.velocity[0] ** 2 + entity.velocity[2] ** 2);
-    const isGlbModel = false;
-    
-    if (speed > 0.01 && !isGlbModel) {
-      meshRef.current.rotation.x += speed * 0.5;
-    }
+    rollMarble(meshRef.current, entity.position[0], entity.position[2], getGlobalZoogiScale());
     
     meshRef.current.scale.set(1, 1, 1);
     
@@ -1736,4 +1768,8 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
       />
     </group>
   );
+}
+
+for (const modelUrl of zoogiModelPreloadUrls()) {
+  useGLTF.preload(modelUrl);
 }
