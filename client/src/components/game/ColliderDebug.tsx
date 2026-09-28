@@ -23,6 +23,7 @@ export function ColliderDebug() {
   const landedRocks = useZoogiGame((state) => state.landedRocks);
   const editorPlacedModels = useZoogiGame((state) => state.editorPlacedModels);
   const knockoff = useZoogiGame((state) => state.wallSettings.knockoffBoundaryRadius);
+  const knockoffOffset = useZoogiGame((state) => state.elementTransforms.knockoffBoundaryOffset);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -65,7 +66,7 @@ export function ColliderDebug() {
         </mesh>
       ))}
       {ring > 0 && (
-        <mesh position={[0, 0.12, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh position={[knockoffOffset?.x ?? 0, 0.12, knockoffOffset?.z ?? 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <ringGeometry args={[ring - 0.08, ring, 72]} />
           <meshBasicMaterial color="#ffffff" wireframe side={2} />
         </mesh>
