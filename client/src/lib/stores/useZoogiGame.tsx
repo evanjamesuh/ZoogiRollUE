@@ -1089,6 +1089,7 @@ function playfieldSettings(
   map: string | null | undefined,
   wallSettings: ZoogiGameState["wallSettings"],
   backgroundSettings: ZoogiGameState["backgroundSettings"],
+  elementTransforms: ZoogiGameState["elementTransforms"],
 ) {
   const layout = getMapLayout(map);
   const zones = zonesFromLayout(map);
@@ -1096,6 +1097,12 @@ function playfieldSettings(
   const patch: Partial<ZoogiGameState> = {
     zoneEditorConfigs: zones,
     wallSettings: { ...wallSettings, knockoffBoundaryRadius: layout.knockoffRadius },
+    // The floor and the layout are centered on the origin. A saved editor nudge
+    // would slide the out line across the sand.
+    elementTransforms: {
+      ...elementTransforms,
+      knockoffBoundaryOffset: { x: 0, y: 0, z: 0 },
+    },
   };
   const stage =
     map === "grass"
@@ -2689,7 +2696,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         editorPlacedModels: get().editorPlacedModels.filter(m => 
           !m.modelUrl.includes('zoogi_town') && !m.modelUrl.includes('workshop')
         ),
-        ...playfieldSettings(selectedMap, get().wallSettings, get().backgroundSettings),
+        ...playfieldSettings(selectedMap, get().wallSettings, get().backgroundSettings, get().elementTransforms),
       });
       
       // Classic mode now uses same free roam mechanics as local_multiplayer
@@ -2779,7 +2786,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         developerCamera: false,
         selectedMoveElement: null,
         selectedMap: "grass",
-        ...playfieldSettings("grass", get().wallSettings, get().backgroundSettings),
+        ...playfieldSettings("grass", get().wallSettings, get().backgroundSettings, get().elementTransforms),
         orbMultiplier: 1 as 1 | 2 | 3,
         restrictionPhaseActive: false,
         restrictionPhaseStartTime: Date.now(),
@@ -2845,7 +2852,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         isPlayerTurn: true,
         turnIndex: 0,
         allMovementStopped: true,
-        ...playfieldSettings(roundMap, get().wallSettings, get().backgroundSettings),
+        ...playfieldSettings(roundMap, get().wallSettings, get().backgroundSettings, get().elementTransforms),
         playerEntity: playerEntity ? {
           ...playerEntity,
           position: getSpawnPointPosition(playerEntity.spawnPointIndex ?? 0, roundZones, roundMap ?? undefined),
@@ -2879,7 +2886,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         phase: "playing",
         selectedZoogi: zoogiToUse,
         selectedMap: selectedMap,
-        ...playfieldSettings(selectedMap, get().wallSettings, get().backgroundSettings),
+        ...playfieldSettings(selectedMap, get().wallSettings, get().backgroundSettings, get().elementTransforms),
         playerEntity: gameState.playerEntity,
         enemies: gameState.enemies,
         orbs: gameState.orbs,
@@ -3515,7 +3522,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         orbs,
         mushrooms,
         pinballBumpers: createPinballBumpers(selectedMap),
-        ...playfieldSettings(selectedMap, get().wallSettings, get().backgroundSettings),
+        ...playfieldSettings(selectedMap, get().wallSettings, get().backgroundSettings, get().elementTransforms),
         score: 0,
         isVictory: false,
         currentRound: 1,
@@ -3880,7 +3887,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         afterLoad.gameMode !== "map_editor" &&
         afterLoad.selectedMap === mapId
       ) {
-        set(playfieldSettings(mapId, afterLoad.wallSettings, afterLoad.backgroundSettings));
+        set(playfieldSettings(mapId, afterLoad.wallSettings, afterLoad.backgroundSettings, afterLoad.elementTransforms));
       }
     },
     

@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { useRef, useMemo, Suspense, Component, ReactNode } from "react";
+import { useRef, useMemo, useLayoutEffect, Suspense, Component, ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGLTF, useAnimations, Center } from "@react-three/drei";
 import { useZoogiGame, CustomArenaDecoration } from "@/lib/stores/useZoogiGame";
@@ -25,7 +25,7 @@ import { EditorScoringZones } from "./EditorScoringZones";
 import { ScoringZones } from "./ScoringZones";
 import { PinballBumpers } from "./PinballBumpers";
 import { ARENA_RADIUS } from "@/lib/arenaConstants";
-import { ARABIAN_STAGE, COSMOS_STAGE, GRASS_STAGE, WINTER_STAGE, arabianPlayTransform, getMapLayout } from "@/lib/arenaColliders";
+import { ARABIAN_STAGE, COSMOS_STAGE, GRASS_STAGE, WINTER_STAGE, arabianPlayTransform, fitPropFootprints, getMapLayout, setWinterCampSolids, type PropCloud } from "@/lib/arenaColliders";
 
 export { ARENA_RADIUS };
 
@@ -112,12 +112,54 @@ function ArabianNightsScene() {
       }
     });
   }, [scene]);
+
+  // The courtyard sand continues far past a circle. Clip the flat floor so the
+  // sand you can stand on ends at the same edge as the fallback disk.
+  useLayoutEffect(() => {
+    if (editing) return;
+    scene.updateMatrixWorld(true);
+    const invScene = scene.matrixWorld.clone().invert();
+    const radius = ARABIAN_STAGE.floorRadius;
+    const scale = ARABIAN_STAGE.modelScale;
+    scene.traverse((child) => {
+      if (!(child instanceof THREE.Mesh) || child.userData.playDiskClipped) return;
+      const geometry = child.geometry;
+      if (!geometry.boundingBox) geometry.computeBoundingBox();
+      const local = geometry.boundingBox;
+      if (!local) return;
+      const rel = new THREE.Matrix4().copy(child.matrixWorld).premultiply(invScene);
+      const box = local.clone().applyMatrix4(rel);
+      const height = (box.max.y - box.min.y) * scale;
+      const wide = Math.max(box.max.x - box.min.x, box.max.z - box.min.z) * scale;
+      if (height > 1.5 || wide < 4) return;
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      child.material = materials.map((material) => clipMaterialToDisk(material, radius));
+      child.userData.playDiskClipped = true;
+    });
+  }, [scene, editing]);
   
   return (
     <group ref={groupRef} position={[modelX, modelY, modelZ]} scale={[modelScale, modelScale, modelScale]} rotation={modelRotation}>
       <primitive object={scene} />
     </group>
   );
+}
+
+function clipMaterialToDisk(material: THREE.Material, radius: number): THREE.Material {
+  const clipped = material.clone();
+  clipped.onBeforeCompile = (shader) => {
+    if (!shader.vertexShader.includes("#include <worldpos_vertex>")) return;
+    if (!shader.fragmentShader.includes("#include <dithering_fragment>")) return;
+    shader.uniforms.uPlayDisk = { value: radius };
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying vec3 vPlayWorld;")
+      .replace("#include <worldpos_vertex>", "#include <worldpos_vertex>\nvPlayWorld = worldPosition.xyz;");
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", "#include <common>\nuniform float uPlayDisk;\nvarying vec3 vPlayWorld;")
+      .replace("#include <dithering_fragment>", "if (dot(vPlayWorld.xz, vPlayWorld.xz) > uPlayDisk * uPlayDisk) discard;\n#include <dithering_fragment>");
+  };
+  clipped.needsUpdate = true;
+  return clipped;
 }
 
 interface SkatingPenguinData {
@@ -341,6 +383,39 @@ function WinterLocationScene() {
   });
 
   const winterScale = WINTER_STAGE.modelScale;
+
+  // Solids come from this mesh, in the same pose it is drawn. A missing model
+  // never gets here, so those walls are not invisible obstacles on the fallback ice.
+  useLayoutEffect(() => {
+    scene.updateMatrixWorld(true);
+    const invScene = scene.matrixWorld.clone().invert();
+    const scale = WINTER_STAGE.modelScale;
+    const offsetY = WINTER_STAGE.modelOffsetY;
+    const clouds: PropCloud[] = [];
+    const vertex = new THREE.Vector3();
+    scene.traverse((child) => {
+      if (!(child instanceof THREE.Mesh)) return;
+      const attr = child.geometry?.getAttribute("position");
+      if (!attr) return;
+      const points: PropCloud["points"] = [];
+      const stride = Math.max(1, Math.floor(attr.count / 400));
+      for (let i = 0; i < attr.count; i += stride) {
+        vertex.fromBufferAttribute(attr, i);
+        vertex.applyMatrix4(child.matrixWorld).applyMatrix4(invScene);
+        points.push({
+          x: vertex.x * scale,
+          y: vertex.y * scale + offsetY,
+          z: vertex.z * scale,
+        });
+      }
+      clouds.push({ name: child.name || "prop", points });
+    });
+    const solids = fitPropFootprints(clouds);
+    setWinterCampSolids(solids);
+    console.log(`[ICE] camp colliders fitted to the winter model: ${solids.length}`);
+    return () => setWinterCampSolids(null);
+  }, [scene]);
+
   return (
     <group ref={groupRef} position={[0, WINTER_STAGE.modelOffsetY, 0]} scale={[winterScale, winterScale, winterScale]}>
       <primitive object={scene} />
@@ -621,13 +696,16 @@ interface ArenaProps {
   theme?: "grass" | "ice" | "lava" | "space" | "saturn";
 }
 
-class MeshyArenaErrorBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { hasError: boolean }> {
-  constructor(props: { children: ReactNode; fallback: ReactNode }) {
+class MeshyArenaErrorBoundary extends Component<{ children: ReactNode; fallback: ReactNode; onError?: () => void }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode; fallback: ReactNode; onError?: () => void }) {
     super(props);
     this.state = { hasError: false };
   }
   static getDerivedStateFromError() { return { hasError: true }; }
-  componentDidCatch(error: Error) { console.error("Meshy arena loading error:", error); }
+  componentDidCatch(error: Error) {
+    console.error("Meshy arena loading error:", error);
+    this.props.onError?.();
+  }
   render() { return this.state.hasError ? this.props.fallback : this.props.children; }
 }
 
@@ -767,7 +845,7 @@ export function Arena({ theme = "grass" }: ArenaProps) {
         </MeshyArenaErrorBoundary>
       )}
       {isIceTheme && (
-        <MeshyArenaErrorBoundary fallback={stageFallback}>
+        <MeshyArenaErrorBoundary fallback={stageFallback} onError={() => setWinterCampSolids(null)}>
           <Suspense fallback={null}>
             <WinterLocationScene />
           </Suspense>

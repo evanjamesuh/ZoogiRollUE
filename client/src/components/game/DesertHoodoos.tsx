@@ -80,14 +80,18 @@ function StylizedHoodoo({ hoodoo }: { hoodoo: HoodooData }) {
 }
 
 function FallbackHoodoo({ hoodoo }: { hoodoo: HoodooData }) {
+  // Local radius matches the collider. The group scale is hoodoo.scale, and the
+  // real mesh is lifted so its base sits on y=0; this stand-in is already built
+  // with its base at y=0, so it is not lifted again.
+  const radius = hoodoo.radius / hoodoo.scale;
   return (
-    <group position={hoodoo.position} scale={hoodoo.scale}>
-      <mesh position={[0, 0.8, 0]} castShadow>
-        <cylinderGeometry args={[0.3, 0.5, 1.6, 8]} />
+    <group position={[hoodoo.position[0], 0, hoodoo.position[2]]} scale={hoodoo.scale}>
+      <mesh position={[0, 0.7, 0]} castShadow>
+        <cylinderGeometry args={[radius * 0.62, radius * 0.78, 1.4, 8]} />
         <meshStandardMaterial color="#CD853F" roughness={0.9} />
       </mesh>
-      <mesh position={[0, 2.0, 0]} castShadow>
-        <cylinderGeometry args={[0.6, 0.3, 0.8, 8]} />
+      <mesh position={[0, 1.5, 0]} castShadow>
+        <cylinderGeometry args={[radius, radius * 0.55, 0.5, 8]} />
         <meshStandardMaterial color="#D2691E" roughness={0.9} />
       </mesh>
     </group>
