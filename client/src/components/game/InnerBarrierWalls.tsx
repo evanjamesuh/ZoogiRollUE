@@ -1,9 +1,7 @@
 import { useEffect, useRef, useMemo, useState, useCallback } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
-import { usePhysicsWorld } from "@/lib/physics/usePhysicsWorld";
 import { ARENA_RADIUS, WALL_OWNERSHIP_GAP_ANGLES } from "@/lib/arenaConstants";
-import { isRapierReady } from "@/lib/physics/rapierInit";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { triggerCollisionCameraEffect } from "@/lib/stores/useCameraEffects";
 import { triggerWallHitFeel, useGameFeel } from "@/lib/stores/useGameFeel";
@@ -298,16 +296,11 @@ export function InnerBarrierWalls({
   // Inner walls now appear in all game modes
   const shouldSpawn = true;
   const isMapEditor = gameMode === "map_editor";
-  const { world, isInitialized, createKinematicBox, createDynamicBox, removeBody, getBody, getPosition, getRotation, applyImpulse, setAngularVelocity } = usePhysicsWorld();
   const [hoveredSegmentId, setHoveredSegmentId] = useState<string | null>(null);
   
-  const physicsCreated = useRef(false);
   const [wallSegmentState, setWallSegmentState] = useState<WallSegment[]>([]);
-  const segmentPhysicsIds = useRef<Map<string, string>>(new Map());
-  const lastCollisionCheck = useRef<number>(0);
   const segmentHitCooldown = useRef<Map<string, number>>(new Map());
   const ZOOGI_MASS = 2.0;
-  const segmentGroupRefs = useRef<Map<string, THREE.Group>>(new Map());
   
   // Inner rotating walls - spin but don't break (walls are now solid)
   const [rotatingWalls, setRotatingWalls] = useState<RotatingWall[]>([]);
@@ -384,94 +377,41 @@ export function InnerBarrierWalls({
   const midRadius = (innerRadius + outerRadius) / 2;
 
   useEffect(() => {
-    // Clean up physics bodies when disabled
-    if (!enabled) {
-      segmentPhysicsIds.current.forEach((physicsId) => {
-        removeBody(physicsId);
-      });
-      segmentPhysicsIds.current.clear();
-      physicsCreated.current = false;
+    if (!enabled || !shouldSpawn) {
       setWallSegmentState([]);
       setRotatingWalls([]);
       rotationStateRef.current.clear();
       rotatingWallRefs.current.clear();
       segmentHitCooldown.current.clear();
-      console.log("InnerBarrierWalls disabled - cleaned up all physics bodies and rotation state");
-      return;
-    }
-    
-    if (!shouldSpawn || !isInitialized || !world) return;
-    if (!isRapierReady()) return;
-    
-    // Always clear existing physics bodies first
-    segmentPhysicsIds.current.forEach((physicsId) => {
-      removeBody(physicsId);
-    });
-    segmentPhysicsIds.current.clear();
-    
-    // Wait for configs to sync
-    if (wallSegments.length > 0 && innerWallSegmentConfigs.length !== wallSegments.length) {
-      console.log("Waiting for inner wall configs to sync...", innerWallSegmentConfigs.length, "vs", wallSegments.length);
       return;
     }
 
-    physicsCreated.current = true;
-    
-    // Create ONE physics body per segment (4 solid segments total)
-    const segments: WallSegment[] = [];
-    
-    wallSegments.forEach((segment, segIdx) => {
+    if (wallSegments.length > 0 && innerWallSegmentConfigs.length !== wallSegments.length) {
+      return;
+    }
+
+    const segments: WallSegment[] = wallSegments.map((segment, segIdx) => {
       const segmentConfig = getInnerSegmentConfig(segment.id);
-      const isVisible = segmentConfig ? segmentConfig.visible : true;
       const offset = segmentConfig?.positionOffset || { x: 0, y: 0, z: 0 };
-      
       const centerAngle = (segment.startAngle + segment.endAngle) / 2;
       const x = Math.cos(centerAngle) * midRadius + offset.x;
       const z = Math.sin(centerAngle) * midRadius + offset.z;
-      
-      // Calculate segment arc length for physics box
-      const angleRange = segment.endAngle - segment.startAngle;
-      const arcLength = angleRange * midRadius;
-      
       const quat = new THREE.Quaternion();
       quat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -centerAngle + Math.PI / 2);
-      
-      segments.push({
+
+      return {
         id: segment.id,
         segmentIndex: segIdx,
         centerAngle,
         startAngle: segment.startAngle,
         endAngle: segment.endAngle,
-        position: [x, wallHeight / 2 + offset.y, z],
+        position: [x, wallHeight / 2 + offset.y, z] as [number, number, number],
         rotation: { w: quat.w, x: quat.x, y: quat.y, z: quat.z },
-      });
-      
-      // Create ONE dynamic physics body per segment
-      if (isVisible) {
-        const physicsId = `inner-wall-segment-physics-${segIdx}`;
-        const body = createDynamicBox(
-          physicsId,
-          [x, wallHeight / 2 + offset.y, z],
-          [arcLength, wallHeight, wallThickness * 1.5],
-          { w: quat.w, x: quat.x, y: quat.y, z: quat.z },
-          { 
-            restitution: 0.6, 
-            friction: 0.5,
-            mass: 25.0, // Heavier for full segment
-            linearDamping: 0.8,
-            angularDamping: 0.5
-          }
-        );
-        
-        if (body) {
-          segmentPhysicsIds.current.set(segment.id, physicsId);
-        }
-      }
+      };
     });
-    
+
     setWallSegmentState(segments);
-    
-    // Also initialize the rotating walls array (for inner layer spin behavior)
+
     const rotWalls: RotatingWall[] = wallSegments.map((segment, idx) => ({
       id: segment.id,
       segmentIndex: idx,
@@ -482,30 +422,17 @@ export function InnerBarrierWalls({
       currentRotation: 0
     }));
     setRotatingWalls(rotWalls);
-    
-    // Initialize the ref-based rotation state for performance
-    rotWalls.forEach(wall => {
-      rotationStateRef.current.set(wall.id, {
-        currentRotation: 0,
-        angularVelocity: 0
-      });
-    });
-    
-    console.log(`Created ${segments.length} inner ROTATING wall segments at radius ${midRadius.toFixed(2)}`);
 
-    return () => {
-      segmentPhysicsIds.current.forEach((physicsId) => {
-        removeBody(physicsId);
-      });
-      segmentPhysicsIds.current.clear();
-      physicsCreated.current = false;
-      setWallSegmentState([]);
-      setRotatingWalls([]);
-      rotationStateRef.current.clear();
-      rotatingWallRefs.current.clear();
-      segmentHitCooldown.current.clear();
-    };
-  }, [enabled, shouldSpawn, isInitialized, world, wallSegments, midRadius, wallHeight, wallThickness, createDynamicBox, removeBody, innerWallSegmentConfigs]);
+    rotWalls.forEach(wall => {
+      const existing = rotationStateRef.current.get(wall.id);
+      if (!existing) {
+        rotationStateRef.current.set(wall.id, {
+          currentRotation: 0,
+          angularVelocity: 0
+        });
+      }
+    });
+  }, [enabled, shouldSpawn, wallSegments, midRadius, wallHeight, innerWallSegmentConfigs]);
 
 
   // Function to spin a rotating wall when hit off-center
@@ -741,24 +668,6 @@ export function InnerBarrierWalls({
       }
     });
     
-    // Sync wall segment visual positions with physics bodies
-    wallSegmentState.forEach(segment => {
-      const physicsId = segmentPhysicsIds.current.get(segment.id);
-      if (!physicsId) return;
-      
-      const pos = getPosition(physicsId);
-      const rot = getRotation(physicsId);
-      if (!pos || !rot) return;
-      
-      // Directly update group transform (no React re-render)
-      const group = segmentGroupRefs.current.get(segment.id);
-      if (group) {
-        group.position.set(pos.x, pos.y, pos.z);
-        group.quaternion.set(rot.x, rot.y, rot.z, rot.w);
-      }
-    });
-    
-    // Collision detection enabled for Rapier physics walls
     if (!enabled || !shouldSpawn || wallSegmentState.length === 0) return;
     
     const now = Date.now();

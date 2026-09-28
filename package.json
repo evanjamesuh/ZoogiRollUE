@@ -8,10 +8,10 @@
     "build": "tsx script/build.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
+    "test": "tsx --test client/src/lib/sim.test.ts",
     "db:push": "drizzle-kit push"
   },
   "dependencies": {
-    "@dimforge/rapier3d-compat": "^0.19.3",
     "@fontsource/inter": "^5.2.5",
     "@jridgewell/trace-mapping": "^0.3.25",
     "@radix-ui/react-accordion": "^1.2.1",

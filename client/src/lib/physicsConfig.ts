@@ -109,12 +109,12 @@ export function exportPhysicsConfigAsCode(): string {
   const c = currentConfig;
   return `// Physics Configuration - Paste these values into their respective files
 
-// === usePhysicsWorld.tsx ===
+// Dev-panel snapshot. The live match steps in useZoogiGame.physicsTick.
 const FIXED_TIMESTEP = ${c.fixedTimestep.toFixed(6)};
 const MAX_SUBSTEPS = ${c.maxSubsteps};
 const gravity = { x: 0, y: ${c.gravity}, z: 0 };
 
-// === RapierPhysicsManager.tsx ===
+// === store simulation reference ===
 const ZOOGI_RADIUS = ${c.zoogiRadius};
 const SHOCKWAVE_RADIUS = ${c.shockwaveRadius};
 const ARC_LANDING_VELOCITY_THRESHOLD = ${c.arcLandingVelocityThreshold};

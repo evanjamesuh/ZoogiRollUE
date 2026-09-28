@@ -5129,9 +5129,8 @@ export const useZoogiGame = create<ZoogiGameState>()(
       
       const wallHitSegments: number[] = [];
       
-      // Skip smooth circular wall bounce when wall ownership mode is active
-      // Rapier physics handles collisions with destructible wall blocks naturally
-      // DISABLED: Also skip for free roam 3-ring wall layouts - visual walls only
+      // Circular ring bounce stays off. Inner and outer walls bounce entities
+      // by writing back into this same store, so there is only one simulation.
       const { wallOwnershipMode } = state;
       
       // Always skip JS wall collision - walls are now visual only with no collision
@@ -5198,9 +5197,8 @@ export const useZoogiGame = create<ZoogiGameState>()(
         get().damageWallSegment(segmentIndex, 1);
       });
       
-      // Edge ring repel effect - push entities back when approaching ARENA_RADIUS boundary
-      // Only active when wallOwnershipMode is disabled - otherwise let Rapier physics handle collisions naturally
-      // DISABLED: Skip edge repel for free roam 3-ring wall layouts
+      // Edge ring repel stays off. Wall response is applied by the wall
+      // components into this same store, not a second physics world.
       if (false && !wallOwnershipMode) {
         const EDGE_REPEL_START = ARENA_RADIUS - 2; // Start repelling 2 units before edge
         const EDGE_REPEL_FORCE = 0.08; // Repel force strength
@@ -5723,6 +5721,26 @@ export const useZoogiGame = create<ZoogiGameState>()(
           
           // Trigger knockoff boundary flash with player's color (2 flashes)
           get().triggerKnockoffBoundaryFlash(attackerColor, 2);
+
+          if (orb.isStarOrb && orb.starOrbType) {
+            const unlock =
+              orb.starOrbType === "wolfgang" ? { wolfgangAbilityUnlocked: true as const } :
+              orb.starOrbType === "hotstreak" ? { hotstreakAbilityUnlocked: true as const } :
+              { boltAbilityUnlocked: true as const };
+            if (orb.lastHitBy === "player" || orb.lastHitByLocalPlayerIndex === 0) {
+              player = { ...player, ...unlock };
+            } else if (orb.lastHitByLocalPlayerIndex !== null && orb.lastHitByLocalPlayerIndex > 0) {
+              const attackerIndex = orb.lastHitByLocalPlayerIndex - 1;
+              if (enemies[attackerIndex]) {
+                enemies[attackerIndex] = { ...enemies[attackerIndex], ...unlock };
+              }
+            } else if (orb.lastHitBy === "enemy" && orb.lastHitByEnemyId) {
+              const attackerIndex = enemies.findIndex(e => e.id === orb.lastHitByEnemyId);
+              if (attackerIndex >= 0) {
+                enemies[attackerIndex] = { ...enemies[attackerIndex], ...unlock };
+              }
+            }
+          }
           
           // Mark orb as out of ring but keep momentum going
           return {
@@ -5760,7 +5778,12 @@ export const useZoogiGame = create<ZoogiGameState>()(
       if (newExplosion) {
         stateUpdates.showExplosion = newExplosion;
       }
-      
+
+      const hadActiveOrbs = state.orbs.some(o => o.isActive);
+      const stillActiveOrbs = orbs.some(o => o.isActive);
+      if (hadActiveOrbs && !stillActiveOrbs) {
+        stateUpdates.phase = "round_end";
+      }
       
       set(stateUpdates as ZoogiGameState);
       

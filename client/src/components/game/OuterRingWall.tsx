@@ -1,9 +1,7 @@
 import { useEffect, useRef, useMemo, useState, useCallback } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { usePhysicsWorld } from "@/lib/physics/usePhysicsWorld";
 import { WALL_OWNERSHIP_OUTER_RADIUS, WALL_OWNERSHIP_GAP_ANGLES } from "@/lib/arenaConstants";
-import { isRapierReady } from "@/lib/physics/rapierInit";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 
 interface WallCell {
@@ -43,14 +41,6 @@ const THEME_WALL_COLORS: Record<string, string> = {
   lava: "#FF5722",
   space: "#00FFFF",
   saturn: "#FFA726",
-};
-
-const THEME_BLOCK_COLORS: Record<string, string[]> = {
-  grass: ["#00FFFF", "#00E5FF", "#18FFFF"],
-  ice: ["#81D4FA", "#B3E5FC", "#E1F5FE"],
-  lava: ["#FF5722", "#E64A19", "#BF360C"],
-  space: ["#00FFFF", "#00E5FF", "#18FFFF"],
-  saturn: ["#FFA726", "#FFB74D", "#FFCC80"],
 };
 
 function createCurvedWallGeometry(
@@ -141,15 +131,9 @@ export function OuterRingWall({
   const shouldSpawn = wallOwnershipMode || gameMode === "map_editor";
   
   const wallColor = THEME_WALL_COLORS[theme] || THEME_WALL_COLORS.grass;
-  const blockColors = THEME_BLOCK_COLORS[theme] || THEME_BLOCK_COLORS.grass;
   const isGlowing = theme === "space";
-  const { world, isInitialized, createKinematicBox, createDynamicBox, removeBody, getBody } = usePhysicsWorld();
-  
-  const physicsCreated = useRef(false);
   const [wallCells, setWallCells] = useState<WallCell[]>([]);
   const [scatteredBlocks, setScatteredBlocks] = useState<ScatteredBlock[]>([]);
-  const cellPhysicsIds = useRef<Map<string, string>>(new Map());
-  const scatteredPhysicsIds = useRef<Map<string, string>>(new Map());
   const cellHitCooldown = useRef<Map<string, number>>(new Map());
   const rebuildTimers = useRef<Map<string, number>>(new Map());
   const wallGroupRef = useRef<THREE.Group>(null);
@@ -190,62 +174,38 @@ export function OuterRingWall({
   const midRadius = (innerRadius + outerRadius) / 2;
 
   useEffect(() => {
-    // Clean up physics bodies when disabled
-    if (!enabled) {
-      cellPhysicsIds.current.forEach((physicsId) => {
-        removeBody(physicsId);
-      });
-      cellPhysicsIds.current.clear();
-      scatteredPhysicsIds.current.forEach((physicsId) => {
-        removeBody(physicsId);
-      });
-      scatteredPhysicsIds.current.clear();
+    if (!enabled || !shouldSpawn) {
       rebuildTimers.current.clear();
-      physicsCreated.current = false;
       setWallCells([]);
       setScatteredBlocks([]);
       cellHitCooldown.current.clear();
-      console.log("OuterRingWall disabled - cleaned up all physics bodies");
       return;
     }
-    
-    if (!shouldSpawn || !isInitialized || !world) return;
-    if (!isRapierReady()) return;
-    
-    // Clear existing physics bodies first to allow recreation when configs change
-    cellPhysicsIds.current.forEach((physicsId) => {
-      removeBody(physicsId);
-    });
-    cellPhysicsIds.current.clear();
 
-    physicsCreated.current = true;
-    
     const cells: WallCell[] = [];
     const cellsPerSegment = 10;
-    
+
     wallSegments.forEach((segment, segIdx) => {
       const angleRange = segment.endAngle - segment.startAngle;
       const cellAngle = angleRange / cellsPerSegment;
-      
+
       for (let i = 0; i < cellsPerSegment; i++) {
         const cellStartAngle = segment.startAngle + cellAngle * i;
         const cellEndAngle = segment.startAngle + cellAngle * (i + 1);
         const angle = (cellStartAngle + cellEndAngle) / 2;
-        
+
         const x = Math.cos(angle) * midRadius;
         const z = Math.sin(angle) * midRadius;
-        
+
         const exactCellAngle = cellEndAngle - cellStartAngle;
         const physicsBoxLength = 2 * midRadius * Math.sin(exactCellAngle / 2);
         const visualBoxLength = physicsBoxLength * 1.05;
-        
+
         const quat = new THREE.Quaternion();
         quat.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -angle + Math.PI / 2);
-        
-        const cellId = `outer-wall-cell-${segIdx}-${i}`;
-        
+
         cells.push({
-          id: cellId,
+          id: `outer-wall-cell-${segIdx}-${i}`,
           segmentIndex: segIdx,
           cellIndex: i,
           angle,
@@ -255,53 +215,13 @@ export function OuterRingWall({
           size: [visualBoxLength, wallHeight, wallThickness],
           ownerColor: wallColor,
         });
-        
-        // DISABLED: Outer wall Rapier physics - visual only to prevent invisible blocking
-        // const physicsId = `outer-wall-physics-${segIdx}-${i}`;
-        // const colliderThickness = 2.0;
-        // const body = createKinematicBox(
-        //   physicsId,
-        //   [x, wallHeight / 2, z],
-        //   [physicsBoxLength * 1.2, wallHeight, colliderThickness],
-        //   { w: quat.w, x: quat.x, y: quat.y, z: quat.z },
-        //   { restitution: 0.9, friction: 0.2 }
-        // );
-        // 
-        // if (body) {
-        //   cellPhysicsIds.current.set(cellId, physicsId);
-        // }
       }
     });
-    
-    setWallCells(cells);
-    console.log(`Created ${cells.length} outer wall cells at radius ${midRadius.toFixed(2)} (NO physics - visual only)`);
 
-    return () => {
-      cellPhysicsIds.current.forEach((physicsId) => {
-        removeBody(physicsId);
-      });
-      cellPhysicsIds.current.clear();
-      scatteredPhysicsIds.current.forEach((physicsId) => {
-        removeBody(physicsId);
-      });
-      scatteredPhysicsIds.current.clear();
-      rebuildTimers.current.clear();
-      physicsCreated.current = false;
-      setWallCells([]);
-      setScatteredBlocks([]);
-      cellHitCooldown.current.clear();
-    };
-  }, [enabled, shouldSpawn, isInitialized, world, wallSegments, midRadius, wallHeight, wallThickness, wallColor, createKinematicBox, removeBody]);
+    setWallCells(cells);
+  }, [enabled, shouldSpawn, wallSegments, midRadius, wallHeight, wallThickness, wallColor]);
 
   const breakCell = useCallback((cell: WallCell, impactVelocity: [number, number, number], impactForce: number) => {
-    const physicsId = cellPhysicsIds.current.get(cell.id);
-    if (physicsId) {
-      setTimeout(() => {
-        removeBody(physicsId);
-      }, 100);
-      cellPhysicsIds.current.delete(cell.id);
-    }
-    
     rebuildTimers.current.set(cell.id, Date.now());
     
     const newBlocks: ScatteredBlock[] = [];
@@ -333,11 +253,8 @@ export function OuterRingWall({
           impactVelocity[2] * 0.4 + Math.sin(randomAngle) * scatterForce * Math.random()
         ];
         
-        const blockId = `scattered-outer-${cell.id}-${row}-${col}`;
-        const colorIndex = Math.floor(Math.random() * blockColors.length);
-        
         newBlocks.push({
-          id: blockId,
+          id: `scattered-outer-${cell.id}-${row}-${col}`,
           position: blockPos,
           velocity: blockVel,
           rotation: [Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI],
@@ -345,57 +262,17 @@ export function OuterRingWall({
           createdAt: Date.now(),
           color: cell.ownerColor,
         });
-        
-        const scatterPhysicsId = `scatter-outer-physics-${blockId}`;
-        const scatterQuat = new THREE.Quaternion();
-        scatterQuat.setFromEuler(new THREE.Euler(
-          Math.random() * Math.PI,
-          Math.random() * Math.PI,
-          Math.random() * Math.PI
-        ));
-        
-        const body = createDynamicBox(
-          scatterPhysicsId,
-          blockPos,
-          [blockWidth * 0.4, blockHeight * 0.4, cell.size[2] * 0.4],
-          { w: scatterQuat.w, x: scatterQuat.x, y: scatterQuat.y, z: scatterQuat.z },
-          { restitution: 0.4, friction: 0.5, linearDamping: 0.3, angularDamping: 0.3, mass: 1.0 }
-        );
-        
-        if (body) {
-          scatteredPhysicsIds.current.set(blockId, scatterPhysicsId);
-          body.rigidBody.applyImpulse({ x: blockVel[0] * 2, y: blockVel[1] * 2, z: blockVel[2] * 2 }, true);
-        }
       }
     }
     
     setWallCells(prev => prev.map(c => c.id === cell.id ? { ...c, isBroken: true } : c));
     setScatteredBlocks(prev => [...prev, ...newBlocks]);
-  }, [blockColors, createDynamicBox, removeBody]);
+  }, []);
 
   const rebuildCell = useCallback((cellId: string) => {
-    const originalCell = wallCells.find(c => c.id === cellId);
-    if (!originalCell) return;
-    
-    const physicsId = `outer-wall-physics-${originalCell.segmentIndex}-${originalCell.cellIndex}`;
-    const exactCellAngle = originalCell.size[0] / (midRadius * 1.05);
-    const physicsBoxLength = 2 * midRadius * Math.sin(exactCellAngle / 2);
-    
-    const body = createKinematicBox(
-      physicsId,
-      originalCell.position,
-      [physicsBoxLength * 1.2, wallHeight, 2.0],
-      originalCell.rotation,
-      { restitution: 0.9, friction: 0.2 }
-    );
-    
-    if (body) {
-      cellPhysicsIds.current.set(cellId, physicsId);
-    }
-    
     setWallCells(prev => prev.map(c => c.id === cellId ? { ...c, isBroken: false } : c));
     rebuildTimers.current.delete(cellId);
-  }, [wallCells, midRadius, wallHeight, createKinematicBox]);
+  }, []);
 
   useFrame(() => {
     if (!enabled || !shouldSpawn) return;
@@ -550,28 +427,24 @@ export function OuterRingWall({
 
     setScatteredBlocks(prev => {
       const expireTime = 4000;
+      const step = 0.05;
       return prev.filter(block => {
-        if (now - block.createdAt > expireTime) {
-          const physicsId = scatteredPhysicsIds.current.get(block.id);
-          if (physicsId) {
-            removeBody(physicsId);
-            scatteredPhysicsIds.current.delete(block.id);
-          }
-          return false;
-        }
-        
-        const body = scatteredPhysicsIds.current.get(block.id);
-        if (body) {
-          const physicsBody = getBody(body);
-          if (physicsBody) {
-            const pos = physicsBody.rigidBody.translation();
-            block.position = [pos.x, pos.y, pos.z];
-            const rot = physicsBody.rigidBody.rotation();
-            const euler = new THREE.Euler();
-            euler.setFromQuaternion(new THREE.Quaternion(rot.x, rot.y, rot.z, rot.w));
-            block.rotation = [euler.x, euler.y, euler.z];
-          }
-        }
+        if (now - block.createdAt > expireTime) return false;
+        block.velocity = [
+          block.velocity[0] * 0.98,
+          block.velocity[1] - 0.2,
+          block.velocity[2] * 0.98,
+        ];
+        block.position = [
+          block.position[0] + block.velocity[0] * step,
+          Math.max(0, block.position[1] + block.velocity[1] * step),
+          block.position[2] + block.velocity[2] * step,
+        ];
+        block.rotation = [
+          block.rotation[0] + block.angularVelocity[0] * step,
+          block.rotation[1] + block.angularVelocity[1] * step,
+          block.rotation[2] + block.angularVelocity[2] * step,
+        ];
         return true;
       });
     });
