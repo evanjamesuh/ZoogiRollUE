@@ -4025,25 +4025,37 @@ export const useZoogiGame = create<ZoogiGameState>()(
       const COLLISION_RADIUS = 0.5;
       
       // Collision profiles for different entity type pairs
+      // Equal-mass marbles. restitution is the bounce coefficient (0–1).
+      // friction is Coulomb mu for the tangent, not a post-hit speed scale.
+      // minImpulse stays 0: a floor on the impulse adds kinetic energy.
       const COLLISION_PROFILES = {
-        playerPlayer: { restitution: 0.9, friction: 0.96, minImpulse: 0.25, maxVelocity: 1.4 },
-        playerOrb: { restitution: 0.4, friction: 0.92, minImpulse: 0, maxVelocity: 0.8 },
-        orbOrb: { restitution: 0.35, friction: 0.90, minImpulse: 0, maxVelocity: 0.5 },
+        playerPlayer: { restitution: 0.72, friction: 0.35, minImpulse: 0, maxVelocity: 1.4 },
+        playerOrb: { restitution: 0.68, friction: 0.4, minImpulse: 0, maxVelocity: 1.4 },
+        orbOrb: { restitution: 0.55, friction: 0.45, minImpulse: 0, maxVelocity: 1.4 },
       };
-      
-      const DEFAULT_FRICTION = 0.97;
+
+      // One physicsTick is one frame, and velocity is distance per frame.
+      // 0.972 damps a full-power flick (~1.4) across roughly an arena diameter.
+      // 0.006 of constant drag then kills the low-speed creep that used to
+      // follow an orb after contact. 0.02 matches the turn-end "stopped" check.
+      const REST_SPEED = 0.02;
+      const LINEAR_DAMPING = 0.972;
+      const ROLLING_DRAG = 0.006;
       
       let player = { ...state.playerEntity };
       let enemies = state.enemies.map(e => ({ ...e }));
       let orbs = state.orbs.map(o => ({ ...o }));
       let orbsToRemove: string[] = [];
       
-      const applyFriction = (vel: [number, number, number], friction: number = DEFAULT_FRICTION): [number, number, number] => {
-        let vx = vel[0] * friction;
-        let vz = vel[2] * friction;
-        if (Math.abs(vx) < 0.005) vx = 0;
-        if (Math.abs(vz) < 0.005) vz = 0;
-        return [vx, 0, vz];
+      const applyFriction = (vel: [number, number, number]): [number, number, number] => {
+        let vx = vel[0] * LINEAR_DAMPING;
+        let vz = vel[2] * LINEAR_DAMPING;
+        const speed = Math.hypot(vx, vz);
+        if (speed < REST_SPEED) return [0, 0, 0];
+        const slowed = speed - ROLLING_DRAG;
+        if (slowed < REST_SPEED) return [0, 0, 0];
+        const scale = slowed / speed;
+        return [vx * scale, 0, vz * scale];
       };
       
       const resolveCollision = (
@@ -4068,37 +4080,62 @@ export const useZoogiGame = create<ZoogiGameState>()(
         const dvz = vel1[2] - vel2[2];
         const dvn = dvx * nx + dvz * nz;
         
+        // Already separating or resting. Do not add a shove.
         if (dvn <= 0) return { vel1, vel2 };
-        
-        const rawImpulse = (2 * dvn * profile.restitution) / (mass1 + mass2);
-        const impulse = Math.max(rawImpulse, profile.minImpulse);
-        
+
+        const inv1 = mass1 > 0 ? 1 / mass1 : 0;
+        const inv2 = mass2 > 0 ? 1 / mass2 : 0;
+        const invSum = inv1 + inv2;
+        if (invSum <= 0) return { vel1, vel2 };
+
+        const restitution = Math.min(1, Math.max(0, profile.restitution));
+        const impulse = ((1 + restitution) * dvn) / invSum;
+
+        const tx = dvx - dvn * nx;
+        const tz = dvz - dvn * nz;
+        const tangentSpeed = Math.hypot(tx, tz);
+        let jtx = 0;
+        let jtz = 0;
+        if (tangentSpeed > 1e-8) {
+          const mu = Math.min(1, Math.max(0, profile.friction));
+          const jt = Math.min(mu * impulse, tangentSpeed / invSum);
+          jtx = (tx / tangentSpeed) * jt;
+          jtz = (tz / tangentSpeed) * jt;
+        }
+
         let newVel1: [number, number, number] = [
-          vel1[0] - impulse * mass2 * nx,
+          vel1[0] - (impulse * nx + jtx) * inv1,
           0,
-          vel1[2] - impulse * mass2 * nz
+          vel1[2] - (impulse * nz + jtz) * inv1
         ];
         
         let newVel2: [number, number, number] = [
-          vel2[0] + impulse * mass1 * nx,
+          vel2[0] + (impulse * nx + jtx) * inv2,
           0,
-          vel2[2] + impulse * mass1 * nz
+          vel2[2] + (impulse * nz + jtz) * inv2
         ];
+
+        const keBefore = 0.5 * mass1 * (vel1[0] ** 2 + vel1[2] ** 2) + 0.5 * mass2 * (vel2[0] ** 2 + vel2[2] ** 2);
+        const keAfter = 0.5 * mass1 * (newVel1[0] ** 2 + newVel1[2] ** 2) + 0.5 * mass2 * (newVel2[0] ** 2 + newVel2[2] ** 2);
+        if (keAfter > keBefore && keAfter > 1e-12) {
+          const scale = Math.sqrt(keBefore / keAfter);
+          newVel1 = [newVel1[0] * scale, 0, newVel1[2] * scale];
+          newVel2 = [newVel2[0] * scale, 0, newVel2[2] * scale];
+        }
         
-        // Apply profile-specific friction damping post-collision
-        newVel1 = [newVel1[0] * profile.friction, 0, newVel1[2] * profile.friction];
-        newVel2 = [newVel2[0] * profile.friction, 0, newVel2[2] * profile.friction];
-        
-        // Apply profile-specific velocity cap
-        const speed1 = Math.sqrt(newVel1[0] ** 2 + newVel1[2] ** 2);
+        const speed1 = Math.hypot(newVel1[0], newVel1[2]);
         if (speed1 > profile.maxVelocity) {
           const scale = profile.maxVelocity / speed1;
           newVel1 = [newVel1[0] * scale, 0, newVel1[2] * scale];
+        } else if (speed1 < REST_SPEED) {
+          newVel1 = [0, 0, 0];
         }
-        const speed2 = Math.sqrt(newVel2[0] ** 2 + newVel2[2] ** 2);
+        const speed2 = Math.hypot(newVel2[0], newVel2[2]);
         if (speed2 > profile.maxVelocity) {
           const scale = profile.maxVelocity / speed2;
           newVel2 = [newVel2[0] * scale, 0, newVel2[2] * scale];
+        } else if (speed2 < REST_SPEED) {
+          newVel2 = [0, 0, 0];
         }
         
         return { vel1: newVel1, vel2: newVel2 };
@@ -4456,8 +4493,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
           player.position = pos1;
           orb.position = pos2;
           
-          // Use same collision physics as player-player (bouncy, equal mass feel)
-          const result = resolveCollision(player.position, player.velocity, orb.position, orb.velocity, COLLISION_PROFILES.playerPlayer, 1, 1);
+          const result = resolveCollision(player.position, player.velocity, orb.position, orb.velocity, COLLISION_PROFILES.playerOrb, 1, 1);
           player.velocity = capVelocity(result.vel1, player.zoogi.id);
           orb.velocity = result.vel2;
           
@@ -4511,18 +4547,9 @@ export const useZoogiGame = create<ZoogiGameState>()(
           
           {
             
-            const prePlayerSpeed = Math.sqrt(prePlayerVel[0] ** 2 + prePlayerVel[2] ** 2);
             const result = resolveCollision(player.position, player.velocity, enemy.position, enemy.velocity, COLLISION_PROFILES.playerPlayer, 1, 1);
             player.velocity = capVelocity(result.vel1, player.zoogi.id);
-            
-            const minKnockback = prePlayerSpeed > 0.12 ? 0.15 : 0;
-            const knockbackVel = result.vel2;
-            const knockbackSpeed = Math.sqrt(knockbackVel[0] ** 2 + knockbackVel[2] ** 2);
-            if (knockbackSpeed < minKnockback && minKnockback > 0) {
-              enemy.velocity = capVelocity([nx * minKnockback, 0, nz * minKnockback], enemy.zoogi.id);
-            } else {
-              enemy.velocity = capVelocity(knockbackVel, enemy.zoogi.id);
-            }
+            enemy.velocity = capVelocity(result.vel2, enemy.zoogi.id);
             
             // Only attribute hits if neither entity is invulnerable
             if (!playerInvulnerable && !enemyInvulnerable) {
@@ -4550,13 +4577,14 @@ export const useZoogiGame = create<ZoogiGameState>()(
             hadCollision = true;
             
             // Player Hotstreak uses button-activated explosion, not auto on collision
-            if (player.zoogi.id === "lars") {
+            // Ricochet is a deliberate Lars boost (larsRicochetBoost > 1), not an always-on pull.
+            if (player.zoogi.id === "lars" && player.larsRicochetBoost > 1) {
               triggeredLarsBoost = true;
             }
             
             // Enemy Hotstreak no longer triggers explosions on contact
             // Only player Hotstreak can use button-activated explosion
-            if (enemy.zoogi.id === "lars") {
+            if (enemy.zoogi.id === "lars" && enemy.larsRicochetBoost > 1) {
               let nearestPos: [number, number, number] | null = null;
               let nearestD = Infinity;
               orbs.forEach(o => {
@@ -4723,8 +4751,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
             enemy.position = pos1;
             orb.position = pos2;
             
-            // Use same collision physics as player-player (bouncy, equal mass feel)
-            const result = resolveCollision(enemy.position, enemy.velocity, orb.position, orb.velocity, COLLISION_PROFILES.playerPlayer, 1, 1);
+            const result = resolveCollision(enemy.position, enemy.velocity, orb.position, orb.velocity, COLLISION_PROFILES.playerOrb, 1, 1);
             enemy.velocity = capVelocity(result.vel1, enemy.zoogi.id);
             orb.velocity = result.vel2;
             
@@ -4739,7 +4766,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
             orb.lastHitByLocalPlayerIndex = gameMode === "local_multiplayer" ? ei + 1 : null;
             orb.lastHitTimestamp = Date.now();
             
-            if (enemy.zoogi.id === "lars") {
+            if (enemy.zoogi.id === "lars" && enemy.larsRicochetBoost > 1) {
               let nearPos: [number, number, number] | null = null;
               let nearD = Infinity;
               orbs.forEach(o => {
@@ -4846,10 +4873,9 @@ export const useZoogiGame = create<ZoogiGameState>()(
         const prevZ = clone.position[2];
         const prevDist = Math.sqrt(prevX * prevX + prevZ * prevZ);
         
-        let vx = clone.velocity[0] * DEFAULT_FRICTION;
-        let vz = clone.velocity[2] * DEFAULT_FRICTION;
-        if (Math.abs(vx) < 0.01) vx = 0;
-        if (Math.abs(vz) < 0.01) vz = 0;
+        const dampedClone = applyFriction(clone.velocity);
+        let vx = dampedClone[0];
+        let vz = dampedClone[2];
         
         let newX = prevX + vx;
         let newZ = prevZ + vz;
@@ -4939,7 +4965,6 @@ export const useZoogiGame = create<ZoogiGameState>()(
       const mushroomsUpdated = state.mushrooms;
       
       const BUMPER_COLLISION_RADIUS = 2.0;
-      const BUMPER_BOUNCE_FORCE = 0.6;
       const bumperHits: { bumperId: string; hitTime: number }[] = [];
 
       const checkBumperCollision = (
@@ -4958,13 +4983,12 @@ export const useZoogiGame = create<ZoogiGameState>()(
             const nz = dz / dist;
             
             const speed = Math.sqrt(vel[0] * vel[0] + vel[2] * vel[2]);
-            const bounceSpeed = Math.max(speed, 0.3) * (1 + BUMPER_BOUNCE_FORCE);
+            // Redirect off the bumper at a loss. A speed multiplier launched marbles back toward the orbs.
+            const bounceSpeed = speed * 0.72;
             
-            const newVel: [number, number, number] = [
-              nx * bounceSpeed,
-              vel[1],
-              nz * bounceSpeed
-            ];
+            const newVel: [number, number, number] = bounceSpeed < REST_SPEED
+              ? [0, vel[1], 0]
+              : [nx * bounceSpeed, vel[1], nz * bounceSpeed];
             
             const newPos: [number, number, number] = [
               bumper.position[0] + nx * (minDist + 0.1),
@@ -5129,9 +5153,8 @@ export const useZoogiGame = create<ZoogiGameState>()(
       
       const wallHitSegments: number[] = [];
       
-      // Skip smooth circular wall bounce when wall ownership mode is active
-      // Rapier physics handles collisions with destructible wall blocks naturally
-      // DISABLED: Also skip for free roam 3-ring wall layouts - visual walls only
+      // Circular ring bounce stays off. Inner and outer walls bounce entities
+      // by writing back into this same store, so there is only one simulation.
       const { wallOwnershipMode } = state;
       
       // Always skip JS wall collision - walls are now visual only with no collision
@@ -5198,9 +5221,8 @@ export const useZoogiGame = create<ZoogiGameState>()(
         get().damageWallSegment(segmentIndex, 1);
       });
       
-      // Edge ring repel effect - push entities back when approaching ARENA_RADIUS boundary
-      // Only active when wallOwnershipMode is disabled - otherwise let Rapier physics handle collisions naturally
-      // DISABLED: Skip edge repel for free roam 3-ring wall layouts
+      // Edge ring repel stays off. Wall response is applied by the wall
+      // components into this same store, not a second physics world.
       if (false && !wallOwnershipMode) {
         const EDGE_REPEL_START = ARENA_RADIUS - 2; // Start repelling 2 units before edge
         const EDGE_REPEL_FORCE = 0.08; // Repel force strength
@@ -5723,6 +5745,26 @@ export const useZoogiGame = create<ZoogiGameState>()(
           
           // Trigger knockoff boundary flash with player's color (2 flashes)
           get().triggerKnockoffBoundaryFlash(attackerColor, 2);
+
+          if (orb.isStarOrb && orb.starOrbType) {
+            const unlock =
+              orb.starOrbType === "wolfgang" ? { wolfgangAbilityUnlocked: true as const } :
+              orb.starOrbType === "hotstreak" ? { hotstreakAbilityUnlocked: true as const } :
+              { boltAbilityUnlocked: true as const };
+            if (orb.lastHitBy === "player" || orb.lastHitByLocalPlayerIndex === 0) {
+              player = { ...player, ...unlock };
+            } else if (orb.lastHitByLocalPlayerIndex !== null && orb.lastHitByLocalPlayerIndex > 0) {
+              const attackerIndex = orb.lastHitByLocalPlayerIndex - 1;
+              if (enemies[attackerIndex]) {
+                enemies[attackerIndex] = { ...enemies[attackerIndex], ...unlock };
+              }
+            } else if (orb.lastHitBy === "enemy" && orb.lastHitByEnemyId) {
+              const attackerIndex = enemies.findIndex(e => e.id === orb.lastHitByEnemyId);
+              if (attackerIndex >= 0) {
+                enemies[attackerIndex] = { ...enemies[attackerIndex], ...unlock };
+              }
+            }
+          }
           
           // Mark orb as out of ring but keep momentum going
           return {
@@ -5760,7 +5802,12 @@ export const useZoogiGame = create<ZoogiGameState>()(
       if (newExplosion) {
         stateUpdates.showExplosion = newExplosion;
       }
-      
+
+      const hadActiveOrbs = state.orbs.some(o => o.isActive);
+      const stillActiveOrbs = orbs.some(o => o.isActive);
+      if (hadActiveOrbs && !stillActiveOrbs) {
+        stateUpdates.phase = "round_end";
+      }
       
       set(stateUpdates as ZoogiGameState);
       
