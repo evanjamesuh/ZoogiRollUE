@@ -21,7 +21,7 @@ import { EditorPlacedModels } from "./EditorPlacedModels";
 import { TransformGizmo } from "./TransformGizmo";
 import { WallSegmentGizmo } from "./WallSegmentGizmo";
 import { InnerWallSegmentGizmo } from "./InnerWallSegmentGizmo";
-import { useZoogiGame } from "@/lib/stores/useZoogiGame";
+import { resolveUnlockSpot, useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { Sky, Environment } from "@react-three/drei";
 import * as THREE from "three";
 import { EffectComposer, Bloom } from "@react-three/postprocessing";
@@ -110,6 +110,42 @@ function ArcPeakOverlayWrapper() {
   );
 }
 
+const unlockProbe = new THREE.Vector3();
+
+function exitIsOnScreen(camera: THREE.Camera, position: [number, number, number]): boolean {
+  camera.updateMatrixWorld();
+  unlockProbe.set(position[0], Math.max(position[1], 0.5) + 0.8, position[2]);
+  unlockProbe.project(camera);
+  if (unlockProbe.z < -1 || unlockProbe.z > 1) return false;
+  return Math.abs(unlockProbe.x) < 0.86 && Math.abs(unlockProbe.y) < 0.8;
+}
+
+function MatchUnlockFlash({
+  flash,
+}: {
+  flash: { id: string; position: [number, number, number]; startTime: number; color: string; anchorId: string };
+}) {
+  const camera = useThree((state) => state.camera);
+  const playerEntity = useZoogiGame((state) => state.playerEntity);
+  const enemies = useZoogiGame((state) => state.enemies);
+  const spot = useRef<[number, number, number] | null>(null);
+  if (!spot.current) {
+    const anchor = playerEntity?.id === flash.anchorId
+      ? playerEntity
+      : enemies.find((enemy) => enemy.id === flash.anchorId) ?? null;
+    spot.current = resolveUnlockSpot(flash.position, anchor ? anchor.position : null, exitIsOnScreen(camera, flash.position));
+  }
+
+  return (
+    <PowerUnlockFlash
+      position={spot.current}
+      startTime={flash.startTime}
+      radius={5.6}
+      color={flash.color}
+    />
+  );
+}
+
 function MatchPowerVisuals() {
   const showExplosion = useZoogiGame((state) => state.showExplosion);
   const powerUnlocks = useZoogiGame((state) => state.powerUnlocks);
@@ -134,13 +170,7 @@ function MatchPowerVisuals() {
         />
       )}
       {powerUnlocks.filter((flash) => now - flash.startTime < 4000).map((flash) => (
-        <PowerUnlockFlash
-          key={flash.id}
-          position={flash.position}
-          startTime={flash.startTime}
-          radius={5.2}
-          color={flash.color}
-        />
+        <MatchUnlockFlash key={flash.id} flash={flash} />
       ))}
     </>
   );

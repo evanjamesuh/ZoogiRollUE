@@ -6,7 +6,7 @@ export type Vec3 = [number, number, number];
 
 const EXPLOSION_DURATION = 0.95;
 const STUN_BURST_DURATION = 0.9;
-const UNLOCK_DURATION = 0.55;
+const UNLOCK_DURATION = 0.75;
 
 function clamp01(v: number): number {
   return Math.max(0, Math.min(1, v));
@@ -698,12 +698,12 @@ export function PowerUnlockFlash({
 
   useFrame((state) => {
     const elapsed = playedTime(state.clock.elapsedTime);
-    const life = 1 - smoothstep(elapsed / UNLOCK_DURATION);
-    const pop = Math.max(0.72, Math.sin(clamp01(elapsed / 0.42) * Math.PI));
+    const life = elapsed <= 0.62 ? 1 : 1 - smoothstep((elapsed - 0.62) / (UNLOCK_DURATION - 0.62));
+    const pop = Math.max(0.85, Math.sin(clamp01(elapsed / 0.5) * Math.PI));
     if (root.current) root.current.rotation.y = elapsed * 2.5;
-    if (ring.current) ring.current.scale.setScalar(Math.max(radius * 0.55, radius * smoothstep(elapsed / 0.2)));
-    if (ringMat.current) ringMat.current.opacity = 0.9 * life;
-    if (discMat.current) discMat.current.opacity = 0.5 * life;
+    if (ring.current) ring.current.scale.setScalar(Math.max(radius * 0.72, radius * smoothstep(elapsed / 0.16)));
+    if (ringMat.current) ringMat.current.opacity = life;
+    if (discMat.current) discMat.current.opacity = 0.92 * life;
     const coreScale = 0.45 + pop * 1.7;
     if (core.current) core.current.scale.setScalar(coreScale);
     if (coreMat.current) coreMat.current.opacity = 0.95 * life;
@@ -734,28 +734,31 @@ export function PowerUnlockFlash({
   if (done) return null;
 
   return (
-    <group ref={root} position={aboveFloor(position)} renderOrder={3}>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.2, 0]}>
+    <group ref={root} position={aboveFloor(position)} renderOrder={8}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.45, 0]} renderOrder={8}>
         <circleGeometry args={[radius * 0.92, 48]} />
-        <meshBasicMaterial ref={discMat} color={color} transparent opacity={0.42} depthWrite={false} side={THREE.DoubleSide} toneMapped={false} />
+        <meshBasicMaterial ref={discMat} color={color} transparent opacity={0.92} depthWrite={false} depthTest={false} side={THREE.DoubleSide} toneMapped={false} />
       </mesh>
-      <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.28, 0]}>
-        <ringGeometry args={[0.82, 1, 40]} />
+      <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.5, 0]} renderOrder={9}>
+        <ringGeometry args={[0.78, 1, 40]} />
         <meshBasicMaterial
           ref={ringMat}
-          color={color}
-          opacity={0.9}
-          {...additive}
+          color="#fff6c2"
+          opacity={1}
+          transparent
+          depthWrite={false}
+          depthTest={false}
           side={THREE.DoubleSide}
+          toneMapped={false}
         />
       </mesh>
-      <mesh ref={core} position={[0, 1.6, 0]}>
-        <sphereGeometry args={[0.85, 18, 18]} />
-        <meshBasicMaterial ref={coreMat} color={color} opacity={0.95} {...additive} />
+      <mesh ref={core} position={[0, 1.15, 0]} renderOrder={10}>
+        <sphereGeometry args={[1.15, 18, 18]} />
+        <meshBasicMaterial ref={coreMat} color={color} opacity={0.95} depthTest={false} {...additive} />
       </mesh>
-      <mesh position={[0, 1.6, 0]}>
-        <sphereGeometry args={[0.34, 12, 12]} />
-        <meshBasicMaterial color="#ffffff" opacity={0.9} {...additive} />
+      <mesh position={[0, 1.15, 0]} renderOrder={11}>
+        <sphereGeometry args={[0.48, 12, 12]} />
+        <meshBasicMaterial color="#ffffff" opacity={1} depthTest={false} {...additive} />
       </mesh>
       {Array.from({ length: rays }).map((_, i) => (
         <mesh
@@ -766,7 +769,7 @@ export function PowerUnlockFlash({
           rotation={[0, -((i / rays) * Math.PI * 2), 0]}
         >
           <boxGeometry args={[1, 1, 1]} />
-          <meshBasicMaterial color={color} transparent opacity={0.9} toneMapped={false} />
+          <meshBasicMaterial color={color} transparent opacity={0.95} depthTest={false} toneMapped={false} />
         </mesh>
       ))}
       {stars.map((_, i) => (
@@ -777,7 +780,7 @@ export function PowerUnlockFlash({
           }}
         >
           <octahedronGeometry args={[0.28, 0]} />
-          <meshBasicMaterial color={color} transparent opacity={0.95} toneMapped={false} />
+          <meshBasicMaterial color="#fff6c2" transparent opacity={1} depthTest={false} toneMapped={false} />
         </mesh>
       ))}
     </group>

@@ -764,6 +764,60 @@ test("a power cast by the AI stuns the human", async () => {
   assert.equal(shocked.enemies[0]?.isStunned, false, "the caster should not stun itself");
 });
 
+test("a rolling AI blast stays centered on the caster", async () => {
+  const { useZoogiGame, ZOOGI_ROSTER } = await loadGame();
+  const hotstreak = ZOOGI_ROSTER.find((zoogi) => zoogi.id === "hotstreak");
+  assert.ok(hotstreak);
+  useZoogiGame.getState().selectZoogi(ZOOGI_ROSTER.find((zoogi) => zoogi.id === "lars") ?? ZOOGI_ROSTER[0]);
+  useZoogiGame.setState({ aiPlayerCount: 1, gameMode: "classic", zoneEditorConfigs: [], phase: "menu" });
+  useZoogiGame.getState().startGame();
+  const player = useZoogiGame.getState().playerEntity;
+  assert.ok(player);
+  const castAt: [number, number, number] = [0, 0.5, 16];
+  useZoogiGame.setState({
+    phase: "playing",
+    isPlayerTurn: false,
+    turnIndex: 0,
+    orbs: [],
+    abilityNotice: null,
+    showExplosion: null,
+    playerEntity: {
+      ...player,
+      position: [0, 0.5, 10],
+      velocity: [0, 0, 0],
+      isStunned: false,
+    },
+    enemies: [{
+      ...player,
+      id: "ai-hotstreak",
+      isPlayer: false,
+      zoogi: hotstreak,
+      position: castAt,
+      velocity: [0.45, 0, 0.2],
+      hotstreakAbilityUnlocked: true,
+      isStunned: false,
+      isKnockedOut: false,
+    }],
+  });
+  const cast = useZoogiGame.getState().useAiPower("ai-hotstreak");
+  assert.equal(cast, "hotstreak");
+  const after = useZoogiGame.getState();
+  const blast = after.showExplosion?.position;
+  assert.ok(blast, "the blast should be visible");
+  assert.ok(Math.hypot(blast[0] - castAt[0], blast[2] - castAt[2]) < 0.001, "the blast stays on the rolling caster");
+  assert.ok((after.playerEntity?.velocity[2] ?? 0) < -0.2, "the push uses that same center, back toward the ring");
+  assert.ok(Math.hypot(after.enemies[0]?.velocity[0] ?? 0, after.enemies[0]?.velocity[2] ?? 0) > 0.4, "the caster keeps its roll");
+});
+
+test("an off-screen star burst anchors on the unlocking marble", async () => {
+  const { resolveUnlockSpot } = await loadGame();
+  const exit: [number, number, number] = [0, 0.7, 24];
+  const marble: [number, number, number] = [2, 0.5, 8];
+  assert.deepEqual(resolveUnlockSpot(exit, marble, true), exit);
+  assert.deepEqual(resolveUnlockSpot(exit, marble, false), marble);
+  assert.deepEqual(resolveUnlockSpot(exit, null, false), exit);
+});
+
 test("practice mode places star orbs", async () => {
   const { useZoogiGame, ZOOGI_ROSTER } = await loadGame();
   useZoogiGame.getState().selectZoogi(ZOOGI_ROSTER[0]);

@@ -705,7 +705,7 @@ interface ZoogiGameState {
   fallingEntities: FallingEntity[];
   lastCollisionEvent: CollisionEvent | null;
   showExplosion: { position: [number, number, number]; timestamp: number; color?: string; radius?: number } | null;
-  powerUnlocks: { id: string; position: [number, number, number]; startTime: number; color: string }[];
+  powerUnlocks: { id: string; position: [number, number, number]; startTime: number; color: string; anchorId: string }[];
   pendingGrenades: PendingGrenade[];
   
   orbCaptureEffects: OrbCaptureEffect[];
@@ -1353,9 +1353,20 @@ function starFlashColor(starType: string | null | undefined): string {
   return "#ffd700";
 }
 
+/** Gold burst sits on the star's exit when that point is in frame, otherwise on the marble that unlocked it. */
+export function resolveUnlockSpot(
+  exit: [number, number, number],
+  anchor: [number, number, number] | null,
+  exitOnScreen: boolean,
+): [number, number, number] {
+  const source = exitOnScreen || !anchor ? exit : anchor;
+  return [source[0], source[1], source[2]];
+}
+
 function flashStarUnlock(
   set: (fn: (state: ZoogiGameState) => Partial<ZoogiGameState>) => void,
   orb: { id: string; position: [number, number, number]; starOrbType?: string | null },
+  anchorId: string,
 ) {
   if (flashedStarOrbIds.has(orb.id)) return;
   flashedStarOrbIds.add(orb.id);
@@ -1369,6 +1380,7 @@ function flashStarUnlock(
         position: [orb.position[0], orb.position[1], orb.position[2]],
         startTime: now,
         color: starFlashColor(orb.starOrbType),
+        anchorId,
       },
     ],
   }));
@@ -2132,12 +2144,17 @@ export const useZoogiGame = create<ZoogiGameState>()(
         return;
       }
       
-      const explosionPos = [...controlledEntity.position] as [number, number, number];
-      triggerAbilityFeel(explosionPos, 1.0);
+      // One frozen point: the caster where they are right now, including while rolling.
+      const castAt: [number, number, number] = [
+        controlledEntity.position[0],
+        controlledEntity.position[1],
+        controlledEntity.position[2],
+      ];
+      triggerAbilityFeel(castAt, 1.0);
       triggerAbilityCameraEffect("Instant Explosion");
-      useGameFeel.getState().triggerCartoonExplosion(explosionPos, true);
+      useGameFeel.getState().triggerCartoonExplosion(castAt, true);
       useAudio.getState().playExplosion();
-      get().triggerExplosion(explosionPos, undefined, BLAST_RADIUS);
+      get().triggerExplosion(castAt, undefined, BLAST_RADIUS);
       get().showAbilityNotice("Explosion!");
       
       const EXPLOSION_RADIUS = BLAST_RADIUS;
@@ -2149,8 +2166,8 @@ export const useZoogiGame = create<ZoogiGameState>()(
       currentEnemies.forEach((enemy) => {
         if (enemy.id === controlledEntityId) return;
         
-        const eDx = enemy.position[0] - explosionPos[0];
-        const eDz = enemy.position[2] - explosionPos[2];
+        const eDx = enemy.position[0] - castAt[0];
+        const eDz = enemy.position[2] - castAt[2];
         const eDist = Math.sqrt(eDx * eDx + eDz * eDz);
         if (eDist < EXPLOSION_RADIUS && eDist > 0.1) {
           const force = (1 - eDist / EXPLOSION_RADIUS) * EXPLOSION_FORCE;
@@ -2166,8 +2183,8 @@ export const useZoogiGame = create<ZoogiGameState>()(
 
       const blastPlayer = get().playerEntity;
       if (blastPlayer && blastPlayer.id !== controlledEntityId) {
-        const pDx = blastPlayer.position[0] - explosionPos[0];
-        const pDz = blastPlayer.position[2] - explosionPos[2];
+        const pDx = blastPlayer.position[0] - castAt[0];
+        const pDz = blastPlayer.position[2] - castAt[2];
         const pDist = Math.sqrt(pDx * pDx + pDz * pDz);
         if (pDist < EXPLOSION_RADIUS && pDist > 0.1) {
           const force = (1 - pDist / EXPLOSION_RADIUS) * EXPLOSION_FORCE;
@@ -2187,8 +2204,8 @@ export const useZoogiGame = create<ZoogiGameState>()(
       const currentOrbs = get().orbs;
       currentOrbs.forEach((orb) => {
         if (!orb.isActive) return;
-        const oDx = orb.position[0] - explosionPos[0];
-        const oDz = orb.position[2] - explosionPos[2];
+        const oDx = orb.position[0] - castAt[0];
+        const oDz = orb.position[2] - castAt[2];
         const oDist = Math.sqrt(oDx * oDx + oDz * oDz);
         if (oDist < EXPLOSION_RADIUS && oDist > 0.1) {
           const force = (1 - oDist / EXPLOSION_RADIUS) * EXPLOSION_FORCE;
@@ -2754,8 +2771,9 @@ export const useZoogiGame = create<ZoogiGameState>()(
     })),
     
     triggerExplosion: (position, color?: string, radius = BLAST_RADIUS) => {
-      set({ showExplosion: { position, timestamp: Date.now(), color, radius } });
-      console.log("Explosion triggered at", position, "color:", color || "orange", "radius:", radius);
+      const frozen: [number, number, number] = [position[0], position[1], position[2]];
+      set({ showExplosion: { position: frozen, timestamp: Date.now(), color, radius } });
+      console.log("Explosion triggered at", frozen, "color:", color || "orange", "radius:", radius);
     },
     
     addLandedRock: (rock) => set((state) => ({
@@ -3363,7 +3381,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
               ...getAbilityUnlock(orb.starOrbType)
             } : null
           }));
-          flashStarUnlock(set, orb);
+          flashStarUnlock(set, orb, playerEntity.id);
         }
       } else if (orb.lastHitBy === "enemy" && orb.lastHitByEnemyId) {
         // In local multiplayer, enemies are actually other local players
@@ -3377,7 +3395,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
                 idx === enemyIndex ? { ...e, ...getAbilityUnlock(orb.starOrbType) } : e
               )
             }));
-            flashStarUnlock(set, orb);
+            flashStarUnlock(set, orb, enemies[enemyIndex].id);
           }
         }
       }
@@ -6044,26 +6062,26 @@ export const useZoogiGame = create<ZoogiGameState>()(
               get().showAbilityNotice(`${name} unlocked!`);
               return unlockPatchForZoogi(zoogiId);
             };
-            let granted = false;
+            let anchorId: string | null = null;
             if (orb.lastHitBy === "player" || orb.lastHitByLocalPlayerIndex === 0) {
               player = { ...player, ...grant(player.zoogi.id, player.zoogi.ability) };
-              granted = true;
+              anchorId = player.id;
             } else if (orb.lastHitByLocalPlayerIndex !== null && orb.lastHitByLocalPlayerIndex > 0) {
               const attackerIndex = orb.lastHitByLocalPlayerIndex - 1;
               if (enemies[attackerIndex]) {
                 const attacker = enemies[attackerIndex];
                 enemies[attackerIndex] = { ...attacker, ...grant(attacker.zoogi.id, attacker.zoogi.ability) };
-                granted = true;
+                anchorId = attacker.id;
               }
             } else if (orb.lastHitBy === "enemy" && orb.lastHitByEnemyId) {
               const attackerIndex = enemies.findIndex(e => e.id === orb.lastHitByEnemyId);
               if (attackerIndex >= 0) {
                 const attacker = enemies[attackerIndex];
                 enemies[attackerIndex] = { ...attacker, ...grant(attacker.zoogi.id, attacker.zoogi.ability) };
-                granted = true;
+                anchorId = attacker.id;
               }
             }
-            if (granted) flashStarUnlock(set, orb);
+            if (anchorId) flashStarUnlock(set, orb, anchorId);
           }
           
           // Mark orb as out of ring but keep momentum going

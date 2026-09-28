@@ -952,7 +952,7 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
   const stunRotationRef = useRef(0);
   const lastLaunchTimeRef = useRef(0);
   const ffaCooldownRef = useRef(1.5 + Math.random() * 1.5);
-  const prePowerRef = useRef<"pending" | "done">("pending");
+  const prePowerRef = useRef<"pending" | "cast" | "done">("pending");
   const wolfTimerRef = useRef<number | null>(null);
   
   const { enemies, isPlayerTurn, turnIndex, playerEntity, orbs, updateEnemy, endTurn, setMovementStopped, spawnWolfClones, gameMode, lockOnEnabled, lockOnTargetId, setLockOnTarget, aiControls } = useZoogiGame();
@@ -1001,10 +1001,14 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
         const powerId = enemy.zoogi.id;
         if (powerId === "pinpoint") {
           useZoogiGame.getState().showAbilityNotice(`${enemy.zoogi.name} locks on!`);
-        } else if (powerId !== "wolfgang") {
-          useZoogiGame.getState().useAiPower(entityId);
+          prePowerRef.current = "done";
+        } else if (powerId === "wolfgang") {
+          prePowerRef.current = "done";
+        } else {
+          // Cast on the next pass, after this frame's physics step, so a rolling
+          // marble and the blast share the position that actually gets drawn.
+          prePowerRef.current = "cast";
         }
-        prePowerRef.current = "done";
       }
       if (aiTimerRef.current > launchDelay) {
         if (enemy.isStunned) {
@@ -1279,6 +1283,10 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
     if (wolfTimerRef.current !== null && speed > 0.05) {
       wolfTimerRef.current += delta;
       if (wolfTimerRef.current >= 0.4) {
+        const live = useZoogiGame.getState().enemies.find((entry) => entry.id === entityId);
+        if (live && meshRef.current) {
+          meshRef.current.position.set(live.position[0], live.position[1], live.position[2]);
+        }
         useZoogiGame.getState().useAiPower(entityId);
         wolfTimerRef.current = null;
       }
@@ -1298,6 +1306,17 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
     prevSpeedRef.current = speed;
     
   });
+
+  useFrame(() => {
+    if (prePowerRef.current !== "cast") return;
+    const state = useZoogiGame.getState();
+    const live = state.enemies.find((entry) => entry.id === entityId);
+    if (live && meshRef.current) {
+      meshRef.current.position.set(live.position[0], live.position[1], live.position[2]);
+    }
+    state.useAiPower(entityId);
+    prePowerRef.current = "done";
+  }, 0.5);
   
   useFrame((_, delta) => {
     if (enemy?.isStunned) {
