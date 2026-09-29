@@ -772,11 +772,91 @@ test("a computer marble that is only coasting does not skip its shot, and a late
   assert.equal(handedBack, true, "once the computer actually rolls, stopping should hand the turn back");
 });
 
-test("a tied final round is not a loss", async () => {
+test("a stop frame cannot end the turn twice, so the computer still gets to roll", async () => {
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  const { stopFrameMayEndTurn } = await loadGame();
+  const useZoogiGame = await playingMarble();
+  const player = useZoogiGame.getState().playerEntity;
+  assert.ok(player);
+  const enemyId = "handoff-cpu";
+  useZoogiGame.setState({
+    phase: "playing",
+    gameMode: "classic",
+    isPlayerTurn: true,
+    turnIndex: 0,
+    turnHasLaunched: false,
+    gameTimer: 200,
+    orbs: [],
+    mushrooms: [],
+    pinballBumpers: [],
+    zoneEditorConfigs: [],
+    wallSettings: { ...useZoogiGame.getState().wallSettings, knockoffBoundaryRadius: 50 },
+    playerEntity: {
+      ...player,
+      position: [0, 0.5, 0],
+      velocity: [0, 0, 0],
+      isKnockedOut: false,
+      isRespawning: false,
+      spawnImmunity: false,
+    },
+    enemies: [{
+      ...player,
+      id: enemyId,
+      isPlayer: false,
+      position: [4, 0.5, 0],
+      velocity: [0, 0, 0],
+      isKnockedOut: false,
+      isRespawning: false,
+    }],
+  });
+
+  const repeatStopFrames = (whoJustStopped: "player" | "enemy") => {
+    for (let frame = 0; frame < 8; frame++) {
+      const live = useZoogiGame.getState();
+      if (stopFrameMayEndTurn(live, "player")) live.endTurn();
+      if (stopFrameMayEndTurn(live, "enemy", 0)) live.endTurn();
+      useZoogiGame.getState().physicsTick(1 / 60);
+    }
+    const after = useZoogiGame.getState();
+    if (whoJustStopped === "player") {
+      assert.equal(after.isPlayerTurn, false, "late player stop-frames must leave the computer up");
+    } else {
+      assert.equal(after.isPlayerTurn, true, "late computer stop-frames must leave the player up");
+    }
+    assert.equal(after.turnHasLaunched, false, "the handoff clears the launch flag");
+    assert.equal(stopFrameMayEndTurn(after, whoJustStopped, 0), false);
+  };
+
+  useZoogiGame.getState().updatePlayerVelocity([0.25, 0, 0]);
+  assert.equal(useZoogiGame.getState().turnHasLaunched, true);
+  for (let frame = 0; frame < 120 && useZoogiGame.getState().isPlayerTurn; frame++) {
+    useZoogiGame.getState().physicsTick(1 / 60);
+  }
+  assert.equal(useZoogiGame.getState().isPlayerTurn, false, "the player's stop hands the turn to the computer");
+  repeatStopFrames("player");
+
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  useZoogiGame.getState().updateEnemy(enemyId, { velocity: [0.25, 0, 0] });
+  assert.equal(useZoogiGame.getState().turnHasLaunched, true, "the computer's launch arms its own turn");
+  assert.equal(useZoogiGame.getState().isPlayerTurn, false);
+  for (let frame = 0; frame < 120 && !useZoogiGame.getState().isPlayerTurn; frame++) {
+    useZoogiGame.getState().physicsTick(1 / 60);
+  }
+  assert.equal(useZoogiGame.getState().isPlayerTurn, true, "the computer's stop hands the turn back");
+  repeatStopFrames("enemy");
+});
+
+test("a tied final round is not a loss, and earlier wins stay a victory", async () => {
   await new Promise((resolve) => setTimeout(resolve, 500));
   const useZoogiGame = await playingMarble();
   const player = useZoogiGame.getState().playerEntity;
   assert.ok(player);
+  const enemy = {
+    ...player,
+    id: "tied-cpu",
+    isPlayer: false,
+    score: 0,
+  };
   useZoogiGame.setState({
     phase: "playing",
     gameMode: "classic",
@@ -785,18 +865,35 @@ test("a tied final round is not a loss", async () => {
     score: 0,
     gameTimer: 0.4,
     isVictory: false,
+    playerRoundWins: 0,
+    enemyRoundWins: new Map<string, number>(),
     playerEntity: { ...player, score: 0 },
-    enemies: [{
-      ...player,
-      id: "tied-cpu",
-      isPlayer: false,
-      score: 0,
-    }],
+    enemies: [enemy],
   });
   useZoogiGame.getState().tickTimers(1);
-  const finished = useZoogiGame.getState();
-  assert.equal(finished.phase, "game_over");
-  assert.equal(finished.isVictory, true, "a 0–0 final round should not show a defeat");
+  const allTied = useZoogiGame.getState();
+  assert.equal(allTied.phase, "game_over");
+  assert.equal(allTied.isVictory, true, "a 0–0 match should not show a defeat");
+  assert.equal(allTied.playerRoundWins, 1, "the tied round still goes to the player");
+
+  useZoogiGame.setState({
+    phase: "playing",
+    currentRound: 3,
+    maxRounds: 3,
+    score: 0,
+    gameTimer: 0.4,
+    isVictory: false,
+    playerRoundWins: 2,
+    enemyRoundWins: new Map<string, number>(),
+    enemies: [{ ...enemy, score: 0 }],
+  });
+  useZoogiGame.getState().tickTimers(1);
+  const ahead = useZoogiGame.getState();
+  const aheadEnemyWins = Math.max(...Array.from(ahead.enemyRoundWins.values()), 0);
+  assert.equal(ahead.phase, "game_over");
+  assert.equal(ahead.isVictory, true);
+  assert.equal(ahead.playerRoundWins, 3);
+  assert.ok(ahead.playerRoundWins > aheadEnemyWins, "two earlier wins plus a 0–0 last round is a victory, not a match tie");
 
   useZoogiGame.setState({
     phase: "playing",
@@ -805,10 +902,30 @@ test("a tied final round is not a loss", async () => {
     score: 10,
     gameTimer: 0.4,
     isVictory: false,
-    enemies: finished.enemies.map((enemy) => ({ ...enemy, score: 40 })),
+    playerRoundWins: 0,
+    enemyRoundWins: new Map<string, number>(),
+    enemies: [{ ...enemy, score: 40 }],
   });
   useZoogiGame.getState().tickTimers(1);
   const lost = useZoogiGame.getState();
   assert.equal(lost.phase, "game_over");
-  assert.equal(lost.isVictory, false, "a final round the opponent won should still be a loss");
+  assert.equal(lost.isVictory, false, "a match the opponent won on rounds should still be a loss");
+
+  useZoogiGame.setState({
+    phase: "playing",
+    currentRound: 3,
+    maxRounds: 3,
+    score: 0,
+    gameTimer: 0.4,
+    isVictory: false,
+    playerRoundWins: 1,
+    enemyRoundWins: new Map<string, number>(),
+    enemies: [{ ...enemy, score: 40 }],
+  });
+  useZoogiGame.getState().tickTimers(1);
+  const split = useZoogiGame.getState();
+  const splitEnemyWins = Math.max(...Array.from(split.enemyRoundWins.values()), 0);
+  assert.equal(split.phase, "game_over");
+  assert.equal(split.isVictory, true, "an even round total is not a defeat");
+  assert.equal(split.playerRoundWins, splitEnemyWins, "the tie screen is for an even match, not a tied last round");
 });
