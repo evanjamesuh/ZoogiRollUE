@@ -76,13 +76,12 @@ function buildWolfGeometry(): THREE.BufferGeometry {
     tag(place(new THREE.SphereGeometry(0.2, 12, 10), 0.16, 0.38, 0.02, 1.15, 0.85, 1.25), 0, bodyPivot),
     tag(place(new THREE.SphereGeometry(0.22, 12, 10), -0.14, 0.36, -0.32, 1.2, 0.9, 1.3), 0, bodyPivot),
     tag(place(new THREE.SphereGeometry(0.22, 12, 10), 0.14, 0.36, -0.16, 1.2, 0.9, 1.3), 0, bodyPivot),
-    tag(capsule(0.12, 0.34, -0.18, 0.16, 0.28, -0.4, 0, 0), 1, new THREE.Vector3(-0.18, 0.36, 0.22)),
-    tag(capsule(0.12, 0.32, 0.18, 0.16, 0.08, 0.35, 0, 0), 2, new THREE.Vector3(0.18, 0.36, 0.08)),
-    tag(capsule(0.13, 0.36, -0.15, 0.14, -0.28, 0.45, 0, 0), 3, new THREE.Vector3(-0.15, 0.34, -0.22)),
-    tag(capsule(0.13, 0.34, 0.15, 0.14, -0.08, -0.3, 0, 0), 4, new THREE.Vector3(0.15, 0.34, -0.1)),
-    tag(capsule(0.11, 0.22, 0, 0.52, -0.62, 0.55, 0, 0), 5, rump),
-    tag(capsule(0.08, 0.16, 0, 0.62, -0.88, 0.7, 0, 0), 5, rump),
-    tag(place(new THREE.SphereGeometry(0.07, 8, 6), 0, 0.7, -1.02, 1, 1, 1.4), 5, rump),
+    tag(capsule(0.14, 0.2, -0.18, 0.26, 0.24, -0.28, 0, 0), 1, new THREE.Vector3(-0.18, 0.4, 0.2)),
+    tag(capsule(0.14, 0.18, 0.18, 0.26, 0.06, 0.25, 0, 0), 2, new THREE.Vector3(0.18, 0.4, 0.06)),
+    tag(capsule(0.145, 0.22, -0.15, 0.24, -0.22, 0.32, 0, 0), 3, new THREE.Vector3(-0.15, 0.38, -0.16)),
+    tag(capsule(0.145, 0.2, 0.15, 0.24, -0.04, -0.22, 0, 0), 4, new THREE.Vector3(0.15, 0.38, -0.06)),
+    tag(capsule(0.07, 0.14, 0, 0.46, -0.72, 0.7, 0, 0), 5, rump),
+    tag(capsule(0.04, 0.1, 0, 0.52, -1.02, 0.95, 0, 0), 5, rump),
   ];
   const merged = mergeGeometries(parts, false);
   for (const part of parts) part.dispose();
@@ -225,7 +224,7 @@ export function SpectralWolf({
     depthWrite: false,
     depthTest: true,
     toneMapped: false,
-    blending: THREE.AdditiveBlending,
+    blending: THREE.NormalBlending,
     side: THREE.FrontSide,
     wireframe: false,
     alphaTest: 0,

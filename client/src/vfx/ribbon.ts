@@ -93,7 +93,7 @@ export function layJagged(
   const n = out.length;
   for (let i = 0; i < n; i++) {
     const t = n === 1 ? 0 : i / (n - 1);
-    const amp = Math.sin(t * Math.PI) * (0.22 + 0.45 * Math.min(1.4, len / 5));
+    const amp = Math.sin(t * Math.PI) * (0.38 + 0.85 * Math.min(1.15, len / 4));
     const j = jitters[i - 1];
     const jx = j ? j[0] * amp : 0;
     const jy = j ? j[1] * amp * 0.55 : 0;

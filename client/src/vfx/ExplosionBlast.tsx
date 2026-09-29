@@ -124,7 +124,7 @@ export function ExplosionBlast({
     if (scorchMat.current) {
       const arrive = Math.min(1, elapsed / 0.12);
       const fade = elapsed < 1.2 ? 1 : Math.max(0, 1 - (elapsed - 1.2) / 2.4);
-      scorchMat.current.opacity = 0.34 * arrive * fade;
+      scorchMat.current.opacity = 0.2 * arrive * fade;
     }
     {
       const wave = Math.min(1, elapsed / 0.32);
@@ -150,7 +150,7 @@ export function ExplosionBlast({
   return (
     <group position={[px, 0, pz]} renderOrder={3}>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
-        <circleGeometry args={[Math.max(0.7, radius * 0.16), 40]} />
+        <circleGeometry args={[Math.max(0.48, radius * 0.08), 40]} />
         <meshBasicMaterial
           ref={scorchMat}
           map={textures.scorch}

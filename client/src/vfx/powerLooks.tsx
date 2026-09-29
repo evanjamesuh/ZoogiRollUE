@@ -31,13 +31,14 @@ export type Vec3 = [number, number, number];
 
 const ARC_POINTS = 14;
 
-function ribbonMaterial(color: THREE.Color, cloth: boolean): THREE.ShaderMaterial {
+function ribbonMaterial(color: THREE.Color, cloth: boolean, hot = false): THREE.ShaderMaterial {
   const mat = new THREE.ShaderMaterial({
     uniforms: {
       uColor: { value: color },
       uFade: { value: 1 },
       uCloth: { value: cloth ? 1 : 0 },
       uEndFade: { value: 0 },
+      uHot: { value: hot ? 1 : 0 },
     },
     vertexShader: RIBBON_VERT,
     fragmentShader: RIBBON_FRAG,
@@ -52,6 +53,7 @@ function ribbonMaterial(color: THREE.Color, cloth: boolean): THREE.ShaderMateria
     mat.blending = THREE.CustomBlending;
     mat.blendSrc = THREE.OneFactor;
     mat.blendDst = THREE.OneFactor;
+    if (hot) mat.depthTest = false;
   }
   return mat;
 }
@@ -78,7 +80,7 @@ export function JaggedArc({
   endFade?: number;
 }) {
   const geo = useMemo(() => createRibbonGeometry(ARC_POINTS - 1), []);
-  const material = useMemo(() => ribbonMaterial(new THREE.Color(color), cloth), [color, cloth]);
+  const material = useMemo(() => ribbonMaterial(new THREE.Color(color), cloth, !cloth), [color, cloth]);
   const points = useMemo(() => Array.from({ length: ARC_POINTS }, () => new THREE.Vector3()), []);
   const fromV = useRef(new THREE.Vector3());
   const toV = useRef(new THREE.Vector3());
@@ -118,7 +120,7 @@ export function StraightBeam({
   endFade?: number;
 }) {
   const geo = useMemo(() => createRibbonGeometry(1), []);
-  const material = useMemo(() => ribbonMaterial(new THREE.Color(color), false), [color]);
+  const material = useMemo(() => ribbonMaterial(new THREE.Color(color), false, false), [color]);
   const points = useMemo(() => [new THREE.Vector3(), new THREE.Vector3()], []);
 
   useEffect(() => () => {
@@ -159,10 +161,14 @@ function BeamMotes({ from, to }: { from: Vec3; to: Vec3 }) {
     const time = clock.elapsedTime;
     for (let i = 0; i < pool.capacity; i++) {
       const u = ((i + 0.35) / pool.capacity + time * 0.04) % 1;
-      const wob = Math.sin(time * 1.8 + i * 1.7) * 0.05;
-      pool.px[i] = from[0] + (to[0] - from[0]) * u + wob;
-      pool.py[i] = from[1] + (to[1] - from[1]) * u + Math.cos(time * 1.4 + i) * 0.04;
-      pool.pz[i] = from[2] + (to[2] - from[2]) * u - wob * 0.6;
+      const dx = to[0] - from[0];
+      const dz = to[2] - from[2];
+      const span = Math.hypot(dx, dz) || 1;
+      const side = (i % 2 === 0 ? 1 : -1) * (0.1 + (i % 3) * 0.045);
+      const wob = Math.sin(time * 1.8 + i * 1.7) * 0.04;
+      pool.px[i] = from[0] + dx * u + (-dz / span) * side + wob;
+      pool.py[i] = from[1] + (to[1] - from[1]) * u + Math.cos(time * 1.4 + i) * 0.05;
+      pool.pz[i] = from[2] + dz * u + (dx / span) * side - wob * 0.4;
       pool.opacity[i] = 0.22 + 0.18 * Math.sin(time * 3.2 + i);
       pool.size[i] = 0.04 + (i % 3) * 0.015;
       pool.active[i] = 1;
@@ -338,8 +344,8 @@ export function BindRibbons() {
       dust.px[i] = Math.cos(ang) * reach;
       dust.py[i] = 0.06 + (i % 4) * 0.07;
       dust.pz[i] = Math.sin(ang) * reach;
-      dust.opacity[i] = 0.55;
-      dust.size[i] = 0.42 + (i % 2) * 0.16;
+      dust.opacity[i] = 0.38;
+      dust.size[i] = 0.16 + (i % 3) * 0.05;
       dust.active[i] = 1;
     }
   });
@@ -433,30 +439,38 @@ function ArcSet({ pairs }: { pairs: Array<[Vec3, Vec3]> }) {
   const bolts = pairs.flatMap((pair, i) => {
     const from = pair[0];
     const to = pair[1];
-    const t = 0.58;
-    const mid: Vec3 = [
-      from[0] + (to[0] - from[0]) * t,
-      from[1] + (to[1] - from[1]) * t + 0.12,
-      from[2] + (to[2] - from[2]) * t,
+    const ends: Vec3[] = [
+      to,
+      [to[0] + 0.34, to[1] + 0.32, to[2] - 0.16],
+      [to[0] - 0.28, to[1] + 0.1, to[2] + 0.32],
     ];
-    const side = i % 2 === 0 ? 1 : -1;
-    const fork: Vec3 = [mid[0] + side * 0.85, mid[1] + 0.55, mid[2] - side * 0.45];
-    const forkB: Vec3 = [mid[0] - side * 0.45, mid[1] + 0.85, mid[2] + side * 0.7];
-    return [
-      { key: `m${i}`, from, to, width: 0.42, color: "#f4fbff", sag: 0.26, salt: 3 },
-      { key: `c${i}`, from, to, width: 0.14, color: "#ffffff", sag: 0.26, salt: 3 },
-      { key: `f${i}`, from: mid, to: fork, width: 0.2, color: "#d7ecff", sag: 0.1, salt: 9 },
-      { key: `g${i}`, from: mid, to: forkB, width: 0.14, color: "#b9dcff", sag: 0.08, salt: 15 },
-    ].map((bolt) => ({ ...bolt, pair: i }));
+    return ends.flatMap((end, k) => {
+      const t = 0.4 + k * 0.14;
+      const mid: Vec3 = [
+        from[0] + (end[0] - from[0]) * t,
+        from[1] + (end[1] - from[1]) * t + 0.2,
+        from[2] + (end[2] - from[2]) * t,
+      ];
+      const side = k % 2 === 0 ? 1 : -1;
+      const fork: Vec3 = [mid[0] + side * 0.85, mid[1] + 0.55, mid[2] - side * 0.6];
+      const width = k === 0 ? 0.16 : 0.1;
+      const sag = 0.16 + k * 0.07;
+      const salt = 3 + k * 5;
+      return [
+        { key: `m${i}${k}`, from, to: end, width, color: "#d7ecff", sag, salt },
+        { key: `c${i}${k}`, from, to: end, width: width * 0.28, color: "#ffffff", sag, salt },
+        { key: `f${i}${k}`, from: mid, to: fork, width: 0.07, color: "#b9dcff", sag: 0.14, salt: salt + 9 },
+      ];
+    });
   });
   return (
     <group>
       {bolts.map((bolt) => (
         <JaggedArc
-          key={`${bolt.key}-${generation}`}
+          key={bolt.key}
           from={bolt.from}
           to={bolt.to}
-          seed={generation * 17 + bolt.pair * 13 + bolt.salt}
+          seed={generation * 17 + bolt.salt}
           width={bolt.width}
           color={bolt.color}
           sag={bolt.sag}
@@ -523,14 +537,14 @@ export function StunCrawlers() {
       </mesh>
       {ends.map((pair, i) => (
         <JaggedArc
-          key={`${generation}-${i}`}
+          key={i}
           from={pair[0]}
           to={pair[1]}
           seed={generation * 11 + i}
-          width={0.2}
+          width={0.11}
           color="#f5fbff"
-          sag={0.05}
-          fade={0.9}
+          sag={0.1}
+          fade={0.95}
         />
       ))}
     </group>
@@ -564,12 +578,12 @@ export function UnlockGlow({
     mat.alphaTest = 0;
     return mat;
   }, []);
-  const embers = useMemo(() => createSpritePool(12), []);
+  const embers = useMemo(() => createSpritePool(18), []);
 
   useEffect(() => {
     const rand = mulberry32(91);
     clearSpritePool(embers);
-    seedRisingEmbers(embers, rand, getVfxQuality() === "low" ? 6 : 10);
+    seedRisingEmbers(embers, rand, getVfxQuality() === "low" ? 8 : 16);
     return () => ring.dispose();
   }, [embers, ring]);
 
@@ -581,8 +595,8 @@ export function UnlockGlow({
     if (step > 0) stepRising(embers, elapsed, step);
     const flash = elapsed < 0.16 ? elapsed / 0.16 : Math.max(0, 1 - (elapsed - 0.16) / 0.7);
     if (light.current) {
-      light.current.intensity = flash * 10;
-      light.current.distance = 2.4;
+      light.current.intensity = flash * 16;
+      light.current.distance = 2.2;
     }
     ring.uniforms.uWave.value = 0.28 + Math.min(1, elapsed / 0.4) * 0.48;
     ring.uniforms.uOpacity.value = 0.95 * flash;
@@ -590,7 +604,7 @@ export function UnlockGlow({
 
   return (
     <group position={position}>
-      <pointLight ref={light} position={[0, 0.7, 0]} color="#ffb15a" intensity={0} distance={2.4} decay={2} />
+      <pointLight ref={light} position={[0, 0.7, 0]} color="#ff9a3a" intensity={0} distance={2.2} decay={2} />
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.42, 0]}>
         <circleGeometry args={[0.75, 40]} />
         <primitive object={ring} attach="material" />

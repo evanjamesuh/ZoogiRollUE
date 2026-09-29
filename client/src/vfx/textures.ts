@@ -32,6 +32,11 @@ function valueNoise(x: number, y: number): number {
   return n00 * (1 - sx) * (1 - sy) + n10 * sx * (1 - sy) + n01 * (1 - sx) * sy + n11 * sx * sy;
 }
 
+function smoothstep(edge0: number, edge1: number, x: number): number {
+  const t = Math.max(0, Math.min(1, (x - edge0) / (edge1 - edge0)));
+  return t * t * (3 - 2 * t);
+}
+
 function fbm(x: number, y: number): number {
   let v = 0;
   let a = 0.5;
@@ -114,9 +119,10 @@ function paintScorch(data: Uint8ClampedArray, size: number): void {
       const d = Math.hypot(u, v) * 2;
       const n = fbm(u * 5.4 + 1.7, v * 4.8 + 6.4);
       const lobe = fbm(u * 2.2 + 4.1, v * 2.6 + 0.7);
-      const limit = 0.42 + lobe * 0.38;
+      const limit = 0.22 + lobe * 0.55;
+      const chips = fbm(u * 9.5 + 2.2, v * 8.4 + 1.1);
       const fall = Math.max(0, 1 - d / limit);
-      const ragged = Math.pow(fall, 1.35) * (0.35 + 0.65 * n);
+      const ragged = Math.pow(fall, 1.6) * (0.15 + 0.85 * n) * smoothstep(0.28, 0.62, chips);
       const alpha = d > limit ? 0 : ragged;
       const i = (y * size + x) * 4;
       const tone = 18 + n * 22;

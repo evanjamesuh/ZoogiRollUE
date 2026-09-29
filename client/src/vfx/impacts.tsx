@@ -64,7 +64,7 @@ function ImpactBurst({ impact }: { impact: ImpactEvent }) {
     } else if (electric) {
       seedBurstSparks(sparks, rand, 10, [0.75, 0.9, 1], [0, 1, 0]);
     } else {
-      seedBurstSparks(sparks, rand, 22, [1, 0.86, 0.45], impact.dir, 2.4);
+      seedBurstSparks(sparks, rand, 26, [1.55, 1.15, 0.55], impact.dir, 3.4);
       seedDustPuff(dust, rand, 5);
     }
     return () => {
@@ -81,13 +81,13 @@ function ImpactBurst({ impact }: { impact: ImpactEvent }) {
     }
     const flash = elapsed < 0.08 ? 1 : Math.max(0, 1 - (elapsed - 0.08) / 0.18);
     if (light.current) {
-      light.current.intensity = flash * (electric ? 10 : dusty ? 4 : 14);
-      light.current.distance = electric ? 1.8 : dusty ? 1.4 : 1.6;
+      light.current.intensity = flash * (electric ? 8 : dusty ? 3 : 9);
+      light.current.distance = electric ? 1.5 : dusty ? 1.2 : 1.15;
     }
     if (elapsed > 0.85) dismissImpact(impact.id);
   });
 
-  const color = electric ? "#e7f3ff" : dusty ? "#e6c48a" : "#ffc56a";
+  const color = electric ? "#e7f3ff" : dusty ? "#e6c48a" : "#fff4e0";
   return (
     <group position={impact.position}>
       <pointLight ref={light} position={[0, 0.25, 0]} color={color} intensity={0} distance={1.6} decay={2} />
