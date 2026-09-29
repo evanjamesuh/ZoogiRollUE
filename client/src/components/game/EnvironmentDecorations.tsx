@@ -140,7 +140,8 @@ export function EnvironmentDecorations() {
       ice: ["#8ab4c4", "#9ac4d4", "#7aa4b4", "#aad4e4"],
       lava: ["#2a1a1a", "#3a2020", "#1a0a0a", "#4a2a2a"],
       space: ["#3a3a5a", "#4a4a6a", "#2a2a4a", "#5a5a7a"],
-      saturn: ["#6a5a4a", "#7a6a5a", "#5a4a3a", "#8a7a6a"]
+      saturn: ["#6a5a4a", "#7a6a5a", "#5a4a3a", "#8a7a6a"],
+      tomb: ["#c4a070", "#b89060", "#d7b48a", "#a07848"]
     };
     
     const flowerColors = ["#ff69b4", "#ffd700", "#ff4500", "#9932cc", "#00ced1"];

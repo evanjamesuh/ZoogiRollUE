@@ -27,7 +27,7 @@ async function loadGame(): Promise<GameStore> {
   return import("./stores/useZoogiGame.tsx");
 }
 
-test("one simulation: launch, collision, and zone score", async () => {
+test("one simulation: launch, collision, and no ring score", async () => {
   const { useZoogiGame, ZOOGI_ROSTER } = await loadGame();
   const store = useZoogiGame.getState();
 
@@ -143,6 +143,10 @@ test("one simulation: launch, collision, and zone score", async () => {
   assert.equal(scored.phase, "playing", "a resting orb should not end the round");
   assert.equal(scored.orbs[0]?.isActive, true);
   assert.equal(scored.orbs[0]?.capturedInZone ?? null, null);
+
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  useZoogiGame.getState().endTurn();
+  assert.equal(useZoogiGame.getState().score, 0, "standing in a score ring does not award points");
 });
 
 function planarSpeed(velocity: [number, number, number]): number {
@@ -1195,7 +1199,7 @@ test("a computer marble that is only coasting does not skip its shot, and a late
     id: "coast-cpu",
     isPlayer: false,
     position: [4, 0.5, 0] as [number, number, number],
-    velocity: [0.35, 0, 0] as [number, number, number],
+    velocity: [0.12, 0, 0] as [number, number, number],
     isKnockedOut: false,
     isRespawning: false,
   };
@@ -1224,7 +1228,7 @@ test("a computer marble that is only coasting does not skip its shot, and a late
   assert.equal(planarSpeed(coasted.enemies[0]?.velocity ?? [1, 0, 0]), 0);
 
   useZoogiGame.setState({
-    enemies: coasted.enemies.map((marble) => ({ ...marble, velocity: [0.3, 0, 0] as [number, number, number] })),
+    enemies: coasted.enemies.map((marble) => ({ ...marble, velocity: [0.2, 0, 0] as [number, number, number] })),
   });
   let handedBack = false;
   for (let frame = 0; frame < 800; frame++) {
@@ -1494,6 +1498,33 @@ test("a knockoff offset does not carry from one map into the next", async () => 
   useZoogiGame.getState().startGame();
   assert.deepEqual(useZoogiGame.getState().elementTransforms.knockoffBoundaryOffset, { x: 0, y: 0, z: 0 });
   assert.equal(useZoogiGame.getState().wallSettings.knockoffBoundaryRadius, 15.5 * arenaScaleFor("grass"));
+
+  for (const mapId of ["grass", "ice", "saturn"] as const) {
+    useZoogiGame.setState({
+      selectedMap: mapId,
+      elementTransforms: {
+        ...useZoogiGame.getState().elementTransforms,
+        knockoffBoundaryOffset: { x: -9.9, y: 0, z: -4.8 },
+      },
+    });
+    useZoogiGame.getState().startGame();
+    const state = useZoogiGame.getState();
+    const scale = arenaScaleFor(mapId);
+    assert.deepEqual(state.elementTransforms.knockoffBoundaryOffset, { x: 0, y: 0, z: 0 }, mapId);
+    assert.equal(state.wallSettings.knockoffBoundaryRadius, 15.5 * scale, mapId);
+    const spawns = state.zoneEditorConfigs.filter((zone) => zone.isSpawn);
+    const scores = state.zoneEditorConfigs.filter((zone) => !zone.isSpawn);
+    assert.equal(spawns.length, 4, mapId);
+    assert.equal(scores.length, 4, mapId);
+    for (const spawn of spawns) {
+      assert.equal(spawn.distance, 8 * scale, mapId);
+      assert.ok(spawn.distance + 0.5 < 15.2 * scale, `${mapId} spawn leaves the floor`);
+    }
+    for (const score of scores) {
+      assert.equal(score.distance, 9.4 * scale, mapId);
+      assert.ok(score.distance + 4 <= 15.2 * scale, `${mapId} score zone leaves the floor`);
+    }
+  }
 });
 
 test("frozen ring ice patches coast without speeding a marble up", async () => {

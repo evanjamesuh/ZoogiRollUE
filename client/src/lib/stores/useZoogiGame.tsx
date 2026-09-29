@@ -16,8 +16,6 @@ import {
   KNOCKOUT_PENALTY,
   BUMPER_SCORE,
   KNOCKOUT_RESPAWN_BEAT,
-  ZONE_SCORE_ORB,
-  SCORE_ZONE_RADIUS,
   RESTRICTION_PHASE_DURATION,
   INVULNERABILITY_DURATION,
   RESPAWN_DELAY,
@@ -148,7 +146,7 @@ export const DEFAULT_ELEMENT_TRANSFORMS = {
 
 export type GamePhase = "menu" | "shop" | "zoogipedia" | "arena_editor" | "character_selection" | "local_setup" | "map_selection" | "playing" | "round_end" | "game_over" | "feature_hub" | "music_visualizer" | "ringer_creator" | "ringer_trials_loading" | "ringer_trials";
 export type GameMode = "classic" | "ringer_royale" | "local_multiplayer" | "practice" | "map_editor";
-export type MapTheme = "grass" | "ice" | "lava" | "space" | "saturn" | "neon";
+export type MapTheme = "grass" | "ice" | "lava" | "space" | "saturn" | "tomb" | "neon";
 
 export interface ZoogiStats {
   speed: number;
@@ -247,6 +245,7 @@ export const MAP_OPTIONS: { id: MapTheme; name: string; description: string; col
   { id: "lava", name: "Volcanic Pit", description: "Fiery lava arena", color: "#FF5722" },
   { id: "space", name: "Cosmic Platform", description: "Floating in the void", color: "#7C4DFF" },
   { id: "saturn", name: "Arabian Nights", description: "Magical palace arena", color: "#FFA726" },
+  { id: "tomb", name: "Pharaoh's Tomb", description: "Sandstone hieroglyph court", color: "#E0B88A" },
   { id: "neon", name: "Night Circuit", description: "Neon rails over a night city", color: "#d946ef" }
 ];
 
@@ -3621,7 +3620,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         offTheFloor: false,
       });
 
-      const { enemies, turnIndex, isPlayerTurn, gameMode, localPlayers, currentLocalPlayerIndex, playerEntity, zoneEditorConfigs, zoneControlActive, updateZoneOwnership, checkZoneControlActivation, clearScoredZones } = get();
+      const { enemies, turnIndex, isPlayerTurn, gameMode, localPlayers, currentLocalPlayerIndex, playerEntity, checkZoneControlActivation, clearScoredZones } = get();
       
       // Clear scored zones at end of turn for next turn
       clearScoredZones();
@@ -3629,42 +3628,8 @@ export const useZoogiGame = create<ZoogiGameState>()(
       // Check zone control activation timing
       checkZoneControlActivation();
       
-      // Check if current player stopped in a zone - claim it with player's color and award 15 points
-      const checkZoneOwnership = (entity: GameEntity | null, playerIndex: number) => {
-        if (!entity) return;
-        const ZONE_RADIUS = 4;
-        const px = entity.position[0];
-        const pz = entity.position[2];
-        
-        // Get player color based on index
-        const playerColors = ["#FF4444", "#4444FF", "#44FF44", "#FFFF44", "#FF44FF", "#44FFFF", "#FF8800", "#8800FF"];
-        const playerColor = playerColors[playerIndex % playerColors.length];
-        
-        for (const zone of zoneEditorConfigs) {
-          if (!zone.visible) continue;
-          // Skip zones already scored during roll-through this turn
-          if (get().isZoneScoredThisTurn(zone.id)) continue;
-          
-          const zx = Math.cos(zone.angle) * zone.distance;
-          const zz = Math.sin(zone.angle) * zone.distance;
-          const dist = Math.sqrt((px - zx) ** 2 + (pz - zz) ** 2);
-          
-          if (dist < ZONE_RADIUS) {
-            updateZoneOwnership(zone.id, playerColor);
-            get().addScore(ZONE_SCORE_ORB);
-            get().triggerKnockoffBoundaryFlash(playerColor, 1);
-            console.log(`Player ${playerIndex + 1} claimed zone ${zone.id}! +${ZONE_SCORE_ORB} points`);
-            return;
-          }
-        }
-      };
-      
       if (gameMode === "local_multiplayer") {
         const activePlayers = localPlayers.filter(p => !p.isEliminated);
-        
-        // Check zone ownership for current player before switching
-        const currentEntity = currentLocalPlayerIndex === 0 ? playerEntity : enemies[currentLocalPlayerIndex - 1];
-        checkZoneOwnership(currentEntity, currentLocalPlayerIndex);
         
         if (activePlayers.length <= 1) {
           const winnerIndex = localPlayers.findIndex(p => !p.isEliminated);
@@ -3731,11 +3696,6 @@ export const useZoogiGame = create<ZoogiGameState>()(
         
         get().resetTurnState();
         return;
-      }
-      
-      // Classic mode: Check zone ownership for player before turn switch
-      if (isPlayerTurn && playerEntity) {
-        checkZoneOwnership(playerEntity, 0);
       }
       
       const releaseStun = (entity: GameEntity): GameEntity => {

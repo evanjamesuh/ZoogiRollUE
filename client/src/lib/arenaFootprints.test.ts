@@ -138,7 +138,7 @@ test("the drawn floor edge and knockout rim match the colliders", () => {
   assert.equal(COSMOS_STAGE.floorRadius * arenaScaleFor("space"), getMapLayout("space")?.floorRadius);
   assert.equal(ARABIAN_STAGE.floorRadius * arenaScaleFor("saturn"), getMapLayout("saturn")?.floorRadius);
 
-  for (const map of ["grass", "ice", "lava", "space", "saturn"] as const) {
+  for (const map of ["grass", "ice", "lava", "space", "saturn", "tomb"] as const) {
     const edge = arenaVisualEdge(map);
     const layout = getMapLayout(map);
     assert.ok(layout);
@@ -171,7 +171,7 @@ test("the drawn floor edge and knockout rim match the colliders", () => {
 test("rim gaps are sealed or clearly wide enough for a marble", () => {
   setWinterCampActive(true);
   try {
-    for (const map of ["grass", "ice", "lava", "space", "saturn"] as const) {
+    for (const map of ["grass", "ice", "lava", "space", "saturn", "tomb"] as const) {
       const layout = getMapLayout(map);
       assert.ok(layout);
       const solids = matchSolids(map);
@@ -207,7 +207,7 @@ test("rim gaps are sealed or clearly wide enough for a marble", () => {
 });
 
 test("counter-scaling an embedded mesh restores its size and keeps a rim nudge", () => {
-  const scale = arenaScaleFor("grass");
+  const scale = 1.5;
   const modelScale = GRASS_STAGE.modelScale;
   const nudge: ObstacleNudge = { meshKey: "Tree2_Leavs_0", dx: 0.25, dz: -0.1 };
 
@@ -257,11 +257,12 @@ test("counter-scaling an embedded mesh restores its size and keeps a rim nudge",
   const tree = make("Tree2_Leavs_0");
   const floor = make("GroundDisk");
   const root = make("stage", [floor, rock, tree]);
-  const pose = embeddedObstaclePose("grass");
-  assert.ok(pose.meshKeys.some((key) => nodeMatchesMeshKey("S_7_rock", key)));
-  assert.ok(pose.meshKeys.some((key) => nodeMatchesMeshKey("Tree2", key)));
+  const meshKeys = ["S_7_rock", "Tree2_Leavs_0"];
+  assert.ok(meshKeys.some((key) => nodeMatchesMeshKey("S_7_rock", key)));
+  assert.ok(meshKeys.some((key) => nodeMatchesMeshKey("Tree2", key)));
+  assert.deepEqual(embeddedObstaclePose("grass").meshKeys, []);
 
-  const restore = applyEmbeddedObstaclePose(root, scale, modelScale, pose.meshKeys, [nudge]);
+  const restore = applyEmbeddedObstaclePose(root, scale, modelScale, meshKeys, [nudge]);
   assert.equal(floor.scale.x, 1, "the floor stays on the dress group");
   assert.ok(Math.abs(rock.scale.x - counterScaleFor(scale)) < 1e-9);
   assert.equal(rockChild.scale.x, 1, "a child of a counter-scaled mesh is not scaled again");

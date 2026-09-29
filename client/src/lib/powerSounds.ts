@@ -206,6 +206,22 @@ export function playWolfDash(): void {
       t,
       t + 0.42
     );
+
+    const air = ctx.createBufferSource();
+    air.buffer = noiseBuffer(ctx, 0.9);
+    const airFilter = ctx.createBiquadFilter();
+    airFilter.type = "lowpass";
+    airFilter.frequency.setValueAtTime(880, t + 0.12);
+    airFilter.frequency.exponentialRampToValueAtTime(220, t + 0.85);
+    const airGain = ctx.createGain();
+    airGain.gain.setValueAtTime(0.0001, t + 0.1);
+    airGain.gain.exponentialRampToValueAtTime(0.05, t + 0.24);
+    airGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+    air.connect(airFilter);
+    airFilter.connect(airGain);
+    airGain.connect(out);
+    air.start(t + 0.1);
+    air.stop(t + 0.95);
   });
 }
 
@@ -259,6 +275,23 @@ export function playExplosion(): void {
     noiseGain.connect(out);
     noise.start(t);
     noise.stop(t + 0.26);
+
+    tone(
+      ctx,
+      out,
+      "sine",
+      (osc, when) => {
+        osc.frequency.setValueAtTime(46, when);
+        osc.frequency.exponentialRampToValueAtTime(28, when + 0.9);
+      },
+      (gain, when) => {
+        gain.gain.setValueAtTime(0.0001, when);
+        gain.gain.exponentialRampToValueAtTime(0.07, when + 0.12);
+        gain.gain.exponentialRampToValueAtTime(0.0001, when + 1.05);
+      },
+      t + 0.08,
+      t + 1.15
+    );
   });
 }
 

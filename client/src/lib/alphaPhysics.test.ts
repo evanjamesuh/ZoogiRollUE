@@ -54,7 +54,7 @@ async function playing() {
 }
 
 test("arenas are about 15 to 20 Zoogi diameters across", () => {
-  const circles = ["grass", "ice", "lava", "space", "saturn"] as const;
+  const circles = ["grass", "ice", "lava", "space", "saturn", "tomb"] as const;
   for (const map of circles) {
     const layout = getMapLayout(map);
     assert.ok(layout);
@@ -65,7 +65,9 @@ test("arenas are about 15 to 20 Zoogi diameters across", () => {
   const longSide = (neonPlayHalfX() * 2) / ZOOGI_DIAMETER;
   assert.ok(shortSide >= 15 && shortSide <= 20, `neon short side ${shortSide.toFixed(2)}`);
   assert.ok(longSide > 20 && longSide < 24, `neon long side ${longSide.toFixed(2)}`);
-  assert.equal(arenaScaleFor("grass"), 1.115);
+  assert.equal(arenaScaleFor("grass"), 1);
+  assert.equal(arenaScaleFor("lava"), 0.836);
+  assert.equal(arenaScaleFor("neon"), 1.613);
 });
 
 test("a normal shot rolls straight and rests in 2 to 4 seconds", async () => {

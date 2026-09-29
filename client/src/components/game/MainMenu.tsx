@@ -154,8 +154,11 @@ export function MainMenu() {
         setShowTownView(false);
         break;
       case "practice":
-      case "marble_arena":
         setGameMode("practice");
+        setPhase("character_selection");
+        break;
+      case "marble_arena":
+        setGameMode("classic");
         setPhase("character_selection");
         break;
       case "create_zoogi":

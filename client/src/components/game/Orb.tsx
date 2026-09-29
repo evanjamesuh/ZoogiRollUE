@@ -4,6 +4,7 @@ import { useFrame } from "@react-three/fiber";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { visualPosition } from "@/lib/renderInterp";
 import { ORB_BODY_COLOR, ORB_DRAW_RADIUS, ORB_GLOW_COLOR, ORB_REST_Y } from "@/lib/restHeight";
+import { Glint } from "@/vfx/powerLooks";
 
 function getStarColor(starOrbType: "wolfgang" | "hotstreak" | "bolt" | null | undefined): string {
   switch (starOrbType) {
@@ -90,6 +91,9 @@ export function Orb({ orbId }: OrbProps) {
           </mesh>
         )}
         <pointLight color="#6eb6ff" intensity={0.7} distance={4.5} position={[0, radius * 0.4, 0]} />
+        {isLockedOn && (
+          <Glint position={[0, radius * 0.85, 0]} size={0.62} color="#d5e8ff" />
+        )}
       </group>
 
       {isLockedOn && (
