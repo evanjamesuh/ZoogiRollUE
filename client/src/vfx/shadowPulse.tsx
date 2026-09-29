@@ -39,7 +39,7 @@ function shadowBudget() {
 function ribbonMaterial(pop = false): THREE.ShaderMaterial {
   const mat = new THREE.ShaderMaterial({
     uniforms: {
-      uColor: { value: new THREE.Color(pop ? "#1a0630" : "#2a1844") },
+      uColor: { value: new THREE.Color(pop ? "#1a0b2e" : "#2a1844") },
       uGlint: { value: new THREE.Color("#b69cff") },
       uFade: { value: 1 },
       uTime: { value: 0 },
@@ -220,7 +220,7 @@ export function ShadowPulseLook({
     ground.uniforms.uTime.value = state.clock.elapsedTime;
     const frontFrac = Math.min(1, front / radius);
     ground.uniforms.uFront.value = frontFrac;
-    ground.uniforms.uEdge.value = edgeFade * 0.2;
+    ground.uniforms.uEdge.value = edgeFade * 0.22;
     ground.uniforms.uVeil.value = veil * 0.95;
     pool.uniforms.uTime.value = state.clock.elapsedTime;
     pool.uniforms.uFront.value = frontFrac;
@@ -283,8 +283,8 @@ function ShadowTendril({ phase }: { phase: number }) {
       const rad = 0.62 + Math.sin(u * 7.0 + phase) * 0.06 + Math.sin(time * 0.7 + u * 5.0) * 0.025;
       points[i].set(Math.cos(ang) * rad, y, Math.sin(ang) * rad);
     }
-    writeRibbon(geo, points, 0.04, state.camera.position);
-    material.uniforms.uFade.value = 0.95;
+    writeRibbon(geo, points, 0.05, state.camera.position);
+    material.uniforms.uFade.value = 1;
     material.uniforms.uTime.value = time;
   });
 

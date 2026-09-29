@@ -545,13 +545,15 @@ void main() {
   float strobe = fract(sin(floor(uTime * 7.0) * 17.13 + n * 48.0));
   float flick = mix(0.45 + 0.55 * sin(uTime * 5.5 + n * 16.0), 0.25 + 0.75 * strobe, 0.5);
   float vein = crack * inside * flick * uVeil;
-  float wob = (fbmS(vec2(ang * 1.15, r * 2.4)) - 0.5) * 0.14;
+  float wob = (fbmS(vec2(ang * 3.4, r * 9.0 + uTime * 0.05)) - 0.5) * 0.045;
   float d = r - (uFront + wob);
-  float band = exp(-(d * d) / 0.008);
-  float chips = smoothstep(0.22, 0.7, noiseS(vec2(ang * 7.5, r * 5.0) + uTime * 0.15));
-  band *= chips;
-  vec3 veinCol = vec3(0.714, 0.612, 1.0) * vein * 0.72;
-  vec3 edgeCol = vec3(0.714, 0.612, 1.0) * band * uEdge;
+  // Narrow radial falloff. A wide plateau here reads as flat grey slabs.
+  float band = exp(-(d * d) / 0.00065);
+  float wisps = fbmS(vec2(ang * 16.0, r * 24.0) + vec2(uTime * 0.2, n * 1.6));
+  float grain = fbmS(vec2(ang * 6.5 + 1.7, uTime * 0.16) + wisps * 2.0);
+  band *= wisps * grain;
+  vec3 veinCol = vec3(0.5, 0.32, 0.78) * vein * 0.42;
+  vec3 edgeCol = vec3(0.55, 0.36, 0.82) * band * uEdge;
   vec3 col = veinCol + edgeCol;
   if (max(col.r, max(col.g, col.b)) < 0.012) discard;
   gl_FragColor = vec4(col, 1.0);
@@ -585,13 +587,30 @@ float noiseR(vec2 p) {
 void main() {
   float n = noiseR(vec2(vAlong * 6.0 + uTime * 0.22, vSide * 2.4));
   float pop = step(0.5, uPop);
-  float gap = mix(smoothstep(0.42, 0.78, n), smoothstep(0.05, 0.28, n), pop);
-  float thread = exp(-vSide * vSide * mix(11.0, 2.6, pop));
+  if (pop > 0.5) {
+    float ends = smoothstep(0.0, 0.14, vAlong) * smoothstep(1.0, 0.86, vAlong);
+    float side = abs(vSide) / max(ends, 0.22);
+    float core = smoothstep(1.05, 0.28, side);
+    float bits = noiseR(vec2(vAlong * 11.0 + uTime * 0.28, vSide * 1.6));
+    float bits2 = noiseR(vec2(vAlong * 23.0 - uTime * 0.17, 3.4));
+    float breakup = mix(0.9, 1.0, smoothstep(0.12, 0.7, bits));
+    breakup *= mix(0.92, 1.0, bits2);
+    float ragged = smoothstep(0.58, 0.98, abs(vSide));
+    breakup = mix(breakup, breakup * mix(0.35, 1.0, bits2), ragged);
+    float alpha = core * ends * breakup * 0.85 * uFade;
+    float fres = pow(smoothstep(0.68, 1.0, abs(vSide)), 1.5) * ends;
+    vec3 col = uColor + uGlint * (fres * 0.2 + 0.008);
+    if (alpha < 0.03) discard;
+    gl_FragColor = vec4(col, alpha);
+    return;
+  }
+  float gap = smoothstep(0.42, 0.78, n);
+  float thread = exp(-vSide * vSide * 11.0);
   float along = smoothstep(0.0, 0.06, vAlong) * smoothstep(1.0, 0.08, vAlong);
-  along *= mix(smoothstep(0.16, 0.48, noiseR(vec2(vAlong * 3.4 + uTime * 0.15, 1.7))), 1.0, pop);
+  along *= smoothstep(0.16, 0.48, noiseR(vec2(vAlong * 3.4 + uTime * 0.15, 1.7)));
   float edge = smoothstep(0.18, 0.95, abs(vSide));
-  vec3 body = uColor * mix(0.62 + 0.38 * n, 1.0, pop);
-  vec3 col = mix(body, uGlint, edge * mix(0.16, 0.95, pop));
+  vec3 body = uColor * (0.62 + 0.38 * n);
+  vec3 col = mix(body, uGlint, edge * 0.16);
   float alpha = thread * along * gap * uFade;
   if (alpha < 0.03) discard;
   gl_FragColor = vec4(col, alpha);
