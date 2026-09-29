@@ -658,12 +658,13 @@ export function MainMenu() {
                 <div className="flex flex-col gap-4">
                   <button
                     onClick={() => {
-                      setPhase("ringer_creator");
+                      setGameMode("classic");
+                      setPhase("character_selection");
                     }}
                     className="flex items-center justify-center gap-2 px-8 py-4 min-h-[56px] bg-gradient-to-r from-green-500 to-emerald-600 text-white text-xl font-bold rounded-full shadow-lg shadow-green-500/50 hover:shadow-green-500/70 transition-shadow active:scale-95"
                   >
                     <Play size={24} />
-                    Enter Battle Stadium
+                    Play
                   </button>
 
                   <button
@@ -674,40 +675,10 @@ export function MainMenu() {
                     Multiplayer
                   </button>
                   
-                  <button
-                    onClick={() => {
-                      setGameMode("practice");
-                      setPhase("character_selection");
-                    }}
-                    className="flex items-center justify-center gap-2 px-8 py-4 min-h-[56px] bg-gradient-to-r from-amber-500 to-orange-600 text-white text-xl font-bold rounded-full shadow-lg shadow-amber-500/50 hover:shadow-amber-500/70 transition-shadow active:scale-95"
-                  >
-                    <Target size={24} />
-                    Marble Arena
-                  </button>
-                  
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => setPhase("ringer_creator")}
-                      className="bg-gradient-to-r from-orange-500 via-red-500 to-purple-600 rounded-xl p-3 relative overflow-hidden group hover:shadow-lg hover:shadow-red-500/30 transition-all active:scale-[0.98]"
-                    >
-                      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.15),transparent_60%)]" />
-                      <div className="flex flex-col items-center gap-2 text-center relative">
-                        <div className="w-10 h-10 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-lg">
-                          <Flame className="w-5 h-5 text-white" />
-                        </div>
-                        <div>
-                          <div className="flex items-center justify-center gap-1 mb-0.5">
-                            <Sparkles className="w-3 h-3 text-yellow-300" />
-                            <span className="text-yellow-300 text-[10px] font-bold uppercase">NEW</span>
-                          </div>
-                          <div className="text-white font-bold text-sm">The Ringer Trials</div>
-                        </div>
-                      </div>
-                    </button>
-                    
+                  <div className="mt-3">
                     <button
                       onClick={() => setShowComicViewer(true)}
-                      className="bg-gradient-to-r from-green-600 via-emerald-500 to-teal-500 rounded-xl p-3 relative overflow-hidden group hover:shadow-lg hover:shadow-emerald-500/30 transition-all active:scale-[0.98]"
+                      className="w-full bg-gradient-to-r from-green-600 via-emerald-500 to-teal-500 rounded-xl p-3 relative overflow-hidden group hover:shadow-lg hover:shadow-emerald-500/30 transition-all active:scale-[0.98]"
                     >
                       <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700" />
                       <div className="flex flex-col items-center gap-2 text-center">

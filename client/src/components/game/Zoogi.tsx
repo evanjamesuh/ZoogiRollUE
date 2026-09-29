@@ -8,13 +8,17 @@ import { useAudio } from "@/lib/stores/useAudio";
 import { useProgression } from "@/lib/stores/useProgression";
 import { triggerLaunchFeel } from "@/lib/stores/useGameFeel";
 import { visualPosition } from "@/lib/renderInterp";
+import { marbleIsShown } from "@/lib/marblePresence";
+import { ZOOGI_DRAW_RADIUS } from "@/lib/restHeight";
+import { ARENA_SCALE } from "@/lib/arenaScale";
+import { getMapLayout } from "@/lib/arenaColliders";
 import { AI_LAUNCH_DELAY, LAUNCH_POWER_MULTIPLIER, MAX_LAUNCH_SPEED } from "@/lib/simFeel";
 import { triggerLaunchCameraEffect, clearAimCameraEffect } from "@/lib/stores/useCameraEffects";
 import { getSkinEffect, getRainbowColor } from "@/lib/skinEffects";
 import { StunnedIndicator } from "./PowerEffects";
 
 // Global scale control - adjust this to resize ALL Zoogis uniformly
-let globalZoogiScale = 0.86;
+let globalZoogiScale = ZOOGI_DRAW_RADIUS;
 
 export function getGlobalZoogiScale(): number {
   return globalZoogiScale;
@@ -821,7 +825,7 @@ export function PlayerZoogi() {
 
   return (
     <group>
-      <group ref={meshRef} position={pos} visible={!firstPersonView && !playerEntity.isKnockedOut && !playerEntity.isRespawning}>
+      <group ref={meshRef} position={pos} visible={marbleIsShown(playerEntity, firstPersonView)}>
         <ZoogiModelSwitch zoogiId={playerEntity.zoogi.id} hasShield={playerEntity.hasShield} hasSpawnImmunity={playerEntity.spawnImmunity} color={playerEntity.zoogi.color} customModelUrl={playerEntity.customModelUrl} isPlayer={true} />
         {playerEntity.larsRicochetBoost > 1 && (
           <PopRing args={[1.1, 1.35, 24]} color="#3B82F6" />
@@ -1074,7 +1078,7 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
           ffaCooldownRef.current = 1.5 + Math.random() * 1.5;
         }
         
-        const ARENA_RADIUS = 18;
+        const ARENA_RADIUS = getMapLayout(useZoogiGame.getState().selectedMap)?.knockoffRadius ?? 18 * ARENA_SCALE;
         const activeOrbs = orbs.filter(o => o.isActive);
         
         const getDistance = (p1: [number, number, number], p2: [number, number, number]) => 
@@ -1391,7 +1395,7 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
 
   return (
     <group>
-      <group ref={meshRef} position={enemy.position} onClick={handleClick} visible={!enemy.isKnockedOut && !enemy.isRespawning}>
+      <group ref={meshRef} position={enemy.position} onClick={handleClick} visible={marbleIsShown(enemy)}>
         <ZoogiModelSwitch zoogiId={enemy.zoogi.id} hasShield={false} hasSpawnImmunity={enemy.spawnImmunity} color={enemy.zoogi.color} />
         {enemy.larsRicochetBoost > 1 && (
           <PopRing args={[1.1, 1.35, 24]} color="#3B82F6" />
@@ -1794,15 +1798,9 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
     }
   };
 
-  // In local multiplayer, only show the player whose turn it is
-  // Other players are hidden at their spawn points until their turn
-  if (gameMode === "local_multiplayer" && !isMyTurn) {
-    return null;
-  }
-
   return (
     <group>
-      <group ref={meshRef} position={pos} visible={!entity.isKnockedOut && !entity.isRespawning}>
+      <group ref={meshRef} position={pos} visible={marbleIsShown(entity)}>
         <ZoogiModelSwitch zoogiId={entity.zoogi.id} hasShield={false} color={entity.zoogi.color} />
         {entity.larsRicochetBoost > 1 && (
           <PopRing args={[1.1, 1.35, 24]} color="#3B82F6" />

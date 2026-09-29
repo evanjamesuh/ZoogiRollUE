@@ -259,9 +259,8 @@ function WinterLocationScene() {
   useFrame((state, delta) => {
     const t = state.clock.elapsedTime;
 
-    spinObjects.current.forEach(({ obj, baseY, phase }) => {
+    spinObjects.current.forEach(({ obj }) => {
       obj.rotation.y += 0.03;
-      obj.position.y = baseY + Math.sin(t * 2.0 + phase) * 0.3;
     });
 
     swayObjects.current.forEach(({ obj, baseY, baseRotY, phase }) => {

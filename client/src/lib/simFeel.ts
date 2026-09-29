@@ -1,3 +1,5 @@
+import { ARENA_SCALE } from "./arenaScale";
+
 /**
  * Match-feel numbers shared by the launch code and the fixed step.
  *
@@ -7,19 +9,22 @@
  * These are higher than the old per-frame crawl: a full drag reaches the
  * cap in a shorter pull, rails and bumpers keep more speed, and the extra
  * rolling drag ends the slow tail so a turn can finish.
+ *
+ * Launch speed grows with the arenas so a full flick still crosses the ring
+ * in about the same number of steps.
  */
 
 /** Hard cap on planar speed, in units per 1/60 s step. */
-export const MAX_PLANAR_SPEED = 2.05;
+export const MAX_PLANAR_SPEED = 2.05 * ARENA_SCALE;
 
 /** Drag distance (world units) times this is the launch speed, before the cap. */
-export const LAUNCH_POWER_MULTIPLIER = 0.36;
+export const LAUNCH_POWER_MULTIPLIER = 0.36 * ARENA_SCALE;
 
 /** Top speed a player or AI flick is allowed to set. */
-export const MAX_LAUNCH_SPEED = 2.05;
+export const MAX_LAUNCH_SPEED = 2.05 * ARENA_SCALE;
 
 /** Lock-on flicks use a set speed rather than the drag meter. */
-export const LOCKON_LAUNCH_SPEED = 1.65;
+export const LOCKON_LAUNCH_SPEED = 1.65 * ARENA_SCALE;
 
 /** Seconds an AI waits after its turn starts before it flicks. */
 export const AI_LAUNCH_DELAY = 0.4;

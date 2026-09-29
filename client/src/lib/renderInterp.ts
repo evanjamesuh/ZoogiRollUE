@@ -30,9 +30,15 @@ export function setInterpAlpha(nextAlpha: number): void {
   alpha = Math.min(1, Math.max(0, nextAlpha));
 }
 
+/** A step this large is a respawn, not a roll. Draw the store position. */
+const TELEPORT_DISTANCE = 2.5;
+
 export function visualPosition(id: string, fallback: Vec3): Vec3 {
   const sample = samples.get(id);
   if (!sample) return fallback;
+  const stepJump = Math.hypot(sample.curr[0] - sample.prev[0], sample.curr[2] - sample.prev[2]);
+  const storeJump = Math.hypot(fallback[0] - sample.curr[0], fallback[2] - sample.curr[2]);
+  if (stepJump > TELEPORT_DISTANCE || storeJump > TELEPORT_DISTANCE) return fallback;
   const t = alpha;
   return [
     sample.prev[0] + (sample.curr[0] - sample.prev[0]) * t,

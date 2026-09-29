@@ -1479,7 +1479,7 @@ test("a knockoff offset does not carry from one map into the next", async () => 
   });
   useZoogiGame.getState().startGame();
   assert.deepEqual(useZoogiGame.getState().elementTransforms.knockoffBoundaryOffset, { x: 0, y: 0, z: 0 });
-  assert.equal(useZoogiGame.getState().wallSettings.knockoffBoundaryRadius, 15.5);
+  assert.equal(useZoogiGame.getState().wallSettings.knockoffBoundaryRadius, 15.5 * 1.5);
 
   useZoogiGame.setState({
     selectedMap: "grass",
@@ -1490,7 +1490,7 @@ test("a knockoff offset does not carry from one map into the next", async () => 
   });
   useZoogiGame.getState().startGame();
   assert.deepEqual(useZoogiGame.getState().elementTransforms.knockoffBoundaryOffset, { x: 0, y: 0, z: 0 });
-  assert.equal(useZoogiGame.getState().wallSettings.knockoffBoundaryRadius, 15.5);
+  assert.equal(useZoogiGame.getState().wallSettings.knockoffBoundaryRadius, 15.5 * 1.5);
 });
 
 test("frozen ring ice patches coast without speeding a marble up", async () => {

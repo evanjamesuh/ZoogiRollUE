@@ -7,13 +7,14 @@
  */
 
 import type { MapLayout, ZonePlacement } from "./arenaColliders";
+import { scalePlay } from "./arenaScale";
 import { MAX_PLANAR_SPEED, RAIL_RESTITUTION } from "./simFeel";
 
-export const NEON_HALF_X = 12;
-export const NEON_HALF_Z = 8;
-export const NEON_RAIL_DEPTH = 0.7;
+export const NEON_HALF_X = scalePlay(12);
+export const NEON_HALF_Z = scalePlay(8);
+export const NEON_RAIL_DEPTH = scalePlay(0.7);
 /** How far each rail stops short of a corner, leaving a knockout mouth. */
-export const NEON_CORNER_GAP = 3.15;
+export const NEON_CORNER_GAP = scalePlay(3.15);
 
 export interface NeonRail {
   id: string;
@@ -82,7 +83,7 @@ export function neonBumpers(): NeonBumper[] {
     { id: "neon-post-c", x: -3.4, z: -4.6 },
     { id: "neon-pylon-west", x: -6.6, z: 5.6 },
     { id: "neon-pylon-east", x: 5.8, z: -2.6 },
-  ];
+  ].map((bumper) => ({ ...bumper, x: scalePlay(bumper.x), z: scalePlay(bumper.z) }));
 }
 
 export interface NeonBox {
@@ -106,7 +107,13 @@ export function neonObstacles(): NeonBox[] {
     { id: "pad-south", minX: 1.6, maxX: 3.8, minZ: -6.7, maxZ: -5.55 },
     { id: "channel-north", minX: -2.35, maxX: 2.35, minZ: 0.72, maxZ: 1.08 },
     { id: "channel-south", minX: -2.35, maxX: 2.35, minZ: -1.08, maxZ: -0.72 },
-  ];
+  ].map((box) => ({
+    ...box,
+    minX: scalePlay(box.minX),
+    maxX: scalePlay(box.maxX),
+    minZ: scalePlay(box.minZ),
+    maxZ: scalePlay(box.maxZ),
+  }));
 }
 
 function zoneAt(id: string, x: number, z: number, isSpawn: boolean): ZonePlacement {
@@ -124,19 +131,19 @@ export function neonCourtLayout(): MapLayout {
     id: "neon",
     floorRadius: NEON_HALF_Z,
     // Stored so other systems have a number. The live check is the rectangle.
-    knockoffRadius: NEON_HALF_X + 0.35,
-    orbRingRadius: 3.15,
+    knockoffRadius: NEON_HALF_X + scalePlay(0.35),
+    orbRingRadius: scalePlay(3.15),
     scenery: [],
     bumpers: neonBumpers(),
     zones: [
-      zoneAt("spawn-0", -6.4, -1.1, true),
-      zoneAt("spawn-1", 6.6, 1.05, true),
-      zoneAt("spawn-2", -1.15, 4.15, true),
-      zoneAt("spawn-3", 1.2, -4.05, true),
-      zoneAt("score-0", 7.6, 4.55, false),
-      zoneAt("score-1", -7.7, 4.4, false),
-      zoneAt("score-2", 7.8, -4.35, false),
-      zoneAt("score-3", -7.5, -4.5, false),
+      zoneAt("spawn-0", scalePlay(-6.4), scalePlay(-1.1), true),
+      zoneAt("spawn-1", scalePlay(6.6), scalePlay(1.05), true),
+      zoneAt("spawn-2", scalePlay(-1.15), scalePlay(4.15), true),
+      zoneAt("spawn-3", scalePlay(1.2), scalePlay(-4.05), true),
+      zoneAt("score-0", scalePlay(7.6), scalePlay(4.55), false),
+      zoneAt("score-1", scalePlay(-7.7), scalePlay(4.4), false),
+      zoneAt("score-2", scalePlay(7.8), scalePlay(-4.35), false),
+      zoneAt("score-3", scalePlay(-7.5), scalePlay(-4.5), false),
     ],
   };
 }

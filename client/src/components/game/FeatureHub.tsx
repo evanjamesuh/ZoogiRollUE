@@ -62,7 +62,7 @@ export function FeatureHub() {
   const [showCollections, setShowCollections] = useState(false);
 
   const handlePlayNow = () => {
-    setGameMode("practice");
+    setGameMode("classic");
     setPhase("character_selection");
   };
 

@@ -35,6 +35,7 @@ import { getDeviceId } from "@/lib/deviceId";
 import { COSMOS_STAGE, GRASS_STAGE, arabianPlayTransform, collectMatchSolids, getIcePatches, getMapLayout, knockoffOffsetForMap, resolveSolidCollision } from "../arenaColliders";
 import { isOutsideNeonCourt, resolveNeonRails } from "../neonCourt";
 import { ICE_LINEAR_DAMPING, ICE_ROLLING_DRAG, LINEAR_DAMPING, LOCKON_LAUNCH_SPEED, MARBLE_RESTITUTION, MAX_PLANAR_SPEED, REST_SPEED, ROLLING_DRAG } from "../simFeel";
+import { ORB_REST_Y, ZOOGI_REST_Y } from "../restHeight";
 
 export const DEFAULT_BACKGROUND_SETTINGS = {
   distance: 200,
@@ -1038,7 +1039,7 @@ const createOrbs = (ringRadius = 5): Orb[] => {
     
     orbs.push({
       id: `orb-${i}-${Math.random().toString(36).substr(2, 9)}`,
-      position: [x, 0.5, z],
+      position: [x, ORB_REST_Y, z],
       velocity: [0, 0, 0],
       color: orbColor,
       points: 50,
@@ -1121,7 +1122,7 @@ const createPracticeOrbs = (multiplier: 1 | 2 | 3 = 1): Orb[] => {
       
       orbs.push({
         id: `orb-r${ring}-i${i}`,
-        position: [x, 0.5, z],
+        position: [x, ORB_REST_Y, z],
         velocity: [0, 0, 0],
         color: colors[orbIndex % colors.length],
         points: 50,
@@ -1145,7 +1146,7 @@ const initializePracticeGame = (selectedZoogi: Zoogi, orbMultiplier: 1 | 2 | 3 =
   const playerEntity: GameEntity = {
     id: "player",
     zoogi: selectedZoogi,
-    position: [0, 0.5, 0],
+    position: [0, ZOOGI_REST_Y, 0],
     velocity: [0, 0, 0],
     health: 100,
     maxHealth: 100,
@@ -1390,8 +1391,8 @@ function actorTakingTurn(state: {
   isPlayerTurn: boolean;
   turnIndex: number;
   currentLocalPlayerIndex: number;
-  playerEntity: { velocity: [number, number, number]; isKnockedOut?: boolean } | null;
-  enemies: { velocity: [number, number, number]; isKnockedOut?: boolean }[];
+  playerEntity: { velocity: [number, number, number]; isKnockedOut?: boolean; isRespawning?: boolean } | null;
+  enemies: { velocity: [number, number, number]; isKnockedOut?: boolean; isRespawning?: boolean }[];
 }) {
   if (state.gameMode === "local_multiplayer") {
     if (state.currentLocalPlayerIndex <= 0) return state.playerEntity;
@@ -1538,9 +1539,9 @@ function respawnInsidePlayfield(
   const limit = Math.max(3, knockoffRadius - 2.5);
   if (dist > limit && dist > 0) {
     const scale = limit / dist;
-    return [pos[0] * scale, 0.5, pos[2] * scale];
+    return [pos[0] * scale, ZOOGI_REST_Y, pos[2] * scale];
   }
-  return [pos[0], 0.5, pos[2]];
+  return [pos[0], ZOOGI_REST_Y, pos[2]];
 }
 
 function readyToPlaceBack(entity: { isKnockedOut?: boolean; isRespawning?: boolean; respawnAt?: number | null } | null | undefined): boolean {
@@ -3593,7 +3594,11 @@ export const useZoogiGame = create<ZoogiGameState>()(
     
     endTurn: () => {
       const turnNow = Date.now();
-      if (turnNow - lastTurnEndedAt < 450) return;
+      const handingOff = actorTakingTurn(get());
+      const knockedOutHandoff = !!(handingOff && (handingOff.isKnockedOut || handingOff.isRespawning));
+      // A knockout has to hand the turn off even inside the debounce window.
+      // Otherwise the hidden marble keeps the turn and everyone else looks gone.
+      if (!knockedOutHandoff && turnNow - lastTurnEndedAt < 450) return;
       lastTurnEndedAt = turnNow;
       // Drop the launch flag only after the turn really advances. A debounced
       // call leaves it set so the next physics step can try again.
@@ -6290,6 +6295,21 @@ export const useZoogiGame = create<ZoogiGameState>()(
           : enemy
       ));
 
+      const ridingArc = (arc: { type?: string | null } | null | undefined) => arc?.type === "over";
+      if (!ridingArc(player.arcMovement)) {
+        player.position = [player.position[0], ZOOGI_REST_Y, player.position[2]];
+      }
+      enemies = enemies.map((enemy) => (
+        ridingArc(enemy.arcMovement)
+          ? enemy
+          : { ...enemy, position: [enemy.position[0], ZOOGI_REST_Y, enemy.position[2]] as [number, number, number] }
+      ));
+      orbs = orbs.map((orb) => (
+        orb.isActive
+          ? { ...orb, position: [orb.position[0], ORB_REST_Y, orb.position[2]] as [number, number, number] }
+          : orb
+      ));
+
       const stateUpdates: Partial<ZoogiGameState> = {
         playerEntity: player,
         enemies,
@@ -6343,7 +6363,9 @@ export const useZoogiGame = create<ZoogiGameState>()(
           turnSlowFrames = 0;
         }
         const actor = actorTakingTurn(settled);
-        if (actor && !actor.isKnockedOut) {
+        if (actor && (actor.isKnockedOut || actor.isRespawning)) {
+          get().endTurn();
+        } else if (actor && !actor.isKnockedOut) {
           const actorSpeed = Math.hypot(actor.velocity[0], actor.velocity[2]);
           if (!turnReadyForLaunch) {
             if (actorSpeed < 0.02) turnReadyForLaunch = true;

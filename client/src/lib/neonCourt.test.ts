@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { BUMPER_RADIUS, MARBLE_RADIUS, getMapLayout } from "./arenaColliders.ts";
 import {
+  NEON_CORNER_GAP,
   NEON_HALF_X,
   NEON_HALF_Z,
   isOutsideNeonCourt,
@@ -79,8 +80,8 @@ test("layout helper matches getMapLayout", () => {
 });
 
 test("raised pads and the center channel bounce, and the corner mouths stay open", () => {
-  const gapX = NEON_HALF_X - 3.15;
-  const gapZ = NEON_HALF_Z - 3.15;
+  const gapX = NEON_HALF_X - NEON_CORNER_GAP;
+  const gapZ = NEON_HALF_Z - NEON_CORNER_GAP;
   const boxes = neonObstacles();
   assert.ok(boxes.length >= 4);
 
