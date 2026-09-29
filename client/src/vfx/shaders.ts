@@ -106,10 +106,12 @@ varying float vVariant;
 
 void main() {
   float dist = length(vUv - 0.5);
-  float roundMask = smoothstep(0.5, 0.15, dist);
-  float n = fbm(vUv * 3.1 + vec2(uTime * 0.09, vVariant * 2.4));
-  float alpha = min(roundMask * (0.5 + 0.5 * n) * vOpacity, 0.7);
-  vec3 col = vec3(0.46, 0.56, 0.64) * (0.78 + 0.32 * n);
+  float n = fbm(vUv * 2.2 + vec2(uTime * 0.05, vVariant * 1.6));
+  float alpha = exp(-dist * dist * 8.0);
+  alpha *= smoothstep(0.5, 0.2, dist);
+  alpha = min(alpha * (0.72 + 0.28 * n) * vOpacity, 0.55);
+  vec3 col = vec3(0.34, 0.44, 0.52);
+  col *= mix(1.0, 0.62, smoothstep(0.02, 0.42, dist));
   gl_FragColor = vec4(col, alpha);
 }
 `.replace("void main()", `${PUFF_NOISE}\nvoid main()`);
@@ -147,19 +149,29 @@ export const RIBBON_FRAG = /* glsl */ `
 uniform vec3 uColor;
 uniform float uFade;
 uniform float uCloth;
+uniform float uEndFade;
 varying float vSide;
 varying float vAlong;
+
+float clothHash(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
 void main() {
-  float edge = smoothstep(1.0, 0.12, abs(vSide));
-  float core = exp(-vSide * vSide * 7.0);
-  float along = smoothstep(0.0, 0.06, vAlong) * smoothstep(1.0, 0.92, vAlong);
-  vec3 col = uColor * mix(0.55, 1.0, core);
+  float edge = smoothstep(1.0, 0.08, abs(vSide));
+  float core = exp(-vSide * vSide * 6.0);
+  float along = smoothstep(0.0, 0.16, vAlong) * smoothstep(1.0, 0.72, vAlong);
+  float tail = mix(1.0, smoothstep(1.0, 0.18, vAlong), uEndFade);
+  along *= tail;
+  vec3 col = uColor * mix(0.62, 1.0, core);
   if (uCloth > 0.5) {
-    float weave = 0.82 + 0.18 * sin(vAlong * 48.0);
-    col *= weave;
-    gl_FragColor = vec4(col, edge * along * uFade);
+    float stripe = 0.74 + 0.26 * sin(vAlong * 42.0);
+    float grit = clothHash(vec2(floor(vAlong * 48.0), floor(vSide * 5.0)));
+    float fray = mix(0.45 + 0.55 * grit, 1.0, smoothstep(0.0, 0.22, vAlong) * smoothstep(1.0, 0.78, vAlong));
+    col *= stripe * (0.86 + 0.14 * grit);
+    gl_FragColor = vec4(col, edge * along * fray * uFade);
   } else {
-    col = (col + uColor * core * 1.4) * 2.4;
+    col = (col + uColor * core * 2.2) * 3.4;
     gl_FragColor = vec4(col * edge * along * uFade, 1.0);
   }
 }
@@ -207,12 +219,14 @@ void main() {
 
 export const GLINT_FRAG = /* glsl */ `
 uniform vec3 uColor;
+uniform float uTime;
 varying vec2 vUv;
 void main() {
   float dist = length(vUv - 0.5);
   float edge = smoothstep(0.5, 0.16, dist);
   float core = exp(-dist * dist * 48.0);
-  vec3 col = uColor * (edge * 0.25 + core * 2.6);
+  float pulse = 0.62 + 0.38 * sin(uTime * 6.5);
+  vec3 col = uColor * (edge * 0.16 + core * 2.8) * pulse;
   gl_FragColor = vec4(col, 1.0);
 }
 `;
@@ -224,11 +238,11 @@ uniform float uWave;
 varying vec2 vUv;
 void main() {
   float r = length(vUv * 2.0 - 1.0);
-  float band = exp(-pow((r - uWave) / 0.2, 2.0));
-  float pool = (1.0 - smoothstep(0.05, 0.92, r)) * 0.72;
-  float edge = 1.0 - smoothstep(0.86, 1.0, r);
-  float alpha = (band * 1.25 + pool) * edge * uOpacity;
-  gl_FragColor = vec4(uColor * 3.6, alpha);
+  float band = exp(-pow((r - uWave) / 0.18, 2.0));
+  float pool = (1.0 - smoothstep(0.05, 0.8, r)) * 0.22;
+  float edge = 1.0 - smoothstep(0.72, 1.0, r);
+  float alpha = (band * 0.55 + pool) * edge * uOpacity;
+  gl_FragColor = vec4(uColor * 1.05, alpha);
 }
 `;
 
@@ -387,13 +401,14 @@ void main() {
   float nse = noiseW(vLocal.xy * 2.6 + vLocal.yz * 1.7 + vec2(uTime * 0.9, uTime * 0.45));
   float flick = 0.72 + 0.28 * sin(uTime * 17.0 + nse * 22.0);
   fres *= flick;
-  float rear = smoothstep(0.4, -0.55, vLocal.z);
-  float low = smoothstep(0.22, -0.42, vLocal.y);
-  float breakUp = clamp(rear * 1.05 + low * 1.05, 0.0, 1.0);
-  float wisp = smoothstep(0.38, 0.78, nse);
-  float mask = mix(0.92, wisp, breakUp);
-  vec3 col = vec3(0.58, 1.02, 1.25) * (0.72 + fres * 2.5);
-  float alpha = (0.46 + fres * 0.72) * uFade * mask;
+  float rear = smoothstep(0.15, -0.95, vLocal.z);
+  float low = smoothstep(0.42, -0.05, vLocal.y);
+  float breakUp = clamp(rear * 1.25 + low * 1.45, 0.0, 1.0);
+  float wisp = smoothstep(0.18, 0.55, nse);
+  float mask = mix(0.88, wisp * 0.42, breakUp);
+  fres *= mix(1.0, 0.35, breakUp);
+  vec3 col = vec3(0.55, 0.98, 1.22) * (1.05 + fres * 1.15);
+  float alpha = (0.58 + fres * 0.28) * uFade * mask;
   gl_FragColor = vec4(col, alpha);
 }
 `.replace("void main()", `${WOLF_NOISE}\nvoid main()`);

@@ -27,35 +27,89 @@ function radiusSpan(radius: number): number {
 }
 
 /**
- * Fewer, larger charcoal puffs. Most climb as a column that mushrooms;
- * the rest stay as a low base. They do not fill the blast radius.
+ * Overlapping puffs of mixed sizes. They start already stacked into a column
+ * so the cloud reads as one mass, then billow and mushroom.
  */
 export function seedBlastSmoke(pool: SpritePool, radius: number, rand: () => number, originY = 0.45): void {
-  const count = Math.min(pool.capacity, Math.max(6, Math.round(particleBudget().smoke * radiusSpan(radius))));
-  const columnCount = Math.max(3, Math.round(count * 0.58));
+  const budget = particleBudget().smoke;
+  const count = Math.min(pool.capacity, Math.max(10, Math.round(budget * 2 * radiusSpan(radius))));
   const scale = 0.82 + 0.18 * Math.min(radius / 8, 1.25);
   for (let n = 0; n < count; n++) {
-    const column = n < columnCount;
+    const column = n < Math.round(count * 0.72);
     const ang = rand() * Math.PI * 2;
-    const reach = column ? radius * (0.02 + rand() * 0.05) : radius * (0.12 + rand() * 0.18);
-    const speed = reach * SMOKE_DRAG;
-    const life = 1.85 + rand() * 0.45;
+    const band = n / count;
+    const reach = column ? radius * (0.02 + rand() * 0.06) : radius * (0.08 + rand() * 0.14);
+    const speed = reach * (column ? 0.55 : SMOKE_DRAG);
+    const life = 2.05 + rand() * 0.55;
+    const sizeRoll = rand();
+    const size = (sizeRoll < 0.28 ? 0.62 + rand() * 0.35 : sizeRoll < 0.7 ? 1.05 + rand() * 0.45 : 1.7 + rand() * 0.7) * scale;
     spawnSprite(pool, {
-      x: Math.cos(ang) * radius * (column ? 0.015 : 0.04),
-      y: originY + rand() * (column ? 0.2 : 0.12),
-      z: Math.sin(ang) * radius * (column ? 0.015 : 0.04),
+      x: Math.cos(ang) * (column ? 0.15 + rand() * 0.55 : 0.25 + rand() * 0.7),
+      y: originY + band * (column ? 2.15 : 0.35) + (rand() - 0.5) * 0.28,
+      z: Math.sin(ang) * (column ? 0.15 + rand() * 0.55 : 0.25 + rand() * 0.7),
       vx: Math.cos(ang) * speed,
-      vy: column ? 5.2 + rand() * 2.4 : 1.05 + rand() * 1.3,
+      vy: column ? 1.5 + rand() * 2.6 : 0.35 + rand() * 0.7,
       vz: Math.sin(ang) * speed,
       life,
-      size: (column ? 1.55 + rand() * 0.5 : 1.25 + rand() * 0.4) * scale,
-      grow: (0.28 + rand() * 0.32) * scale,
-      spin: (rand() - 0.5) * 0.35,
+      size,
+      grow: (0.22 + rand() * 0.38) * scale,
+      spin: (rand() - 0.5) * 0.4,
       r: 0.13,
       g: 0.135,
       b: 0.145,
       seed: rand() * 40 + (column ? 1000 : 0),
     });
+  }
+}
+
+/** Low dust that crawls outward along the ground under the column. */
+export function seedDustSkirt(pool: SpritePool, radius: number, rand: () => number, originY = 0.08): void {
+  const count = Math.min(pool.capacity, getSkirtCount());
+  for (let n = 0; n < count; n++) {
+    const ang = (n / count) * Math.PI * 2 + rand() * 0.4;
+    const speed = 1.1 + rand() * 1.8;
+    spawnSprite(pool, {
+      x: Math.cos(ang) * (0.2 + rand() * 0.35),
+      y: originY + rand() * 0.08,
+      z: Math.sin(ang) * (0.2 + rand() * 0.35),
+      vx: Math.cos(ang) * speed * Math.min(1, radius / 8),
+      vy: 0.05 + rand() * 0.2,
+      vz: Math.sin(ang) * speed * Math.min(1, radius / 8),
+      life: 1.5 + rand() * 0.6,
+      size: (0.7 + rand() * 1.15) * Math.min(1, 0.65 + radius / 20),
+      grow: 0.35 + rand() * 0.4,
+      spin: (rand() - 0.5) * 0.5,
+      r: 0.55,
+      g: 0.48,
+      b: 0.36,
+      seed: rand() * 8 + n,
+    });
+  }
+}
+
+function getSkirtCount(): number {
+  return particleBudget().smoke > 8 ? 14 : 8;
+}
+
+export function stepDustSkirt(pool: SpritePool, _elapsed: number, dt: number): void {
+  const drag = damp(1.15, dt);
+  for (let i = 0; i < pool.capacity; i++) {
+    if (pool.active[i] === 0) continue;
+    pool.life[i] -= dt;
+    if (pool.life[i] <= 0) {
+      killSprite(pool, i);
+      continue;
+    }
+    pool.vx[i] *= drag;
+    pool.vz[i] *= drag;
+    pool.vy[i] = Math.max(-0.05, pool.vy[i] - 0.8 * dt);
+    pool.px[i] += pool.vx[i] * dt;
+    pool.py[i] = Math.max(0.05, Math.min(0.28, pool.py[i] + pool.vy[i] * dt));
+    pool.pz[i] += pool.vz[i] * dt;
+    const age = 1 - pool.life[i] / pool.maxLife[i];
+    pool.opacity[i] = 0.55 * (1 - smoothstep((age - 0.35) / 0.65));
+    pool.size[i] = pool.size0[i] + pool.grow[i] * age;
+    pool.rot[i] += pool.spin[i] * dt;
   }
 }
 
@@ -294,8 +348,8 @@ export function emitMist(
     vy: 0.15 + rand * 0.55,
     vz: backZ * (0.9 + rand * 1.1) + (rand - 0.5) * 0.45,
     life: 0.55 + rand * 0.35,
-    size: 0.16 + rand * 0.18,
-    grow: 0.08 + rand * 0.12,
+    size: 0.22 + rand * 0.2,
+    grow: 0.1 + rand * 0.16,
     spin: (rand - 0.5) * 0.6,
     r: 0.46,
     g: 0.56,
@@ -378,6 +432,7 @@ export function seedBurstSparks(
   count: number,
   color: [number, number, number],
   dir: [number, number, number] = [0, 1, 0],
+  scale = 1,
 ): void {
   const len = Math.hypot(dir[0], dir[1], dir[2]) || 1;
   const dx = dir[0] / len;
@@ -385,18 +440,19 @@ export function seedBurstSparks(
   const dz = dir[2] / len;
   const n = Math.min(pool.capacity, count);
   for (let i = 0; i < n; i++) {
-    const point = rand() < 0.3;
-    const spread = (rand() - 0.5) * 1.4;
-    const side = (rand() - 0.5) * 1.4;
+    const point = rand() < 0.22;
+    const spread = (rand() - 0.5) * 0.85;
+    const side = (rand() - 0.5) * 0.85;
+    const kick = 0.75 + 0.25 * scale;
     spawnSprite(pool, {
-      x: (rand() - 0.5) * 0.12,
-      y: 0.15 + rand() * 0.25,
-      z: (rand() - 0.5) * 0.12,
-      vx: dx * (2.2 + rand() * 3.4) + spread,
-      vy: dy * (1.4 + rand() * 2.2) + 0.8 + rand(),
-      vz: dz * (2.2 + rand() * 3.4) + side,
-      life: 0.32 + rand() * 0.28,
-      size: (point ? 0.04 : 0.055) + rand() * 0.02,
+      x: (rand() - 0.5) * 0.08,
+      y: 0.12 + rand() * 0.2,
+      z: (rand() - 0.5) * 0.08,
+      vx: (dx * (3.4 + rand() * 4.2) + spread) * kick,
+      vy: (dy * (1.6 + rand() * 2.4) + 0.7 + rand() * 1.2) * kick,
+      vz: (dz * (3.4 + rand() * 4.2) + side) * kick,
+      life: 0.38 + rand() * 0.28,
+      size: ((point ? 0.07 : 0.11) + rand() * 0.05) * scale,
       grow: 0,
       spin: 0,
       r: color[0],
@@ -443,7 +499,7 @@ export function seedRisingEmbers(pool: SpritePool, rand: () => number, count: nu
       vy: 1.6 + rand() * 1.8,
       vz: Math.sin(ang) * (0.15 + rand() * 0.35),
       life: 0.7 + rand() * 0.35,
-      size: point ? 0.12 : 0.2 + rand() * 0.12,
+      size: point ? 0.08 : 0.12 + rand() * 0.06,
       grow: 0.01,
       spin: 0,
       r: 1,

@@ -112,15 +112,18 @@ function paintScorch(data: Uint8ClampedArray, size: number): void {
       const u = (x + 0.5) / size - 0.5;
       const v = (y + 0.5) / size - 0.5;
       const d = Math.hypot(u, v) * 2;
-      const n = fbm(u * 4.2 + 1.7, v * 3.6 + 6.4);
-      const ragged = Math.exp(-d * d * 1.15) * (0.55 + 0.45 * n);
-      const alpha = ragged * (d < 1.05 ? 1 : 0);
+      const n = fbm(u * 5.4 + 1.7, v * 4.8 + 6.4);
+      const lobe = fbm(u * 2.2 + 4.1, v * 2.6 + 0.7);
+      const limit = 0.42 + lobe * 0.38;
+      const fall = Math.max(0, 1 - d / limit);
+      const ragged = Math.pow(fall, 1.35) * (0.35 + 0.65 * n);
+      const alpha = d > limit ? 0 : ragged;
       const i = (y * size + x) * 4;
-      const tone = 10 + n * 16;
+      const tone = 18 + n * 22;
       data[i] = tone;
-      data[i + 1] = tone * 0.7;
-      data[i + 2] = tone * 0.48;
-      data[i + 3] = Math.max(0, Math.min(255, alpha * 220));
+      data[i + 1] = tone * 0.72;
+      data[i + 2] = tone * 0.5;
+      data[i + 3] = Math.max(0, Math.min(255, alpha * 180));
     }
   }
 }

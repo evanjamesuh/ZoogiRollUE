@@ -12,6 +12,8 @@ import {
   seedBlastEmbers,
   seedBlastFire,
   seedBlastSmoke,
+  seedDustSkirt,
+  stepDustSkirt,
   stepEmbers,
   stepFire,
   stepSmoke,
@@ -50,6 +52,7 @@ export function ExplosionBlast({
   const smoke = useMemo(() => createSpritePool(SMOKE_CAP), []);
   const fire = useMemo(() => createSpritePool(FIRE_CAP), []);
   const embers = useMemo(() => createSpritePool(EMBER_CAP), []);
+  const skirt = useMemo(() => createSpritePool(16), []);
   const clock = usePlayedClock(frozenElapsed);
   const blast = useRef(new THREE.Vector3());
   const warm = useRef(1);
@@ -63,10 +66,12 @@ export function ExplosionBlast({
     clearSpritePool(smoke);
     clearSpritePool(fire);
     clearSpritePool(embers);
+    clearSpritePool(skirt);
     seedBlastSmoke(smoke, radius, mulberry32(hashSeed(px, py, pz, startTime, 11)), lift);
     seedBlastFire(fire, radius, mulberry32(hashSeed(px, py, pz, startTime, 17)), lift);
     seedBlastEmbers(embers, radius, mulberry32(hashSeed(px, py, pz, startTime, 29)), lift);
-  }, [smoke, fire, embers, radius, px, py, pz, startTime, lift]);
+    seedDustSkirt(skirt, radius, mulberry32(hashSeed(px, py, pz, startTime, 41)), 0.08);
+  }, [smoke, fire, embers, skirt, radius, px, py, pz, startTime, lift]);
 
   const ringMaterial = useMemo(() => {
     return new THREE.ShaderMaterial({
@@ -96,6 +101,7 @@ export function ExplosionBlast({
       stepSmoke(smoke, elapsed, step);
       stepFire(fire, elapsed, step);
       stepEmbers(embers, elapsed, step);
+      stepDustSkirt(skirt, elapsed, step);
     }
 
     const flashAmt = elapsed < 0.16 ? Math.pow(1 - elapsed / 0.16, 1.2) : 0;
@@ -118,7 +124,7 @@ export function ExplosionBlast({
     if (scorchMat.current) {
       const arrive = Math.min(1, elapsed / 0.12);
       const fade = elapsed < 1.2 ? 1 : Math.max(0, 1 - (elapsed - 1.2) / 2.4);
-      scorchMat.current.opacity = 0.6 * arrive * fade;
+      scorchMat.current.opacity = 0.34 * arrive * fade;
     }
     {
       const wave = Math.min(1, elapsed / 0.32);
@@ -144,7 +150,7 @@ export function ExplosionBlast({
   return (
     <group position={[px, 0, pz]} renderOrder={3}>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
-        <circleGeometry args={[radius * 0.5, 40]} />
+        <circleGeometry args={[Math.max(0.7, radius * 0.16), 40]} />
         <meshBasicMaterial
           ref={scorchMat}
           map={textures.scorch}
@@ -183,6 +189,7 @@ export function ExplosionBlast({
         />
       </mesh>
       <InstancedSprites pool={smoke} mode="smoke" warm={warm} />
+      <InstancedSprites pool={skirt} mode="dust" />
       <InstancedSprites pool={fire} mode="fire" />
       <InstancedSprites pool={embers} mode="ember" />
     </group>

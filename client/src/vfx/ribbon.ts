@@ -3,7 +3,7 @@ import * as THREE from "three";
 const dir = new THREE.Vector3();
 const side = new THREE.Vector3();
 const up = new THREE.Vector3(0, 1, 0);
-const bin = new THREE.Vector3();
+const toView = new THREE.Vector3();
 
 export function createRibbonGeometry(segments: number): THREE.BufferGeometry {
   const geo = new THREE.BufferGeometry();
@@ -37,23 +37,36 @@ export function createRibbonGeometry(segments: number): THREE.BufferGeometry {
   return geo;
 }
 
-/** Writes a camera-width ribbon through `points`. `points.length` must be segments + 1. */
-export function writeRibbon(geo: THREE.BufferGeometry, points: ArrayLike<THREE.Vector3>, width: number): void {
+/**
+ * Writes a ribbon through `points`. Width faces `view` when given, so a bolt
+ * stays thick even when the path runs toward the camera.
+ * `points.length` must be segments + 1.
+ */
+export function writeRibbon(
+  geo: THREE.BufferGeometry,
+  points: ArrayLike<THREE.Vector3>,
+  width: number,
+  view?: THREE.Vector3,
+): void {
   const attr = geo.getAttribute("position") as THREE.BufferAttribute;
   const count = attr.count / 2;
   if (points.length < count) return;
   for (let i = 0; i < count; i++) {
     const prev = points[Math.max(0, i - 1)];
     const next = points[Math.min(count - 1, i + 1)];
+    const p = points[i];
     dir.subVectors(next, prev);
     if (dir.lengthSq() < 1e-8) dir.set(0, 0, 1);
     dir.normalize();
-    side.crossVectors(dir, up);
+    if (view) toView.subVectors(view, p);
+    else toView.copy(up);
+    if (toView.lengthSq() < 1e-8) toView.copy(up);
+    side.crossVectors(dir, toView);
+    if (side.lengthSq() < 1e-6) side.crossVectors(dir, up);
     if (side.lengthSq() < 1e-6) side.set(1, 0, 0);
     side.normalize().multiplyScalar(width);
-    const p = points[i];
-    attr.setXYZ(i * 2, p.x - side.x, p.y, p.z - side.z);
-    attr.setXYZ(i * 2 + 1, p.x + side.x, p.y, p.z + side.z);
+    attr.setXYZ(i * 2, p.x - side.x, p.y - side.y, p.z - side.z);
+    attr.setXYZ(i * 2 + 1, p.x + side.x, p.y + side.y, p.z + side.z);
   }
   attr.needsUpdate = true;
 }
@@ -100,7 +113,10 @@ export function layHelix(
   const n = out.length;
   for (let i = 0; i < n; i++) {
     const t = n === 1 ? 0 : i / (n - 1);
-    const ang = phase + time * 1.4 + t * Math.PI * 2 * turns;
-    out[i].set(Math.cos(ang) * radius, -0.32 + t * 0.95, Math.sin(ang) * radius);
+    const ang = phase + time * 1.6 + t * Math.PI * 2 * turns;
+    const wob = Math.sin(t * 19 + phase * 3) * 0.028 + Math.sin(ang * 2.2) * 0.018;
+    const r = radius + wob;
+    const y = -0.34 + t * 0.78 + Math.sin(t * 27 + phase) * 0.02;
+    out[i].set(Math.cos(ang) * r, y, Math.sin(ang) * r);
   }
 }

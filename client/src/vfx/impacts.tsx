@@ -50,7 +50,7 @@ function useImpacts(): ImpactEvent[] {
 function ImpactBurst({ impact }: { impact: ImpactEvent }) {
   const clock = usePlayedClock();
   const light = useRef<THREE.PointLight>(null);
-  const sparks = useMemo(() => createSpritePool(18), []);
+  const sparks = useMemo(() => createSpritePool(28), []);
   const dust = useMemo(() => createSpritePool(10), []);
   const electric = impact.kind === "electric";
   const dusty = impact.kind === "dust";
@@ -64,8 +64,8 @@ function ImpactBurst({ impact }: { impact: ImpactEvent }) {
     } else if (electric) {
       seedBurstSparks(sparks, rand, 10, [0.75, 0.9, 1], [0, 1, 0]);
     } else {
-      seedBurstSparks(sparks, rand, 14, [1, 0.78, 0.38], impact.dir);
-      seedDustPuff(dust, rand, 6);
+      seedBurstSparks(sparks, rand, 22, [1, 0.86, 0.45], impact.dir, 2.4);
+      seedDustPuff(dust, rand, 5);
     }
     return () => {
       clearSpritePool(sparks);
@@ -79,15 +79,18 @@ function ImpactBurst({ impact }: { impact: ImpactEvent }) {
       if (!dusty) stepGlints(sparks, elapsed, step);
       if (dusty || impact.kind === "spark") stepDust(dust, elapsed, step);
     }
-    const flash = elapsed < 0.08 ? 1 : Math.max(0, 1 - (elapsed - 0.08) / 0.16);
-    if (light.current) light.current.intensity = flash * (electric ? 14 : dusty ? 6 : 22);
+    const flash = elapsed < 0.08 ? 1 : Math.max(0, 1 - (elapsed - 0.08) / 0.18);
+    if (light.current) {
+      light.current.intensity = flash * (electric ? 10 : dusty ? 4 : 14);
+      light.current.distance = electric ? 1.8 : dusty ? 1.4 : 1.6;
+    }
     if (elapsed > 0.85) dismissImpact(impact.id);
   });
 
-  const color = electric ? "#d7ecff" : dusty ? "#e6c48a" : "#ffe2a8";
+  const color = electric ? "#e7f3ff" : dusty ? "#e6c48a" : "#ffc56a";
   return (
     <group position={impact.position}>
-      <pointLight ref={light} position={[0, 0.35, 0]} color={color} intensity={0} distance={4.5} decay={2} />
+      <pointLight ref={light} position={[0, 0.25, 0]} color={color} intensity={0} distance={1.6} decay={2} />
       {!dusty && <InstancedSprites pool={sparks} mode="ember" />}
       {(dusty || impact.kind === "spark") && <InstancedSprites pool={dust} mode="dust" />}
     </group>
