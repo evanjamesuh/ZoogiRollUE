@@ -30,12 +30,12 @@ function marks(prefix: string, distance: number, radius: number, height: number,
 }
 
 export const GRASS_RIM: RimMark[] = [
-  { id: "meadow-rock-0", angleDeg: 32, distance: 13.35, radius: 1.15, height: 0.85 },
-  { id: "meadow-rock-1", angleDeg: 70, distance: 13.5, radius: 1.05, height: 0.72 },
-  { id: "meadow-rock-2", angleDeg: 152, distance: 13.25, radius: 1.2, height: 0.9 },
-  { id: "meadow-rock-3", angleDeg: 196, distance: 13.45, radius: 1.1, height: 0.78 },
-  { id: "meadow-rock-4", angleDeg: 250, distance: 13.3, radius: 1.22, height: 0.88 },
-  { id: "meadow-rock-5", angleDeg: 332, distance: 13.4, radius: 1.08, height: 0.7 },
+  { id: "meadow-rock-0", angleDeg: 250, distance: 12.6, radius: 1.15, height: 0.85 },
+  { id: "meadow-rock-1", angleDeg: 69.5, distance: 12.6, radius: 1.05, height: 0.72 },
+  { id: "meadow-rock-2", angleDeg: 166, distance: 12.6, radius: 1.2, height: 0.9 },
+  { id: "meadow-rock-3", angleDeg: 290.5, distance: 12.6, radius: 1.1, height: 0.78 },
+  { id: "meadow-rock-4", angleDeg: 346, distance: 12.58, radius: 1.22, height: 0.88 },
+  { id: "meadow-rock-5", angleDeg: 110.5, distance: 12.6, radius: 1.08, height: 0.7 },
 ];
 
 /** Snowmen stand on the ice just inside the snowy lip. Footprint matches the base sphere. */

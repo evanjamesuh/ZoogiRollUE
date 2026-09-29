@@ -315,7 +315,7 @@ function MeadowFloor() {
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, MEADOW_GROUND_Y, 0]} receiveShadow>
         <circleGeometry args={[MEADOW_GROUND_RADIUS, 96]} />
-        <meshStandardMaterial map={outer} color="#e4efc0" roughness={1} />
+        <meshStandardMaterial map={outer} color="#6b8a3e" roughness={1} />
       </mesh>
     </group>
   );
@@ -331,7 +331,7 @@ function MeadowRimPiece({ mark, stump }: { mark: RimMark; stump: boolean }) {
     return (
       <group position={[x, 0, z]} rotation={[0, (mark.angleDeg * Math.PI) / 180, 0]}>
         <mesh position={[0, body / 2, 0]} castShadow receiveShadow>
-          <cylinderGeometry args={[mark.radius * 0.78, mark.radius * 0.9, body, 8]} />
+          <cylinderGeometry args={[mark.radius, mark.radius, body, 8]} />
           <meshStandardMaterial color="#6b4630" roughness={0.92} />
         </mesh>
         <mesh position={[0, body + cap / 2, 0]} castShadow receiveShadow>
