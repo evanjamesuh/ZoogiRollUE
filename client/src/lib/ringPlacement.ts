@@ -35,21 +35,42 @@ export function shiftBox(box: Aabb, dx: number, dz: number): Aabb {
   };
 }
 
+/** Nothing visual may enter this radius. The knockoff line is 15.5. */
+export const RING_VISUAL_LIMIT = 15.55;
+
+export type RingPieceAction = "hide" | "push" | "clip" | "keep";
+
 /**
- * Hide the playfield slab and sky domes. Props, even flat ones like a pool,
- * stay so they can be moved outside the ring.
+ * Hide the painted playfield slab and the arabian sky shells.
+ * Building faces are also named FrontSide/BackSide, so the name alone does
+ * not hide them. A flat slab centred on the ring is the old floor.
  */
 export function shouldHideRingPiece(name: string, box: Aabb): boolean {
-  if (/sky|skydome|backdrop|FrontSide|BackSide/i.test(name)) return true;
+  if (/sky|skydome|backdrop/i.test(name)) return true;
+  if (/^(FrontSide_18|FrontSide_20|BackSide_2)$/.test(name)) return true;
   const size = boxSize(box);
   const xz = Math.max(size.x, size.z);
+  if (size.y > 120 && xz > 400) return true;
   const centerDist = Math.hypot((box.minX + box.maxX) / 2, (box.minZ + box.maxZ) / 2);
   const flat = size.y < 1.8;
-  const surrounds = box.minX < -40 && box.maxX > 40 && box.minZ < -40 && box.maxZ > 40 && size.y > 30;
-  if (surrounds && size.y > xz * 0.45) return true;
   if (flat && xz > 12 && centerDist < ROUND_KNOCKOFF_RADIUS) return true;
   if (closestDistanceXZ(box) < 0.5 && flat && xz > 8) return true;
   return false;
+}
+
+/**
+ * What to do with a mesh that may cross the ring.
+ * Small props on one side slide outward. A shell wrapped around the origin
+ * is clipped so the part outside the ring stays where the art placed it.
+ */
+export function ringPieceAction(name: string, box: Aabb, minRadius: number): RingPieceAction {
+  if (shouldHideRingPiece(name, box)) return "hide";
+  if (minRadius >= RING_VISUAL_LIMIT) return "keep";
+  const size = boxSize(box);
+  const xz = Math.max(size.x, size.z);
+  const center = Math.hypot((box.minX + box.maxX) / 2, (box.minZ + box.maxZ) / 2);
+  if (xz <= 36 && center >= 4) return "push";
+  return "clip";
 }
 
 /**

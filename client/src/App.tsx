@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useState } from "react";
-import { useZoogiGame } from "@/lib/stores/useZoogiGame";
+import { useZoogiGame, ZOOGI_ROSTER, type MapTheme } from "@/lib/stores/useZoogiGame";
 import { useAudio } from "@/lib/stores/useAudio";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
@@ -75,8 +75,31 @@ function RingerTrialsLoading() {
   );
 }
 
+const PLAY_MAPS: MapTheme[] = ["grass", "ice", "lava", "space", "saturn", "tomb"];
+
+/** Opens a match directly: /?play=grass&debug=colliders&view=top */
+function usePlayShortcut() {
+  const selectMap = useZoogiGame((state) => state.selectMap);
+  const selectZoogi = useZoogiGame((state) => state.selectZoogi);
+  const startGame = useZoogiGame((state) => state.startGame);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const play = params.get("play");
+    if (!play || !PLAY_MAPS.includes(play as MapTheme)) return;
+    selectZoogi(ZOOGI_ROSTER[0]);
+    selectMap(play as MapTheme);
+    startGame();
+    if (params.get("view") === "top") {
+      window.setTimeout(() => {
+        if (!useZoogiGame.getState().birdsEyeView) useZoogiGame.getState().toggleBirdsEyeView();
+      }, 80);
+    }
+  }, [selectMap, selectZoogi, startGame]);
+}
+
 function App() {
   const powerPreview = usePowerPreview();
+  usePlayShortcut();
   const phase = useZoogiGame((state) => state.phase);
   const { setHitSound, setSuccessSound, setMenuMusic, menuMusic, isMuted, stopMenuMusic, initAudioContext } = useAudio();
 

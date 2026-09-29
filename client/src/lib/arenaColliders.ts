@@ -26,9 +26,13 @@ export const SNOWMAN_RADIUS = 0.55;
 export const REST_SPEED = 0.02;
 
 export const GRASS_STAGE = {
-  /** floating_island_stage.glb. The round playfield is drawn separately. */
-  modelScale: 60,
-  modelOffsetY: 0,
+  /**
+   * floating_island_stage.glb is about 1.5 units across. Scale 48 makes the
+   * cliffs a ring around the grass circle. The round floor is drawn in code,
+   * and the model's own grass disc is hidden.
+   */
+  modelScale: 48,
+  modelOffsetY: -2.4,
   groundRadius: ROUND_FLOOR_RADIUS,
 };
 
@@ -57,18 +61,14 @@ export const COSMOS_STAGE = {
 };
 
 /**
- * arabian_nights_stage.glb is authored around (-656.5, 556.6, 11). The anchor
- * puts the courtyard near the origin and the floor on y=0. The round tiled
- * plaza is drawn in code. Palace, domes, colonnade, and pool are pushed
- * outside the knockoff line and are not solids.
+ * arabian_nights_stage.glb is authored around (-656.5, 556.6, 11). That point
+ * is the courtyard. The anchor puts it on the origin and the floor on y=0.
+ * The round tiled plaza is drawn in code. Palace, domes, colonnade, and the
+ * sunken pool stay outside the knockoff line and are not solids.
  */
-const ARABIAN_PLAZA_SHIFT: [number, number] = [4, 16];
-
 export const ARABIAN_STAGE = {
   modelScale: 0.48,
   floorCenter: [-656.5, 556.6, 11] as [number, number, number],
-  plazaAnchor: [-526.5, 556.6, 11] as [number, number, number],
-  plazaShift: ARABIAN_PLAZA_SHIFT,
   plazaCenter: [0, 0] as [number, number],
   floorRadius: ROUND_FLOOR_RADIUS,
   knockoffRadius: ROUND_KNOCKOFF_RADIUS,
@@ -178,9 +178,8 @@ export function getTombBackdrop(): TombPiece[] {
 
 export function arabianPlayTransform(): { x: number; y: number; z: number; scale: number } {
   const scale = ARABIAN_STAGE.modelScale;
-  const [x, y, z] = ARABIAN_STAGE.plazaAnchor;
-  const [shiftX, shiftZ] = ARABIAN_STAGE.plazaShift;
-  return { x: -scale * x + shiftX, y: -scale * y, z: -scale * z + shiftZ, scale };
+  const [x, y, z] = ARABIAN_STAGE.floorCenter;
+  return { x: -scale * x, y: -scale * y, z: -scale * z, scale };
 }
 
 /** Every map's out-line is centred on the origin. Callers must apply this on each map so a previous map cannot leave a leftover shift. */

@@ -4,25 +4,19 @@ import { useFrame } from "@react-three/fiber";
 import { useAnimations, useGLTF } from "@react-three/drei";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import {
-  ARABIAN_STAGE,
   GRASS_STAGE,
   WINTER_STAGE,
   arabianPlayTransform,
   getMapLayout,
+  setWinterCampActive,
   type SolidCircle,
 } from "@/lib/arenaColliders";
-import { ROUND_KNOCKOFF_RADIUS } from "@/lib/roundRim";
-import {
-  boxSize,
-  closestDistanceXZ,
-  shouldHideRingPiece,
-  translationToClear,
-  type Aabb,
-} from "@/lib/ringPlacement";
+import { GRASS_RIM, ROUND_KNOCKOFF_RADIUS, rimPosition, type RimMark } from "@/lib/roundRim";
+import { RING_VISUAL_LIMIT, ringPieceAction, type Aabb } from "@/lib/ringPlacement";
 
 const EDGE = ROUND_KNOCKOFF_RADIUS;
 const RIM_INNER = 14.7;
-const SCENERY_LIMIT = EDGE + 0.85;
+const MEADOW_HIDE = /^(Grass\d|B_\d|Base_|Chain_|pPlatonic)/;
 
 class ModelErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   constructor(props: { children: ReactNode }) {
@@ -284,25 +278,60 @@ function MeadowFlowers() {
   );
 }
 
+/** A stone from the island, scaled so its widest point matches the rim collider. */
+function placeRimRock(source: THREE.Object3D, mark: RimMark): THREE.Group {
+  const clone = source.clone(true);
+  clone.position.set(0, 0, 0);
+  clone.rotation.set(0, 0, 0);
+  clone.scale.set(1, 1, 1);
+  clone.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(clone);
+  const center = box.getCenter(new THREE.Vector3());
+  clone.position.set(-center.x, -box.min.y, -center.z);
+  clone.updateMatrixWorld(true);
+  let maxR = 0.001;
+  const v = new THREE.Vector3();
+  clone.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const pos = mesh.geometry.getAttribute("position");
+    if (!pos) return;
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos as THREE.BufferAttribute, i).applyMatrix4(mesh.matrixWorld);
+      maxR = Math.max(maxR, Math.hypot(v.x, v.z));
+    }
+  });
+  const wrapper = new THREE.Group();
+  wrapper.add(clone);
+  wrapper.scale.setScalar(mark.radius / maxR);
+  const { x, z } = rimPosition(mark);
+  wrapper.position.set(x, 0, z);
+  wrapper.rotation.y = (mark.angleDeg * Math.PI) / 180;
+  wrapper.traverse((obj) => {
+    if (obj instanceof THREE.Mesh) {
+      obj.castShadow = true;
+      obj.receiveShadow = true;
+    }
+  });
+  return wrapper;
+}
+
 function MeadowRocks() {
-  const rockMap = useMemo(() => paintedTexture(rockDraw, 1, 1, 256), []);
-  const rocks = useMemo(() => sceneryOf("grass").filter((solid) => solid.kind === "rock"), []);
-  return (
-    <group>
-      {rocks.map((rock) => (
-        <mesh
-          key={rock.id}
-          position={[rock.x, rock.radius * 0.42, rock.z]}
-          scale={[rock.radius, rock.radius * 0.62, rock.radius * 0.92]}
-          castShadow
-          receiveShadow
-        >
-          <icosahedronGeometry args={[1, 1]} />
-          <meshStandardMaterial map={rockMap} color="#c4b4a4" roughness={0.92} />
-        </mesh>
-      ))}
-    </group>
-  );
+  const { scene } = useGLTF("/models/floating_island_stage.glb");
+  const group = useMemo(() => {
+    const sources: THREE.Object3D[] = [];
+    scene.traverse((obj) => {
+      if (/^S_\d+$/.test(obj.name) && obj.parent?.name === "Stones") sources.push(obj);
+    });
+    sources.sort((a, b) => a.name.localeCompare(b.name));
+    const root = new THREE.Group();
+    if (sources.length === 0) return root;
+    GRASS_RIM.forEach((mark, i) => {
+      root.add(placeRimRock(sources[i % sources.length], mark));
+    });
+    return root;
+  }, [scene]);
+  return <primitive object={group} />;
 }
 
 function SnowLip() {
@@ -367,95 +396,212 @@ function toAabb(box: THREE.Box3): Aabb {
   };
 }
 
-function findContentRoot(scene: THREE.Object3D): THREE.Object3D {
-  let node = scene;
-  for (let i = 0; i < 8; i++) {
-    const kids = node.children.filter((child) => child.type !== "Bone" && !child.type.includes("Camera") && !child.type.includes("Light"));
-    if (kids.length !== 1) break;
-    if ((kids[0] as THREE.Mesh).isMesh) break;
-    node = kids[0];
-  }
-  return node;
-}
-
-function applyWorldXZ(object: THREE.Object3D, dx: number, dz: number) {
+function applyWorldDelta(object: THREE.Object3D, dx: number, dy: number, dz: number) {
   const parent = object.parent;
   if (!parent) {
     object.position.x += dx;
+    object.position.y += dy;
     object.position.z += dz;
     return;
   }
   parent.updateWorldMatrix(true, false);
   const inverse = new THREE.Matrix4().copy(parent.matrixWorld).invert();
   const origin = new THREE.Vector3(0, 0, 0).applyMatrix4(inverse);
-  const moved = new THREE.Vector3(dx, 0, dz).applyMatrix4(inverse);
+  const moved = new THREE.Vector3(dx, dy, dz).applyMatrix4(inverse);
   object.position.x += moved.x - origin.x;
+  object.position.y += moved.y - origin.y;
   object.position.z += moved.z - origin.z;
 }
 
-function collectPieces(node: THREE.Object3D): THREE.Object3D[] {
-  const pieces: THREE.Object3D[] = [];
-  for (const child of node.children) {
-    if (!child.visible || child.type === "Bone" || child.type.includes("Light") || child.type.includes("Camera")) continue;
-    child.updateWorldMatrix(true, true);
-    const box = new THREE.Box3().setFromObject(child);
-    if (box.isEmpty()) continue;
-    const aabb = toAabb(box);
-    const size = boxSize(aabb);
-    const coversPlay = closestDistanceXZ(aabb) < EDGE && Math.max(size.x, size.z) > 8;
-    const mesh = (child as THREE.Mesh).isMesh;
-    if (coversPlay && !mesh && child.children.length > 0) {
-      pieces.push(...collectPieces(child));
-    } else {
-      pieces.push(child);
-    }
-  }
-  return pieces;
+interface UnitMeasure {
+  minR: number;
+  minY: number;
+  cx: number;
+  cz: number;
+  box: THREE.Box3;
 }
 
-function placeAroundRing(root: THREE.Object3D): { hid: number; moved: number; kept: number } | null {
-  if (root.userData.ringArranged) return null;
-  root.userData.ringArranged = true;
-  const content = findContentRoot(root);
-  let hid = 0;
-  let moved = 0;
-  let kept = 0;
-  const plans: { child: THREE.Object3D; hide: boolean; dx: number; dz: number }[] = [];
+function measureUnit(object: THREE.Object3D): UnitMeasure | null {
+  object.updateWorldMatrix(true, true);
+  const box = new THREE.Box3().setFromObject(object);
+  if (box.isEmpty()) return null;
+  let minR = Infinity;
+  let minY = Infinity;
+  let sx = 0;
+  let sz = 0;
+  let n = 0;
+  const v = new THREE.Vector3();
+  object.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.visible || !mesh.isMesh) return;
+    const pos = mesh.geometry?.getAttribute("position") as THREE.BufferAttribute | undefined;
+    if (!pos) return;
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld);
+      const r = Math.hypot(v.x, v.z);
+      if (r < minR) minR = r;
+      if (v.y < minY) minY = v.y;
+      sx += v.x;
+      sz += v.z;
+      n += 1;
+    }
+  });
+  if (n === 0) return null;
+  return { minR, minY, cx: sx / n, cz: sz / n, box };
+}
 
-  for (const child of collectPieces(content)) {
-    child.updateWorldMatrix(true, true);
-    let box = new THREE.Box3().setFromObject(child);
-    if (box.isEmpty()) continue;
-    let aabb = toAabb(box);
-    if (shouldHideRingPiece(child.name, aabb)) {
-      plans.push({ child, hide: true, dx: 0, dz: 0 });
+function ancestorHidden(object: THREE.Object3D, root: THREE.Object3D): boolean {
+  let node: THREE.Object3D | null = object;
+  while (node && node !== root) {
+    if (!node.visible) return true;
+    node = node.parent;
+  }
+  return false;
+}
+
+function clipMesh(mesh: THREE.Mesh, limit: number, fullHeight: boolean) {
+  const geom = mesh.geometry;
+  const pos = geom.getAttribute("position") as THREE.BufferAttribute | undefined;
+  if (!pos) return;
+  const index = geom.getIndex();
+  const triCount = index ? index.count / 3 : pos.count / 3;
+  const keep: number[] = [];
+  const v = new THREE.Vector3();
+  const bad = (vi: number) => {
+    v.fromBufferAttribute(pos, vi).applyMatrix4(mesh.matrixWorld);
+    if (Math.hypot(v.x, v.z) >= limit) return false;
+    if (fullHeight) return v.y > -1.5;
+    return v.y > -0.45 && v.y < 22;
+  };
+  let removed = 0;
+  for (let t = 0; t < triCount; t++) {
+    const a = index ? index.getX(t * 3) : t * 3;
+    const b = index ? index.getX(t * 3 + 1) : t * 3 + 1;
+    const c = index ? index.getX(t * 3 + 2) : t * 3 + 2;
+    if (bad(a) || bad(b) || bad(c)) {
+      removed += 1;
       continue;
     }
-    const xz = Math.max(boxSize(aabb).x, boxSize(aabb).z);
-    if (xz > 26) {
-      child.scale.multiplyScalar(16 / xz);
-      child.updateWorldMatrix(true, true);
-      box = new THREE.Box3().setFromObject(child);
-      aabb = toAabb(box);
-    }
-    const shift = translationToClear(aabb, SCENERY_LIMIT, 32);
-    plans.push({ child, hide: false, dx: shift.dx, dz: shift.dz });
+    keep.push(a, b, c);
   }
+  if (removed === 0) return;
+  if (keep.length === 0) {
+    mesh.visible = false;
+    return;
+  }
+  const next = new THREE.BufferGeometry();
+  for (const name of Object.keys(geom.attributes)) {
+    const attr = geom.getAttribute(name) as THREE.BufferAttribute;
+    const item = attr.itemSize;
+    const arr = new Float32Array(keep.length * item);
+    for (let i = 0; i < keep.length; i++) {
+      for (let k = 0; k < item; k++) arr[i * item + k] = attr.getComponent(keep[i], k);
+    }
+    next.setAttribute(name, new THREE.BufferAttribute(arr, item, attr.normalized));
+  }
+  mesh.geometry = next;
+}
 
-  for (const plan of plans) {
-    if (plan.hide) {
-      plan.child.visible = false;
+function clipUnit(object: THREE.Object3D, limit: number, fullHeight: boolean) {
+  object.updateWorldMatrix(true, true);
+  object.traverse((child) => {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.visible) return;
+    clipMesh(mesh, limit, fullHeight);
+  });
+}
+
+function pushUnit(object: THREE.Object3D, limit: number) {
+  for (let step = 0; step < 6; step++) {
+    const measured = measureUnit(object);
+    if (!measured || measured.minR >= limit) return;
+    let dx = measured.cx;
+    let dz = measured.cz;
+    const len = Math.hypot(dx, dz);
+    if (len < 1e-3) return;
+    dx /= len;
+    dz /= len;
+    const dist = Math.min(48, limit + 0.35 - measured.minR);
+    if (dist <= 0.02) return;
+    applyWorldDelta(object, dx * dist, 0, dz * dist);
+    object.updateWorldMatrix(true, true);
+  }
+}
+
+function collectUnits(root: THREE.Object3D): THREE.Object3D[] {
+  const units: THREE.Object3D[] = [];
+  const claimed = new Set<THREE.Object3D>();
+  root.traverse((obj) => {
+    if (!obj.visible || claimed.has(obj)) return;
+    const parent = obj.parent;
+    if (parent && /^Tree\d+$/.test(parent.name)) {
+      if (!claimed.has(parent)) {
+        units.push(parent);
+        claimed.add(parent);
+      }
+      return;
+    }
+    if (parent?.name === "Lower_base2") {
+      if (!claimed.has(parent)) {
+        units.push(parent);
+        claimed.add(parent);
+      }
+      return;
+    }
+    if ((obj as THREE.Mesh).isMesh) units.push(obj);
+  });
+  return units;
+}
+
+function arrangeRing(root: THREE.Object3D, map: "grass" | "ice" | "saturn"): { hid: number; pushed: number; clipped: number; kept: number } | null {
+  if (root.userData.ringArranged) return null;
+  root.userData.ringArranged = true;
+  let hid = 0;
+  let pushed = 0;
+  let clipped = 0;
+  let kept = 0;
+
+  root.traverse((obj) => {
+    if (map === "grass" && (MEADOW_HIDE.test(obj.name) || obj.name === "Lower_base" || obj.name === "Stones")) {
+      obj.visible = false;
+    }
+    if (map === "saturn" && obj.name === "FrontSide_2") {
+      applyWorldDelta(obj, 0, 3.5, 0);
+    }
+  });
+
+  for (const unit of collectUnits(root)) {
+    if (ancestorHidden(unit, root)) continue;
+    const measured = measureUnit(unit);
+    if (!measured) continue;
+    const aabb = toAabb(measured.box);
+    const action = ringPieceAction(unit.name, aabb, measured.minR);
+    if (action === "hide") {
+      unit.visible = false;
       hid += 1;
       continue;
     }
-    if (Math.hypot(plan.dx, plan.dz) > 0.02) {
-      applyWorldXZ(plan.child, plan.dx, plan.dz);
-      moved += 1;
-    } else {
-      kept += 1;
+    if (action === "push") {
+      const before = measured.minR;
+      pushUnit(unit, RING_VISUAL_LIMIT);
+      const after = measureUnit(unit);
+      if (after && after.minR > before + 0.05) pushed += 1;
+      if (after && after.minR < RING_VISUAL_LIMIT) {
+        clipUnit(unit, RING_VISUAL_LIMIT, after.minY < 5);
+        clipped += 1;
+      } else {
+        kept += 1;
+      }
+      continue;
     }
+    if (action === "clip") {
+      clipUnit(unit, RING_VISUAL_LIMIT, measured.minY < 5);
+      clipped += 1;
+      continue;
+    }
+    kept += 1;
   }
-  return { hid, moved, kept };
+  return { hid, pushed, clipped, kept };
 }
 
 interface IdleNode {
@@ -514,8 +660,10 @@ function RingStage({
       }
       group.updateMatrixWorld(true);
       if (arrange) {
-        const stats = placeAroundRing(clone);
-        if (stats) console.info(`[ring] ${url} hid ${stats.hid}, moved ${stats.moved}, kept ${stats.kept}`);
+        const map = url.includes("winter") ? "ice" : url.includes("arabian") ? "saturn" : "grass";
+        const stats = arrangeRing(clone, map);
+        if (stats) console.info(`[ring] ${url} hid ${stats.hid}, pushed ${stats.pushed}, clipped ${stats.clipped}, kept ${stats.kept}`);
+        if (map === "ice") setWinterCampActive(true);
       }
       if (idle === "winter") idleRef.current = collectWinterIdle(clone);
       clone.traverse((obj) => {
@@ -528,6 +676,7 @@ function RingStage({
     run();
     return () => {
       cancelled = true;
+      if (url.includes("winter")) setWinterCampActive(false);
     };
   }, [clone, arrange, idle, url]);
 
@@ -572,9 +721,9 @@ export function MeadowArena() {
   return (
     <group>
       <RoundIsland kind="grass" lip="#efe6d4" underside="#241c16" sideColor="#b7a394" />
-      <MeadowRocks />
       <MeadowFlowers />
       <StageBoundary>
+        <MeadowRocks />
         <RingStage
           url="/models/floating_island_stage.glb"
           position={position}

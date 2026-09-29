@@ -21,7 +21,7 @@ import {
   setWinterCampActive,
   subscribeWinterCamp,
 } from "./arenaColliders.ts";
-import { shouldHideRingPiece, translationToClear, type Aabb } from "./ringPlacement.ts";
+import { ringPieceAction, shouldHideRingPiece, translationToClear, type Aabb } from "./ringPlacement.ts";
 
 const MAPS = ["grass", "ice", "lava", "space", "saturn", "tomb"] as const;
 const SCORE_ZONE_RADIUS = 4;
@@ -160,8 +160,9 @@ test("fitted stages keep the knockoff on the measured floor", () => {
   assert.ok(Math.abs(saturn.knockoffRadius - 15.5) < 0.02, "arabian plaza circle sits on the origin");
   assert.ok(saturn.knockoffRadius - saturn.floorRadius < 0.6, "fallback disk ends at the out line");
   const placed = arabianPlayTransform();
-  assert.ok(Math.abs(placed.x - 256.72) < 0.05, "stage shift +4 x");
-  assert.ok(Math.abs(placed.z - 10.72) < 0.05, "stage shift +16 z");
+  assert.ok(Math.abs(placed.x - 315.12) < 0.05, "courtyard centred on x");
+  assert.ok(Math.abs(placed.y + 267.168) < 0.05, "floor sits on y=0");
+  assert.ok(Math.abs(placed.z + 5.28) < 0.05, "courtyard centred on z");
   assert.equal(lava.scenery.length, 6, "south outer hoodoo is present");
   for (const hoodoo of lava.scenery) {
     assert.ok(hoodoo.radius <= 0.25 * 2.8 + 1e-6, `${hoodoo.id} is trimmed to the stone`);
@@ -370,9 +371,14 @@ function box(minX: number, minY: number, minZ: number, maxX: number, maxY: numbe
 test("ring placement hides the playfield slab and pushes props outside", () => {
   const floor = box(-16, 0, -16, 16, 0.4, 16);
   assert.equal(shouldHideRingPiece("PlazaFloor", floor), true);
-  assert.equal(shouldHideRingPiece("FrontSide_5", box(-80, 0, -80, 80, 40, 80)), true);
+  assert.equal(shouldHideRingPiece("FrontSide_5", box(-80, 0, -80, 80, 40, 80)), false);
+  assert.equal(shouldHideRingPiece("BackSide_2", box(-800, -50, -800, 800, 400, 800)), true);
+  assert.equal(shouldHideRingPiece("FrontSide_20", box(0, 0, 0, 1, 1, 1)), true);
   const pool = box(2, 0, 4, 7, 0.3, 9);
   assert.equal(shouldHideRingPiece("Pool", pool), false);
+  assert.equal(ringPieceAction("box", box(10, 0, -1, 14, 2, 1), 10), "push");
+  assert.equal(ringPieceAction("ground", box(-30, 0, -30, 30, 4, 30), 0), "clip");
+  assert.equal(ringPieceAction("fir", box(20, 0, -2, 26, 8, 4), 20), "keep");
   const pushed = translationToClear(pool, 16.35, 32);
   const moved = {
     minX: pool.minX + pushed.dx,
