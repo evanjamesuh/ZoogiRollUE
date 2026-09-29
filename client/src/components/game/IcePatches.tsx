@@ -1,6 +1,4 @@
-import * as THREE from "three";
-import { useMemo, useRef } from "react";
-import { useFrame } from "@react-three/fiber";
+import { useMemo } from "react";
 import { getIcePatches } from "@/lib/arenaColliders";
 
 interface IcePatch {
@@ -30,30 +28,18 @@ export function IcePatches() {
 }
 
 function IcePatchMesh({ patch }: { patch: IcePatch }) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  
-  useFrame((state) => {
-    if (meshRef.current) {
-      const material = meshRef.current.material as THREE.MeshStandardMaterial;
-      material.opacity = 0.6 + Math.sin(state.clock.elapsedTime * 2 + patch.rotation) * 0.1;
-    }
-  });
-
   return (
-    <mesh
-      ref={meshRef}
-      position={patch.position}
-      rotation={[-Math.PI / 2, 0, patch.rotation]}
-    >
-      <circleGeometry args={[patch.radius, 12]} />
+    <mesh position={patch.position} rotation={[-Math.PI / 2, 0, patch.rotation]}>
+      <circleGeometry args={[patch.radius, 48]} />
       <meshStandardMaterial
-        color="#B8E8FF"
+        color="#1486c0"
         transparent
-        opacity={0.6}
-        roughness={0.1}
-        metalness={0.3}
-        emissive="#88D4FF"
-        emissiveIntensity={0.2}
+        opacity={0.74}
+        roughness={0.22}
+        metalness={0.04}
+        emissive="#083e68"
+        emissiveIntensity={0.22}
+        depthWrite={false}
       />
     </mesh>
   );
