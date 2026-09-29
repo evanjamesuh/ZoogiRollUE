@@ -364,6 +364,7 @@ export function CharacterSelection() {
       )}
       
       <div className={`allow-pan-y flex-1 flex flex-col p-4 relative z-10 overflow-y-auto ${phone ? "phone-safe-top" : ""}`}>
+        <div className={phone ? "my-auto flex w-full flex-col gap-3" : undefined}>
         <motion.h1
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -403,6 +404,7 @@ export function CharacterSelection() {
         ) : (
           detail
         )}
+        </div>
       </div>
 
       {!phone && aiRow}

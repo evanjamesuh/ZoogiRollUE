@@ -136,12 +136,14 @@
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 2px;
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior: contain;
   touch-action: pan-x;
-  padding: 4px 8px;
+  padding: 4px;
+  scrollbar-width: none;
   border-radius: 16px;
   background: rgba(0, 0, 0, 0.45);
 }
