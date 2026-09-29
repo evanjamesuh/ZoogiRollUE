@@ -6,6 +6,7 @@ import { usePlayedClock } from "@/vfx/bursts";
 import { emitImpact } from "@/vfx/impacts";
 import { BoltDischarge, StunCrawlers, UnlockGlow } from "@/vfx/powerLooks";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
+import { ZOOGI_FX_SCALE } from "@/lib/restHeight";
 
 export { ExplosionBlast } from "@/vfx/ExplosionBlast";
 
@@ -154,7 +155,7 @@ export function ShadowPulse({
     if (ringMat.current) ringMat.current.opacity = 0.95 * Math.max(fade, expand < 1 ? 0.85 : 0);
     if (ring2Mat.current) ring2Mat.current.opacity = 0.75 * fade;
     if (washMat.current) washMat.current.opacity = 0.42 * smoothstep(elapsed / 0.12) * Math.max(fade, 0.15);
-    const coreScale = (0.45 + expand * 1.1) * Math.max(fade, 0.04);
+    const coreScale = (0.45 + expand * 1.1) * Math.max(fade, 0.04) * ZOOGI_FX_SCALE;
     if (core.current) core.current.scale.setScalar(coreScale);
     if (coreMat.current) coreMat.current.opacity = 0.8 * fade;
     if (frozenElapsed === undefined && !ended.current && elapsed >= SHADOW_PULSE_DURATION) {
@@ -235,7 +236,7 @@ export function StunnedIndicator({
   if (!pulse && remaining <= 0 && duration <= 0) return null;
 
   return (
-    <group position={position}>
+    <group position={position} scale={ZOOGI_FX_SCALE}>
       <StunCrawlers />
     </group>
   );

@@ -9,7 +9,7 @@ import { useProgression } from "@/lib/stores/useProgression";
 import { triggerLaunchFeel } from "@/lib/stores/useGameFeel";
 import { visualPosition } from "@/lib/renderInterp";
 import { marbleIsShown } from "@/lib/marblePresence";
-import { ZOOGI_DRAW_RADIUS } from "@/lib/restHeight";
+import { ZOOGI_DRAW_RADIUS, ZOOGI_FX_SCALE } from "@/lib/restHeight";
 import { arenaScaleFor } from "@/lib/mapDefaultConfigs";
 import { getMapLayout } from "@/lib/arenaColliders";
 import { AI_LAUNCH_DELAY, LAUNCH_POWER_MULTIPLIER, MAX_LAUNCH_SPEED } from "@/lib/simFeel";
@@ -277,10 +277,10 @@ function boundNow(entity: { wrapsBindUntil?: number; slowUntil?: number }): bool
 
 function StatusLooks({ ricochet, bound }: { ricochet: boolean; bound: boolean }) {
   return (
-    <>
+    <group scale={ZOOGI_FX_SCALE}>
       {ricochet && <RicochetShell />}
       {bound && <BindRibbons />}
-    </>
+    </group>
   );
 }
 
@@ -851,13 +851,13 @@ export function PlayerZoogi() {
         <ZoogiModelSwitch zoogiId={playerEntity.zoogi.id} hasShield={playerEntity.hasShield} hasSpawnImmunity={playerEntity.spawnImmunity} color={playerEntity.zoogi.color} customModelUrl={playerEntity.customModelUrl} isPlayer={true} />
         <StatusLooks ricochet={playerEntity.larsRicochetBoost > 1} bound={boundNow(playerEntity)} />
         {(playerEntity.boltPhasingUntil || 0) > Date.now() && (
-          <mesh>
+          <mesh scale={ZOOGI_FX_SCALE}>
             <sphereGeometry args={[1.15, 16, 16]} />
             <meshBasicMaterial color="#FDE047" transparent opacity={0.35} />
           </mesh>
         )}
         {playerEntity.speedBoost > 1 && (
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} scale={ZOOGI_FX_SCALE}>
             <ringGeometry args={[0.9, 1.15, 20]} />
             <meshBasicMaterial color="#e5e7eb" transparent opacity={0.8} />
           </mesh>
@@ -932,12 +932,12 @@ export function PlayerZoogi() {
             const arrowLength = Math.min(rawLength, 8);
             const arrowRotation = Math.atan2(launchDz, launchDx);
             const shaftLength = arrowLength * 0.7;
-            const headSize = Math.min(0.5, arrowLength * 0.15);
+            const headSize = Math.min(0.5 * ZOOGI_FX_SCALE, arrowLength * 0.15);
             
             return arrowLength > 0.3 ? (
               <group position={[pos[0], 0.15, pos[2]]} rotation={[0, -arrowRotation + Math.PI / 2, 0]}>
                 <mesh position={[0, 0, shaftLength / 2]} rotation={[-Math.PI / 2, 0, 0]}>
-                  <planeGeometry args={[0.25, shaftLength]} />
+                  <planeGeometry args={[0.25 * ZOOGI_FX_SCALE, shaftLength]} />
                   <meshBasicMaterial color="#3B82F6" transparent opacity={0.4} side={THREE.DoubleSide} />
                 </mesh>
                 <mesh position={[0, 0, shaftLength + headSize / 2]} rotation={[Math.PI / 2, 0, 0]}>
@@ -947,7 +947,7 @@ export function PlayerZoogi() {
               </group>
             ) : null;
           })()}
-          <mesh position={[pos[0], 0.1, pos[2]]} rotation={[-Math.PI / 2, 0, 0]}>
+          <mesh position={[pos[0], 0.1, pos[2]]} rotation={[-Math.PI / 2, 0, 0]} scale={ZOOGI_FX_SCALE}>
             <ringGeometry args={[0.6, 0.8, 32]} />
             <meshBasicMaterial color="#3B82F6" transparent opacity={0.5} />
           </mesh>
@@ -977,7 +977,7 @@ export function PlayerZoogi() {
       )}
 
       {(isPlayerTurn || isFreeForAll) && !isDragging && !playerEntity.isKnockedOut && !playerEntity.isRespawning && (
-        <mesh position={[pos[0], 0.05, pos[2]]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh position={[pos[0], 0.05, pos[2]]} rotation={[-Math.PI / 2, 0, 0]} scale={ZOOGI_FX_SCALE}>
           <ringGeometry args={[0.7, 0.9, 32]} />
           <meshBasicMaterial color={isFreeForAll ? "#A855F7" : "#00FF00"} transparent opacity={0.5} />
         </mesh>
@@ -1440,7 +1440,7 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
         </Html>
         )}
         {isMyTurn && !isFreeForAll && (
-          <mesh position={[0, 0.05 - enemy.position[1], 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <mesh position={[0, 0.05 - enemy.position[1], 0]} rotation={[-Math.PI / 2, 0, 0]} scale={ZOOGI_FX_SCALE}>
             <ringGeometry args={[0.7, 0.9, 32]} />
             <meshBasicMaterial color="#FF6600" transparent opacity={0.5} />
           </mesh>
@@ -1820,7 +1820,7 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
       )}
       
       {isMyTurn && (
-        <mesh position={[pos[0], 0.05, pos[2]]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh position={[pos[0], 0.05, pos[2]]} rotation={[-Math.PI / 2, 0, 0]} scale={ZOOGI_FX_SCALE}>
           <ringGeometry args={[0.7, 0.9, 32]} />
           <meshBasicMaterial color={playerColors[playerIndex]} transparent opacity={0.6} />
         </mesh>
@@ -1851,12 +1851,12 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
             const arrowLength = Math.min(rawLength, 8);
             const arrowRotation = Math.atan2(launchDz, launchDx);
             const shaftLength = arrowLength * 0.7;
-            const headSize = Math.min(0.5, arrowLength * 0.15);
+            const headSize = Math.min(0.5 * ZOOGI_FX_SCALE, arrowLength * 0.15);
             
             return arrowLength > 0.3 ? (
               <group position={[pos[0], 0.15, pos[2]]} rotation={[0, -arrowRotation + Math.PI / 2, 0]}>
                 <mesh position={[0, 0, shaftLength / 2]} rotation={[-Math.PI / 2, 0, 0]}>
-                  <planeGeometry args={[0.25, shaftLength]} />
+                  <planeGeometry args={[0.25 * ZOOGI_FX_SCALE, shaftLength]} />
                   <meshBasicMaterial color="#3B82F6" transparent opacity={0.4} side={THREE.DoubleSide} />
                 </mesh>
                 <mesh position={[0, 0, shaftLength + headSize / 2]} rotation={[Math.PI / 2, 0, 0]}>
@@ -1866,7 +1866,7 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
               </group>
             ) : null;
           })()}
-          <mesh position={[pos[0], 0.1, pos[2]]} rotation={[-Math.PI / 2, 0, 0]}>
+          <mesh position={[pos[0], 0.1, pos[2]]} rotation={[-Math.PI / 2, 0, 0]} scale={ZOOGI_FX_SCALE}>
             <ringGeometry args={[0.6, 0.8, 32]} />
             <meshBasicMaterial color="#3B82F6" transparent opacity={0.5} />
           </mesh>

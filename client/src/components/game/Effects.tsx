@@ -5,6 +5,7 @@ import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { useGameFeel } from "@/lib/stores/useGameFeel";
 import { WolfCloneLook } from "./PowerEffects";
 import { SmokeBurstField } from "@/vfx/bursts";
+import { ZOOGI_FX_SCALE } from "@/lib/restHeight";
 
 const ZOOGI_COLORS: Record<string, string> = {
   wolfgang: "#6B7280",
@@ -53,7 +54,7 @@ function MotionTrail({ position, velocity, color }: {
       if (!mesh) continue;
       const age = point.timestamp > 0 ? (now - point.timestamp) / TRAIL_LIFETIME : 1;
       if (age >= 0 && age < 1) {
-        const scale = Math.max(0.1, (1 - age) * 0.4);
+        const scale = Math.max(0.1, (1 - age) * 0.4) * ZOOGI_FX_SCALE;
         mesh.visible = true;
         mesh.position.set(point.position[0], point.position[1], point.position[2]);
         mesh.scale.setScalar(scale);
@@ -653,7 +654,7 @@ function CollisionBurst({
     const glow = glowScaleRef.current;
     if (lensGroupRef.current) {
       lensGroupRef.current.visible = lens > 0.1;
-      lensGroupRef.current.scale.setScalar(lens);
+      lensGroupRef.current.scale.setScalar(lens * ZOOGI_FX_SCALE);
     }
     const lensOpacity = [0.3, 0.15, 0.4];
     lensMats.current.forEach((mat, i) => {
@@ -661,7 +662,7 @@ function CollisionBurst({
     });
     if (glowMeshRef.current) {
       glowMeshRef.current.visible = glow > 0.1;
-      glowMeshRef.current.scale.setScalar(glow);
+      glowMeshRef.current.scale.setScalar(glow * ZOOGI_FX_SCALE);
     }
     if (glowMatRef.current) glowMatRef.current.opacity = glow * 0.25;
   });
@@ -671,7 +672,7 @@ function CollisionBurst({
 
   return (
     <group>
-      <group ref={lensGroupRef} position={position} scale={initialLens} visible={initialLens > 0.1}>
+      <group ref={lensGroupRef} position={position} scale={initialLens * ZOOGI_FX_SCALE} visible={initialLens > 0.1}>
         <mesh>
           <ringGeometry args={[0.3, 0.5, 32]} />
           <meshBasicMaterial
@@ -704,7 +705,7 @@ function CollisionBurst({
         </mesh>
       </group>
 
-      <mesh ref={glowMeshRef} position={position} scale={initialGlow} visible={initialGlow > 0.1}>
+      <mesh ref={glowMeshRef} position={position} scale={initialGlow * ZOOGI_FX_SCALE} visible={initialGlow > 0.1}>
         <sphereGeometry args={[0.3, 16, 16]} />
         <meshBasicMaterial
           ref={glowMatRef}

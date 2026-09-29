@@ -4,7 +4,7 @@ import { getMapLayout, resolveSolidCollision, MARBLE_RADIUS, ORB_RADIUS, BUMPER_
 import { ARENA_SCALE_BY_MAP, arenaScaleFor } from "./arenaScale.ts";
 import { leftNeonOpenEdge, neonPlayHalfX, neonPlayHalfZ, neonRails } from "./neonCourt.ts";
 import { circleTimeOfImpact } from "./sweptHit.ts";
-import { ORB_DRAW_RADIUS, ORB_REST_Y, ZOOGI_DIAMETER, ZOOGI_DRAW_RADIUS, ZOOGI_REST_Y } from "./restHeight.ts";
+import { ORB_DRAW_RADIUS, ORB_REST_Y, ZOOGI_DIAMETER, ZOOGI_DRAW_RADIUS, ZOOGI_FX_SCALE, ZOOGI_REST_Y } from "./restHeight.ts";
 import {
   BUMPER_RESTITUTION,
   FALL_GRAVITY,
@@ -410,7 +410,9 @@ test("the drawn ball matches the collider and rests on the floor", () => {
   assert.equal(sink, 0);
   const orbSink = ORB_DRAW_RADIUS - ORB_RADIUS;
   assert.equal(orbSink, 0);
-  console.log(`MEASURE drawRadius=${ZOOGI_DRAW_RADIUS} hitRadius=${MARBLE_RADIUS} orbDraw=${ORB_DRAW_RADIUS} orbHit=${ORB_RADIUS} sink=${sink}`);
+  const selectionOuter = 0.9 * ZOOGI_FX_SCALE;
+  assert.ok(selectionOuter > ZOOGI_DRAW_RADIUS && selectionOuter < ZOOGI_DRAW_RADIUS * 1.15, `selection ring ${selectionOuter}`);
+  console.log(`MEASURE drawRadius=${ZOOGI_DRAW_RADIUS} hitRadius=${MARBLE_RADIUS} orbDraw=${ORB_DRAW_RADIUS} orbHit=${ORB_RADIUS} sink=${sink} fxScale=${ZOOGI_FX_SCALE.toFixed(3)}`);
 });
 
 test("an orb is lighter than a Zoogi, so it leaves faster and the shooter keeps more", async () => {

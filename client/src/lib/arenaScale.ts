@@ -6,10 +6,10 @@
  * mapDefaultConfigs re-exports this table and stores arenaScale on each
  * map config that has one. Change a map by editing its number here.
  *
- * Every factor is 1 for now. Meadow's knockoff of 15.5 is then about 31
- * Zoogi widths across, which matches the alpha. Evan is choosing the
- * final value. Cosmic Platform's stage model is shifted and scaled onto
- * the 15.6 lip separately from this factor.
+ * Every factor is 1. That is the final size: Meadow's knockoff of 15.5
+ * is about 31 Zoogi widths across, which matches the alpha. Cosmic
+ * Platform's stage model is shifted and scaled onto the 15.6 lip
+ * separately from this factor.
  */
 export const ARENA_SCALE_BY_MAP: Record<string, number> = {
   grass: 1,

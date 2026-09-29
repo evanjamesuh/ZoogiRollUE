@@ -17,6 +17,7 @@ import {
   STUN_RIM_FRAG,
 } from "./shaders";
 import { getVfxQuality } from "./quality";
+import { ZOOGI_FX_SCALE } from "@/lib/restHeight";
 import {
   seedBurstSparks,
   seedOzone,
@@ -201,8 +202,8 @@ function BeamMotes({ from, to }: { from: Vec3; to: Vec3 }) {
 export function AimBeam({ from, to }: { from: Vec3; to: Vec3 }) {
   return (
     <group>
-      <StraightBeam from={from} to={to} width={0.12} color="#b7d7ff" endFade={1} />
-      <StraightBeam from={from} to={to} width={0.035} color="#f7fbff" endFade={1} />
+      <StraightBeam from={from} to={to} width={0.12 * ZOOGI_FX_SCALE} color="#b7d7ff" endFade={1} />
+      <StraightBeam from={from} to={to} width={0.035 * ZOOGI_FX_SCALE} color="#f7fbff" endFade={1} />
       <Glint position={to} size={0.55} color="#eaf6ff" />
       <BeamMotes from={from} to={to} />
     </group>
@@ -227,8 +228,8 @@ export function AimPath({ points }: { points: Vec3[] }) {
   useFrame((state) => {
     const n = Math.min(points.length, buf.length);
     for (let i = 0; i < n; i++) buf[i].set(points[i][0], points[i][1], points[i][2]);
-    writeRibbon(glowGeo, buf, 0.11, state.camera.position);
-    writeRibbon(coreGeo, buf, 0.032, state.camera.position);
+    writeRibbon(glowGeo, buf, 0.11 * ZOOGI_FX_SCALE, state.camera.position);
+    writeRibbon(coreGeo, buf, 0.032 * ZOOGI_FX_SCALE, state.camera.position);
     glow.uniforms.uFade.value = 0.9;
     core.uniforms.uFade.value = 1;
     glow.uniforms.uEndFade.value = 1;
@@ -258,7 +259,7 @@ export function Glint({
   const material = useMemo(() => {
     const mat = new THREE.ShaderMaterial({
       uniforms: {
-        uSize: { value: size },
+        uSize: { value: size * ZOOGI_FX_SCALE },
         uColor: { value: new THREE.Color(color) },
         uTime: { value: 0 },
       },
@@ -332,7 +333,7 @@ export function BindRibbons() {
     for (let i = 0; i < pool.capacity; i++) {
       pool.active[i] = 1;
       pool.opacity[i] = 0.45;
-      pool.size[i] = 0.26;
+      pool.size[i] = 0.26 * ZOOGI_FX_SCALE;
       pool.rot[i] = i;
       pool.seed[i] = i + 1;
     }
@@ -365,7 +366,7 @@ export function BindRibbons() {
       dust.py[i] = 0.06 + (i % 4) * 0.07;
       dust.pz[i] = Math.sin(ang) * reach;
       dust.opacity[i] = 0.38;
-      dust.size[i] = 0.16 + (i % 3) * 0.05;
+      dust.size[i] = (0.16 + (i % 3) * 0.05) * ZOOGI_FX_SCALE;
       dust.active[i] = 1;
     }
   });
@@ -456,18 +457,18 @@ function ArcSet({ pairs }: { pairs: Array<[Vec3, Vec3]> }) {
       from[2] + (to[2] - from[2]) * t,
     ];
     const forks: Array<{ key: string; from: Vec3; to: Vec3; salt: number }> = [
-      { key: `a${i}`, from: pointAt(0.34, 0.12), to: [pointAt(0.34, 0.12)[0] + 0.55, pointAt(0.34, 0.12)[1] + 0.35, pointAt(0.34, 0.12)[2] - 0.4], salt: 11 },
-      { key: `b${i}`, from: pointAt(0.58, 0.08), to: [pointAt(0.58, 0.08)[0] - 0.48, pointAt(0.58, 0.08)[1] + 0.42, pointAt(0.58, 0.08)[2] + 0.36], salt: 19 },
-      { key: `c${i}`, from: pointAt(0.46, 0.16), to: [pointAt(0.46, 0.16)[0] + 0.22, pointAt(0.46, 0.16)[1] + 0.55, pointAt(0.46, 0.16)[2] + 0.5], salt: 23 },
+      { key: `a${i}`, from: pointAt(0.34, 0.12), to: [pointAt(0.34, 0.12)[0] + 0.55 * ZOOGI_FX_SCALE, pointAt(0.34, 0.12)[1] + 0.35 * ZOOGI_FX_SCALE, pointAt(0.34, 0.12)[2] - 0.4 * ZOOGI_FX_SCALE], salt: 11 },
+      { key: `b${i}`, from: pointAt(0.58, 0.08), to: [pointAt(0.58, 0.08)[0] - 0.48 * ZOOGI_FX_SCALE, pointAt(0.58, 0.08)[1] + 0.42 * ZOOGI_FX_SCALE, pointAt(0.58, 0.08)[2] + 0.36 * ZOOGI_FX_SCALE], salt: 19 },
+      { key: `c${i}`, from: pointAt(0.46, 0.16), to: [pointAt(0.46, 0.16)[0] + 0.22 * ZOOGI_FX_SCALE, pointAt(0.46, 0.16)[1] + 0.55 * ZOOGI_FX_SCALE, pointAt(0.46, 0.16)[2] + 0.5 * ZOOGI_FX_SCALE], salt: 23 },
     ];
     return [
-      { key: `glow${i}`, from, to, width: 0.12, color: "#9ecfff", sag: 0.1, salt: 3, hot: false },
-      { key: `core${i}`, from, to, width: 0.032, color: "#ffffff", sag: 0.1, salt: 3, hot: true },
+      { key: `glow${i}`, from, to, width: 0.12 * ZOOGI_FX_SCALE, color: "#9ecfff", sag: 0.1, salt: 3, hot: false },
+      { key: `core${i}`, from, to, width: 0.032 * ZOOGI_FX_SCALE, color: "#ffffff", sag: 0.1, salt: 3, hot: true },
       ...forks.map((fork) => ({
         key: fork.key,
         from: fork.from,
         to: fork.to,
-        width: 0.045,
+        width: 0.045 * ZOOGI_FX_SCALE,
         color: "#c5e6ff",
         sag: 0.05,
         salt: fork.salt,
@@ -620,7 +621,7 @@ export function UnlockGlow({
   return (
     <group position={position}>
       <pointLight ref={light} position={[0, 0.7, 0]} color="#ff9a3a" intensity={0} distance={2.2} decay={2} />
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.42, 0]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.42, 0]} scale={ZOOGI_FX_SCALE}>
         <circleGeometry args={[0.75, 40]} />
         <primitive object={ring} attach="material" />
       </mesh>

@@ -3,6 +3,7 @@ import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { addTrauma } from "@/lib/cameraRig";
+import { ZOOGI_FX_SCALE } from "@/lib/restHeight";
 
 const SPARK_COUNT = 56;
 const SPARK_COLORS = ["#fff4c8", "#7ef6ff", "#ff4ad8", "#d08bff"];
@@ -183,7 +184,7 @@ function KoBursts({ burstsRef }: { burstsRef: MutableRefObject<Burst[]> }) {
       const t = burst.age / 0.55;
       ring.visible = true;
       ring.position.set(burst.x, 0.08, burst.z);
-      const scale = 0.4 + t * 3.4;
+      const scale = (0.4 + t * 3.4) * ZOOGI_FX_SCALE;
       ring.scale.setScalar(scale);
       const material = ring.material as THREE.MeshBasicMaterial;
       material.opacity = (1 - t) * 0.9;
