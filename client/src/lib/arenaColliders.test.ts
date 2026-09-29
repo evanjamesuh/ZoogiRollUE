@@ -317,7 +317,8 @@ test("pharaoh's tomb is a centred sandstone ring with matching rim blocks", () =
     assert.equal(solid.kind, "rock");
     assert.equal(solid.radius, block.radius, `${block.id} keeps its authored size`);
     const gap = layout.knockoffRadius - Math.hypot(solid.x, solid.z) - solid.radius;
-    assert.ok(gap < 0.4 || gap >= 1.7, `${block.id} rim gap ${gap.toFixed(3)}`);
+    const widths = gap / (MARBLE_RADIUS * 2);
+    assert.ok(widths < 0.4 || widths >= 1.7, `${block.id} rim gap ${widths.toFixed(3)} marble widths`);
     assert.ok(Math.hypot(solid.x, solid.z) + solid.radius <= layout.knockoffRadius + 1e-6, `${block.id} crosses the edge`);
   }
   for (const piece of getTombBackdrop()) {

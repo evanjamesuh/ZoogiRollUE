@@ -208,9 +208,39 @@ export function neonCourtLayout(): MapLayout {
   };
 }
 
-/** True when a marble center has left the floor, including through a corner mouth. */
+/** True when a marble center has left the floor rectangle, including through a corner mouth. */
 export function isOutsideNeonCourt(x: number, z: number): boolean {
   return Math.abs(x) > neonPlayHalfX() || Math.abs(z) > neonPlayHalfZ();
+}
+
+function overlapsBox(x: number, z: number, radius: number, box: NeonBox): boolean {
+  const nearestX = Math.min(box.maxX, Math.max(box.minX, x));
+  const nearestZ = Math.min(box.maxZ, Math.max(box.minZ, z));
+  return Math.hypot(x - nearestX, z - nearestZ) < radius;
+}
+
+/**
+ * Knockout is the corner mouth. A center that has crossed the rectangle but
+ * is still touching a rail or pad has not reached the open edge.
+ */
+export function leftNeonOpenEdge(x: number, z: number, radius: number): boolean {
+  if (!isOutsideNeonCourt(x, z)) return false;
+  for (const box of [...neonRails(), ...neonObstacles()]) {
+    if (overlapsBox(x, z, radius, box)) return false;
+  }
+  return true;
+}
+
+/** Inward normal for a rail that sits on the court boundary. Interior pads return null. */
+function boundaryInward(rail: NeonBox): { x: number; z: number } | null {
+  const halfX = neonPlayHalfX();
+  const halfZ = neonPlayHalfZ();
+  const eps = 0.05;
+  if (Math.abs(rail.maxZ - halfZ) < eps && rail.minZ > 0) return { x: 0, z: -1 };
+  if (Math.abs(rail.minZ + halfZ) < eps && rail.maxZ < 0) return { x: 0, z: 1 };
+  if (Math.abs(rail.maxX - halfX) < eps && rail.minX > 0) return { x: -1, z: 0 };
+  if (Math.abs(rail.minX + halfX) < eps && rail.maxX < 0) return { x: 1, z: 0 };
+  return null;
 }
 
 export interface RailHit {
@@ -336,9 +366,32 @@ export function resolveNeonRails(
       );
       if (!hit) continue;
 
-      const nx = hit.nx;
-      const nz = hit.nz;
+      let nx = hit.nx;
+      let nz = hit.nz;
       if (nx === 0 && nz === 0) continue;
+
+      const skin = 0.03;
+      const place = (px: number, pz: number): { x: number; z: number } => {
+        let nextX = x;
+        let nextZ = z;
+        if (px < 0) nextX = rail.minX - radius - skin;
+        else if (px > 0) nextX = rail.maxX + radius + skin;
+        if (pz < 0) nextZ = rail.minZ - radius - skin;
+        else if (pz > 0) nextZ = rail.maxZ + radius + skin;
+        return { x: nextX, z: nextZ };
+      };
+
+      // A marble that started on the court must not be shoved out through a rail.
+      const inward = boundaryInward(rail);
+      const startedOnCourt = !isOutsideNeonCourt(prev[0], prev[2]);
+      if (inward && startedOnCourt) {
+        const placed = place(nx, nz);
+        const facesOut = nx * inward.x + nz * inward.z < 0;
+        if (facesOut || isOutsideNeonCourt(placed.x, placed.z)) {
+          nx = inward.x;
+          nz = inward.z;
+        }
+      }
 
       const dot = vx * nx + vz * nz;
       if (dot < 0) {
@@ -347,11 +400,9 @@ export function resolveNeonRails(
         [vx, vz] = capSpeed(vx, vz);
       }
 
-      const skin = 0.03;
-      if (nx < 0) x = rail.minX - radius - skin;
-      else if (nx > 0) x = rail.maxX + radius + skin;
-      if (nz < 0) z = rail.minZ - radius - skin;
-      else if (nz > 0) z = rail.maxZ + radius + skin;
+      const parked = place(nx, nz);
+      x = parked.x;
+      z = parked.z;
 
       hits.push({
         id: rail.id,

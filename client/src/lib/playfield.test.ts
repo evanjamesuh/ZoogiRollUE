@@ -220,9 +220,25 @@ test("knockout uses the enlarged edge on every arena", async () => {
     if (map === "neon") {
       assert.equal(isOutsideNeonCourt(0, neonPlayHalfZ() + 0.2), true);
       assert.equal(isOutsideNeonCourt(0, neonPlayHalfZ() - 0.2), false);
+      const onRail = useZoogiGame.getState().playerEntity;
+      assert.ok(onRail);
+      useZoogiGame.setState({
+        playerEntity: {
+          ...onRail,
+          position: [0, ZOOGI_REST_Y, neonPlayHalfZ() + 0.25],
+          velocity: [0, 0, 0],
+          isKnockedOut: false,
+          isRespawning: false,
+          offTheFloor: false,
+          spawnImmunity: false,
+          invulnerableUntil: null,
+        },
+      });
+      useZoogiGame.getState().physicsTick(1 / 60);
+      assert.equal(useZoogiGame.getState().playerEntity?.offTheFloor, false, "a rail overlap is not the open edge");
     }
     const outside: [number, number, number] = map === "neon"
-      ? [neonPlayHalfX() + 0.35, ZOOGI_REST_Y, 0]
+      ? [neonPlayHalfX() - 0.4, ZOOGI_REST_Y, neonPlayHalfZ() + 1.2]
       : [layout.knockoffRadius + 1.2, ZOOGI_REST_Y, 0];
     const still = useZoogiGame.getState().playerEntity;
     assert.ok(still);

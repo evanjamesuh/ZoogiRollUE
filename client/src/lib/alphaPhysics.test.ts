@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getMapLayout, resolveSolidCollision, MARBLE_RADIUS, BUMPER_RADIUS } from "./arenaColliders.ts";
+import { getMapLayout, resolveSolidCollision, MARBLE_RADIUS, ORB_RADIUS, BUMPER_RADIUS, centerPastOpenEdge, collectMatchSolids } from "./arenaColliders.ts";
 import { arenaScaleFor } from "./arenaScale.ts";
-import { neonPlayHalfX, neonPlayHalfZ } from "./neonCourt.ts";
+import { leftNeonOpenEdge, neonPlayHalfX, neonPlayHalfZ, neonRails } from "./neonCourt.ts";
+import { circleTimeOfImpact } from "./sweptHit.ts";
 import { ORB_DRAW_RADIUS, ORB_REST_Y, ZOOGI_DIAMETER, ZOOGI_DRAW_RADIUS, ZOOGI_REST_Y } from "./restHeight.ts";
 import {
   BUMPER_RESTITUTION,
@@ -10,7 +11,10 @@ import {
   FULL_LAUNCH_SPEED_PER_SEC,
   MARBLE_RESTITUTION,
   MAX_LAUNCH_SPEED,
+  MAX_PLANAR_SPEED,
   MOMENTUM_TRANSFER,
+  ORB_MASS,
+  ZOOGI_MASS,
   NORMAL_LAUNCH_SPEED,
   ROCK_RESTITUTION,
   ROLLING_DECEL,
@@ -193,7 +197,7 @@ test("a head-on hit keeps some shooter speed and gives most of it to the target"
     },
     enemies: [{
       ...enemy,
-      position: [0.95, ZOOGI_REST_Y, 0],
+      position: [MARBLE_RADIUS * 2 + 0.12, ZOOGI_REST_Y, 0],
       velocity: [0, 0, 0],
       arcMovement: null,
       isStunned: false,
@@ -352,7 +356,7 @@ test("orbs rest on the floor, stay put when touched, and score only by falling o
     },
     orbs: [{
       id: "touch-orb",
-      position: [0.7, ORB_REST_Y, 0],
+      position: [MARBLE_RADIUS + ORB_RADIUS + 0.08, ORB_REST_Y, 0],
       velocity: [0, 0, 0],
       color: "#0341CA",
       points: 50,
@@ -395,4 +399,191 @@ test("orbs rest on the floor, stay put when touched, and score only by falling o
   assert.equal(useZoogiGame.getState().orbs[0]?.isActive, false, "the orb leaves play after it falls out");
   assert.equal(useZoogiGame.getState().score, 50, "the point lands when the orb finishes falling");
   assert.equal(FALL_GRAVITY, 9.81);
+});
+
+test("the drawn ball matches the collider and rests on the floor", () => {
+  assert.equal(MARBLE_RADIUS, ZOOGI_DRAW_RADIUS);
+  assert.equal(ORB_RADIUS, ORB_DRAW_RADIUS);
+  assert.equal(ZOOGI_REST_Y, MARBLE_RADIUS);
+  assert.equal(ORB_REST_Y, ORB_RADIUS);
+  assert.ok(ORB_RADIUS < MARBLE_RADIUS);
+  const sink = ZOOGI_DRAW_RADIUS - MARBLE_RADIUS;
+  assert.equal(sink, 0);
+  console.log(`MEASURE drawRadius=${ZOOGI_DRAW_RADIUS} hitRadius=${MARBLE_RADIUS} orbRadius=${ORB_RADIUS} sink=${sink}`);
+});
+
+test("an orb is lighter than a Zoogi, so it leaves faster and the shooter keeps more", async () => {
+  assert.ok(ORB_MASS < ZOOGI_MASS);
+  const { useZoogiGame, player } = await playing();
+  const incoming = 0.45;
+  useZoogiGame.setState({
+    phase: "playing",
+    currentRound: 46,
+    score: 0,
+    isPlayerTurn: true,
+    turnHasLaunched: false,
+    firstTickProcessed: true,
+    enemies: [],
+    mushrooms: [],
+    pinballBumpers: [],
+    wolfClones: [],
+    wallSettings: { ...useZoogiGame.getState().wallSettings, knockoffBoundaryRadius: 80 },
+    playerEntity: {
+      ...player,
+      position: [0, ZOOGI_REST_Y, 0],
+      velocity: [incoming, 0, 0],
+      arcMovement: null,
+      spawnImmunity: false,
+      larsRicochetBoost: 1,
+    },
+    orbs: [{
+      id: "light-orb",
+      position: [MARBLE_RADIUS + ORB_RADIUS + 0.08, ORB_REST_Y, 0],
+      velocity: [0, 0, 0],
+      color: "#0341CA",
+      points: 50,
+      isActive: true,
+      lastHitBy: null,
+      lastHitByEnemyId: null,
+      lastHitByLocalPlayerIndex: null,
+      lastHitTimestamp: null,
+      isStarOrb: false,
+      starOrbType: null,
+      isOutOfRing: false,
+    }],
+  });
+  useZoogiGame.getState().physicsTick(1 / 60);
+  const after = useZoogiGame.getState();
+  const shooter = after.playerEntity;
+  const orb = after.orbs[0];
+  assert.ok(shooter && orb);
+  const orbSpeed = Math.hypot(orb.velocity[0], orb.velocity[2]);
+  const kept = Math.hypot(shooter.velocity[0], shooter.velocity[2]) / incoming;
+  const leave = orbSpeed / incoming;
+  assert.ok(orb.velocity[0] > 0, "the orb is pushed forward");
+  assert.ok(leave > MOMENTUM_TRANSFER, `orb leave ${leave.toFixed(3)} should beat an equal-mass transfer`);
+  assert.ok(kept > SHOOTER_KEEP + 0.05, `shooter kept ${kept.toFixed(3)}`);
+  console.log(`MEASURE orbMass=${ORB_MASS.toFixed(3)} zoogiMass=${ZOOGI_MASS} orbLeave=${leave.toFixed(3)} orbKeep=${kept.toFixed(3)}`);
+});
+
+test("a crossing that endpoints miss still registers, including a full-power shot", async () => {
+  const closing = 4.1;
+  const half = closing / 2;
+  const startGap = 2.76;
+  const a0 = -startGap / 2;
+  const a1 = a0 + half;
+  const b0 = startGap / 2;
+  const b1 = b0 - half;
+  const endGap = Math.abs(a1 - b1);
+  const hitDiameter = 1;
+  assert.ok(startGap > hitDiameter && endGap > hitDiameter);
+  assert.equal(Math.abs(a0 - b0) < hitDiameter, false);
+  assert.equal(endGap < hitDiameter, false);
+  const swept = circleTimeOfImpact(a0, 0, a1, 0, b0, 0, b1, 0, hitDiameter);
+  assert.ok(swept, "the swept hit registers");
+  assert.ok(swept.t > 0 && swept.t < 1);
+  const endpointGap = Math.min(startGap, endGap);
+  console.log(`MEASURE tunnelClose=${closing} endpointGap=${endpointGap.toFixed(3)} hitDiameter=${hitDiameter} hitT=${swept.t.toFixed(3)}`);
+
+  const { useZoogiGame, player, enemy } = await playing();
+  const gap = MARBLE_RADIUS * 2 + 0.05;
+  useZoogiGame.setState({
+    phase: "playing",
+    currentRound: 47,
+    isPlayerTurn: true,
+    turnHasLaunched: false,
+    firstTickProcessed: true,
+    orbs: [],
+    mushrooms: [],
+    pinballBumpers: [],
+    wolfClones: [],
+    wallSettings: { ...useZoogiGame.getState().wallSettings, knockoffBoundaryRadius: 80 },
+    playerEntity: {
+      ...player,
+      position: [-gap / 2, ZOOGI_REST_Y, 0],
+      velocity: [MAX_LAUNCH_SPEED, 0, 0],
+      arcMovement: null,
+      spawnImmunity: false,
+      larsRicochetBoost: 1,
+    },
+    enemies: [{
+      ...enemy,
+      position: [gap / 2, ZOOGI_REST_Y, 0],
+      velocity: [-MAX_LAUNCH_SPEED, 0, 0],
+      arcMovement: null,
+      isStunned: false,
+      isKnockedOut: false,
+      isRespawning: false,
+      larsRicochetBoost: 1,
+    }],
+  });
+  useZoogiGame.getState().physicsTick(1 / 60);
+  const shot = useZoogiGame.getState();
+  const shooterSpeed = Math.hypot(shot.playerEntity?.velocity[0] ?? 0, shot.playerEntity?.velocity[2] ?? 0);
+  const targetSpeed = Math.hypot(shot.enemies[0]?.velocity[0] ?? 0, shot.enemies[0]?.velocity[2] ?? 0);
+  assert.ok(targetSpeed > MAX_PLANAR_SPEED * 0.4, `full-power target speed ${targetSpeed.toFixed(3)}`);
+  assert.ok((shot.enemies[0]?.velocity[0] ?? 0) > 0, "the target is sent back the way the shot came");
+  console.log(`MEASURE fullPowerHit target=${targetSpeed.toFixed(3)} shooter=${shooterSpeed.toFixed(3)} cap=${MAX_PLANAR_SPEED.toFixed(3)}`);
+});
+
+test("knockout waits for the open edge, not a meadow rock or a night-circuit rail", async () => {
+  const grass = getMapLayout("grass");
+  assert.ok(grass);
+  const solids = collectMatchSolids({ map: "grass", bumpers: [], landedRocks: [], editorModels: [] });
+  const rock = grass.scenery.find((solid) => {
+    const rockDist = Math.hypot(solid.x, solid.z);
+    return rockDist + solid.radius + MARBLE_RADIUS > grass.knockoffRadius;
+  });
+  assert.ok(rock, "a meadow rim rock reaches the knockout line");
+  const rockDist = Math.hypot(rock.x, rock.z);
+  const ux = rock.x / rockDist;
+  const uz = rock.z / rockDist;
+  const against = rockDist + rock.radius + MARBLE_RADIUS * 0.9;
+  assert.ok(against > grass.knockoffRadius, "the sample center is past the circle");
+  assert.ok(against < rockDist + rock.radius + MARBLE_RADIUS, "the sample still overlaps the rock");
+  assert.equal(
+    centerPastOpenEdge("grass", ux * against, uz * against, grass.knockoffRadius, MARBLE_RADIUS, solids),
+    false,
+  );
+  assert.equal(
+    centerPastOpenEdge("grass", grass.knockoffRadius + 0.35, 0, grass.knockoffRadius, MARBLE_RADIUS, solids),
+    true,
+    "the +x gap is open",
+  );
+
+  const { useZoogiGame, player } = await playing();
+  useZoogiGame.getState().selectZoogi(player.zoogi);
+  useZoogiGame.setState({ selectedMap: "grass", aiPlayerCount: 0, phase: "menu" });
+  useZoogiGame.getState().startGame();
+  const grassPlayer = useZoogiGame.getState().playerEntity;
+  assert.ok(grassPlayer);
+  useZoogiGame.setState({
+    phase: "playing",
+    firstTickProcessed: true,
+    orbs: [],
+    enemies: [],
+    mushrooms: [],
+    pinballBumpers: [],
+    wolfClones: [],
+    playerEntity: {
+      ...grassPlayer,
+      position: [ux * against, ZOOGI_REST_Y, uz * against],
+      velocity: [0, 0, 0],
+      offTheFloor: false,
+      isKnockedOut: false,
+      isRespawning: false,
+      spawnImmunity: false,
+      invulnerableUntil: null,
+      arcMovement: null,
+    },
+  });
+  useZoogiGame.getState().physicsTick(1 / 60);
+  assert.equal(useZoogiGame.getState().playerEntity?.offTheFloor, false, "overlapping a rim rock stays in");
+
+  const halfZ = neonPlayHalfZ();
+  const north = neonRails().find((rail) => rail.id === "rail-north");
+  assert.ok(north);
+  const railCenterZ = (north.minZ + north.maxZ) / 2;
+  assert.equal(leftNeonOpenEdge(0, halfZ + MARBLE_RADIUS * 0.25, MARBLE_RADIUS), false);
+  assert.ok(railCenterZ < halfZ);
 });

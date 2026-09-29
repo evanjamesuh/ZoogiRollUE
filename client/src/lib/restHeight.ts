@@ -8,7 +8,7 @@ export const ZOOGI_REST_Y = ZOOGI_DRAW_RADIUS;
 /** Visual width of a Zoogi. Arena scales are sized in these diameters. */
 export const ZOOGI_DIAMETER = ZOOGI_DRAW_RADIUS * 2;
 
-/** Comic blue orb. Larger than the collision circle so it reads from the high camera. */
+/** Comic blue orb. Smaller than a Zoogi, and the same size as its collider. */
 export const ORB_DRAW_RADIUS = 0.62;
 export const ORB_REST_Y = ORB_DRAW_RADIUS;
 

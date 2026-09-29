@@ -31,6 +31,7 @@ import {
   neonPlayHalfZ,
   neonRails,
 } from "./neonCourt.ts";
+import { ZOOGI_DIAMETER, ZOOGI_DRAW_RADIUS, ORB_DRAW_RADIUS } from "./restHeight.ts";
 import {
   MARBLE_WIDTH,
   RIM_GAP_OPEN,
@@ -57,8 +58,10 @@ function matchSolids(map: string) {
 }
 
 test("a marble width is the collision diameter", () => {
+  assert.equal(MARBLE_RADIUS, ZOOGI_DRAW_RADIUS);
   assert.equal(MARBLE_WIDTH, MARBLE_RADIUS * 2);
-  assert.equal(MARBLE_WIDTH, 1);
+  assert.equal(MARBLE_WIDTH, ZOOGI_DIAMETER);
+  assert.equal(ORB_DRAW_RADIUS < ZOOGI_DRAW_RADIUS, true);
 });
 
 test("every arena draws each obstacle on its collider", () => {

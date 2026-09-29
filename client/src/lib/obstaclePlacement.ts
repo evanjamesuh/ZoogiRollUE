@@ -12,7 +12,10 @@
  * a marble almost fits through, so those slots are nudged shut or open.
  */
 
-export const MARBLE_WIDTH = 1;
+import { ZOOGI_DIAMETER } from "./restHeight";
+
+/** Collision diameter. Rim gaps are measured in these widths. */
+export const MARBLE_WIDTH = ZOOGI_DIAMETER;
 export const RIM_GAP_SEALED = 0.4;
 export const RIM_GAP_OPEN = 1.7;
 
@@ -77,7 +80,8 @@ export function rimGapInBand(worldGap: number, marbleWidth = MARBLE_WIDTH): bool
 export function snapRimGap(worldGap: number, marbleWidth = MARBLE_WIDTH): number {
   if (!rimGapInBand(worldGap, marbleWidth)) return worldGap;
   const seal = (RIM_GAP_SEALED - 0.001) * marbleWidth;
-  const open = RIM_GAP_OPEN * marbleWidth;
+  // Sit just outside the band so a float rounding of 1.7 does not fall back in.
+  const open = (RIM_GAP_OPEN + 0.002) * marbleWidth;
   const mid = ((RIM_GAP_SEALED + RIM_GAP_OPEN) / 2) * marbleWidth;
   return worldGap < mid ? seal : open;
 }

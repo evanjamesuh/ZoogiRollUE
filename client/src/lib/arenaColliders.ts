@@ -1,6 +1,7 @@
 import { getSnowmanPositions } from "./arenaConstants";
 import { arenaScaleFor } from "./arenaScale";
-import { neonCourtLayout, neonPlayHalfX, neonPlayHalfZ, neonRimGapAdjustments } from "./neonCourt";
+import { leftNeonOpenEdge, neonCourtLayout, neonPlayHalfX, neonPlayHalfZ, neonRimGapAdjustments } from "./neonCourt";
+import { ORB_DRAW_RADIUS, ZOOGI_DRAW_RADIUS } from "./restHeight";
 import { MARBLE_WIDTH, placeScaledObstacles, type RimGapAdjustment } from "./obstaclePlacement";
 import { BUMPER_RESTITUTION, ROCK_RESTITUTION } from "./simFeel";
 import {
@@ -22,8 +23,9 @@ import {
  */
 export const BUMPER_RADIUS = 0.955;
 export const BUMPER_MODEL_URL = "/models/bumber1.glb";
-export const MARBLE_RADIUS = 0.5;
-export const ORB_RADIUS = 0.4;
+/** Hit radius matches the drawn ball, so the mesh rests on the floor and touches when it collides. */
+export const MARBLE_RADIUS = ZOOGI_DRAW_RADIUS;
+export const ORB_RADIUS = ORB_DRAW_RADIUS;
 export const SNOWMAN_RADIUS = 0.55;
 export const REST_SPEED = 0.02;
 
@@ -624,6 +626,7 @@ export function resolveSolidCollision(
   entityRadius: number,
   solids: SolidCircle[],
   restitution = ROCK_RESTITUTION,
+  keepInsideRadius?: number,
 ): { pos: [number, number, number]; vel: [number, number, number]; hits: string[] } {
   let x = pos[0];
   let z = pos[2];
@@ -661,8 +664,17 @@ export function resolveSolidCollision(
         dz = 0;
         dist = 1;
       }
-      const nx = dx / dist;
-      const nz = dz / dist;
+      let nx = dx / dist;
+      let nz = dz / dist;
+      if (keepInsideRadius !== undefined) {
+        const solidDist = Math.hypot(solid.x, solid.z);
+        const facesOut = nx * solid.x + nz * solid.z > 0;
+        const onRim = solidDist + solid.radius >= keepInsideRadius - entityRadius - 0.05;
+        if (facesOut && onRim && solidDist > 1e-6) {
+          nx = -solid.x / solidDist;
+          nz = -solid.z / solidDist;
+        }
+      }
       const dot = vx * nx + vz * nz;
       const bounce = solid.kind === "bumper" ? Math.max(restitution, BUMPER_RESTITUTION) : restitution;
       if (dot < 0) {
@@ -706,6 +718,36 @@ export function countClearLanes(layout: MapLayout, samples = 24): number {
     if (laneIsClear(layout, (i / samples) * Math.PI * 2)) clear++;
   }
   return clear;
+}
+
+/**
+ * True only when the body is past the knockout line on an angle the rim
+ * solids do not cover. Overlapping a meadow rock, or sitting on its outer
+ * face, is not the open edge.
+ */
+export function centerPastOpenEdge(
+  mapId: string | null | undefined,
+  x: number,
+  z: number,
+  knockoffRadius: number,
+  bodyRadius: number,
+  solids: SolidCircle[],
+): boolean {
+  if (mapId === "neon") return leftNeonOpenEdge(x, z, bodyRadius);
+  if (Math.hypot(x, z) <= knockoffRadius) return false;
+  const walls = solids.filter((solid) => solid.kind !== "bumper");
+  if (pointInsideSolid(x, z, walls, bodyRadius)) return false;
+  const angle = Math.atan2(z, x);
+  const rimX = Math.cos(angle) * knockoffRadius;
+  const rimZ = Math.sin(angle) * knockoffRadius;
+  for (const solid of walls) {
+    const rimClearance = Math.hypot(rimX - solid.x, rimZ - solid.z) - solid.radius;
+    if (rimClearance >= bodyRadius) continue;
+    const bodyGap = Math.hypot(x - solid.x, z - solid.z) - solid.radius;
+    // Still against the wall. Far past it, the body has left the court.
+    if (bodyGap < bodyRadius) return false;
+  }
+  return true;
 }
 
 export function pointInsideSolid(x: number, z: number, solids: SolidCircle[], padding = 0): SolidCircle | null {

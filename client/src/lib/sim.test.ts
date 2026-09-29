@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { endCardResult } from "./matchResult.ts";
+import { ORB_MASS, ZOOGI_MASS } from "./simFeel.ts";
 
 const memory = new Map<string, string>();
 const storage = {
@@ -153,8 +154,8 @@ function planarSpeed(velocity: [number, number, number]): number {
   return Math.hypot(velocity[0], velocity[2]);
 }
 
-function planarEnergy(velocity: [number, number, number]): number {
-  return 0.5 * (velocity[0] ** 2 + velocity[2] ** 2);
+function planarEnergy(velocity: [number, number, number], mass = ZOOGI_MASS): number {
+  return 0.5 * mass * (velocity[0] ** 2 + velocity[2] ** 2);
 }
 
 function makeStillOrb(id: string, x: number, z: number) {
@@ -261,7 +262,7 @@ test("marble near an orb with no ability active does not accelerate toward it", 
     const beforePlayer = before.playerEntity;
     assert.ok(beforePlayer);
     const beforeEnergy = planarEnergy(beforePlayer.velocity)
-      + before.orbs.reduce((sum, orb) => sum + planarEnergy(orb.velocity), 0);
+      + before.orbs.reduce((sum, orb) => sum + planarEnergy(orb.velocity, ORB_MASS), 0);
     useZoogiGame.getState().physicsTick(1 / 60);
     const after = useZoogiGame.getState();
     const afterPlayer = after.playerEntity;
@@ -270,7 +271,7 @@ test("marble near an orb with no ability active does not accelerate toward it", 
     if (speed > maxSpeed) maxSpeed = speed;
     maxSideways = Math.max(maxSideways, Math.abs(afterPlayer.velocity[2]), Math.abs(afterPlayer.position[2]));
     const afterEnergy = planarEnergy(afterPlayer.velocity)
-      + after.orbs.reduce((sum, orb) => sum + planarEnergy(orb.velocity), 0);
+      + after.orbs.reduce((sum, orb) => sum + planarEnergy(orb.velocity, ORB_MASS), 0);
     assert.ok(
       afterEnergy <= beforeEnergy + 1e-6,
       `contact must not add energy, before=${beforeEnergy} after=${afterEnergy}`
@@ -311,7 +312,7 @@ test("marble comes to rest within a reasonable time after a flick and collision"
     const beforePlayer = before.playerEntity;
     assert.ok(beforePlayer);
     const beforeEnergy = planarEnergy(beforePlayer.velocity)
-      + before.orbs.reduce((sum, orb) => sum + planarEnergy(orb.velocity), 0);
+      + before.orbs.reduce((sum, orb) => sum + planarEnergy(orb.velocity, ORB_MASS), 0);
 
     useZoogiGame.getState().physicsTick(1 / 60);
 
@@ -320,7 +321,7 @@ test("marble comes to rest within a reasonable time after a flick and collision"
     const hitOrb = after.orbs[0];
     assert.ok(afterPlayer && hitOrb);
     const speed = planarSpeed(afterPlayer.velocity);
-    const afterEnergy = planarEnergy(afterPlayer.velocity) + planarEnergy(hitOrb.velocity);
+    const afterEnergy = planarEnergy(afterPlayer.velocity) + planarEnergy(hitOrb.velocity, ORB_MASS);
     assert.ok(
       afterEnergy <= beforeEnergy + 1e-6,
       `flick collision gained energy on frame ${frame + 1}, before=${beforeEnergy} after=${afterEnergy}`
@@ -338,7 +339,8 @@ test("marble comes to rest within a reasonable time after a flick and collision"
   assert.ok(restFrame > 0 && restFrame <= 180, `marble was still moving after ${restFrame} frames`);
   assert.equal(planarSpeed(done.velocity), 0, "marble should be fully stopped");
   const coast = done.position[0] - contactX;
-  assert.ok(coast < 1.25, `marble kept rolling after contact, coast=${coast}`);
+  // A lighter orb takes less of the shot, so the shooter rolls on and then stops.
+  assert.ok(coast > 2 && coast < 8, `light-orb coast=${coast}`);
   assert.ok(Math.abs(done.position[2]) < 0.05, "collision should not steer the marble sideways");
 
   for (let frame = 0; frame < 60; frame++) {

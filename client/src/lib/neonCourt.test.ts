@@ -6,6 +6,7 @@ import {
   NEON_HALF_X,
   NEON_HALF_Z,
   isOutsideNeonCourt,
+  leftNeonOpenEdge,
   neonBumpers,
   neonCourtLayout,
   neonObstacles,
@@ -129,4 +130,22 @@ test("raised pads and the center channel bounce, and the corner mouths stay open
     vel = resolved.vel;
   }
   assert.equal(bounced, true);
+});
+
+test("overlapping a rail stays on the court, and a corner mouth is the open edge", () => {
+  const halfZ = neonPlayHalfZ();
+  const halfX = neonPlayHalfX();
+  const railZ = halfZ + MARBLE_RADIUS * 0.3;
+  assert.equal(isOutsideNeonCourt(0, railZ), true);
+  assert.equal(leftNeonOpenEdge(0, railZ, MARBLE_RADIUS), false, "still touching the north rail");
+
+  const prev: [number, number, number] = [0, 0.5, halfZ - 0.35];
+  const next: [number, number, number] = [0, 0.5, halfZ + 0.45];
+  const resolved = resolveNeonRails(prev, next, [0, 0, 0.8], MARBLE_RADIUS);
+  assert.equal(isOutsideNeonCourt(resolved.pos[0], resolved.pos[2]), false, "the rail pushes back onto the floor");
+  assert.ok(resolved.vel[2] <= 0, "the bounce comes back in");
+
+  const mouthX = halfX - 0.4;
+  const mouthZ = halfZ + 0.6;
+  assert.equal(leftNeonOpenEdge(mouthX, mouthZ, MARBLE_RADIUS), true, "the corner mouth is open");
 });

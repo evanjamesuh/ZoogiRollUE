@@ -8,7 +8,13 @@
  * rest in about three seconds.
  */
 
+import { ORB_DRAW_RADIUS, ZOOGI_DRAW_RADIUS } from "./restHeight";
+
 export const SIM_HZ = 60;
+
+/** Zoogis are the heavy body. Orbs use the volume ratio of the two radii. */
+export const ZOOGI_MASS = 1;
+export const ORB_MASS = (ORB_DRAW_RADIUS / ZOOGI_DRAW_RADIUS) ** 3;
 
 /** Constant deceleration, world units per second squared. */
 export const ROLLING_DECEL = 4.5;
