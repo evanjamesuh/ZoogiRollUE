@@ -33,6 +33,8 @@ import { useAudio } from "./useAudio";
 import { triggerAbilityCameraEffect, triggerKnockoffCameraEffect, triggerCollisionCameraEffect, triggerTargetFocusCameraEffect } from "./useCameraEffects";
 import { getDeviceId } from "@/lib/deviceId";
 import { COSMOS_STAGE, GRASS_STAGE, arabianPlayTransform, collectMatchSolids, getIcePatches, getMapLayout, knockoffOffsetForMap, resolveSolidCollision } from "../arenaColliders";
+import { isOutsideNeonCourt, resolveNeonRails } from "../neonCourt";
+import { ICE_LINEAR_DAMPING, ICE_ROLLING_DRAG, LINEAR_DAMPING, LOCKON_LAUNCH_SPEED, MARBLE_RESTITUTION, MAX_PLANAR_SPEED, REST_SPEED, ROLLING_DRAG } from "../simFeel";
 
 export const DEFAULT_BACKGROUND_SETTINGS = {
   distance: 200,
@@ -145,7 +147,7 @@ export const DEFAULT_ELEMENT_TRANSFORMS = {
 
 export type GamePhase = "menu" | "shop" | "zoogipedia" | "arena_editor" | "character_selection" | "local_setup" | "map_selection" | "playing" | "round_end" | "game_over" | "feature_hub" | "music_visualizer" | "ringer_creator" | "ringer_trials_loading" | "ringer_trials";
 export type GameMode = "classic" | "ringer_royale" | "local_multiplayer" | "practice" | "map_editor";
-export type MapTheme = "grass" | "ice" | "lava" | "space" | "saturn";
+export type MapTheme = "grass" | "ice" | "lava" | "space" | "saturn" | "neon";
 
 export interface ZoogiStats {
   speed: number;
@@ -243,7 +245,8 @@ export const MAP_OPTIONS: { id: MapTheme; name: string; description: string; col
   { id: "ice", name: "Frozen Ring", description: "Slippery ice platform", color: "#81D4FA" },
   { id: "lava", name: "Volcanic Pit", description: "Fiery lava arena", color: "#FF5722" },
   { id: "space", name: "Cosmic Platform", description: "Floating in the void", color: "#7C4DFF" },
-  { id: "saturn", name: "Arabian Nights", description: "Magical palace arena", color: "#FFA726" }
+  { id: "saturn", name: "Arabian Nights", description: "Magical palace arena", color: "#FFA726" },
+  { id: "neon", name: "Night Circuit", description: "Neon rails over a night city", color: "#d946ef" }
 ];
 
 interface Orb {
@@ -2747,7 +2750,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
       
       if (dist < 0.5) return;
       
-      const LAUNCH_SPEED = 0.95;
+      const LAUNCH_SPEED = LOCKON_LAUNCH_SPEED;
       
       if (straightMode) {
         const { tangentOffset } = state;
@@ -3359,7 +3362,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
     updatePlayerVelocity: (velocity) => set((state) => {
       if (!state.playerEntity) return {};
       
-      const MAX_VELOCITY = 1.4;
+      const MAX_VELOCITY = MAX_PLANAR_SPEED;
       const isPinpoint = state.playerEntity.zoogi.id === "pinpoint";
       
       let cappedVelocity = velocity;
@@ -4499,25 +4502,13 @@ export const useZoogiGame = create<ZoogiGameState>()(
       // friction is Coulomb mu for the tangent, not a post-hit speed scale.
       // minImpulse stays 0: a floor on the impulse adds kinetic energy.
       const COLLISION_PROFILES = {
-        playerPlayer: { restitution: 0.72, friction: 0.35, minImpulse: 0, maxVelocity: 1.4 },
-        playerOrb: { restitution: 0.68, friction: 0.4, minImpulse: 0, maxVelocity: 1.4 },
-        orbOrb: { restitution: 0.55, friction: 0.45, minImpulse: 0, maxVelocity: 1.4 },
+        playerPlayer: { restitution: MARBLE_RESTITUTION, friction: 0.35, minImpulse: 0, maxVelocity: MAX_PLANAR_SPEED },
+        playerOrb: { restitution: 0.68, friction: 0.4, minImpulse: 0, maxVelocity: MAX_PLANAR_SPEED },
+        orbOrb: { restitution: 0.55, friction: 0.45, minImpulse: 0, maxVelocity: MAX_PLANAR_SPEED },
       };
 
-      // One physicsTick is one frame, and velocity is distance per frame.
-      // 0.972 damps a full-power flick (~1.4) across roughly an arena diameter.
-      // 0.006 of constant drag then kills the low-speed creep that used to
-      // follow an orb after contact. 0.02 matches the turn-end "stopped" check.
-      const REST_SPEED = 0.02;
-      const LINEAR_DAMPING = 0.972;
-      const ROLLING_DRAG = 0.006;
-      // A patch should coast, not motor the marble. Ground loses 2.8% plus
-      // 0.006 of drag each frame. The old 1.08 scale ran after that damping
-      // (0.972 * 1.08), so speed climbed about 5% per frame while on the disk.
-      // Ice damping stays under 1 and ice drag stays positive, so the patch
-      // only keeps more of the speed the marble already had.
-      const ICE_LINEAR_DAMPING = 0.992;
-      const ICE_ROLLING_DRAG = 0.002;
+      // One physicsTick is one fixed 1/60 s step. Velocity is distance per step.
+      // Damping, drag, and the Frozen Ring patch live in simFeel.ts.
       
       let player = { ...state.playerEntity };
       let enemies = state.enemies.map(e => ({ ...e }));
@@ -4657,7 +4648,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         };
       };
       
-      const MAX_VELOCITY = 1.4;
+      const MAX_VELOCITY = MAX_PLANAR_SPEED;
       const capVelocity = (vel: [number, number, number], zoogiId?: string): [number, number, number] => {
         const speed = Math.sqrt(vel[0] ** 2 + vel[2] ** 2);
         if (speed > MAX_VELOCITY) {
@@ -5462,6 +5453,21 @@ export const useZoogiGame = create<ZoogiGameState>()(
         return { ...orb, position: result.pos, velocity: result.vel };
       });
 
+      if (state.selectedMap === "neon") {
+        const playerRail = resolveNeonRails(prevPlayerPos, player.position, player.velocity, COLLISION_RADIUS);
+        player.position = playerRail.pos;
+        player.velocity = playerRail.vel;
+        enemies = enemies.map((enemy, ei) => {
+          const rail = resolveNeonRails(prevEnemyPositions[ei], enemy.position, enemy.velocity, COLLISION_RADIUS);
+          return { ...enemy, position: rail.pos, velocity: rail.vel };
+        });
+        orbs = orbs.map((orb, oi) => {
+          if (!orb.isActive) return orb;
+          const rail = resolveNeonRails(prevOrbPositions[oi], orb.position, orb.velocity, 0.4);
+          return { ...orb, position: rail.pos, velocity: rail.vel };
+        });
+      }
+
       const BOUNCE_FACTOR = 0.7;
       const WALL_COLLISION_DIST = ARENA_RADIUS;
       
@@ -5826,9 +5832,14 @@ export const useZoogiGame = create<ZoogiGameState>()(
       const playerIsRespawning = player.isRespawning;
       const playerIsKnockedOut = player.isKnockedOut;
       const playerHasSpawnImmunity = player.spawnImmunity;
-      if (playerDist > knockoffRadiusForPlayers && !playerIsInvulnerable && !playerIsRespawning && !playerIsKnockedOut && !playerHasSpawnImmunity) {
-        // Only apply penalty during restriction phase
-        if (isRestricted) {
+      const playerOut = state.selectedMap === "neon"
+        ? isOutsideNeonCourt(playerAdjustedX, playerAdjustedZ)
+        : playerDist > knockoffRadiusForPlayers;
+      // Night Circuit knocks a marble out as soon as it leaves the floor.
+      // The other maps still wait for the restriction phase.
+      const knockoutLive = isRestricted || state.selectedMap === "neon";
+      if (playerOut && !playerIsInvulnerable && !playerIsRespawning && !playerIsKnockedOut && !playerHasSpawnImmunity) {
+        if (knockoutLive) {
           // Add player to falling entities for visual effect
           const playerFalling: FallingEntity = {
             id: `fall-player-${Date.now()}`,
@@ -5949,7 +5960,10 @@ export const useZoogiGame = create<ZoogiGameState>()(
         const enemyAdjustedZ = enemy.position[2] - knockoffOffsetForPlayers.z;
         const dist = Math.sqrt(enemyAdjustedX ** 2 + enemyAdjustedZ ** 2);
         const enemyIsInvulnerable = enemy.invulnerableUntil !== null && now < enemy.invulnerableUntil;
-        if (dist > knockoffRadiusForPlayers && isRestricted && !enemyIsInvulnerable) {
+        const enemyOut = state.selectedMap === "neon"
+          ? isOutsideNeonCourt(enemyAdjustedX, enemyAdjustedZ)
+          : dist > knockoffRadiusForPlayers;
+        if (enemyOut && knockoutLive && !enemyIsInvulnerable) {
           const localPlayerIndex = enemyIndex + 1;
           
           // Add enemy to falling entities for visual effect
@@ -6176,8 +6190,11 @@ export const useZoogiGame = create<ZoogiGameState>()(
         // Apply zone scoring updates to orb
         orb = updatedOrb;
         
+        const orbOut = state.selectedMap === "neon"
+          ? isOutsideNeonCourt(adjustedX, adjustedZ)
+          : dist > knockoffRadius;
         // Check if orb just crossed the knockoff boundary
-        if (dist > knockoffRadius) {
+        if (orbOut) {
           // Award points to whoever knocked the orb out
           let attackerColor = "#FFFFFF"; // Default white
           

@@ -1,4 +1,6 @@
 import { getSnowmanPositions } from "./arenaConstants";
+import { neonCourtLayout } from "./neonCourt";
+import { BUMPER_RESTITUTION } from "./simFeel";
 
 /**
  * Solid shapes the marble simulation uses.
@@ -378,6 +380,7 @@ const LAYOUTS: Record<string, MapLayout> = {
 
 export function getMapLayout(mapId: string | null | undefined): MapLayout | null {
   if (!mapId) return null;
+  if (mapId === "neon") return neonCourtLayout();
   return LAYOUTS[mapId] ?? null;
 }
 
@@ -485,9 +488,10 @@ export function resolveSolidCollision(
       const nx = dx / dist;
       const nz = dz / dist;
       const dot = vx * nx + vz * nz;
+      const bounce = solid.kind === "bumper" ? Math.max(restitution, BUMPER_RESTITUTION) : restitution;
       if (dot < 0) {
-        vx = (vx - 2 * dot * nx) * restitution;
-        vz = (vz - 2 * dot * nz) * restitution;
+        vx = (vx - 2 * dot * nx) * bounce;
+        vz = (vz - 2 * dot * nz) * bounce;
         const speed = Math.hypot(vx, vz);
         if (speed < REST_SPEED) {
           vx = 0;
