@@ -52,11 +52,14 @@ function ringGeometry(rings: RingSpec[], segments = 80): THREE.BufferGeometry {
   return geom;
 }
 
-function paintMaterial(color: string) {
+function paintMaterial(color: string, pull = 4) {
   return new THREE.MeshBasicMaterial({
     color,
     toneMapped: false,
     side: THREE.DoubleSide,
+    polygonOffset: true,
+    polygonOffsetFactor: -pull,
+    polygonOffsetUnits: -pull * 2,
   });
 }
 
@@ -135,10 +138,10 @@ function SymmetricSnowLip() {
 }
 
 function KnockoutEdge() {
-  const amber = useMemo(() => paintMaterial(AMBER), []);
-  const navy = useMemo(() => paintMaterial(NAVY), []);
-  const cyan = useMemo(() => paintMaterial(CYAN), []);
-  const ink = useMemo(() => paintMaterial(INK), []);
+  const amber = useMemo(() => paintMaterial(AMBER, 0), []);
+  const navy = useMemo(() => paintMaterial(NAVY, 0), []);
+  const cyan = useMemo(() => paintMaterial(CYAN, 0), []);
+  const ink = useMemo(() => paintMaterial(INK, 0), []);
   const flash = useZoogiGame((state) => state.knockoffBoundaryFlash);
   const flashStart = useRef<number | null>(null);
   const flashColor = useRef("#ffffff");
@@ -146,10 +149,10 @@ function KnockoutEdge() {
 
   const bands = useMemo(
     () => ({
-      navy: ringGeometry([{ x: 0, z: 0, inner: 14.86, outer: 15.16 }], 128),
-      cyan: ringGeometry([{ x: 0, z: 0, inner: 15.16, outer: 15.32 }], 128),
-      amber: ringGeometry([{ x: 0, z: 0, inner: 15.32, outer: KNOCK }], 128),
-      ink: ringGeometry([{ x: 0, z: 0, inner: KNOCK, outer: KNOCK + 0.32 }], 96),
+      navy: ringGeometry([{ x: 0, z: 0, inner: 14.7, outer: 15.02 }], 160),
+      cyan: ringGeometry([{ x: 0, z: 0, inner: 15.02, outer: 15.2 }], 160),
+      amber: ringGeometry([{ x: 0, z: 0, inner: 15.2, outer: KNOCK }], 160),
+      ink: ringGeometry([{ x: 0, z: 0, inner: KNOCK, outer: KNOCK + 0.62 }], 128),
     }),
     [],
   );
@@ -178,18 +181,18 @@ function KnockoutEdge() {
 
   return (
     <group>
-      <FlatPaint geometry={bands.navy} material={navy} y={MARK_Y + 0.03} />
-      <FlatPaint geometry={bands.cyan} material={cyan} y={MARK_Y + 0.038} />
-      <FlatPaint geometry={bands.amber} material={amber} y={MARK_Y + 0.046} />
-      <FlatPaint geometry={bands.ink} material={ink} y={MARK_Y + 0.054} />
+      <FlatPaint geometry={bands.navy} material={navy} y={0.088} />
+      <FlatPaint geometry={bands.cyan} material={cyan} y={0.094} />
+      <FlatPaint geometry={bands.amber} material={amber} y={0.1} />
+      <FlatPaint geometry={bands.ink} material={ink} y={0.106} />
     </group>
   );
 }
 
 export function FrozenRinkMarkings() {
-  const navy = useMemo(() => paintMaterial(NAVY), []);
-  const cyan = useMemo(() => paintMaterial(CYAN), []);
-  const amber = useMemo(() => paintMaterial(AMBER), []);
+  const navy = useMemo(() => paintMaterial(NAVY, 3), []);
+  const cyan = useMemo(() => paintMaterial(CYAN, 5), []);
+  const amber = useMemo(() => paintMaterial(AMBER, 7), []);
 
   const snowmen = useMemo(
     () =>
@@ -213,19 +216,19 @@ export function FrozenRinkMarkings() {
 
   const rings = useMemo(() => {
     const obstacle = [
-      ...snowmen.map((item) => ({ x: item.x, z: item.z, inner: item.r * 0.62, outer: item.r })),
-      ...bumpers.map((item) => ({ x: item.x, z: item.z, inner: item.r * 0.72, outer: item.r })),
+      ...snowmen.map((item) => ({ x: item.x, z: item.z, inner: item.r * 0.38, outer: item.r })),
+      ...bumpers.map((item) => ({ x: item.x, z: item.z, inner: item.r * 0.55, outer: item.r })),
     ];
     const coastNavy = patches.map((patch) => ({
       x: patch.x,
       z: patch.z,
-      inner: Math.max(0.2, patch.radius - 0.58),
-      outer: patch.radius - 0.22,
+      inner: Math.max(0.2, patch.radius - 0.72),
+      outer: patch.radius - 0.28,
     }));
     const coastCyan = patches.map((patch) => ({
       x: patch.x,
       z: patch.z,
-      inner: patch.radius - 0.22,
+      inner: patch.radius - 0.28,
       outer: patch.radius,
     }));
     return {
