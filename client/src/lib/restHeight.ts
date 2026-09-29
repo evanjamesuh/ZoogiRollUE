@@ -1,15 +1,16 @@
 /**
  * Heights that sit a round body on the y=0 floor.
- * The centre is one draw-radius up, so the bottom touches the surface
- * and the top stays clear of it.
+ * Draw radius and physics radius are the same number: a Zoogi is 0.5
+ * and an orb is 0.4, so the centre rests one radius up and the bottom
+ * touches the floor. The Zoogi-to-orb diameter ratio is 1.25, about 1.3.
  */
-export const ZOOGI_DRAW_RADIUS = 0.86;
+export const ZOOGI_DRAW_RADIUS = 0.5;
 export const ZOOGI_REST_Y = ZOOGI_DRAW_RADIUS;
-/** Visual width of a Zoogi. Arena scales are sized in these diameters. */
+/** Collision and draw width of a Zoogi. Arena spans are counted in these. */
 export const ZOOGI_DIAMETER = ZOOGI_DRAW_RADIUS * 2;
 
 /** Comic blue orb. Smaller than a Zoogi, and the same size as its collider. */
-export const ORB_DRAW_RADIUS = 0.62;
+export const ORB_DRAW_RADIUS = 0.4;
 export const ORB_REST_Y = ORB_DRAW_RADIUS;
 
 /** Panel 06 Orb_sky material: glossy blue with a soft sky glow. */

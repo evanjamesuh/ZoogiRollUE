@@ -8,7 +8,7 @@
 
 import type { MapLayout, ZonePlacement } from "./arenaColliders";
 import { arenaScaleFor } from "./arenaScale";
-import { MARBLE_WIDTH, repairRectRimGaps, snapRimGap, type RimGapAdjustment } from "./obstaclePlacement";
+import { MARBLE_WIDTH, RIM_GAP_OPEN, repairRectRimGaps, snapRimGap, type RimGapAdjustment } from "./obstaclePlacement";
 import { MAX_PLANAR_SPEED, RAIL_RESTITUTION } from "./simFeel";
 
 /** Authored court, in today's units. Readers multiply by the neon arenaScale. */
@@ -151,13 +151,60 @@ function scaledObstacleBoxes(): NeonBox[] {
   });
 }
 
+/**
+ * The knockout line is the outer face of the rail. A slot that looks open
+ * against that line can still trap a marble once the rail thickness is
+ * subtracted, so pads are pulled in until a marble fits between them and
+ * the rail without sitting on a spawn.
+ */
+function placeNeonObstacles(): { boxes: NeonBox[]; adjustments: RimGapAdjustment[] } {
+  const halfX = neonPlayHalfX();
+  const halfZ = neonPlayHalfZ();
+  const placed = repairRectRimGaps(scaledObstacleBoxes(), halfX, halfZ, MARBLE_WIDTH);
+  // The knockout-line nudge can stop at 1.7 widths while the rail still
+  // fills 0.7 of that slot. Leave a full marble, plus a little skin, so a
+  // ball parked on the rail is not also inside the pad.
+  const knockoutOpen = (RIM_GAP_OPEN + 0.002) * MARBLE_WIDTH;
+  const railClear = Math.max(knockoutOpen - NEON_RAIL_DEPTH, MARBLE_WIDTH + 0.06);
+  const innerX = halfX - NEON_RAIL_DEPTH;
+  const innerZ = halfZ - NEON_RAIL_DEPTH;
+  for (const box of placed.boxes) {
+    const faces = [
+      { gap: box.minX + innerX, dx: 1, dz: 0 },
+      { gap: innerX - box.maxX, dx: -1, dz: 0 },
+      { gap: box.minZ + innerZ, dx: 0, dz: 1 },
+      { gap: innerZ - box.maxZ, dx: 0, dz: -1 },
+    ];
+    faces.sort((a, b) => a.gap - b.gap);
+    const nearest = faces[0];
+    if (nearest.gap >= railClear) continue;
+    const shift = railClear - nearest.gap;
+    const before = nearest.gap;
+    box.minX += nearest.dx * shift;
+    box.maxX += nearest.dx * shift;
+    box.minZ += nearest.dz * shift;
+    box.maxZ += nearest.dz * shift;
+    placed.adjustments.push({
+      meshKey: box.id,
+      ids: [box.id],
+      kind: "edge",
+      direction: "inward",
+      dx: nearest.dx * shift,
+      dz: nearest.dz * shift,
+      distance: shift,
+      clearances: [{ id: `${box.id}-rail`, before: before / MARBLE_WIDTH, after: railClear / MARBLE_WIDTH }],
+    });
+  }
+  return placed;
+}
+
 /** Pad centers move out with the court. The boxes themselves stay the same size. */
 export function neonObstacles(): NeonBox[] {
-  return repairRectRimGaps(scaledObstacleBoxes(), neonPlayHalfX(), neonPlayHalfZ(), MARBLE_WIDTH).boxes;
+  return placeNeonObstacles().boxes;
 }
 
 export function neonRimGapAdjustments(): RimGapAdjustment[] {
-  const adjustments = repairRectRimGaps(scaledObstacleBoxes(), neonPlayHalfX(), neonPlayHalfZ(), MARBLE_WIDTH).adjustments;
+  const adjustments = placeNeonObstacles().adjustments;
   const authoredMouth = NEON_CORNER_GAP * courtScale();
   const mouth = neonMouthWidth();
   if (Math.abs(mouth - authoredMouth) > 1e-6) {

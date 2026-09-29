@@ -36,9 +36,9 @@ export const REST_SPEED = 0.02;
 
 /**
  * Full slingshot, world units per second.
- * Night Circuit's long side is about 39 units. At this speed that
- * crossing takes under a second, and the stopping distance is several
- * courts, so an open shot flies off.
+ * At this speed a court of about 30 Zoogi widths takes under a second
+ * to cross, and the stopping distance is several courts, so an open
+ * shot flies off.
  */
 export const FULL_LAUNCH_SPEED_PER_SEC = 46;
 

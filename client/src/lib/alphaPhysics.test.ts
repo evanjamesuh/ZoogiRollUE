@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { getMapLayout, resolveSolidCollision, MARBLE_RADIUS, ORB_RADIUS, BUMPER_RADIUS, centerPastOpenEdge, collectMatchSolids } from "./arenaColliders.ts";
-import { arenaScaleFor } from "./arenaScale.ts";
+import { ARENA_SCALE_BY_MAP, arenaScaleFor } from "./arenaScale.ts";
 import { leftNeonOpenEdge, neonPlayHalfX, neonPlayHalfZ, neonRails } from "./neonCourt.ts";
 import { circleTimeOfImpact } from "./sweptHit.ts";
 import { ORB_DRAW_RADIUS, ORB_REST_Y, ZOOGI_DIAMETER, ZOOGI_DRAW_RADIUS, ZOOGI_REST_Y } from "./restHeight.ts";
@@ -57,21 +57,19 @@ async function playing() {
   return { useZoogiGame, player: started.playerEntity, enemy: started.enemies[0] };
 }
 
-test("arenas are about 15 to 20 Zoogi diameters across", () => {
-  const circles = ["grass", "ice", "lava", "space", "saturn", "tomb"] as const;
-  for (const map of circles) {
-    const layout = getMapLayout(map);
-    assert.ok(layout);
-    const diameters = (layout.floorRadius * 2) / ZOOGI_DIAMETER;
-    assert.ok(diameters >= 15 && diameters <= 20, `${map} is ${diameters.toFixed(2)} Zoogi diameters`);
+test("every map scale defaults to 1 and grass is about 31 Zoogi widths", () => {
+  for (const [map, scale] of Object.entries(ARENA_SCALE_BY_MAP)) {
+    assert.equal(scale, 1, `${map} scale`);
+    assert.equal(arenaScaleFor(map), scale);
   }
-  const shortSide = (neonPlayHalfZ() * 2) / ZOOGI_DIAMETER;
-  const longSide = (neonPlayHalfX() * 2) / ZOOGI_DIAMETER;
-  assert.ok(shortSide >= 15 && shortSide <= 20, `neon short side ${shortSide.toFixed(2)}`);
-  assert.ok(longSide > 20 && longSide < 24, `neon long side ${longSide.toFixed(2)}`);
-  assert.equal(arenaScaleFor("grass"), 1);
-  assert.equal(arenaScaleFor("lava"), 0.836);
-  assert.equal(arenaScaleFor("neon"), 1.613);
+  const grass = getMapLayout("grass");
+  assert.ok(grass);
+  const widths = (grass.knockoffRadius * 2) / ZOOGI_DIAMETER;
+  assert.ok(Math.abs(widths - 31) < 0.2, `grass is ${widths.toFixed(2)} Zoogi widths`);
+  assert.equal(grass.knockoffRadius, 15.5 * arenaScaleFor("grass"));
+  assert.equal(grass.floorRadius, 15.2 * arenaScaleFor("grass"));
+  const ratio = ZOOGI_DRAW_RADIUS / ORB_DRAW_RADIUS;
+  assert.ok(Math.abs(ratio - 1.3) < 0.1, `Zoogi-to-orb ratio ${ratio.toFixed(3)}`);
 });
 
 test("a normal shot rolls straight and rests in 2 to 4 seconds", async () => {
@@ -402,14 +400,17 @@ test("orbs rest on the floor, stay put when touched, and score only by falling o
 });
 
 test("the drawn ball matches the collider and rests on the floor", () => {
+  assert.equal(ZOOGI_DRAW_RADIUS, 0.5);
+  assert.equal(ORB_DRAW_RADIUS, 0.4);
   assert.equal(MARBLE_RADIUS, ZOOGI_DRAW_RADIUS);
   assert.equal(ORB_RADIUS, ORB_DRAW_RADIUS);
-  assert.equal(ZOOGI_REST_Y, MARBLE_RADIUS);
-  assert.equal(ORB_REST_Y, ORB_RADIUS);
-  assert.ok(ORB_RADIUS < MARBLE_RADIUS);
+  assert.equal(ZOOGI_REST_Y, 0.5);
+  assert.equal(ORB_REST_Y, 0.4);
   const sink = ZOOGI_DRAW_RADIUS - MARBLE_RADIUS;
   assert.equal(sink, 0);
-  console.log(`MEASURE drawRadius=${ZOOGI_DRAW_RADIUS} hitRadius=${MARBLE_RADIUS} orbRadius=${ORB_RADIUS} sink=${sink}`);
+  const orbSink = ORB_DRAW_RADIUS - ORB_RADIUS;
+  assert.equal(orbSink, 0);
+  console.log(`MEASURE drawRadius=${ZOOGI_DRAW_RADIUS} hitRadius=${MARBLE_RADIUS} orbDraw=${ORB_DRAW_RADIUS} orbHit=${ORB_RADIUS} sink=${sink}`);
 });
 
 test("an orb is lighter than a Zoogi, so it leaves faster and the shooter keeps more", async () => {

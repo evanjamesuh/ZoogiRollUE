@@ -7,7 +7,7 @@ import { MAX_LAUNCH_SPEED } from "./simFeel.ts";
 function body(id: string, x: number, flags: Record<string, unknown> = {}) {
   return {
     id,
-    position: [x, 0.86, 0] as [number, number, number],
+    position: [x, 0.5, 0] as [number, number, number],
     velocity: [0, 0, 0] as [number, number, number],
     isKnockedOut: false,
     isRespawning: false,
@@ -34,7 +34,7 @@ function baseline(extra: Partial<MotionBaseline> = {}): MotionBaseline {
 test("a roll with the same bodies does not need a React publish", () => {
   const live = baseline();
   const next: MotionNext = {
-    player: { ...live.player!, position: [1, 0.86, 0], velocity: [0.4, 0, 0] },
+    player: { ...live.player!, position: [1, 0.5, 0], velocity: [0.4, 0, 0] },
     enemies: live.enemies,
     orbs: live.orbs,
     wolfClones: [],
@@ -67,7 +67,7 @@ test("a knockout or a spent orb still publishes", () => {
 test("overlay keeps the position array the mesh already holds", () => {
   const live = body("p", 0);
   const held = live.position;
-  overlayRecord(live, { ...live, position: [3, 0.86, 1], velocity: [0.2, 0, 0] });
+  overlayRecord(live, { ...live, position: [3, 0.5, 1], velocity: [0.2, 0, 0] });
   assert.equal(live.position, held);
   assert.equal(live.position[0], 3);
   assert.equal(live.position[2], 1);
