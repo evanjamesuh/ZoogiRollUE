@@ -14,6 +14,8 @@ import {
   KNOCKOUT_SCORE_ORB,
   KNOCKOUT_SCORE_PLAYER,
   KNOCKOUT_PENALTY,
+  BUMPER_SCORE,
+  KNOCKOUT_RESPAWN_BEAT,
   ZONE_SCORE_ORB,
   SCORE_ZONE_RADIUS,
   RESTRICTION_PHASE_DURATION,
@@ -27,11 +29,12 @@ import {
 } from "../arenaConstants";
 import { setCurrentMap } from "@/lib/treeOffsets";
 import { triggerKnockoffFeel, triggerCollisionFeel, triggerCollectFeel, triggerAbilityFeel, triggerWallHitFeel, useGameFeel } from "./useGameFeel";
+import { useAudio } from "./useAudio";
 import { triggerAbilityCameraEffect, triggerKnockoffCameraEffect, triggerCollisionCameraEffect, triggerTargetFocusCameraEffect } from "./useCameraEffects";
 import { getDeviceId } from "@/lib/deviceId";
 import { COSMOS_STAGE, GRASS_STAGE, arabianPlayTransform, collectMatchSolids, getIcePatches, getMapLayout, knockoffOffsetForMap, resolveSolidCollision } from "../arenaColliders";
 import { isOutsideNeonCourt, resolveNeonRails } from "../neonCourt";
-import { LINEAR_DAMPING, LOCKON_LAUNCH_SPEED, MARBLE_RESTITUTION, MAX_PLANAR_SPEED, REST_SPEED, ROLLING_DRAG } from "../simFeel";
+import { ICE_LINEAR_DAMPING, ICE_ROLLING_DRAG, LINEAR_DAMPING, LOCKON_LAUNCH_SPEED, MARBLE_RESTITUTION, MAX_PLANAR_SPEED, REST_SPEED, ROLLING_DRAG } from "../simFeel";
 
 export const DEFAULT_BACKGROUND_SETTINGS = {
   distance: 200,
@@ -171,8 +174,8 @@ export const ZOOGI_ROSTER: Zoogi[] = [
     type: "Wolf",
     color: "#6B7280",
     secondaryColor: "#9CA3AF",
-    ability: "Dash Attack",
-    abilityDescription: "Burst forward with increased speed",
+    ability: "Wolf Pack",
+    abilityDescription: "While moving, send three clones that chase the nearest orb or opponent",
     stats: { speed: 85, power: 60, defense: 50, control: 75 }
   },
   {
@@ -184,6 +187,16 @@ export const ZOOGI_ROSTER: Zoogi[] = [
     ability: "Instant Explosion",
     abilityDescription: "Create a fiery explosion around you",
     stats: { speed: 55, power: 90, defense: 70, control: 45 }
+  },
+  {
+    id: "lars",
+    name: "Lars",
+    type: "Bouncer",
+    color: "#3B82F6",
+    secondaryColor: "#93C5FD",
+    ability: "Ricochet",
+    abilityDescription: "Ricochets toward the nearest target after a hit",
+    stats: { speed: 70, power: 75, defense: 60, control: 80 }
   },
   {
     id: "pinpoint",
@@ -279,6 +292,49 @@ interface WolfClone {
   spawnedByPlayerId: string;
 }
 
+function steerWolfClone(
+  clone: WolfClone,
+  orbs: { isActive: boolean; isOutOfRing?: boolean; position: [number, number, number] }[],
+  enemies: { id: string; position: [number, number, number] }[],
+  stepScale = 1,
+): [number, number, number] {
+  let vx = clone.velocity[0];
+  let vz = clone.velocity[2];
+  let bestDx = 0;
+  let bestDz = 0;
+  let bestDist = Infinity;
+  const consider = (x: number, z: number) => {
+    const dx = x - clone.position[0];
+    const dz = z - clone.position[2];
+    const dist = Math.hypot(dx, dz);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestDx = dx;
+      bestDz = dz;
+    }
+  };
+  for (const orb of orbs) {
+    if (!orb.isActive || orb.isOutOfRing) continue;
+    consider(orb.position[0], orb.position[2]);
+  }
+  for (const enemy of enemies) {
+    if (enemy.id === clone.spawnedByPlayerId) continue;
+    consider(enemy.position[0], enemy.position[2]);
+  }
+  if (bestDist < Infinity && bestDist > 0.3) {
+    const homingStrength = 0.12 * stepScale;
+    vx += (bestDx / bestDist) * homingStrength;
+    vz += (bestDz / bestDist) * homingStrength;
+  }
+  const speed = Math.hypot(vx, vz);
+  const maxSpeed = 1.8;
+  if (speed > maxSpeed) {
+    vx = (vx / speed) * maxSpeed;
+    vz = (vz / speed) * maxSpeed;
+  }
+  return [vx, 0, vz];
+}
+
 interface GroundCrack {
   id: string;
   position: [number, number, number];
@@ -356,6 +412,11 @@ interface GameEntity {
   boltAbilityCooldown: number;
   boltAbilityUsedThisTurn: boolean;
   boltAbilityUnlocked: boolean;
+  larsAbilityUnlocked: boolean;
+  wrapsAbilityUnlocked: boolean;
+  wrapsBindUntil: number;
+  boltPhasingUntil: number;
+  slowUntil: number;
   arcMovement: {
     type: "over" | "left" | "right" | null;
     initialDirection: [number, number];
@@ -606,6 +667,10 @@ interface ZoogiGameState {
   playerRoundWins: number;
   enemyRoundWins: Map<string, number>;
   isPlayerTurn: boolean;
+  // Set when the marble whose turn it is is actually launched. The turn ends
+  // in the physics step once that marble stops, so a missed React frame cannot
+  // leave the round stuck on "Your Turn".
+  turnHasLaunched: boolean;
   turnIndex: number;
   allMovementStopped: boolean;
   
@@ -646,7 +711,8 @@ interface ZoogiGameState {
   landedRocks: LandedRock[];
   fallingEntities: FallingEntity[];
   lastCollisionEvent: CollisionEvent | null;
-  showExplosion: { position: [number, number, number]; timestamp: number; color?: string } | null;
+  showExplosion: { position: [number, number, number]; timestamp: number; color?: string; radius?: number } | null;
+  powerUnlocks: { id: string; position: [number, number, number]; startTime: number; color: string; anchorId: string }[];
   pendingGrenades: PendingGrenade[];
   
   orbCaptureEffects: OrbCaptureEffect[];
@@ -732,15 +798,24 @@ interface ZoogiGameState {
   triggerCollision: (attackerType?: string) => void;
   triggerScore: () => void;
   
-  spawnWolfClones: (position: [number, number, number], velocity: [number, number, number]) => void;
+  spawnWolfClones: (position: [number, number, number], velocity: [number, number, number], ownerId?: string) => void;
   updateWolfClones: () => void;
   clearWolfClones: () => void;
-  activateWolfgangAbility: () => void;
+  activateWolfgangAbility: (casterId: string) => void;
   canUseWolfgangAbility: () => boolean;
-  activateHotstreakAbility: () => void;
+  activateHotstreakAbility: (casterId: string) => void;
   canUseHotstreakAbility: () => boolean;
-  activateBoltAbility: () => void;
+  activateBoltAbility: (casterId: string) => void;
   canUseBoltAbility: () => boolean;
+  activateLarsAbility: (casterId: string) => void;
+  canUseLarsAbility: () => boolean;
+  activateWrapsAbility: (casterId: string) => void;
+  canUseWrapsAbility: () => boolean;
+  aiPowerOpportunity: (casterId: string) => AiPowerName | null;
+  useAiPower: (casterId: string) => AiPowerName | null;
+  debugUnlockPower: (entityId: string) => void;
+  abilityNotice: { text: string; until: number } | null;
+  showAbilityNotice: (text: string) => void;
   
   toggleLockOn: () => void;
   setLockOnTarget: (targetId: string | null, targetType: "orb" | "enemy" | null) => void;
@@ -765,7 +840,7 @@ interface ZoogiGameState {
   clearArcPeakEffect: () => void;
   
   addGroundCrack: (position: [number, number, number]) => void;
-  triggerExplosion: (position: [number, number, number], color?: string) => void;
+  triggerExplosion: (position: [number, number, number], color?: string, radius?: number) => void;
   addLandedRock: (rock: LandedRock) => void;
   armHotstreakGrenade: (position: [number, number, number], ownerId: string) => void;
   
@@ -907,6 +982,11 @@ const createEnemy = (zoogi: Zoogi, position: [number, number, number], spawnPoin
   boltAbilityCooldown: 0,
   boltAbilityUsedThisTurn: false,
   boltAbilityUnlocked: false,
+  larsAbilityUnlocked: false,
+  wrapsAbilityUnlocked: false,
+  wrapsBindUntil: 0,
+  boltPhasingUntil: 0,
+  slowUntil: 0,
   arcMovement: null,
   invulnerableUntil: null,
   isRespawning: false,
@@ -995,7 +1075,23 @@ const createPinballBumpers = (map?: string | null): PinballBumper[] => {
 const createPracticeOrbs = (multiplier: 1 | 2 | 3 = 1): Orb[] => {
   const orbs: Orb[] = [];
   const colors = ["#FFD700", "#FF69B4", "#00CED1", "#FF6347", "#7CFC00", "#FF00FF", "#00FF00", "#FF8C00"];
-  
+  let total = 0;
+  for (let ring = 1; ring <= multiplier; ring++) {
+    total += 4 + (ring - 1) * 4;
+  }
+  const starSlots = new Map<number, "wolfgang" | "hotstreak" | "bolt">();
+  const bag = Array.from({ length: total }, (_, index) => index);
+  for (let i = bag.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const swap = bag[i];
+    bag[i] = bag[j];
+    bag[j] = swap;
+  }
+  const starTypes = ["wolfgang", "hotstreak", "bolt"] as const;
+  for (let slot = 0; slot < Math.min(3, total); slot++) {
+    starSlots.set(bag[slot], starTypes[slot]);
+  }
+
   let orbIndex = 0;
   
   // Spawn orbs in expanding rings based on multiplier
@@ -1007,6 +1103,7 @@ const createPracticeOrbs = (multiplier: 1 | 2 | 3 = 1): Orb[] => {
       const angle = (i / orbsInRing) * Math.PI * 2;
       const x = Math.cos(angle) * radius;
       const z = Math.sin(angle) * radius;
+      const starOrbType = starSlots.get(orbIndex) ?? null;
       
       orbs.push({
         id: `orb-r${ring}-i${i}`,
@@ -1018,7 +1115,9 @@ const createPracticeOrbs = (multiplier: 1 | 2 | 3 = 1): Orb[] => {
         lastHitBy: null,
         lastHitByEnemyId: null,
         lastHitByLocalPlayerIndex: null,
-        lastHitTimestamp: null
+        lastHitTimestamp: null,
+        isStarOrb: starOrbType !== null,
+        starOrbType
       });
       orbIndex++;
     }
@@ -1060,6 +1159,11 @@ const initializePracticeGame = (selectedZoogi: Zoogi, orbMultiplier: 1 | 2 | 3 =
     boltAbilityCooldown: 0,
     boltAbilityUsedThisTurn: false,
     boltAbilityUnlocked: false,
+    larsAbilityUnlocked: false,
+    wrapsAbilityUnlocked: false,
+    wrapsBindUntil: 0,
+    boltPhasingUntil: 0,
+    slowUntil: 0,
     arcMovement: null,
     invulnerableUntil: null,
     isRespawning: false,
@@ -1177,6 +1281,11 @@ const initializeGame = (
     boltAbilityCooldown: 0,
     boltAbilityUsedThisTurn: false,
     boltAbilityUnlocked: false,
+    larsAbilityUnlocked: false,
+    wrapsAbilityUnlocked: false,
+    wrapsBindUntil: 0,
+    boltPhasingUntil: 0,
+    slowUntil: 0,
     arcMovement: null,
     invulnerableUntil: null,
     isRespawning: false,
@@ -1207,6 +1316,216 @@ const initializeGame = (
   
   return { playerEntity, enemies, orbs, mushrooms, pinballBumpers };
 };
+
+let lastTurnEndedAt = 0;
+let turnWatchKey = "";
+let turnReadyForLaunch = false;
+let turnSlowFrames = 0;
+
+/** Fold this round's score into the round-win counters. A tied round goes to the player. */
+function awardRoundWin(
+  score: number,
+  enemies: { id: string; score: number; zoogi?: { name?: string } }[],
+  playerRoundWins: number,
+  enemyRoundWins: Map<string, number>,
+) {
+  const maxEnemyScore = Math.max(...enemies.map((enemy) => enemy.score), 0);
+  const winningEnemy = enemies.find((enemy) => enemy.score === maxEnemyScore && maxEnemyScore > 0);
+  let nextPlayerWins = playerRoundWins;
+  const nextEnemyWins = new Map(enemyRoundWins);
+  if (score > maxEnemyScore) {
+    nextPlayerWins++;
+    console.log(`Round winner: Player! (${score} vs ${maxEnemyScore})`);
+  } else if (winningEnemy && maxEnemyScore > score) {
+    nextEnemyWins.set(winningEnemy.id, (nextEnemyWins.get(winningEnemy.id) || 0) + 1);
+    console.log(`Round winner: ${winningEnemy.zoogi?.name || "Enemy"}! (${maxEnemyScore} vs ${score})`);
+  } else {
+    nextPlayerWins++;
+    console.log(`Round tie - Player wins the round (${score} vs ${maxEnemyScore})`);
+  }
+  const bestEnemyWins = Math.max(...Array.from(nextEnemyWins.values()), 0);
+  return { nextPlayerWins, nextEnemyWins, bestEnemyWins };
+}
+
+/**
+ * A marble may end the turn only while the live store still has that marble up
+ * and the launch flag is still set. Physics clears the flag as it hands off,
+ * so a later stop-frame must not call endTurn again.
+ */
+export function stopFrameMayEndTurn(
+  state: {
+    gameMode: string;
+    isPlayerTurn: boolean;
+    turnIndex: number;
+    currentLocalPlayerIndex: number;
+    turnHasLaunched: boolean;
+  },
+  actor: "player" | "enemy" | "local",
+  index = 0,
+): boolean {
+  if (!state.turnHasLaunched || state.gameMode === "ringer_royale") return false;
+  if (actor === "player") return state.isPlayerTurn;
+  if (actor === "enemy") return !state.isPlayerTurn && state.turnIndex === index;
+  return state.gameMode === "local_multiplayer" && state.currentLocalPlayerIndex === index;
+}
+
+function actorTakingTurn(state: {
+  gameMode: string;
+  isPlayerTurn: boolean;
+  turnIndex: number;
+  currentLocalPlayerIndex: number;
+  playerEntity: { velocity: [number, number, number]; isKnockedOut?: boolean } | null;
+  enemies: { velocity: [number, number, number]; isKnockedOut?: boolean }[];
+}) {
+  if (state.gameMode === "local_multiplayer") {
+    if (state.currentLocalPlayerIndex <= 0) return state.playerEntity;
+    return state.enemies[state.currentLocalPlayerIndex - 1] ?? null;
+  }
+  if (state.isPlayerTurn) return state.playerEntity;
+  return state.enemies[state.turnIndex] ?? state.enemies[0] ?? null;
+}
+
+function unlockPatchForZoogi(zoogiId: string): Partial<GameEntity> {
+  switch (zoogiId) {
+    case "wolfgang": return { wolfgangAbilityUnlocked: true };
+    case "hotstreak": return { hotstreakAbilityUnlocked: true };
+    case "bolt": return { boltAbilityUnlocked: true };
+    case "lars": return { larsAbilityUnlocked: true };
+    case "wraps": return { wrapsAbilityUnlocked: true };
+    default: return {};
+  }
+}
+
+export type AiPowerName = "hotstreak" | "bolt" | "wolfgang" | "lars" | "wraps";
+
+const BLAST_RADIUS = 8;
+const BIND_RADIUS = 7;
+
+const flashedStarOrbIds = new Set<string>();
+
+function distanceXZ(a: [number, number, number], b: [number, number, number]): number {
+  return Math.hypot(a[0] - b[0], a[2] - b[2]);
+}
+
+function readEntity(state: { playerEntity: GameEntity | null; enemies: GameEntity[] }, id: string): GameEntity | null {
+  if (state.playerEntity?.id === id) return state.playerEntity;
+  return state.enemies.find((enemy) => enemy.id === id) ?? null;
+}
+
+function writeEntity(
+  set: (fn: (state: ZoogiGameState) => Partial<ZoogiGameState>) => void,
+  id: string,
+  patch: Partial<GameEntity>,
+) {
+  set((state) => ({
+    playerEntity: state.playerEntity && state.playerEntity.id === id
+      ? { ...state.playerEntity, ...patch }
+      : state.playerEntity,
+    enemies: state.enemies.map((enemy) => (enemy.id === id ? { ...enemy, ...patch } : enemy)),
+  }));
+}
+
+function starFlashColor(starType: string | null | undefined): string {
+  if (starType === "hotstreak") return "#ff4444";
+  if (starType === "bolt") return "#4488ff";
+  return "#ffd700";
+}
+
+/** Gold burst sits on the star's exit when that point is in frame, otherwise on the marble that unlocked it. */
+export function resolveUnlockSpot(
+  exit: [number, number, number],
+  anchor: [number, number, number] | null,
+  exitOnScreen: boolean,
+): [number, number, number] {
+  const source = exitOnScreen || !anchor ? exit : anchor;
+  return [source[0], source[1], source[2]];
+}
+
+function flashStarUnlock(
+  set: (fn: (state: ZoogiGameState) => Partial<ZoogiGameState>) => void,
+  orb: { id: string; position: [number, number, number]; starOrbType?: string | null },
+  anchorId: string,
+) {
+  if (flashedStarOrbIds.has(orb.id)) return;
+  flashedStarOrbIds.add(orb.id);
+  useAudio.getState().playPowerUnlock();
+  const now = Date.now();
+  set((state) => ({
+    powerUnlocks: [
+      ...state.powerUnlocks.filter((flash) => now - flash.startTime < 4000),
+      {
+        id: orb.id,
+        position: [orb.position[0], orb.position[1], orb.position[2]],
+        startTime: now,
+        color: starFlashColor(orb.starOrbType),
+        anchorId,
+      },
+    ],
+  }));
+}
+
+function someoneInside(
+  origin: [number, number, number],
+  points: [number, number, number][],
+  radius: number,
+): boolean {
+  return points.some((point) => {
+    const dist = distanceXZ(origin, point);
+    return dist > 0.1 && dist < radius;
+  });
+}
+
+/** Which one-shot an AI marble may cast right now. Locked powers return null. */
+export function chooseAiPower(
+  caster: GameEntity,
+  others: GameEntity[],
+  orbs: { isActive: boolean; isOutOfRing?: boolean; position: [number, number, number] }[],
+): AiPowerName | null {
+  const foes = others.filter((entity) => entity.id !== caster.id && !entity.isKnockedOut);
+  const foePoints = foes.map((entity) => entity.position);
+  const orbPoints = orbs.filter((orb) => orb.isActive && !orb.isOutOfRing).map((orb) => orb.position);
+  const moving = Math.hypot(caster.velocity[0], caster.velocity[2]) >= 0.05;
+  switch (caster.zoogi.id) {
+    case "hotstreak":
+      if (!caster.hotstreakAbilityUnlocked) return null;
+      return someoneInside(caster.position, [...foePoints, ...orbPoints], BLAST_RADIUS) ? "hotstreak" : null;
+    case "bolt":
+      if (!caster.boltAbilityUnlocked) return null;
+      return someoneInside(caster.position, foePoints, BLAST_RADIUS) ? "bolt" : null;
+    case "wolfgang":
+      if (!caster.wolfgangAbilityUnlocked || !moving) return null;
+      return "wolfgang";
+    case "lars":
+      return caster.larsAbilityUnlocked ? "lars" : null;
+    case "wraps":
+      if (!caster.wrapsAbilityUnlocked) return null;
+      return someoneInside(caster.position, foePoints, BIND_RADIUS) ? "wraps" : null;
+    default:
+      return null;
+  }
+}
+
+function respawnInsidePlayfield(
+  spawnIndex: number,
+  zones: { angle: number; distance: number; isSpawn: boolean }[] | undefined,
+  map: string | null | undefined,
+  knockoffRadius: number,
+): [number, number, number] {
+  const pos = getSpawnPointPosition(spawnIndex, zones, map ?? undefined);
+  const dist = Math.hypot(pos[0], pos[2]);
+  const limit = Math.max(3, knockoffRadius - 2.5);
+  if (dist > limit && dist > 0) {
+    const scale = limit / dist;
+    return [pos[0] * scale, 0.5, pos[2] * scale];
+  }
+  return [pos[0], 0.5, pos[2]];
+}
+
+function readyToPlaceBack(entity: { isKnockedOut?: boolean; isRespawning?: boolean; respawnAt?: number | null } | null | undefined): boolean {
+  if (!entity || !(entity.isKnockedOut || entity.isRespawning)) return false;
+  if (entity.respawnAt != null && Date.now() < entity.respawnAt) return false;
+  return true;
+}
 
 export const useZoogiGame = create<ZoogiGameState>()(
   subscribeWithSelector((set, get) => ({
@@ -1453,6 +1772,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
     playerRoundWins: 0,
     enemyRoundWins: new Map<string, number>(),
     isPlayerTurn: true,
+        turnHasLaunched: false,
     turnIndex: 0,
     allMovementStopped: true,
     
@@ -1493,7 +1813,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
     landedRocks: [],
     fallingEntities: [],
     lastCollisionEvent: null,
-    showExplosion: null,
+    showExplosion: null, powerUnlocks: [],
     pendingGrenades: [],
     
     orbCaptureEffects: [],
@@ -1599,6 +1919,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
     arcPeakTriggeredThisLaunch: false,
     arcPeakTargetPosition: null as [number, number, number] | null,
     slowMotionFactor: 1,
+    abilityNotice: null,
     
     wallSegments: [],
     restrictionPhaseActive: false,
@@ -1806,7 +2127,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
     
     triggerScore: () => set({ lastScoreTime: Date.now() }),
     
-    spawnWolfClones: (position, velocity) => {
+    spawnWolfClones: (position, velocity, ownerId?: string) => {
       const CLONE_SPEED = 1.0;
       const baseAngle = Math.atan2(velocity[2], velocity[0]);
       
@@ -1836,7 +2157,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
           velocity: cloneVel,
           isActive: true,
           sectorAngle: angle,
-          spawnedByPlayerId: get().playerEntity?.id || ""
+          spawnedByPlayerId: ownerId || get().playerEntity?.id || ""
         };
       });
       
@@ -1845,161 +2166,55 @@ export const useZoogiGame = create<ZoogiGameState>()(
     },
     
     updateWolfClones: () => set((state) => {
-      const FRICTION = 0.99;
-      const orbs = state.orbs.filter(o => o.isActive);
-      const enemies = state.enemies;
-      
-      const updatedClones = state.wolfClones.map(clone => {
-        if (!clone.isActive) return clone;
-        
-        let vx = clone.velocity[0];
-        let vz = clone.velocity[2];
-        
-        let bestTargetPos: [number, number, number] | null = null;
-        let bestTargetDist = Infinity;
-        
-        for (const orb of orbs) {
-          const dx = orb.position[0] - clone.position[0];
-          const dz = orb.position[2] - clone.position[2];
-          const dist = Math.sqrt(dx * dx + dz * dz);
-          
-          if (dist < bestTargetDist) {
-            bestTargetPos = [...orb.position] as [number, number, number];
-            bestTargetDist = dist;
-          }
-        }
-        
-        for (const enemy of enemies) {
-          if (enemy.id === clone.spawnedByPlayerId) continue;
-          const dx = enemy.position[0] - clone.position[0];
-          const dz = enemy.position[2] - clone.position[2];
-          const dist = Math.sqrt(dx * dx + dz * dz);
-          
-          if (dist < bestTargetDist) {
-            bestTargetPos = [...enemy.position] as [number, number, number];
-            bestTargetDist = dist;
-          }
-        }
-        
-        if (bestTargetPos) {
-          const dx = bestTargetPos[0] - clone.position[0];
-          const dz = bestTargetPos[2] - clone.position[2];
-          const dist = Math.sqrt(dx * dx + dz * dz);
-          if (dist > 0.3) {
-            const homingStrength = 0.12;
-            vx += (dx / dist) * homingStrength;
-            vz += (dz / dist) * homingStrength;
-          }
-        }
-        
-        vx *= FRICTION;
-        vz *= FRICTION;
-        
-        const speed = Math.sqrt(vx * vx + vz * vz);
-        const maxSpeed = 1.8;
-        if (speed > maxSpeed) {
-          vx = (vx / speed) * maxSpeed;
-          vz = (vz / speed) * maxSpeed;
-        }
-        
-        if (Math.abs(vx) < 0.005) vx = 0;
-        if (Math.abs(vz) < 0.005) vz = 0;
-        
-        const newPos: [number, number, number] = [
-          clone.position[0] + vx,
-          clone.position[1],
-          clone.position[2] + vz
-        ];
-        
-        const cloneDist = Math.sqrt(newPos[0] ** 2 + newPos[2] ** 2);
-        if (cloneDist > ARENA_RADIUS) {
-          return { ...clone, isActive: false };
-        }
-        
-        const isActive = speed > 0.01;
-        
-        return {
-          ...clone,
-          velocity: [vx, 0, vz] as [number, number, number],
-          position: newPos,
-          isActive
-        };
-      });
-      
-      return { wolfClones: updatedClones.filter(c => c.isActive) };
+      const chase = state.playerEntity
+        ? [...state.enemies, { id: state.playerEntity.id, position: state.playerEntity.position }]
+        : state.enemies;
+      return {
+        wolfClones: state.wolfClones.map((clone) => {
+          if (!clone.isActive) return clone;
+          return {
+            ...clone,
+            velocity: steerWolfClone(clone, state.orbs, chase, 1),
+          };
+        }),
+      };
     }),
     
     clearWolfClones: () => set({ wolfClones: [] }),
     
-    activateWolfgangAbility: () => {
-      const state = get();
-      const { gameMode } = state;
-      
-      // Get the currently controlled entity (handles local multiplayer)
-      const controlledEntity = get().getCurrentControlledEntity();
-      if (!controlledEntity) return;
-      
-      // Must be unlocked by collecting the gold star orb
-      if (!controlledEntity.wolfgangAbilityUnlocked) {
-        console.log("Clone ability not unlocked - collect the gold star orb first!");
-        return;
-      }
-      
-      // Must be moving to spawn clones in direction of travel
+    showAbilityNotice: (text) => set({ abilityNotice: { text, until: Date.now() + 2200 } }),
+
+    activateWolfgangAbility: (casterId: string) => {
+      const controlledEntity = readEntity(get(), casterId);
+      if (!controlledEntity || !controlledEntity.wolfgangAbilityUnlocked) return;
+
       const velocity = controlledEntity.velocity;
-      const speed = Math.sqrt(velocity[0] ** 2 + velocity[2] ** 2);
+      const speed = Math.hypot(velocity[0], velocity[2]);
       if (speed < 0.05) {
-        console.log("Must be moving to use clone ability - launch first, then tap!");
+        get().showAbilityNotice("Launch first, then tap Pack!");
         return;
       }
-      
-      get().spawnWolfClones(controlledEntity.position, velocity);
+
+      get().spawnWolfClones(controlledEntity.position, velocity, controlledEntity.id);
+      triggerAbilityFeel(controlledEntity.position, 0.9);
       triggerAbilityCameraEffect("Dash Attack");
-      
-      // Consume the ability (one-time use) and update turn state for consistency
-      const { currentLocalPlayerIndex } = get();
-      if (gameMode === "local_multiplayer" && currentLocalPlayerIndex > 0) {
-        set((s) => ({
-          enemies: s.enemies.map((e, idx) => 
-            idx === currentLocalPlayerIndex - 1 ? { 
-              ...e, 
-              wolfgangAbilityUnlocked: false,
-              wolfgangAbilityUsedThisTurn: true 
-            } : e
-          )
-        }));
-      } else {
-        set((s) => ({
-          playerEntity: s.playerEntity ? {
-            ...s.playerEntity,
-            wolfgangAbilityUnlocked: false,
-            wolfgangAbilityUsedThisTurn: true
-          } : null
-        }));
-      }
-      
-      console.log("Clone ability activated and consumed!");
+      useGameFeel.getState().triggerCartoonStarburst(controlledEntity.position, "#d1d5db");
+      useAudio.getState().playWolfDash();
+      get().showAbilityNotice("Wolf pack!");
+      writeEntity(set, casterId, {
+        wolfgangAbilityUnlocked: false,
+        wolfgangAbilityUsedThisTurn: true,
+      });
     },
-    
+
     canUseWolfgangAbility: () => {
-      // Get the currently controlled entity (handles local multiplayer)
       const controlledEntity = get().getCurrentControlledEntity();
-      if (!controlledEntity) return false;
-      
-      // Must be unlocked (one-time use)
-      if (!controlledEntity.wolfgangAbilityUnlocked) return false;
-      
-      // Must be moving to use clone ability
-      const speed = Math.sqrt(controlledEntity.velocity[0] ** 2 + controlledEntity.velocity[2] ** 2);
-      return speed >= 0.05;
+      if (!controlledEntity?.wolfgangAbilityUnlocked) return false;
+      return Math.hypot(controlledEntity.velocity[0], controlledEntity.velocity[2]) >= 0.05;
     },
     
-    activateHotstreakAbility: () => {
-      const state = get();
-      const { gameMode } = state;
-      
-      // Get the currently controlled entity (handles local multiplayer)
-      const controlledEntity = get().getCurrentControlledEntity();
+    activateHotstreakAbility: (casterId: string) => {
+      const controlledEntity = readEntity(get(), casterId);
       if (!controlledEntity) return;
       
       // Must be unlocked by collecting the red star orb
@@ -2008,24 +2223,30 @@ export const useZoogiGame = create<ZoogiGameState>()(
         return;
       }
       
-      const explosionPos = [...controlledEntity.position] as [number, number, number];
-      triggerAbilityFeel(explosionPos, 1.0);
+      // One frozen point: the caster where they are right now, including while rolling.
+      const castAt: [number, number, number] = [
+        controlledEntity.position[0],
+        controlledEntity.position[1],
+        controlledEntity.position[2],
+      ];
+      triggerAbilityFeel(castAt, 1.0);
       triggerAbilityCameraEffect("Instant Explosion");
-      useGameFeel.getState().triggerCartoonExplosion(explosionPos, true);
-      get().triggerExplosion(explosionPos);
+      useGameFeel.getState().triggerCartoonExplosion(castAt, true);
+      useAudio.getState().playExplosion();
+      get().triggerExplosion(castAt, undefined, BLAST_RADIUS);
+      get().showAbilityNotice("Explosion!");
       
-      const EXPLOSION_RADIUS = 8;
+      const EXPLOSION_RADIUS = BLAST_RADIUS;
       const EXPLOSION_FORCE = 1.0;
       
       const currentEnemies = get().enemies;
-      const { currentLocalPlayerIndex } = get();
+      const controlledEntityId = controlledEntity.id;
       
-      currentEnemies.forEach((enemy, idx) => {
-        // In local multiplayer, don't affect the current player's entity
-        if (gameMode === "local_multiplayer" && idx === currentLocalPlayerIndex - 1) return;
+      currentEnemies.forEach((enemy) => {
+        if (enemy.id === controlledEntityId) return;
         
-        const eDx = enemy.position[0] - explosionPos[0];
-        const eDz = enemy.position[2] - explosionPos[2];
+        const eDx = enemy.position[0] - castAt[0];
+        const eDz = enemy.position[2] - castAt[2];
         const eDist = Math.sqrt(eDx * eDx + eDz * eDz);
         if (eDist < EXPLOSION_RADIUS && eDist > 0.1) {
           const force = (1 - eDist / EXPLOSION_RADIUS) * EXPLOSION_FORCE;
@@ -2038,12 +2259,32 @@ export const useZoogiGame = create<ZoogiGameState>()(
           });
         }
       });
+
+      const blastPlayer = get().playerEntity;
+      if (blastPlayer && blastPlayer.id !== controlledEntityId) {
+        const pDx = blastPlayer.position[0] - castAt[0];
+        const pDz = blastPlayer.position[2] - castAt[2];
+        const pDist = Math.sqrt(pDx * pDx + pDz * pDz);
+        if (pDist < EXPLOSION_RADIUS && pDist > 0.1) {
+          const force = (1 - pDist / EXPLOSION_RADIUS) * EXPLOSION_FORCE;
+          set((s) => ({
+            playerEntity: s.playerEntity ? {
+              ...s.playerEntity,
+              velocity: [
+                s.playerEntity.velocity[0] + (pDx / pDist) * force,
+                0,
+                s.playerEntity.velocity[2] + (pDz / pDist) * force
+              ]
+            } : null
+          }));
+        }
+      }
       
       const currentOrbs = get().orbs;
       currentOrbs.forEach((orb) => {
         if (!orb.isActive) return;
-        const oDx = orb.position[0] - explosionPos[0];
-        const oDz = orb.position[2] - explosionPos[2];
+        const oDx = orb.position[0] - castAt[0];
+        const oDz = orb.position[2] - castAt[2];
         const oDist = Math.sqrt(oDx * oDx + oDz * oDz);
         if (oDist < EXPLOSION_RADIUS && oDist > 0.1) {
           const force = (1 - oDist / EXPLOSION_RADIUS) * EXPLOSION_FORCE;
@@ -2057,26 +2298,10 @@ export const useZoogiGame = create<ZoogiGameState>()(
         }
       });
       
-      // Consume the ability (one-time use) and update turn state for consistency
-      if (gameMode === "local_multiplayer" && currentLocalPlayerIndex > 0) {
-        set((s) => ({
-          enemies: s.enemies.map((e, idx) => 
-            idx === currentLocalPlayerIndex - 1 ? { 
-              ...e, 
-              hotstreakAbilityUnlocked: false,
-              hotstreakAbilityUsedThisTurn: true
-            } : e
-          )
-        }));
-      } else {
-        set((s) => ({
-          playerEntity: s.playerEntity ? {
-            ...s.playerEntity,
-            hotstreakAbilityUnlocked: false,
-            hotstreakAbilityUsedThisTurn: true
-          } : null
-        }));
-      }
+      writeEntity(set, casterId, {
+        hotstreakAbilityUnlocked: false,
+        hotstreakAbilityUsedThisTurn: true,
+      });
       
       console.log("Explosion ability activated and consumed!");
     },
@@ -2090,12 +2315,11 @@ export const useZoogiGame = create<ZoogiGameState>()(
       return controlledEntity.hotstreakAbilityUnlocked;
     },
     
-    activateBoltAbility: () => {
+    activateBoltAbility: (casterId: string) => {
       const state = get();
-      const { gameMode, enemies, orbs } = state;
+      const { enemies, orbs } = state;
       
-      // Get the currently controlled entity (handles local multiplayer)
-      const controlledEntity = get().getCurrentControlledEntity();
+      const controlledEntity = readEntity(state, casterId);
       if (!controlledEntity) return;
       
       // Must be unlocked by collecting the blue star orb
@@ -2107,11 +2331,14 @@ export const useZoogiGame = create<ZoogiGameState>()(
       const explosionPos: [number, number, number] = [...controlledEntity.position];
       triggerAbilityFeel(explosionPos, 0.8);
       triggerAbilityCameraEffect("Static Shock");
-      get().triggerExplosion(explosionPos, "yellow");
+      useAudio.getState().playStunZap();
+      get().triggerExplosion(explosionPos, "yellow", BLAST_RADIUS);
+      useGameFeel.getState().triggerCartoonStarburst(explosionPos, "#FDE047");
+      get().showAbilityNotice("Static Shock! Phasing through enemies.");
+      const phaseUntil = Date.now() + 4000;
       
-      const EXPLOSION_RADIUS = 8;
+      const EXPLOSION_RADIUS = BLAST_RADIUS;
       const EXPLOSION_FORCE = 1.0;
-      const { currentLocalPlayerIndex } = get();
       
       // Get controlled entity ID to exclude self from stun effects
       const controlledEntityId = controlledEntity.id;
@@ -2177,37 +2404,121 @@ export const useZoogiGame = create<ZoogiGameState>()(
         }
       });
       
-      // Consume the ability (one-time use) and update turn state for consistency
-      if (gameMode === "local_multiplayer" && currentLocalPlayerIndex > 0) {
-        set((s) => ({
-          enemies: s.enemies.map((e, idx) => 
-            idx === currentLocalPlayerIndex - 1 ? { 
-              ...e, 
-              boltAbilityUnlocked: false,
-              boltAbilityUsedThisTurn: true
-            } : e
-          )
-        }));
-      } else {
-        set((s) => ({
-          playerEntity: s.playerEntity ? {
-            ...s.playerEntity,
-            boltAbilityUnlocked: false,
-            boltAbilityUsedThisTurn: true
-          } : null
-        }));
-      }
-      
-      console.log("Stun ability activated and consumed!");
+      writeEntity(set, casterId, {
+        boltAbilityUnlocked: false,
+        boltAbilityUsedThisTurn: true,
+        boltPhasingUntil: phaseUntil,
+      });
     },
     
     canUseBoltAbility: () => {
-      // Get the currently controlled entity (handles local multiplayer)
       const controlledEntity = get().getCurrentControlledEntity();
-      if (!controlledEntity) return false;
-      
-      // Only show if unlocked (one-time use)
-      return controlledEntity.boltAbilityUnlocked;
+      return !!controlledEntity?.boltAbilityUnlocked;
+    },
+
+    activateLarsAbility: (casterId: string) => {
+      const controlledEntity = readEntity(get(), casterId);
+      if (!controlledEntity?.larsAbilityUnlocked) return;
+      const state = get();
+      let nearest: [number, number, number] | null = null;
+      let nearestDist = Infinity;
+      const consider = (pos: [number, number, number], id?: string) => {
+        if (id && id === controlledEntity.id) return;
+        const dist = Math.hypot(pos[0] - controlledEntity.position[0], pos[2] - controlledEntity.position[2]);
+        if (dist > 0.4 && dist < nearestDist) {
+          nearestDist = dist;
+          nearest = pos;
+        }
+      };
+      if (state.playerEntity) consider(state.playerEntity.position, state.playerEntity.id);
+      state.enemies.forEach((enemy) => consider(enemy.position, enemy.id));
+      state.orbs.forEach((orb) => { if (orb.isActive) consider(orb.position); });
+
+      let velocity = controlledEntity.velocity;
+      const speed = Math.hypot(velocity[0], velocity[2]);
+      if (nearest && speed > 0.04) {
+        const dx = nearest[0] - controlledEntity.position[0];
+        const dz = nearest[2] - controlledEntity.position[2];
+        const dist = Math.hypot(dx, dz) || 1;
+        const redirected = Math.max(speed, 0.7);
+        velocity = [(dx / dist) * redirected, 0, (dz / dist) * redirected];
+      }
+      triggerAbilityFeel(controlledEntity.position, 0.7);
+      triggerAbilityCameraEffect("Bone Bounce");
+      useGameFeel.getState().triggerCartoonStarburst(controlledEntity.position, "#3B82F6");
+      useAudio.getState().playRicochetPing("arm");
+      get().showAbilityNotice("Ricochet armed!");
+      writeEntity(set, casterId, {
+        larsRicochetBoost: 1.45,
+        larsAbilityUnlocked: false,
+        velocity,
+      });
+    },
+
+    canUseLarsAbility: () => !!get().getCurrentControlledEntity()?.larsAbilityUnlocked,
+
+    activateWrapsAbility: (casterId: string) => {
+      const controlledEntity = readEntity(get(), casterId);
+      if (!controlledEntity?.wrapsAbilityUnlocked) return;
+      const until = Date.now() + 8000;
+      const radius = BIND_RADIUS;
+      triggerAbilityFeel(controlledEntity.position, 0.75);
+      triggerAbilityCameraEffect("Bandage Bind");
+      useGameFeel.getState().triggerCartoonStarburst(controlledEntity.position, "#D4C4B0");
+      useAudio.getState().playBindWrap();
+      get().showAbilityNotice("Bandage Bind! Enemies are slowed.");
+
+      const slowOne = (pos: [number, number, number], vel: [number, number, number]) => {
+        const dist = Math.hypot(pos[0] - controlledEntity.position[0], pos[2] - controlledEntity.position[2]);
+        if (dist > radius) return null;
+        return {
+          velocity: [vel[0] * 0.35, 0, vel[2] * 0.35] as [number, number, number],
+          slowUntil: Date.now() + 4000,
+        };
+      };
+
+      set((s) => {
+        const asCaster = <T extends { id: string; position: [number, number, number]; velocity: [number, number, number] }>(entity: T) => {
+          if (entity.id === controlledEntity.id) {
+            return { ...entity, wrapsBindUntil: until, wrapsAbilityUnlocked: false };
+          }
+          const slowed = slowOne(entity.position, entity.velocity);
+          return slowed ? { ...entity, ...slowed } : entity;
+        };
+        return {
+          playerEntity: s.playerEntity ? asCaster(s.playerEntity) : null,
+          enemies: s.enemies.map((enemy) => asCaster(enemy)),
+        };
+      });
+    },
+
+    canUseWrapsAbility: () => !!get().getCurrentControlledEntity()?.wrapsAbilityUnlocked,
+
+    aiPowerOpportunity: (casterId: string) => {
+      const state = get();
+      const caster = readEntity(state, casterId);
+      if (!caster) return null;
+      const others = [state.playerEntity, ...state.enemies].filter((entity): entity is GameEntity => !!entity);
+      return chooseAiPower(caster, others, state.orbs);
+    },
+
+    useAiPower: (casterId: string) => {
+      const choice = get().aiPowerOpportunity(casterId);
+      if (!choice) return null;
+      if (choice === "hotstreak") get().activateHotstreakAbility(casterId);
+      else if (choice === "bolt") get().activateBoltAbility(casterId);
+      else if (choice === "wolfgang") get().activateWolfgangAbility(casterId);
+      else if (choice === "lars") get().activateLarsAbility(casterId);
+      else get().activateWrapsAbility(casterId);
+      return get().aiPowerOpportunity(casterId) === null ? choice : null;
+    },
+
+    debugUnlockPower: (entityId: string) => {
+      const entity = readEntity(get(), entityId);
+      if (!entity) return;
+      const patch = unlockPatchForZoogi(entity.zoogi.id);
+      if (Object.keys(patch).length === 0) return;
+      writeEntity(set, entityId, patch);
     },
     
     toggleLockOn: () => set((state) => ({
@@ -2538,9 +2849,10 @@ export const useZoogiGame = create<ZoogiGameState>()(
       }]
     })),
     
-    triggerExplosion: (position, color?: string) => {
-      set({ showExplosion: { position, timestamp: Date.now(), color } });
-      console.log("Explosion triggered at", position, "color:", color || "orange");
+    triggerExplosion: (position, color?: string, radius = BLAST_RADIUS) => {
+      const frozen: [number, number, number] = [position[0], position[1], position[2]];
+      set({ showExplosion: { position: frozen, timestamp: Date.now(), color, radius } });
+      console.log("Explosion triggered at", frozen, "color:", color || "orange", "radius:", radius);
     },
     
     addLandedRock: (rock) => set((state) => ({
@@ -2604,6 +2916,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
     },
     
     startGame: () => {
+      flashedStarOrbIds.clear();
       const { selectedZoogi, selectedCustomZoogi, gameMode, customArenaId, customArenaDecorations } = get();
       
       let zoogiToUse: Zoogi;
@@ -2664,6 +2977,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         playerRoundWins: 0,
         enemyRoundWins: new Map<string, number>(),
         isPlayerTurn: true,
+        turnHasLaunched: false,
         turnIndex: 0,
         allMovementStopped: true,
         gameTimer: 300,
@@ -2681,7 +2995,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         groundCracks: [],
         landedRocks: [],
         lastCollisionEvent: null,
-        showExplosion: null,
+        showExplosion: null, powerUnlocks: [],
         customArenaId,
         customArenaDecorations,
         developerMoveMode: false,
@@ -2705,6 +3019,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
     },
     
     startPracticeGame: () => {
+      flashedStarOrbIds.clear();
       const { selectedZoogi, selectedCustomZoogi } = get();
       
       let zoogiToUse: Zoogi;
@@ -2763,6 +3078,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         playerRoundWins: 0,
         enemyRoundWins: new Map<string, number>(),
         isPlayerTurn: true,
+        turnHasLaunched: false,
         turnIndex: 0,
         allMovementStopped: true,
         gameTimer: 9999,
@@ -2780,7 +3096,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         groundCracks: [],
         landedRocks: [],
         lastCollisionEvent: null,
-        showExplosion: null,
+        showExplosion: null, powerUnlocks: [],
         customArenaId: null,
         customArenaDecorations: [],
         developerMoveMode: false,
@@ -2803,31 +3119,16 @@ export const useZoogiGame = create<ZoogiGameState>()(
     },
     
     startNextRound: () => {
+      flashedStarOrbIds.clear();
       const { currentRound, maxRounds, playerEntity, enemies, score, playerRoundWins, enemyRoundWins } = get();
-      
-      const playerScore = score;
-      const maxEnemyScore = Math.max(...enemies.map(e => e.score), 0);
-      const winningEnemy = enemies.find(e => e.score === maxEnemyScore && maxEnemyScore > 0);
-      
-      let newPlayerRoundWins = playerRoundWins;
-      const newEnemyRoundWins = new Map(enemyRoundWins);
-      
-      if (playerScore > maxEnemyScore) {
-        newPlayerRoundWins++;
-        console.log(`Round ${currentRound} winner: Player! (${playerScore} vs ${maxEnemyScore})`);
-      } else if (winningEnemy && maxEnemyScore > playerScore) {
-        const currentWins = newEnemyRoundWins.get(winningEnemy.id) || 0;
-        newEnemyRoundWins.set(winningEnemy.id, currentWins + 1);
-        console.log(`Round ${currentRound} winner: ${winningEnemy.zoogi?.name || 'Enemy'}! (${maxEnemyScore} vs ${playerScore})`);
-      } else {
-        newPlayerRoundWins++;
-        console.log(`Round ${currentRound} tie - Player wins by default`);
-      }
+      const { nextPlayerWins, nextEnemyWins, bestEnemyWins } = awardRoundWin(score, enemies, playerRoundWins, enemyRoundWins);
       
       if (currentRound >= maxRounds) {
-        const maxEnemyWins = Math.max(...Array.from(newEnemyRoundWins.values()), 0);
-        const playerWins = newPlayerRoundWins > maxEnemyWins;
-        console.log(`Game over after ${maxRounds} rounds! Player wins: ${newPlayerRoundWins}, Best enemy: ${maxEnemyWins}`);
+        // The match follows rounds won. Equal round wins is a tie, not a defeat,
+        // and a tied last round does not erase rounds the player already won.
+        const playerWins = nextPlayerWins >= bestEnemyWins;
+        console.log(`Game over after ${maxRounds} rounds! Player wins: ${nextPlayerWins}, Best enemy: ${bestEnemyWins}`);
+        set({ playerRoundWins: nextPlayerWins, enemyRoundWins: nextEnemyWins });
         get().endGame(playerWins);
         return;
       }
@@ -2846,13 +3147,15 @@ export const useZoogiGame = create<ZoogiGameState>()(
         pinballBumpers: newPinballBumpers,
         landedRocks: [],
         currentRound: currentRound + 1,
-        playerRoundWins: newPlayerRoundWins,
-        enemyRoundWins: newEnemyRoundWins,
+        playerRoundWins: nextPlayerWins,
+        enemyRoundWins: nextEnemyWins,
         score: 0,
         gameTimer: 300,
         isPlayerTurn: true,
+        turnHasLaunched: false,
         turnIndex: 0,
         allMovementStopped: true,
+        wolfClones: [],
         ...playfieldSettings(roundMap, get().wallSettings, get().backgroundSettings, get().elementTransforms),
         playerEntity: playerEntity ? {
           ...playerEntity,
@@ -2876,6 +3179,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
     },
     
     restartWithSameZoogi: () => {
+      flashedStarOrbIds.clear();
       const { selectedZoogi, playerEntity, selectedMap, gameMode } = get();
       const zoogiToUse = selectedZoogi || playerEntity?.zoogi;
       
@@ -2900,9 +3204,11 @@ export const useZoogiGame = create<ZoogiGameState>()(
         playerRoundWins: 0,
         enemyRoundWins: new Map<string, number>(),
         isPlayerTurn: true,
+        turnHasLaunched: false,
         turnIndex: 0,
         allMovementStopped: true,
         gameTimer: 300,
+        wolfClones: [],
         showTutorial: false,
         tutorialStep: 0,
         developerMoveMode: false,
@@ -2955,6 +3261,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         playerRoundWins: 0,
         enemyRoundWins: new Map<string, number>(),
         isPlayerTurn: true,
+        turnHasLaunched: false,
         turnIndex: 0,
         birdsEyeView: false,
         firstPersonView: false,
@@ -2968,7 +3275,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         wolfClones: [],
         groundCracks: [],
         lastCollisionEvent: null,
-        showExplosion: null,
+        showExplosion: null, powerUnlocks: [],
         developerMoveMode: false,
         developerCamera: false,
         restrictionPhaseActive: false,
@@ -3021,9 +3328,13 @@ export const useZoogiGame = create<ZoogiGameState>()(
         };
       }
       
+      const playersLaunch = launchSpeed > 0.05
+        && state.gameMode !== "ringer_royale"
+        && (state.gameMode === "local_multiplayer" ? state.currentLocalPlayerIndex === 0 : state.isPlayerTurn);
       return { 
-        playerEntity: { ...state.playerEntity, velocity: cappedVelocity, arcMovement },
-        arcType: null
+        playerEntity: { ...state.playerEntity, velocity: cappedVelocity, arcMovement, lastHitByEnemyId: null },
+        arcType: null,
+        ...(playersLaunch ? { turnHasLaunched: true } : {}),
       };
     }),
     
@@ -3059,19 +3370,24 @@ export const useZoogiGame = create<ZoogiGameState>()(
         };
       }
       
+      const localLaunch = launchSpeed > 0.05
+        && state.gameMode === "local_multiplayer"
+        && state.currentLocalPlayerIndex === playerIndex;
       if (playerIndex === 0) {
         set((state) => ({
           playerEntity: state.playerEntity 
             ? { ...state.playerEntity, velocity: cappedVelocity, arcMovement } 
             : null,
-          arcType: null
+          arcType: null,
+          ...(localLaunch ? { turnHasLaunched: true } : {}),
         }));
       } else {
         set((state) => ({
           enemies: state.enemies.map((e, i) => 
             i === playerIndex - 1 ? { ...e, velocity: cappedVelocity, arcMovement } : e
           ),
-          arcType: null
+          arcType: null,
+          ...(localLaunch ? { turnHasLaunched: true } : {}),
         }));
       }
     },
@@ -3088,11 +3404,20 @@ export const useZoogiGame = create<ZoogiGameState>()(
       }));
     },
     
-    updateEnemy: (id, updates) => set((state) => ({
-      enemies: state.enemies.map(e => 
-        e.id === id ? { ...e, ...updates } : e
-      )
-    })),
+    updateEnemy: (id, updates) => set((state) => {
+      const speed = updates.velocity ? Math.hypot(updates.velocity[0], updates.velocity[2]) : 0;
+      const index = state.enemies.findIndex(e => e.id === id);
+      const theirTurn = state.gameMode === "local_multiplayer"
+        ? state.currentLocalPlayerIndex === index + 1
+        : !state.isPlayerTurn && state.turnIndex === index;
+      const launched = speed > 0.05 && theirTurn && state.gameMode !== "ringer_royale";
+      return {
+        enemies: state.enemies.map(e => 
+          e.id === id ? { ...e, ...updates } : e
+        ),
+        ...(launched ? { turnHasLaunched: true } : {}),
+      };
+    }),
     
     respawnEnemy: (id) => {
       set((state) => {
@@ -3144,6 +3469,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
               ...getAbilityUnlock(orb.starOrbType)
             } : null
           }));
+          flashStarUnlock(set, orb, playerEntity.id);
         }
       } else if (orb.lastHitBy === "enemy" && orb.lastHitByEnemyId) {
         // In local multiplayer, enemies are actually other local players
@@ -3157,6 +3483,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
                 idx === enemyIndex ? { ...e, ...getAbilityUnlock(orb.starOrbType) } : e
               )
             }));
+            flashStarUnlock(set, orb, enemies[enemyIndex].id);
           }
         }
       }
@@ -3207,6 +3534,13 @@ export const useZoogiGame = create<ZoogiGameState>()(
     },
     
     endTurn: () => {
+      const turnNow = Date.now();
+      if (turnNow - lastTurnEndedAt < 450) return;
+      lastTurnEndedAt = turnNow;
+      // Drop the launch flag only after the turn really advances. A debounced
+      // call leaves it set so the next physics step can try again.
+      set({ turnHasLaunched: false });
+
       const { enemies, turnIndex, isPlayerTurn, gameMode, localPlayers, currentLocalPlayerIndex, playerEntity, zoneEditorConfigs, zoneControlActive, updateZoneOwnership, checkZoneControlActivation, clearScoredZones } = get();
       
       // Clear scored zones at end of turn for next turn
@@ -3265,55 +3599,62 @@ export const useZoogiGame = create<ZoogiGameState>()(
         
         let nextIndex = currentLocalPlayerIndex;
         let attempts = 0;
+        const skippedStun = new Set<number>();
         do {
           nextIndex = (nextIndex + 1) % localPlayers.length;
           attempts++;
           const entity = getEntityForLocalPlayer(nextIndex);
           if (entity?.isStunned) {
             console.log(`Local player ${localPlayers[nextIndex]?.name} is stunned, skipping turn`);
+            skippedStun.add(nextIndex);
           }
         } while ((localPlayers[nextIndex].isEliminated || getEntityForLocalPlayer(nextIndex)?.isStunned) && attempts < localPlayers.length);
+        const clearSkippedStun = (index: number, entity: GameEntity): GameEntity => {
+          if (!skippedStun.has(index)) return entity;
+          if (entity.isStunned) useAudio.getState().playStunEnd();
+          return { ...entity, isStunned: false, stunTimer: 0 };
+        };
         
         // Switch to next player - respawn at spawn point if they were knocked out
         const { zoneEditorConfigs } = get();
         
         if (nextIndex === 0) {
           const currentPlayer = get().playerEntity;
-          const needsRespawn = currentPlayer?.isKnockedOut || currentPlayer?.isRespawning;
+          const needsRespawn = readyToPlaceBack(currentPlayer);
           const spawnPos = needsRespawn ? getSpawnPointPosition(currentPlayer?.spawnPointIndex ?? 0, zoneEditorConfigs) : null;
           
           set((s) => ({
             isPlayerTurn: true,
+        turnHasLaunched: false,
             currentLocalPlayerIndex: nextIndex,
             playerEntity: s.playerEntity ? {
-              ...s.playerEntity,
-              ...(spawnPos ? { position: spawnPos, velocity: [0, 0, 0] as [number, number, number] } : {}),
-              isKnockedOut: false,
-              isRespawning: false,
+              ...clearSkippedStun(0, s.playerEntity),
+              ...(spawnPos ? { position: spawnPos, velocity: [0, 0, 0] as [number, number, number], isKnockedOut: false, isRespawning: false, respawnAt: null } : {}),
               hotstreakAbilityUsedThisTurn: false,
               wolfgangAbilityUsedThisTurn: false,
               boltAbilityUsedThisTurn: false
-            } : null
+            } : null,
+            enemies: s.enemies.map((enemy, idx) => clearSkippedStun(idx + 1, enemy)),
           }));
           if (needsRespawn) console.log(`Player 1 respawned at spawn point for their turn`);
         } else {
           const currentEnemy = get().enemies[nextIndex - 1];
-          const needsRespawn = currentEnemy?.isKnockedOut || currentEnemy?.isRespawning;
+          const needsRespawn = readyToPlaceBack(currentEnemy);
           const spawnPos = needsRespawn ? getSpawnPointPosition(currentEnemy?.spawnPointIndex ?? nextIndex, zoneEditorConfigs) : null;
           
           set((s) => ({
             isPlayerTurn: true,
+        turnHasLaunched: false,
             currentLocalPlayerIndex: nextIndex,
+            playerEntity: s.playerEntity ? clearSkippedStun(0, s.playerEntity) : null,
             enemies: s.enemies.map((e, idx) => 
               idx === nextIndex - 1 ? {
-                ...e,
-                ...(spawnPos ? { position: spawnPos, velocity: [0, 0, 0] as [number, number, number] } : {}),
-                isKnockedOut: false,
-                isRespawning: false,
+                ...clearSkippedStun(idx + 1, e),
+                ...(spawnPos ? { position: spawnPos, velocity: [0, 0, 0] as [number, number, number], isKnockedOut: false, isRespawning: false, respawnAt: null } : {}),
                 hotstreakAbilityUsedThisTurn: false,
                 wolfgangAbilityUsedThisTurn: false,
                 boltAbilityUsedThisTurn: false
-              } : e
+              } : clearSkippedStun(idx + 1, e)
             )
           }));
           if (needsRespawn) console.log(`Player ${nextIndex + 1} respawned at spawn point for their turn`);
@@ -3329,68 +3670,63 @@ export const useZoogiGame = create<ZoogiGameState>()(
         checkZoneOwnership(playerEntity, 0);
       }
       
-      if (isPlayerTurn) {
-        let nextEnemyIndex = 0;
-        while (nextEnemyIndex < enemies.length && enemies[nextEnemyIndex].isStunned) {
-          console.log(`Enemy ${enemies[nextEnemyIndex].zoogi.name} is stunned, skipping turn`);
-          nextEnemyIndex++;
+      const releaseStun = (entity: GameEntity): GameEntity => {
+        if (entity.isStunned) useAudio.getState().playStunEnd();
+        return {
+          ...entity,
+          isStunned: false,
+          stunTimer: 0,
+        };
+      };
+      const skipStunnedEnemies = (start: number, list: GameEntity[]) => {
+        const next = list.map((enemy) => ({ ...enemy }));
+        let index = start;
+        while (index < next.length && next[index].isStunned) {
+          console.log(`Enemy ${next[index].zoogi.name} is stunned, skipping turn`);
+          next[index] = releaseStun(next[index]);
+          index++;
         }
-        
-        if (nextEnemyIndex >= enemies.length) {
-          // Player's turn - respawn if knocked out
-          const currentPlayer = get().playerEntity;
-          const needsRespawn = currentPlayer?.isKnockedOut || currentPlayer?.isRespawning;
-          const { zoneEditorConfigs } = get();
-          const spawnPos = needsRespawn ? getSpawnPointPosition(currentPlayer?.spawnPointIndex ?? 0, zoneEditorConfigs) : null;
-          
-          set((s) => ({ 
-            isPlayerTurn: true, 
-            turnIndex: 0,
-            playerEntity: s.playerEntity ? {
-              ...s.playerEntity,
-              ...(spawnPos ? { position: spawnPos, velocity: [0, 0, 0] as [number, number, number] } : {}),
-              isKnockedOut: false,
-              isRespawning: false,
-              hotstreakAbilityUsedThisTurn: false,
-              wolfgangAbilityUsedThisTurn: false,
-              boltAbilityUsedThisTurn: false
-            } : null
+        return { index, enemies: next };
+      };
+      const handPlayerTurn = (list: GameEntity[], clearPlayerStun: boolean) => {
+        const currentPlayer = get().playerEntity;
+        const needsRespawn = readyToPlaceBack(currentPlayer);
+        const { zoneEditorConfigs } = get();
+        const spawnPos = needsRespawn ? respawnInsidePlayfield(currentPlayer?.spawnPointIndex ?? 0, zoneEditorConfigs, get().selectedMap, get().wallSettings.knockoffBoundaryRadius) : null;
+        set((s) => ({
+          isPlayerTurn: true,
+        turnHasLaunched: false,
+          turnIndex: 0,
+          enemies: list,
+          playerEntity: s.playerEntity ? {
+            ...(clearPlayerStun ? releaseStun(s.playerEntity) : s.playerEntity),
+            ...(spawnPos ? { position: spawnPos, velocity: [0, 0, 0] as [number, number, number], isKnockedOut: false, isRespawning: false, respawnAt: null } : {}),
+            hotstreakAbilityUsedThisTurn: false,
+            wolfgangAbilityUsedThisTurn: false,
+            boltAbilityUsedThisTurn: false,
+          } : null,
+        }));
+        if (needsRespawn) console.log(`Player respawned at spawn point for their turn`);
+      };
+
+      const advanced = skipStunnedEnemies(isPlayerTurn ? 0 : turnIndex + 1, enemies);
+      if (advanced.index < advanced.enemies.length) {
+        set({ isPlayerTurn: false, turnIndex: advanced.index, enemies: advanced.enemies });
+      } else if (get().playerEntity?.isStunned) {
+        console.log("Player is stunned, skipping turn");
+        const afterPlayer = skipStunnedEnemies(0, advanced.enemies);
+        if (afterPlayer.index < afterPlayer.enemies.length) {
+          set((s) => ({
+            isPlayerTurn: false,
+            turnIndex: afterPlayer.index,
+            enemies: afterPlayer.enemies,
+            playerEntity: s.playerEntity ? releaseStun(s.playerEntity) : null,
           }));
-          if (needsRespawn) console.log(`Player respawned at spawn point for their turn`);
         } else {
-          set({ isPlayerTurn: false, turnIndex: nextEnemyIndex });
+          handPlayerTurn(afterPlayer.enemies, true);
         }
       } else {
-        let nextIndex = turnIndex + 1;
-        while (nextIndex < enemies.length && enemies[nextIndex].isStunned) {
-          console.log(`Enemy ${enemies[nextIndex].zoogi.name} is stunned, skipping turn`);
-          nextIndex++;
-        }
-        
-        if (nextIndex >= enemies.length) {
-          // Player's turn - respawn if knocked out
-          const currentPlayer = get().playerEntity;
-          const needsRespawn = currentPlayer?.isKnockedOut || currentPlayer?.isRespawning;
-          const { zoneEditorConfigs } = get();
-          const spawnPos = needsRespawn ? getSpawnPointPosition(currentPlayer?.spawnPointIndex ?? 0, zoneEditorConfigs) : null;
-          
-          set((s) => ({ 
-            isPlayerTurn: true, 
-            turnIndex: 0,
-            playerEntity: s.playerEntity ? {
-              ...s.playerEntity,
-              ...(spawnPos ? { position: spawnPos, velocity: [0, 0, 0] as [number, number, number] } : {}),
-              isKnockedOut: false,
-              isRespawning: false,
-              hotstreakAbilityUsedThisTurn: false,
-              wolfgangAbilityUsedThisTurn: false,
-              boltAbilityUsedThisTurn: false
-            } : null
-          }));
-          if (needsRespawn) console.log(`Player respawned at spawn point for their turn`);
-        } else {
-          set({ turnIndex: nextIndex });
-        }
+        handPlayerTurn(advanced.enemies, false);
       }
       
       get().resetTurnState();
@@ -3498,6 +3834,11 @@ export const useZoogiGame = create<ZoogiGameState>()(
           boltAbilityCooldown: 0,
           boltAbilityUsedThisTurn: false,
           boltAbilityUnlocked: false,
+          larsAbilityUnlocked: false,
+          wrapsAbilityUnlocked: false,
+          wrapsBindUntil: 0,
+          boltPhasingUntil: 0,
+          slowUntil: 0,
           arcMovement: null,
           invulnerableUntil: null,
           isRespawning: false,
@@ -3530,6 +3871,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         playerRoundWins: 0,
         enemyRoundWins: new Map<string, number>(),
         isPlayerTurn: true,
+        turnHasLaunched: false,
         turnIndex: 0,
         currentLocalPlayerIndex: 0,
         allMovementStopped: true,
@@ -3538,7 +3880,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         wolfClones: [],
         groundCracks: [],
         landedRocks: [],
-        showExplosion: null,
+        showExplosion: null, powerUnlocks: [],
         customArenaId,
         customArenaDecorations,
         developerMoveMode: false,
@@ -3575,6 +3917,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         playerRoundWins: 0,
         enemyRoundWins: new Map<string, number>(),
         isPlayerTurn: true,
+        turnHasLaunched: false,
         turnIndex: 0,
         allMovementStopped: true,
         gameTimer: 0,
@@ -3582,7 +3925,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         wolfClones: [],
         groundCracks: [],
         landedRocks: [],
-        showExplosion: null,
+        showExplosion: null, powerUnlocks: [],
         customArenaId,
         customArenaDecorations,
         meshyArenaId,
@@ -3946,10 +4289,17 @@ export const useZoogiGame = create<ZoogiGameState>()(
           set({ phase: "round_end" });
           return;
         }
-        // Final round complete - end game
-        const playerScore = state.score;
-        const maxEnemyScore = Math.max(...state.enemies.map(e => e.score), 0);
-        const playerWins = playerScore > maxEnemyScore;
+        // Final round complete. The match is rounds won, not this round's score.
+        // A 0–0 last round still goes to the player, then the higher round total wins.
+        const { nextPlayerWins, nextEnemyWins, bestEnemyWins } = awardRoundWin(
+          state.score,
+          state.enemies,
+          state.playerRoundWins,
+          state.enemyRoundWins,
+        );
+        const playerWins = nextPlayerWins >= bestEnemyWins;
+        console.log(`Final round over: player rounds ${nextPlayerWins} vs ${bestEnemyWins}, win=${playerWins}, tied=${nextPlayerWins === bestEnemyWins}`);
+        set({ playerRoundWins: nextPlayerWins, enemyRoundWins: nextEnemyWins, gameTimer: 0 });
         get().endGame(playerWins);
         return;
       }
@@ -3967,7 +4317,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
       let speedBoostTimer = player.speedBoostTimer - delta;
       let abilityCooldown = Math.max(0, player.abilityCooldown - delta);
       let isStunned = player.isStunned;
-      let stunTimer = player.stunTimer - delta;
+      let stunTimer = player.stunTimer;
       
       if (shieldTimer <= 0) {
         hasShield = false;
@@ -3979,23 +4329,10 @@ export const useZoogiGame = create<ZoogiGameState>()(
         speedBoostTimer = 0;
       }
       
-      if (stunTimer <= 0) {
-        isStunned = false;
-        stunTimer = 0;
-      }
-      
       let wolfgangAbilityCooldown = Math.max(0, player.wolfgangAbilityCooldown - delta);
       
       const updatedEnemies = state.enemies.map(e => {
         let updated = { ...e };
-        if (e.isStunned) {
-          const newStunTimer = e.stunTimer - delta;
-          if (newStunTimer <= 0) {
-            updated = { ...updated, isStunned: false, stunTimer: 0 };
-          } else {
-            updated = { ...updated, stunTimer: newStunTimer };
-          }
-        }
         if (e.wolfgangAbilityCooldown > 0) {
           updated = { ...updated, wolfgangAbilityCooldown: Math.max(0, e.wolfgangAbilityCooldown - delta) };
         }
@@ -4012,7 +4349,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
       
       for (const grenade of explodingGrenades) {
         console.log("Grenade exploding at", grenade.position);
-        get().triggerExplosion(grenade.position);
+        get().triggerExplosion(grenade.position, undefined, 4);
         
         const GRENADE_RADIUS = 4;
         const GRENADE_FORCE = 0.5;
@@ -4112,19 +4449,21 @@ export const useZoogiGame = create<ZoogiGameState>()(
       };
 
       // One physicsTick is one fixed 1/60 s step. Velocity is distance per step.
-      // Damping and drag live in simFeel.ts. 0.02 matches the turn-end "stopped" check.
+      // Damping, drag, and the Frozen Ring patch live in simFeel.ts.
       
       let player = { ...state.playerEntity };
       let enemies = state.enemies.map(e => ({ ...e }));
       let orbs = state.orbs.map(o => ({ ...o }));
       let orbsToRemove: string[] = [];
       
-      const applyFriction = (vel: [number, number, number]): [number, number, number] => {
-        let vx = vel[0] * LINEAR_DAMPING;
-        let vz = vel[2] * LINEAR_DAMPING;
+      const applyFriction = (vel: [number, number, number], onIce = false): [number, number, number] => {
+        const damping = onIce ? ICE_LINEAR_DAMPING : LINEAR_DAMPING;
+        const drag = onIce ? ICE_ROLLING_DRAG : ROLLING_DRAG;
+        let vx = vel[0] * damping;
+        let vz = vel[2] * damping;
         const speed = Math.hypot(vx, vz);
         if (speed < REST_SPEED) return [0, 0, 0];
-        const slowed = speed - ROLLING_DRAG;
+        const slowed = speed - drag;
         if (slowed < REST_SPEED) return [0, 0, 0];
         const scale = slowed / speed;
         return [vx * scale, 0, vz * scale];
@@ -4272,18 +4611,10 @@ export const useZoogiGame = create<ZoogiGameState>()(
         return false;
       };
       
-      const ICE_BOOST = 1.08;
-      
       const prevPlayerPos: [number, number, number] = [player.position[0], player.position[1], player.position[2]];
       
       if (!player.isStunned) {
-        player.velocity = capVelocity(applyFriction(player.velocity), player.zoogi.id);
-        if (isOnIce(player.position)) {
-          const speed = Math.sqrt(player.velocity[0] ** 2 + player.velocity[2] ** 2);
-          if (speed > 0.01) {
-            player.velocity = capVelocity([player.velocity[0] * ICE_BOOST, 0, player.velocity[2] * ICE_BOOST], player.zoogi.id);
-          }
-        }
+        player.velocity = capVelocity(applyFriction(player.velocity, isOnIce(player.position)), player.zoogi.id);
         
         if (player.arcMovement && player.arcMovement.waypoints && player.arcMovement.currentWaypointIndex !== undefined) {
           const waypoints = player.arcMovement.waypoints;
@@ -4406,13 +4737,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         if (e.isStunned) {
           return { ...e, velocity: [0, 0, 0] as [number, number, number] };
         }
-        let newVel = capVelocity(applyFriction(e.velocity), e.zoogi.id);
-        if (isOnIce(e.position)) {
-          const speed = Math.sqrt(newVel[0] ** 2 + newVel[2] ** 2);
-          if (speed > 0.01) {
-            newVel = capVelocity([newVel[0] * ICE_BOOST, 0, newVel[2] * ICE_BOOST], e.zoogi.id);
-          }
-        }
+        let newVel = capVelocity(applyFriction(e.velocity, isOnIce(e.position)), e.zoogi.id);
         
         let newPos: [number, number, number];
         let newArcMovement = e.arcMovement;
@@ -4581,6 +4906,21 @@ export const useZoogiGame = create<ZoogiGameState>()(
         
         if (checkCollision(player.position, enemy.position, COLLISION_RADIUS, COLLISION_RADIUS)) {
           const now = Date.now();
+          const playerPhasing = player.zoogi.id === "bolt" && (player.boltPhasingUntil || 0) > now;
+          const enemyPhasing = enemy.zoogi.id === "bolt" && (enemy.boltPhasingUntil || 0) > now;
+          if (playerPhasing || enemyPhasing) {
+            if (playerPhasing) {
+              enemy.isStunned = true;
+              enemy.stunTimer = Math.max(enemy.stunTimer, 2);
+              useGameFeel.getState().triggerCartoonStarburst(enemy.position, "#FDE047");
+            }
+            if (enemyPhasing) {
+              player.isStunned = true;
+              player.stunTimer = Math.max(player.stunTimer, 2);
+            }
+            enemies[i] = enemy;
+            return;
+          }
           const playerInvulnerable = player.invulnerableUntil !== null && now < player.invulnerableUntil;
           const enemyInvulnerable = enemy.invulnerableUntil !== null && now < enemy.invulnerableUntil;
           
@@ -4639,6 +4979,15 @@ export const useZoogiGame = create<ZoogiGameState>()(
             if (player.zoogi.id === "lars" && player.larsRicochetBoost > 1) {
               triggeredLarsBoost = true;
             }
+            if (player.zoogi.id === "wraps" && (player.wrapsBindUntil || 0) > now) {
+              enemy.velocity = [enemy.velocity[0] * 0.35, 0, enemy.velocity[2] * 0.35];
+              enemy.slowUntil = now + 3500;
+              useGameFeel.getState().triggerCartoonStarburst(collisionMidpoint, "#D4C4B0");
+            }
+            if (enemy.zoogi.id === "wraps" && (enemy.wrapsBindUntil || 0) > now) {
+              player.velocity = [player.velocity[0] * 0.35, 0, player.velocity[2] * 0.35];
+              player.slowUntil = now + 3500;
+            }
             
             // Enemy Hotstreak no longer triggers explosions on contact
             // Only player Hotstreak can use button-activated explosion
@@ -4683,6 +5032,10 @@ export const useZoogiGame = create<ZoogiGameState>()(
             0,
             (dz / dist) * redirectSpeed
           ], player.zoogi.id);
+          player.larsRicochetBoost = 1;
+          useGameFeel.getState().triggerCartoonStarburst(player.position, "#3B82F6");
+          useAudio.getState().playRicochetPing("hit");
+          get().showAbilityNotice("Ricochet!");
           console.log(`Lars auto-ricochet toward nearest target!`);
         }
       }
@@ -4781,8 +5134,11 @@ export const useZoogiGame = create<ZoogiGameState>()(
             const redirectSpeed = currentSpeed * 0.85;
             enemies[enemyIndex] = {
               ...enemy,
+              larsRicochetBoost: 1,
               velocity: capVelocity([(dx / dist) * redirectSpeed, 0, (dz / dist) * redirectSpeed], enemy.zoogi.id)
             };
+            useAudio.getState().playRicochetPing("hit");
+            get().showAbilityNotice("Ricochet!");
             console.log(`Enemy Lars auto-ricochet toward target!`);
           }
         });
@@ -4838,6 +5194,9 @@ export const useZoogiGame = create<ZoogiGameState>()(
                 const ddz = nearPos[2] - enemy.position[2];
                 const dd = Math.sqrt(ddx*ddx + ddz*ddz);
                 enemy.velocity = capVelocity([(ddx/dd)*spd*0.85, 0, (ddz/dd)*spd*0.85], enemy.zoogi.id);
+                enemy.larsRicochetBoost = 1;
+                useAudio.getState().playRicochetPing("hit");
+                get().showAbilityNotice("Ricochet!");
               }
             }
             
@@ -4926,6 +5285,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
       });
 
       let wolfClonesUpdated = state.wolfClones.map(c => ({ ...c }));
+      const frameScale = Math.min(3, _delta > 0 ? _delta * 60 : 1);
       
       wolfClonesUpdated.forEach((clone, ci) => {
         if (!clone.isActive) return;
@@ -4936,12 +5296,16 @@ export const useZoogiGame = create<ZoogiGameState>()(
         const prevX = clone.position[0];
         const prevZ = clone.position[2];
         
+        const chaseTargets = [...enemies, { id: player.id, position: player.position }];
+        clone.velocity = steerWolfClone(clone, orbs, chaseTargets, frameScale);
         const dampedClone = applyFriction(clone.velocity);
         let vx = dampedClone[0];
         let vz = dampedClone[2];
 
         const clonePrev: [number, number, number] = [prevX, clone.position[1], prevZ];
-        const cloneNext: [number, number, number] = [prevX + vx, clone.position[1], prevZ + vz];
+        const stepVx = vx * frameScale;
+        const stepVz = vz * frameScale;
+        const cloneNext: [number, number, number] = [prevX + stepVx, clone.position[1], prevZ + stepVz];
         const cloneHit = resolveSolidCollision(clonePrev, cloneNext, [vx, 0, vz], CLONE_RADIUS, matchSolids, CLONE_BOUNCE);
         vx = cloneHit.vel[0];
         vz = cloneHit.vel[2];
@@ -4994,7 +5358,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         pos: [number, number, number],
         vel: [number, number, number],
         entityRadius: number,
-        awardPoints: boolean,
+        onBumper: (() => void) | null,
       ): { pos: [number, number, number]; vel: [number, number, number] } => {
         const resolved = resolveSolidCollision(prev, pos, vel, entityRadius, matchSolids);
         const seen = new Set<string>();
@@ -5004,23 +5368,29 @@ export const useZoogiGame = create<ZoogiGameState>()(
           const solid = matchSolids.find((item) => item.id === id);
           if (solid?.kind !== "bumper") continue;
           bumperHits.push({ bumperId: id, hitTime: Date.now() });
-          if (awardPoints) get().addScore(50);
+          onBumper?.();
         }
         return { pos: resolved.pos, vel: resolved.vel };
       };
 
-      const playerSolid = applySolidHits(prevPlayerPos, player.position, player.velocity, COLLISION_RADIUS, true);
+      const playerSolid = applySolidHits(prevPlayerPos, player.position, player.velocity, COLLISION_RADIUS, () => {
+        get().addScore(BUMPER_SCORE);
+        player.score += BUMPER_SCORE;
+        get().showAbilityNotice(`Bumper! +${BUMPER_SCORE}`);
+      });
       player.position = playerSolid.pos;
       player.velocity = playerSolid.vel;
 
       enemies = enemies.map((enemy, ei) => {
-        const result = applySolidHits(prevEnemyPositions[ei], enemy.position, enemy.velocity, COLLISION_RADIUS, false);
-        return { ...enemy, position: result.pos, velocity: result.vel };
+        const result = applySolidHits(prevEnemyPositions[ei], enemy.position, enemy.velocity, COLLISION_RADIUS, () => {
+          enemy.score += BUMPER_SCORE;
+        });
+        return { ...enemy, position: result.pos, velocity: result.vel, score: enemy.score };
       });
 
       orbs = orbs.map((orb, oi) => {
         if (!orb.isActive) return orb;
-        const result = applySolidHits(prevOrbPositions[oi], orb.position, orb.velocity, 0.4, false);
+        const result = applySolidHits(prevOrbPositions[oi], orb.position, orb.velocity, 0.4, null);
         return { ...orb, position: result.pos, velocity: result.vel };
       });
 
@@ -5326,8 +5696,12 @@ export const useZoogiGame = create<ZoogiGameState>()(
       if (shouldEndRestriction) {
         set({ restrictionPhaseActive: false });
       }
-      
-      const isRestricted = restrictionPhaseActive && !shouldEndRestriction;
+
+      // Knockouts used to wait on restrictionPhaseActive, but that flag was
+      // only ever stored as false, so falling off the island did nothing.
+      // Scoring, the penalty, and the respawn stay on for the whole round.
+      const isRestricted = true;
+      let endTurnAfterTick = false;
       let currentRespawnPadIndex = nextRespawnPadIndex;
       
       const GROUND_LEVEL = 0;
@@ -5465,12 +5839,18 @@ export const useZoogiGame = create<ZoogiGameState>()(
           const targetPadIndex = currentRespawnPadIndex;
           currentRespawnPadIndex = (currentRespawnPadIndex + 1) % WALL_OWNERSHIP_GAP_ANGLES.length;
           
-          // Mark as knocked out - player continues momentum until stopped
+          // Stop the marble now. Waiting for it to roll to a halt off the
+          // island left the turn stuck until the round timer ran out.
+          player.velocity = [0, 0, 0];
           player.isKnockedOut = true;
+          player.isRespawning = true;
+          player.respawnAt = now + KNOCKOUT_RESPAWN_BEAT;
           player.respawnPadIndex = targetPadIndex;
-          console.log(`Player knocked out! Will respawn when momentum stops at green pad ${targetPadIndex}`);
+          const playersTurn = gameMode === "local_multiplayer" ? currentLocalPlayerIndex === 0 : state.isPlayerTurn;
+          if (gameMode !== "ringer_royale" && playersTurn) endTurnAfterTick = true;
+          get().showAbilityNotice(`Fell off! -${KNOCKOUT_PENALTY}`);
+          console.log(`Player knocked out! Respawning in ${KNOCKOUT_RESPAWN_BEAT}ms`);
         }
-        // If not restricted, player can move freely outside ring - no penalty, no respawn
       }
       
       // Process pending player respawn - wait for momentum to stop
@@ -5484,17 +5864,24 @@ export const useZoogiGame = create<ZoogiGameState>()(
           player.isKnockedOut = false; // Clear knocked out state so turn can advance
           console.log(`Player knocked out - will respawn at spawn point on next turn`);
           
-          // Explicitly trigger turn end after updating state
-          setTimeout(() => get().endTurn(), 100);
+          // Only if this marble is still the one up. A handoff that already
+          // happened must not be ended again when the timer fires.
+          setTimeout(() => {
+            const live = get();
+            if (live.phase !== "playing" || live.gameMode === "ringer_royale") return;
+            const stillUp = live.gameMode === "local_multiplayer" ? live.currentLocalPlayerIndex === 0 : live.isPlayerTurn;
+            if (stillUp) live.endTurn();
+          }, 100);
         }
       }
       
       // Legacy respawn check (for backward compatibility)
       if (player.isRespawning && player.respawnAt !== null && now >= player.respawnAt) {
-        const respawnPos = getSpawnPointPosition(player.spawnPointIndex, state.zoneEditorConfigs);
+        const respawnPos = respawnInsidePlayfield(player.spawnPointIndex, state.zoneEditorConfigs, state.selectedMap, knockoffRadiusForPlayers);
         player.position = respawnPos;
         player.velocity = [0, 0, 0];
         player.isRespawning = false;
+        player.isKnockedOut = false;
         player.respawnAt = null;
         player.respawnPadIndex = null;
         player.spawnImmunity = false;
@@ -5554,6 +5941,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
           } else {
             if (enemy.lastHitByPlayer) {
               get().scoreKnockOff("enemy", KNOCKOUT_SCORE_PLAYER);
+              get().showAbilityNotice(`Knockout! +${KNOCKOUT_SCORE_PLAYER}`);
             }
             get().triggerKnockoffBoundaryFlash("#FF0000", 3); // Red flash for any player knockout
             console.log(`Enemy ${enemy.zoogi.name} knocked out! -${KNOCKOUT_PENALTY} points`);
@@ -5563,13 +5951,19 @@ export const useZoogiGame = create<ZoogiGameState>()(
           const targetPadIndex = currentRespawnPadIndex;
           currentRespawnPadIndex = (currentRespawnPadIndex + 1) % WALL_OWNERSHIP_GAP_ANGLES.length;
           
-          // Mark as knocked out - enemy continues momentum until stopped
+          const enemyTurn = gameMode === "local_multiplayer"
+            ? currentLocalPlayerIndex === enemyIndex + 1
+            : !state.isPlayerTurn && state.turnIndex === enemyIndex;
+          if (gameMode !== "ringer_royale" && enemyTurn) endTurnAfterTick = true;
           return {
             ...enemy,
+            velocity: [0, 0, 0] as [number, number, number],
             lastHitByPlayer: false,
             lastHitByLocalPlayerIndex: null,
             score: Math.max(0, enemy.score - KNOCKOUT_PENALTY),
             isKnockedOut: true,
+            isRespawning: true,
+            respawnAt: now + KNOCKOUT_RESPAWN_BEAT,
             respawnPadIndex: targetPadIndex
           };
         }
@@ -5586,7 +5980,13 @@ export const useZoogiGame = create<ZoogiGameState>()(
             
             // For local multiplayer, trigger turn end for this player
             if (gameMode === "local_multiplayer" && currentLocalPlayerIndex === idx + 1) {
-              setTimeout(() => get().endTurn(), 100);
+              const knockedIndex = idx + 1;
+              setTimeout(() => {
+                const live = get();
+                if (live.phase === "playing" && live.gameMode === "local_multiplayer" && live.currentLocalPlayerIndex === knockedIndex) {
+                  live.endTurn();
+                }
+              }, 100);
             }
             
             return {
@@ -5611,13 +6011,14 @@ export const useZoogiGame = create<ZoogiGameState>()(
       // Process pending enemy respawns (legacy respawn timer)
       enemies = enemies.map((enemy) => {
         if (enemy.isRespawning && enemy.respawnAt !== null && now >= enemy.respawnAt) {
-          const respawnPos = getSpawnPointPosition(enemy.spawnPointIndex, state.zoneEditorConfigs);
+          const respawnPos = respawnInsidePlayfield(enemy.spawnPointIndex, state.zoneEditorConfigs, state.selectedMap, knockoffRadiusForPlayers);
           console.log(`Enemy ${enemy.zoogi.name} respawned at spawn point ${enemy.spawnPointIndex}`);
           return {
             ...enemy,
             position: respawnPos,
             velocity: [0, 0, 0] as [number, number, number],
             isRespawning: false,
+            isKnockedOut: false,
             respawnAt: null,
             respawnPadIndex: null,
             spawnImmunity: false
@@ -5763,6 +6164,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
             set((s) => ({ score: s.score + KNOCKOUT_SCORE_ORB }));
             attackerColor = player.zoogi.color;
             console.log(`Player scored +${KNOCKOUT_SCORE_ORB} for knocking orb out!`);
+            get().showAbilityNotice(`Orb off! +${KNOCKOUT_SCORE_ORB}`);
           } else if (orb.lastHitBy === "enemy" && orb.lastHitByEnemyId) {
             const attackerIndex = enemies.findIndex(e => e.id === orb.lastHitByEnemyId);
             if (attackerIndex >= 0) {
@@ -5772,6 +6174,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
                 score: enemies[attackerIndex].score + KNOCKOUT_SCORE_ORB
               };
               console.log(`Enemy ${enemies[attackerIndex].zoogi.name} scored +${KNOCKOUT_SCORE_ORB} for knocking orb out!`);
+              get().showAbilityNotice(`${enemies[attackerIndex].zoogi.name} scored +${KNOCKOUT_SCORE_ORB}`);
             }
           }
           
@@ -5779,23 +6182,30 @@ export const useZoogiGame = create<ZoogiGameState>()(
           get().triggerKnockoffBoundaryFlash(attackerColor, 2);
 
           if (orb.isStarOrb && orb.starOrbType) {
-            const unlock =
-              orb.starOrbType === "wolfgang" ? { wolfgangAbilityUnlocked: true as const } :
-              orb.starOrbType === "hotstreak" ? { hotstreakAbilityUnlocked: true as const } :
-              { boltAbilityUnlocked: true as const };
+            const grant = (zoogiId: string, name: string) => {
+              get().showAbilityNotice(`${name} unlocked!`);
+              return unlockPatchForZoogi(zoogiId);
+            };
+            let anchorId: string | null = null;
             if (orb.lastHitBy === "player" || orb.lastHitByLocalPlayerIndex === 0) {
-              player = { ...player, ...unlock };
+              player = { ...player, ...grant(player.zoogi.id, player.zoogi.ability) };
+              anchorId = player.id;
             } else if (orb.lastHitByLocalPlayerIndex !== null && orb.lastHitByLocalPlayerIndex > 0) {
               const attackerIndex = orb.lastHitByLocalPlayerIndex - 1;
               if (enemies[attackerIndex]) {
-                enemies[attackerIndex] = { ...enemies[attackerIndex], ...unlock };
+                const attacker = enemies[attackerIndex];
+                enemies[attackerIndex] = { ...attacker, ...grant(attacker.zoogi.id, attacker.zoogi.ability) };
+                anchorId = attacker.id;
               }
             } else if (orb.lastHitBy === "enemy" && orb.lastHitByEnemyId) {
               const attackerIndex = enemies.findIndex(e => e.id === orb.lastHitByEnemyId);
               if (attackerIndex >= 0) {
-                enemies[attackerIndex] = { ...enemies[attackerIndex], ...unlock };
+                const attacker = enemies[attackerIndex];
+                enemies[attackerIndex] = { ...attacker, ...grant(attacker.zoogi.id, attacker.zoogi.ability) };
+                anchorId = attacker.id;
               }
             }
+            if (anchorId) flashStarUnlock(set, orb, anchorId);
           }
           
           // Mark orb as out of ring but keep momentum going
@@ -5811,6 +6221,16 @@ export const useZoogiGame = create<ZoogiGameState>()(
       });
       
       
+      const slowedNow = Date.now();
+      if ((player.slowUntil || 0) > slowedNow) {
+        player.velocity = [player.velocity[0] * 0.8, 0, player.velocity[2] * 0.8];
+      }
+      enemies = enemies.map((enemy) => (
+        (enemy.slowUntil || 0) > slowedNow
+          ? { ...enemy, velocity: [enemy.velocity[0] * 0.8, 0, enemy.velocity[2] * 0.8] as [number, number, number] }
+          : enemy
+      ));
+
       const stateUpdates: Partial<ZoogiGameState> = {
         playerEntity: player,
         enemies,
@@ -5844,6 +6264,45 @@ export const useZoogiGame = create<ZoogiGameState>()(
       set(stateUpdates as ZoogiGameState);
       
       orbsToRemove.forEach(id => get().removeOrb(id));
+      if (endTurnAfterTick) get().endTurn();
+
+      // End the turn from the simulation, not from a React render. The marble
+      // components only noticed a flick was over when one frame saw the speed
+      // fall through 0.02. If physics finished the whole roll before that
+      // render committed, the shot lock stayed on and the computer never moved.
+      // A launch is real once this marble has been still on this turn and then
+      // rolled. Coasting in from the previous hit does not count, so the
+      // computer still gets to take its own shot.
+      const settled = get();
+      if (settled.phase === "playing" && settled.gameMode !== "ringer_royale") {
+        const watchKey = settled.gameMode === "local_multiplayer"
+          ? `L${settled.currentRound}:${settled.currentLocalPlayerIndex}`
+          : `C${settled.currentRound}:${settled.isPlayerTurn ? "p" : "e"}${settled.turnIndex}`;
+        if (watchKey !== turnWatchKey) {
+          turnWatchKey = watchKey;
+          turnReadyForLaunch = false;
+          turnSlowFrames = 0;
+        }
+        const actor = actorTakingTurn(settled);
+        if (actor && !actor.isKnockedOut) {
+          const actorSpeed = Math.hypot(actor.velocity[0], actor.velocity[2]);
+          if (!turnReadyForLaunch) {
+            if (actorSpeed < 0.02) turnReadyForLaunch = true;
+          } else if (actorSpeed > 0.08 && !settled.turnHasLaunched) {
+            set({ turnHasLaunched: true });
+            turnSlowFrames = 0;
+          } else if (get().turnHasLaunched) {
+            if (actorSpeed < 0.02) {
+              get().endTurn();
+            } else if (actorSpeed < 0.12) {
+              turnSlowFrames += 1;
+              if (turnSlowFrames > 40) get().endTurn();
+            } else {
+              turnSlowFrames = 0;
+            }
+          }
+        }
+      }
     }
   }))
 );

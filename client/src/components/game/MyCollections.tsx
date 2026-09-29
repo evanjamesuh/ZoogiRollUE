@@ -482,7 +482,7 @@ export function MyCollections({ onBack, onSelectZoogi, onSelectArena }: MyCollec
 
       {selectedItem && (
         <div 
-          className="fixed inset-0 bg-black/80 z-60 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/80 z-[60] flex items-center justify-center p-4"
           onClick={() => setSelectedItem(null)}
         >
           <div 
@@ -568,7 +568,7 @@ export function MyCollections({ onBack, onSelectZoogi, onSelectArena }: MyCollec
 
       {showDeleteConfirm !== null && (
         <div 
-          className="fixed inset-0 bg-black/80 z-70 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/80 z-[80] flex items-center justify-center p-4"
           onClick={() => setShowDeleteConfirm(null)}
         >
           <div 

@@ -6,6 +6,8 @@ import { ArrowLeft, Users, Check, ChevronLeft, ChevronRight } from "lucide-react
 const PORTRAIT_IMAGES: Record<string, string> = {
   wolfgang: "/portraits/wolfgang.png",
   hotstreak: "/portraits/hotstreak.png",
+  pinpoint: "/portraits/pinpoint.png",
+  bolt: "/portraits/bolt.png",
   wraps: "/portraits/wraps.png",
 };
 

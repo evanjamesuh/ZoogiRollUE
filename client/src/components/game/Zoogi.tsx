@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { useRef, useState, useEffect, useMemo, Suspense, Component, type ReactNode } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { Line, Html, useGLTF } from "@react-three/drei";
-import { useZoogiGame } from "@/lib/stores/useZoogiGame";
+import { stopFrameMayEndTurn, useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { resolveZoogiModel, rollMarble, zoogiModelPreloadUrls, type ZoogiModelSettings } from "@/lib/zoogiModels";
 import { useAudio } from "@/lib/stores/useAudio";
 import { useProgression } from "@/lib/stores/useProgression";
@@ -11,6 +11,7 @@ import { visualPosition } from "@/lib/renderInterp";
 import { AI_LAUNCH_DELAY, LAUNCH_POWER_MULTIPLIER, MAX_LAUNCH_SPEED } from "@/lib/simFeel";
 import { triggerLaunchCameraEffect, clearAimCameraEffect } from "@/lib/stores/useCameraEffects";
 import { getSkinEffect, getRainbowColor } from "@/lib/skinEffects";
+import { StunnedIndicator } from "./PowerEffects";
 
 // Global scale control - adjust this to resize ALL Zoogis uniformly
 let globalZoogiScale = 0.86;
@@ -38,6 +39,7 @@ const ZOOGI_MATERIAL_STYLES: Record<string, {
   wolfgang: { clearcoat: 1.0, clearcoatRoughness: 0.05, metalness: 0.95, roughness: 0.15, reflectivity: 1.0, sheen: 0.3, sheenRoughness: 0.2, sheenColor: "#888888" },
   hotstreak: { clearcoat: 1.0, clearcoatRoughness: 0.08, metalness: 0.85, roughness: 0.2, reflectivity: 0.9, sheen: 0.5, sheenRoughness: 0.15, sheenColor: "#FF6600" },
   lars: { clearcoat: 1.0, clearcoatRoughness: 0.03, metalness: 0.7, roughness: 0.1, reflectivity: 1.0, sheen: 0.2, sheenRoughness: 0.1, sheenColor: "#4488FF" },
+  wraps: { clearcoat: 0.35, clearcoatRoughness: 0.45, metalness: 0.05, roughness: 0.62, reflectivity: 0.3, sheen: 0.85, sheenRoughness: 0.4, sheenColor: "#D4C4B0" },
   pinpoint: { clearcoat: 1.0, clearcoatRoughness: 0.1, metalness: 0.9, roughness: 0.25, reflectivity: 0.85, sheen: 0.4, sheenRoughness: 0.2, sheenColor: "#AA66FF" },
   bolt: { clearcoat: 1.0, clearcoatRoughness: 0.02, metalness: 0.8, roughness: 0.08, reflectivity: 1.0, sheen: 0.6, sheenRoughness: 0.1, sheenColor: "#FFDD00" },
 };
@@ -241,36 +243,50 @@ const ZOOGI_TRAJECTORY_COLORS: Record<string, string> = {
   wolfgang: "#6B7280",   // gray
   hotstreak: "#F97316",  // orange
   lars: "#3B82F6",       // blue
+  wraps: "#D4C4B0",
   pinpoint: "#8B5CF6",   // purple
   bolt: "#FBBF24",       // yellow
 };
 
-function StunEffect({ position }: { position: [number, number, number] }) {
-  const groupRef = useRef<THREE.Group>(null);
-  
-  useFrame((state) => {
-    if (groupRef.current) {
-      groupRef.current.rotation.y = state.clock.elapsedTime * 5;
-    }
+function PopRing({
+  args,
+  color,
+  opacity = 0.85,
+  y = 0.05,
+}: {
+  args: [number, number, number];
+  color: string;
+  opacity?: number;
+  y?: number;
+}) {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const started = useRef(Date.now());
+
+  useFrame(() => {
+    const mesh = meshRef.current;
+    if (!mesh) return;
+    const t = Math.min(1, (Date.now() - started.current) / 240);
+    const overshoot = t < 1 ? Math.sin(t * Math.PI) * 0.28 : 0;
+    mesh.scale.setScalar(Math.max(0.05, t + overshoot));
   });
-  
+
   return (
-    <group ref={groupRef} position={[position[0], position[1] + 0.8, position[2]]}>
-      {[0, 1, 2, 3].map((i) => (
-        <mesh
-          key={i}
-          position={[
-            Math.cos((i / 4) * Math.PI * 2) * 0.5,
-            Math.sin(i * 0.5) * 0.1,
-            Math.sin((i / 4) * Math.PI * 2) * 0.5
-          ]}
-        >
-          <octahedronGeometry args={[0.1]} />
-          <meshBasicMaterial color="#FBBF24" />
-        </mesh>
-      ))}
-      <pointLight color="#FBBF24" intensity={1} distance={2} />
-    </group>
+    <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, y, 0]} scale={0.05}>
+      <ringGeometry args={args} />
+      <meshBasicMaterial color={color} transparent opacity={opacity} side={THREE.DoubleSide} />
+    </mesh>
+  );
+}
+
+function TurnStunMarker({ entity }: { entity: { position: [number, number, number]; isStunned: boolean; stunTimer: number } }) {
+  if (!entity.isStunned) return null;
+  return (
+    <StunnedIndicator
+      position={entity.position}
+      remaining={entity.stunTimer > 0 ? entity.stunTimer : 1}
+      duration={0}
+      pulse
+    />
   );
 }
 
@@ -280,6 +296,7 @@ export function PlayerZoogi() {
     playerEntity, 
     updatePlayerVelocity,
     isPlayerTurn,
+    currentRound,
     endTurn,
     setMovementStopped,
     armHotstreakGrenade,
@@ -328,6 +345,15 @@ export function PlayerZoogi() {
     }
     prevIsPlayerTurnRef.current = isPlayerTurn;
   }, [isPlayerTurn]);
+
+  // A round can end while it is still this marble's turn (the clock hit 0).
+  // The turn flag never flips, so the shot lock from the previous round would
+  // otherwise stay on and the next round could not be flicked.
+  useEffect(() => {
+    launchCooldownRef.current = false;
+    hasLaunchedRef.current = false;
+    prevSpeedRef.current = 0;
+  }, [currentRound]);
 
   useEffect(() => {
     if (playerEntity && isPlayerTurn) {
@@ -604,8 +630,10 @@ export function PlayerZoogi() {
       hasLaunchedRef.current = false;
       launchCooldownRef.current = false;
       setMovementStopped(true);
-      
-      if (!isFreeForAll) {
+
+      // Physics already ends the turn when the roll stops. A later frame can
+      // still see this same slowdown. Ending again would skip whoever is up now.
+      if (!isFreeForAll && stopFrameMayEndTurn(useZoogiGame.getState(), "player")) {
         endTurn();
         console.log("Player turn ended");
       }
@@ -776,12 +804,30 @@ export function PlayerZoogi() {
 
   return (
     <group>
-      <group ref={meshRef} position={pos} visible={!firstPersonView}>
+      <group ref={meshRef} position={pos} visible={!firstPersonView && !playerEntity.isKnockedOut && !playerEntity.isRespawning}>
         <ZoogiModelSwitch zoogiId={playerEntity.zoogi.id} hasShield={playerEntity.hasShield} hasSpawnImmunity={playerEntity.spawnImmunity} color={playerEntity.zoogi.color} customModelUrl={playerEntity.customModelUrl} isPlayer={true} />
+        {playerEntity.larsRicochetBoost > 1 && (
+          <PopRing args={[1.1, 1.35, 24]} color="#3B82F6" />
+        )}
+        {(playerEntity.boltPhasingUntil || 0) > Date.now() && (
+          <mesh>
+            <sphereGeometry args={[1.15, 16, 16]} />
+            <meshBasicMaterial color="#FDE047" transparent opacity={0.35} />
+          </mesh>
+        )}
+        {(playerEntity.wrapsBindUntil || 0) > Date.now() && (
+          <PopRing args={[1.2, 1.55, 24]} color="#D4C4B0" opacity={0.9} y={0.08} />
+        )}
+        {playerEntity.speedBoost > 1 && (
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+            <ringGeometry args={[0.9, 1.15, 20]} />
+            <meshBasicMaterial color="#e5e7eb" transparent opacity={0.8} />
+          </mesh>
+        )}
       </group>
       
       {/* Floating player icon */}
-      {!firstPersonView && (
+      {!firstPersonView && !playerEntity.isKnockedOut && !playerEntity.isRespawning && (
         <Html
           position={[pos[0], pos[1] + 3.2, pos[2]]}
           center
@@ -810,7 +856,7 @@ export function PlayerZoogi() {
       )}
       
       {/* Invisible hitbox for drag interaction - disabled in first person, over shoulder, and birds eye views */}
-      {(isPlayerTurn || isFreeForAll) && !launchCooldownRef.current && !firstPersonView && !overShoulderView && !birdsEyeView && (
+      {(isPlayerTurn || isFreeForAll) && !launchCooldownRef.current && !playerEntity.isKnockedOut && !playerEntity.isRespawning && !firstPersonView && !overShoulderView && !birdsEyeView && (
         <mesh 
           position={pos} 
           onPointerDown={handlePointerDown}
@@ -820,7 +866,7 @@ export function PlayerZoogi() {
         </mesh>
       )}
       
-      {playerEntity.isStunned && <StunEffect position={pos} />}
+      <TurnStunMarker entity={playerEntity} />
 
       {trajectoryPoints.length > 1 && (
         <Line
@@ -890,7 +936,7 @@ export function PlayerZoogi() {
         </>
       )}
 
-      {(isPlayerTurn || isFreeForAll) && !isDragging && (
+      {(isPlayerTurn || isFreeForAll) && !isDragging && !playerEntity.isKnockedOut && !playerEntity.isRespawning && (
         <mesh position={[pos[0], 0.05, pos[2]]} rotation={[-Math.PI / 2, 0, 0]}>
           <ringGeometry args={[0.7, 0.9, 32]} />
           <meshBasicMaterial color={isFreeForAll ? "#A855F7" : "#00FF00"} transparent opacity={0.5} />
@@ -912,12 +958,15 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
   const aiTimerRef = useRef(0);
   const hasLaunchedRef = useRef(false);
   const prevTurnRef = useRef(false);
+  const prevRoundRef = useRef(0);
   const prevSpeedRef = useRef(0);
   const stunRotationRef = useRef(0);
   const lastLaunchTimeRef = useRef(0);
   const ffaCooldownRef = useRef(1.5 + Math.random() * 1.5);
+  const prePowerRef = useRef<"pending" | "cast" | "done">("pending");
+  const wolfTimerRef = useRef<number | null>(null);
   
-  const { enemies, isPlayerTurn, turnIndex, playerEntity, orbs, updateEnemy, endTurn, setMovementStopped, spawnWolfClones, gameMode, lockOnEnabled, lockOnTargetId, setLockOnTarget, aiControls } = useZoogiGame();
+  const { enemies, isPlayerTurn, turnIndex, currentRound, playerEntity, orbs, updateEnemy, endTurn, setMovementStopped, spawnWolfClones, gameMode, lockOnEnabled, lockOnTargetId, setLockOnTarget, aiControls } = useZoogiGame();
   
   const enemy = enemies.find(e => e.id === entityId);
   const myIndex = enemies.findIndex(e => e.id === entityId);
@@ -935,38 +984,75 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
     
     meshRef.current.scale.set(1, 1, 1);
     
-    const shouldBeMyTurn = !isPlayerTurn && turnIndex === myIndex;
-    
+    const liveTurn = useZoogiGame.getState();
+    const liveOwnsTurn = !isFreeForAll && !liveTurn.isPlayerTurn && liveTurn.turnIndex === myIndex;
+    const liveIsMyTurn = liveOwnsTurn && !liveTurn.enemies[myIndex]?.isStunned;
+
     if (!isFreeForAll) {
-      if (shouldBeMyTurn && enemy.isStunned && !prevTurnRef.current) {
+      if (liveOwnsTurn && liveTurn.enemies[myIndex]?.isStunned && !prevTurnRef.current) {
         console.log(`Enemy ${enemy.zoogi.name} is stunned, auto-skipping turn`);
-        setTimeout(() => endTurn(), 300);
+        setTimeout(() => {
+          const live = useZoogiGame.getState();
+          if (!live.isPlayerTurn && live.turnIndex === myIndex && live.enemies[myIndex]?.isStunned) {
+            live.endTurn();
+          }
+        }, 300);
       }
       
-      if (isMyTurn && !prevTurnRef.current) {
+      if (liveIsMyTurn && !prevTurnRef.current) {
         hasLaunchedRef.current = false;
         aiTimerRef.current = 0;
+        prePowerRef.current = "pending";
+        wolfTimerRef.current = null;
         console.log(`Enemy ${enemy.zoogi.name}'s turn starting`);
       }
-      prevTurnRef.current = shouldBeMyTurn;
+      prevTurnRef.current = !liveTurn.isPlayerTurn && liveTurn.turnIndex === myIndex;
+    }
+
+    if (prevRoundRef.current !== currentRound) {
+      prevRoundRef.current = currentRound;
+      hasLaunchedRef.current = false;
+      prevSpeedRef.current = 0;
+      aiTimerRef.current = 0;
     }
     
     const canLaunchFFA = isFreeForAll && speed < 0.1 && !enemy.isStunned;
-    const canLaunchTurnBased = !isFreeForAll && isMyTurn && !hasLaunchedRef.current && !enemy.isStunned;
+    const canLaunchTurnBased = liveIsMyTurn && !hasLaunchedRef.current;
     
     if (canLaunchFFA || canLaunchTurnBased) {
       aiTimerRef.current += delta;
       
-      const launchDelay = isFreeForAll ? ffaCooldownRef.current * aiControls.reactionDelay : AI_LAUNCH_DELAY * aiControls.reactionDelay;
+      // The flick waits past the 0.4s power windup, so a cast still happens
+      // before the marble leaves. AI_LAUNCH_DELAY is the snappy floor.
+      const launchDelay = isFreeForAll
+        ? ffaCooldownRef.current * aiControls.reactionDelay
+        : Math.max(AI_LAUNCH_DELAY * aiControls.reactionDelay, 0.65);
+      if (prePowerRef.current === "pending" && aiTimerRef.current >= 0.4) {
+        const powerId = enemy.zoogi.id;
+        if (powerId === "pinpoint") {
+          useZoogiGame.getState().showAbilityNotice(`${enemy.zoogi.name} locks on!`);
+          prePowerRef.current = "done";
+        } else if (powerId === "wolfgang") {
+          prePowerRef.current = "done";
+        } else {
+          // Cast on the next pass, after this frame's physics step, so a rolling
+          // marble and the blast share the position that actually gets drawn.
+          prePowerRef.current = "cast";
+        }
+      }
       if (aiTimerRef.current > launchDelay) {
         if (enemy.isStunned) {
           console.log(`Enemy ${enemy.zoogi.name} cannot launch - stunned!`);
-          if (!isFreeForAll) endTurn();
+          const live = useZoogiGame.getState();
+          if (!isFreeForAll && !live.isPlayerTurn && live.turnIndex === myIndex) live.endTurn();
           return;
         }
         
         aiTimerRef.current = 0;
         hasLaunchedRef.current = true;
+        if (enemy.zoogi.id === "wolfgang" && enemy.wolfgangAbilityUnlocked) {
+          wolfTimerRef.current = 0;
+        }
         if (isFreeForAll) {
           ffaCooldownRef.current = 1.5 + Math.random() * 1.5;
         }
@@ -1123,7 +1209,8 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
             console.log(`Enemy ${enemy.zoogi.name} moving toward center`);
           } else {
             console.log(`Enemy ${enemy.zoogi.name} at center, looking for next opportunity`);
-            if (!isFreeForAll) endTurn();
+            const live = useZoogiGame.getState();
+            if (!isFreeForAll && !live.isPlayerTurn && live.turnIndex === myIndex) live.endTurn();
           }
           return;
         }
@@ -1204,10 +1291,11 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
           
           // Accuracy from AI controls - lower accuracy = more random angle offset
           const baseAccuracy = aiControls.accuracy;
-          const accuracy = baseAccuracy + Math.random() * (1 - baseAccuracy) * 0.5;
+          const pinpointAim = enemy.zoogi.id === "pinpoint";
+          const accuracy = pinpointAim ? 1 : baseAccuracy + Math.random() * (1 - baseAccuracy) * 0.5;
           // Angle variance inversely proportional to accuracy setting
           const angleVariance = 0.3 * (1 - aiControls.accuracy);
-          const angleOffset = (Math.random() - 0.5) * angleVariance;
+          const angleOffset = pinpointAim ? 0 : (Math.random() - 0.5) * angleVariance;
           const angle = Math.atan2(dz, dx) + angleOffset;
           
           const newVel: [number, number, number] = [
@@ -1215,7 +1303,7 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
             0,
             Math.sin(angle) * launchSpeed * accuracy
           ];
-          updateEnemy(entityId, { velocity: newVel });
+          updateEnemy(entityId, { velocity: newVel, lastHitByPlayer: false });
           setMovementStopped(false);
           
           
@@ -1224,11 +1312,27 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
       }
     }
     
+    if (wolfTimerRef.current !== null && speed > 0.05) {
+      wolfTimerRef.current += delta;
+      if (wolfTimerRef.current >= 0.4) {
+        const live = useZoogiGame.getState().enemies.find((entry) => entry.id === entityId);
+        if (live && meshRef.current) {
+          meshRef.current.position.set(live.position[0], live.position[1], live.position[2]);
+        }
+        useZoogiGame.getState().useAiPower(entityId);
+        wolfTimerRef.current = null;
+      }
+    }
+
     if (hasLaunchedRef.current && speed < 0.02 && prevSpeedRef.current >= 0.02) {
       hasLaunchedRef.current = false;
       aiTimerRef.current = 0;
+      prePowerRef.current = "pending";
+      wolfTimerRef.current = null;
       setMovementStopped(true);
-      if (!isFreeForAll) {
+      // A late frame after physics already handed the turn back must not skip
+      // the human, and a power cast must not be what ends the turn.
+      if (!isFreeForAll && stopFrameMayEndTurn(useZoogiGame.getState(), "enemy", myIndex)) {
         endTurn();
         console.log(`Enemy ${enemy.zoogi.name}'s turn ended`);
       }
@@ -1236,6 +1340,17 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
     prevSpeedRef.current = speed;
     
   });
+
+  useFrame(() => {
+    if (prePowerRef.current !== "cast") return;
+    const state = useZoogiGame.getState();
+    const live = state.enemies.find((entry) => entry.id === entityId);
+    if (live && meshRef.current) {
+      meshRef.current.position.set(live.position[0], live.position[1], live.position[2]);
+    }
+    state.useAiPower(entityId);
+    prePowerRef.current = "done";
+  }, 0.5);
   
   useFrame((_, delta) => {
     if (enemy?.isStunned) {
@@ -1259,11 +1374,18 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
 
   return (
     <group>
-      <group ref={meshRef} position={enemy.position} onClick={handleClick}>
+      <group ref={meshRef} position={enemy.position} onClick={handleClick} visible={!enemy.isKnockedOut && !enemy.isRespawning}>
         <ZoogiModelSwitch zoogiId={enemy.zoogi.id} hasShield={false} hasSpawnImmunity={enemy.spawnImmunity} color={enemy.zoogi.color} />
+        {enemy.larsRicochetBoost > 1 && (
+          <PopRing args={[1.1, 1.35, 24]} color="#3B82F6" />
+        )}
+        {(enemy.wrapsBindUntil || 0) > Date.now() && (
+          <PopRing args={[1.2, 1.55, 24]} color="#D4C4B0" opacity={0.9} y={0.08} />
+        )}
       </group>
 
       {/* Floating enemy icon */}
+      {!enemy.isKnockedOut && !enemy.isRespawning && (
       <Html
         position={[enemy.position[0], enemy.position[1] + 3.2, enemy.position[2]]}
         center
@@ -1288,7 +1410,18 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
         >
           {enemy.zoogi.name?.charAt(0)?.toUpperCase() || 'E'}
         </div>
+        {(enemy.slowUntil || 0) > Date.now() && (
+          <div style={{ marginTop: 4, background: "#D4C4B0", color: "#3f2e22", fontWeight: 700, fontSize: 11, padding: "2px 6px", borderRadius: 6 }}>
+            Slowed
+          </div>
+        )}
+        {enemy.isStunned && (
+          <div style={{ marginTop: 4, background: "#FDE047", color: "#3f2e22", fontWeight: 700, fontSize: 11, padding: "2px 6px", borderRadius: 6 }}>
+            Stunned
+          </div>
+        )}
       </Html>
+      )}
 
       {isMyTurn && !isFreeForAll && (
         <mesh position={[enemy.position[0], 0.05, enemy.position[2]]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -1314,27 +1447,11 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
         </group>
       )}
       
-      {enemy.isStunned && (
-        <group position={[enemy.position[0], enemy.position[1] + 1.8, enemy.position[2]]} rotation={[0, stunRotationRef.current, 0]}>
-          {[0, 1, 2].map((i) => (
-            <mesh
-              key={i}
-              position={[
-                Math.cos((i / 3) * Math.PI * 2) * 0.4,
-                0,
-                Math.sin((i / 3) * Math.PI * 2) * 0.4
-              ]}
-            >
-              <octahedronGeometry args={[0.12]} />
-              <meshBasicMaterial color="#FBBF24" />
-            </mesh>
-          ))}
-        </group>
-      )}
+      <TurnStunMarker entity={enemy} />
 
       <pointLight
         position={[enemy.position[0], enemy.position[1] + 0.5, enemy.position[2]]}
-        color={enemy.isStunned ? "#FBBF24" : enemy.zoogi.color}
+        color={enemy.zoogi.color}
         intensity={0.3}
         distance={3}
       />
@@ -1349,6 +1466,7 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
     enemies,
     orbs,
     currentLocalPlayerIndex,
+    currentRound,
     localPlayers,
     updateLocalPlayerVelocity,
     endTurn,
@@ -1381,6 +1499,12 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
   const localPlayer = localPlayers[playerIndex];
   const playerColors = ["#3B82F6", "#EF4444", "#22C55E", "#A855F7"];
   
+  useEffect(() => {
+    launchCooldownRef.current = false;
+    hasLaunchedRef.current = false;
+    prevSpeedRef.current = 0;
+  }, [currentRound]);
+
   useEffect(() => {
     if (currentLocalPlayerIndex === playerIndex && prevTurnRef.current !== playerIndex) {
       launchCooldownRef.current = false;
@@ -1485,12 +1609,14 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
     
     meshRef.current.scale.set(1, 1, 1);
     
-    if (isMyTurn && hasLaunchedRef.current && speed < 0.02 && prevSpeedRef.current >= 0.02) {
+    if (hasLaunchedRef.current && speed < 0.02 && prevSpeedRef.current >= 0.02) {
       hasLaunchedRef.current = false;
       launchCooldownRef.current = false;
       setMovementStopped(true);
-      console.log(`Local player ${playerIndex} turn ended`);
-      endTurn();
+      if (stopFrameMayEndTurn(useZoogiGame.getState(), "local", playerIndex)) {
+        console.log(`Local player ${playerIndex} turn ended`);
+        endTurn();
+      }
     }
     prevSpeedRef.current = speed;
   });
@@ -1659,8 +1785,14 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
 
   return (
     <group>
-      <group ref={meshRef} position={pos}>
+      <group ref={meshRef} position={pos} visible={!entity.isKnockedOut && !entity.isRespawning}>
         <ZoogiModelSwitch zoogiId={entity.zoogi.id} hasShield={false} color={entity.zoogi.color} />
+        {entity.larsRicochetBoost > 1 && (
+          <PopRing args={[1.1, 1.35, 24]} color="#3B82F6" />
+        )}
+        {(entity.wrapsBindUntil || 0) > Date.now() && (
+          <PopRing args={[1.2, 1.55, 24]} color="#D4C4B0" opacity={0.9} y={0.08} />
+        )}
       </group>
       
       {/* Floating local player icon */}
@@ -1754,6 +1886,8 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
           </mesh>
         </>
       )}
+
+      <TurnStunMarker entity={entity} />
 
       <pointLight
         position={[pos[0], pos[1] + 0.5, pos[2]]}

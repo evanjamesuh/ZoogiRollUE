@@ -3,6 +3,7 @@ import { useRef, useMemo, useState, useEffect } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { useGameFeel } from "@/lib/stores/useGameFeel";
+import { WolfCloneLook } from "./PowerEffects";
 
 const ZOOGI_COLORS: Record<string, string> = {
   wolfgang: "#6B7280",
@@ -185,9 +186,45 @@ interface Particle {
   size: number;
 }
 
+interface ParticleView {
+  id: number;
+  color: string;
+  size: number;
+}
+
+function sameParticleIds(live: { id: number }[], published: number[]): boolean {
+  if (live.length !== published.length) return false;
+  for (let i = 0; i < live.length; i++) {
+    if (live[i].id !== published[i]) return false;
+  }
+  return true;
+}
+
+function publishParticleViews(
+  live: Particle[],
+  publishedIds: { current: number[] },
+  setViews: (views: ParticleView[]) => void
+) {
+  if (sameParticleIds(live, publishedIds.current)) return;
+  publishedIds.current = live.map((p) => p.id);
+  setViews(live.map((p) => ({ id: p.id, color: p.color, size: p.size })));
+}
+
+function placeParticleMesh(mesh: THREE.Mesh, p: Particle, opacityFactor: number, shrink: boolean) {
+  mesh.position.set(p.position[0], p.position[1], p.position[2]);
+  const life = p.life > 0 ? p.life : 0;
+  if (shrink) mesh.scale.setScalar(life);
+  const mat = mesh.material;
+  if (!Array.isArray(mat)) mat.opacity = life * opacityFactor;
+  mesh.visible = life > 0;
+}
+
 export function LaunchBurst() {
   const playerEntity = useZoogiGame((state) => state.playerEntity);
-  const [particles, setParticles] = useState<Particle[]>([]);
+  const [particles, setParticles] = useState<ParticleView[]>([]);
+  const liveRef = useRef<Particle[]>([]);
+  const publishedIds = useRef<number[]>([]);
+  const meshRefs = useRef<Map<number, THREE.Mesh>>(new Map());
   const prevSpeedRef = useRef(0);
   const particleIdRef = useRef(0);
   
@@ -195,15 +232,15 @@ export function LaunchBurst() {
     if (!playerEntity) return;
     
     const speed = Math.sqrt(playerEntity.velocity[0] ** 2 + playerEntity.velocity[2] ** 2);
+    let spawned = false;
     
     if (speed > 0.5 && prevSpeedRef.current < 0.1) {
       const color = ZOOGI_COLORS[playerEntity.zoogi.id] || playerEntity.zoogi.color;
-      const newParticles: Particle[] = [];
       for (let i = 0; i < 15; i++) {
         const angle = Math.random() * Math.PI * 2;
         const upward = 0.5 + Math.random() * 1;
         const outward = 1 + Math.random() * 2;
-        newParticles.push({
+        liveRef.current.push({
           id: particleIdRef.current++,
           position: [...playerEntity.position],
           velocity: [
@@ -217,31 +254,45 @@ export function LaunchBurst() {
           size: 0.1 + Math.random() * 0.1
         });
       }
-      setParticles(prev => [...prev, ...newParticles]);
+      spawned = true;
     }
     prevSpeedRef.current = speed;
-    
-    setParticles(prev => prev
-      .map(p => ({
-        ...p,
-        position: [
-          p.position[0] + p.velocity[0],
-          p.position[1] + p.velocity[1],
-          p.position[2] + p.velocity[2]
-        ] as [number, number, number],
-        velocity: [p.velocity[0], p.velocity[1] - 0.002, p.velocity[2]] as [number, number, number],
-        life: p.life - 0.03
-      }))
-      .filter(p => p.life > 0)
-    );
+
+    if (!spawned && liveRef.current.length === 0) return;
+
+    let died = false;
+    for (const p of liveRef.current) {
+      p.position[0] += p.velocity[0];
+      p.position[1] += p.velocity[1];
+      p.position[2] += p.velocity[2];
+      p.velocity[1] -= 0.002;
+      p.life -= 0.03;
+      const mesh = meshRefs.current.get(p.id);
+      if (mesh) placeParticleMesh(mesh, p, 0.8, true);
+      if (p.life <= 0) died = true;
+    }
+
+    if (died) liveRef.current = liveRef.current.filter((p) => p.life > 0);
+    if (spawned || died) publishParticleViews(liveRef.current, publishedIds, setParticles);
   });
   
   return (
     <group>
       {particles.map(p => (
-        <mesh key={p.id} position={p.position}>
-          <sphereGeometry args={[p.size * p.life, 6, 6]} />
-          <meshBasicMaterial color={p.color} transparent opacity={p.life * 0.8} />
+        <mesh
+          key={p.id}
+          ref={(el) => {
+            if (el) {
+              meshRefs.current.set(p.id, el);
+              const live = liveRef.current.find((item) => item.id === p.id);
+              if (live) placeParticleMesh(el, live, 0.8, true);
+            } else {
+              meshRefs.current.delete(p.id);
+            }
+          }}
+        >
+          <sphereGeometry args={[p.size, 6, 6]} />
+          <meshBasicMaterial color={p.color} transparent opacity={0.8} />
         </mesh>
       ))}
     </group>
@@ -250,7 +301,10 @@ export function LaunchBurst() {
 
 export function WindParticles() {
   const playerEntity = useZoogiGame((state) => state.playerEntity);
-  const [particles, setParticles] = useState<Particle[]>([]);
+  const [particles, setParticles] = useState<ParticleView[]>([]);
+  const liveRef = useRef<Particle[]>([]);
+  const publishedIds = useRef<number[]>([]);
+  const meshRefs = useRef<Map<number, THREE.Mesh>>(new Map());
   const particleIdRef = useRef(0);
   const lastSpawnRef = useRef(0);
   
@@ -259,6 +313,7 @@ export function WindParticles() {
     
     const speed = Math.sqrt(playerEntity.velocity[0] ** 2 + playerEntity.velocity[2] ** 2);
     const now = Date.now();
+    let spawned = false;
     
     if (speed > 0.2 && now - lastSpawnRef.current > 50) {
       lastSpawnRef.current = now;
@@ -266,7 +321,7 @@ export function WindParticles() {
       const offsetAngle = moveAngle + (Math.random() - 0.5) * 1;
       const distance = 1 + Math.random() * 2;
       
-      const newParticle: Particle = {
+      liveRef.current.push({
         id: particleIdRef.current++,
         position: [
           playerEntity.position[0] + Math.sin(offsetAngle) * distance,
@@ -282,30 +337,47 @@ export function WindParticles() {
         maxLife: 1,
         color: "#FFFFFF",
         size: 0.03 + Math.random() * 0.03
-      };
-      setParticles(prev => [...prev.slice(-30), newParticle]);
+      });
+      if (liveRef.current.length > 31) {
+        liveRef.current = liveRef.current.slice(-31);
+      }
+      spawned = true;
     }
-    
-    setParticles(prev => prev
-      .map(p => ({
-        ...p,
-        position: [
-          p.position[0] + p.velocity[0],
-          p.position[1] + p.velocity[1],
-          p.position[2] + p.velocity[2]
-        ] as [number, number, number],
-        life: p.life - 0.05
-      }))
-      .filter(p => p.life > 0)
-    );
+
+    if (!spawned && liveRef.current.length === 0) return;
+
+    let died = false;
+    for (const p of liveRef.current) {
+      p.position[0] += p.velocity[0];
+      p.position[1] += p.velocity[1];
+      p.position[2] += p.velocity[2];
+      p.life -= 0.05;
+      const mesh = meshRefs.current.get(p.id);
+      if (mesh) placeParticleMesh(mesh, p, 0.4, false);
+      if (p.life <= 0) died = true;
+    }
+
+    if (died) liveRef.current = liveRef.current.filter((p) => p.life > 0);
+    if (spawned || died) publishParticleViews(liveRef.current, publishedIds, setParticles);
   });
   
   return (
     <group>
       {particles.map(p => (
-        <mesh key={p.id} position={p.position}>
+        <mesh
+          key={p.id}
+          ref={(el) => {
+            if (el) {
+              meshRefs.current.set(p.id, el);
+              const live = liveRef.current.find((item) => item.id === p.id);
+              if (live) placeParticleMesh(el, live, 0.4, false);
+            } else {
+              meshRefs.current.delete(p.id);
+            }
+          }}
+        >
           <sphereGeometry args={[p.size, 4, 4]} />
-          <meshBasicMaterial color={p.color} transparent opacity={p.life * 0.4} />
+          <meshBasicMaterial color={p.color} transparent opacity={0.4} />
         </mesh>
       ))}
     </group>
@@ -313,9 +385,12 @@ export function WindParticles() {
 }
 
 export function ImpactSparks() {
-  const [sparks, setSparks] = useState<Particle[]>([]);
+  const [sparks, setSparks] = useState<ParticleView[]>([]);
   const playerEntity = useZoogiGame((state) => state.playerEntity);
   const enemies = useZoogiGame((state) => state.enemies);
+  const liveRef = useRef<Particle[]>([]);
+  const publishedIds = useRef<number[]>([]);
+  const meshRefs = useRef<Map<number, THREE.Mesh>>(new Map());
   const prevVelocitiesRef = useRef<Map<string, number>>(new Map());
   const particleIdRef = useRef(0);
   const lastSparkTimeRef = useRef<Map<string, number>>(new Map());
@@ -323,6 +398,7 @@ export function ImpactSparks() {
   useFrame(() => {
     if (!playerEntity) return;
     const now = Date.now();
+    let spawned = false;
     
     const allEntities = [
       { id: "player", entity: playerEntity },
@@ -338,11 +414,12 @@ export function ImpactSparks() {
       if (speedDrop > 0.15 && prevSpeed > 0.2 && now - lastSparkTime > 200) {
         lastSparkTimeRef.current.set(id, now);
         const color = ZOOGI_COLORS[entity.zoogi.id] || entity.zoogi.color;
-        const newSparks: Particle[] = [];
         const sparkCount = Math.min(12, Math.floor(speedDrop * 15));
+        const kept = liveRef.current.slice(-50);
+        liveRef.current = kept;
         for (let i = 0; i < sparkCount; i++) {
           const angle = Math.random() * Math.PI * 2;
-          newSparks.push({
+          liveRef.current.push({
             id: particleIdRef.current++,
             position: [...entity.position],
             velocity: [
@@ -356,32 +433,48 @@ export function ImpactSparks() {
             size: 0.1
           });
         }
-        setSparks(prev => [...prev.slice(-50), ...newSparks]);
+        spawned = true;
       }
       prevVelocitiesRef.current.set(id, speed);
     });
-    
-    setSparks(prev => prev
-      .map(p => ({
-        ...p,
-        position: [
-          p.position[0] + p.velocity[0],
-          p.position[1] + p.velocity[1],
-          p.position[2] + p.velocity[2]
-        ] as [number, number, number],
-        velocity: [p.velocity[0] * 0.95, p.velocity[1] - 0.003, p.velocity[2] * 0.95] as [number, number, number],
-        life: p.life - 0.04
-      }))
-      .filter(p => p.life > 0)
-    );
+
+    if (!spawned && liveRef.current.length === 0) return;
+
+    let died = false;
+    for (const p of liveRef.current) {
+      p.position[0] += p.velocity[0];
+      p.position[1] += p.velocity[1];
+      p.position[2] += p.velocity[2];
+      p.velocity[0] *= 0.95;
+      p.velocity[1] -= 0.003;
+      p.velocity[2] *= 0.95;
+      p.life -= 0.04;
+      const mesh = meshRefs.current.get(p.id);
+      if (mesh) placeParticleMesh(mesh, p, 1, true);
+      if (p.life <= 0) died = true;
+    }
+
+    if (died) liveRef.current = liveRef.current.filter((p) => p.life > 0);
+    if (spawned || died) publishParticleViews(liveRef.current, publishedIds, setSparks);
   });
   
   return (
     <group>
       {sparks.map(p => (
-        <mesh key={p.id} position={p.position}>
-          <octahedronGeometry args={[p.size * p.life]} />
-          <meshBasicMaterial color={p.color} transparent opacity={p.life} />
+        <mesh
+          key={p.id}
+          ref={(el) => {
+            if (el) {
+              meshRefs.current.set(p.id, el);
+              const live = liveRef.current.find((item) => item.id === p.id);
+              if (live) placeParticleMesh(el, live, 1, true);
+            } else {
+              meshRefs.current.delete(p.id);
+            }
+          }}
+        >
+          <octahedronGeometry args={[p.size]} />
+          <meshBasicMaterial color={p.color} transparent opacity={1} />
         </mesh>
       ))}
     </group>
@@ -401,120 +494,8 @@ export function WolfClones() {
 }
 
 function WolfClone({ clone }: { clone: { id: string; position: [number, number, number]; velocity: [number, number, number]; isActive: boolean } }) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  
-  useFrame(() => {
-    if (meshRef.current) {
-      meshRef.current.position.set(clone.position[0], clone.position[1], clone.position[2]);
-      const speed = Math.sqrt(clone.velocity[0] ** 2 + clone.velocity[2] ** 2);
-      if (speed > 0.01) {
-        meshRef.current.rotation.x += speed * 0.5;
-      }
-    }
-  });
-  
   if (!clone.isActive) return null;
-  
-  return (
-    <group>
-      <mesh ref={meshRef} position={clone.position} castShadow>
-        <sphereGeometry args={[0.5, 16, 16]} />
-        <meshStandardMaterial
-          color="#9CA3AF"
-          emissive="#6B7280"
-          emissiveIntensity={0.3}
-          transparent
-          opacity={0.8}
-        />
-      </mesh>
-      <pointLight
-        position={[clone.position[0], clone.position[1] + 0.5, clone.position[2]]}
-        color="#6B7280"
-        intensity={0.2}
-        distance={2}
-      />
-    </group>
-  );
-}
-
-export function ExplosionEffect() {
-  const showExplosion = useZoogiGame((state) => state.showExplosion);
-  const scaleRef = useRef(0);
-  const opacityRef = useRef(1);
-  const meshRef = useRef<THREE.Mesh>(null);
-  const lightningRef = useRef<THREE.Group>(null);
-  
-  useFrame((_, delta) => {
-    if (!showExplosion || !meshRef.current) return;
-    
-    const elapsed = (Date.now() - showExplosion.timestamp) / 1000;
-    
-    if (elapsed < 0.8) {
-      scaleRef.current = Math.min(6, elapsed * 12);
-      opacityRef.current = 1 - elapsed * 1.25;
-      
-      meshRef.current.scale.setScalar(scaleRef.current);
-      (meshRef.current.material as THREE.MeshBasicMaterial).opacity = Math.max(0, opacityRef.current);
-      
-      if (lightningRef.current) {
-        lightningRef.current.rotation.y += delta * 20;
-      }
-    }
-  });
-  
-  if (!showExplosion) return null;
-  
-  const elapsed = (Date.now() - showExplosion.timestamp) / 1000;
-  if (elapsed > 0.8) return null;
-  
-  const isYellow = showExplosion.color === "yellow";
-  const primaryColor = isYellow ? "#FFFF00" : "#FF4500";
-  const secondaryColor = isYellow ? "#00BFFF" : "#FFD700";
-  
-  return (
-    <group position={showExplosion.position}>
-      <mesh ref={meshRef}>
-        <sphereGeometry args={[1, 16, 16]} />
-        <meshBasicMaterial
-          color={primaryColor}
-          transparent
-          opacity={0.8}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
-      <mesh scale={[scaleRef.current * 0.8, scaleRef.current * 0.8, scaleRef.current * 0.8]}>
-        <sphereGeometry args={[1, 16, 16]} />
-        <meshBasicMaterial
-          color={secondaryColor}
-          transparent
-          opacity={0.5}
-        />
-      </mesh>
-      {isYellow && (
-        <group ref={lightningRef}>
-          {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => {
-            const angle = (i / 8) * Math.PI * 2;
-            const length = 4 + Math.random() * 2;
-            return (
-              <mesh
-                key={i}
-                position={[Math.cos(angle) * length * 0.5, 0.5, Math.sin(angle) * length * 0.5]}
-                rotation={[0, 0, Math.PI / 2 + angle]}
-              >
-                <boxGeometry args={[length, 0.15, 0.15]} />
-                <meshBasicMaterial color="#FFFF00" transparent opacity={0.95} />
-              </mesh>
-            );
-          })}
-        </group>
-      )}
-      <pointLight
-        color={primaryColor}
-        intensity={isYellow ? 6 : 4}
-        distance={isYellow ? 15 : 12}
-      />
-    </group>
-  );
+  return <WolfCloneLook position={clone.position} velocity={clone.velocity} />;
 }
 
 
@@ -573,9 +554,16 @@ function CollisionBurst({
   color2: string;
   timestamp: number;
 }) {
-  const [particles, setParticles] = useState<CollisionBurstParticle[]>([]);
-  const [lensFlareScale, setLensFlareScale] = useState(0);
-  const [glowScale, setGlowScale] = useState(0);
+  const [particles, setParticles] = useState<ParticleView[]>([]);
+  const liveRef = useRef<CollisionBurstParticle[]>([]);
+  const publishedIds = useRef<number[]>([]);
+  const meshRefs = useRef<Map<number, THREE.Mesh>>(new Map());
+  const lensScaleRef = useRef(0);
+  const glowScaleRef = useRef(0);
+  const lensGroupRef = useRef<THREE.Group>(null);
+  const lensMats = useRef<(THREE.MeshBasicMaterial | null)[]>([null, null, null]);
+  const glowMeshRef = useRef<THREE.Mesh>(null);
+  const glowMatRef = useRef<THREE.MeshBasicMaterial>(null);
   const particleIdRef = useRef(0);
   const initializedRef = useRef(false);
   
@@ -627,83 +615,115 @@ function CollisionBurst({
       });
     }
     
-    setParticles(newParticles);
-    setLensFlareScale(intensity * 1.5);
-    setGlowScale(intensity * 2);
+    liveRef.current = newParticles;
+    lensScaleRef.current = intensity * 1.5;
+    glowScaleRef.current = intensity * 2;
+    publishParticleViews(newParticles, publishedIds, setParticles);
   }, [position, intensity, color1, color2]);
   
   useFrame(() => {
-    setParticles(prev => prev
-      .map(p => ({
-        ...p,
-        position: [
-          p.position[0] + p.velocity[0],
-          p.position[1] + p.velocity[1],
-          p.position[2] + p.velocity[2]
-        ] as [number, number, number],
-        velocity: [
-          p.velocity[0] * 0.92,
-          p.velocity[1] - 0.004,
-          p.velocity[2] * 0.92
-        ] as [number, number, number],
-        life: p.life - 0.06
-      }))
-      .filter(p => p.life > 0)
-    );
-    
-    setLensFlareScale(prev => Math.max(0, prev - 0.2));
-    setGlowScale(prev => Math.max(0, prev - 0.18));
+    if (!initializedRef.current) return;
+
+    let died = false;
+    for (const p of liveRef.current) {
+      p.position[0] += p.velocity[0];
+      p.position[1] += p.velocity[1];
+      p.position[2] += p.velocity[2];
+      p.velocity[0] *= 0.92;
+      p.velocity[1] -= 0.004;
+      p.velocity[2] *= 0.92;
+      p.life -= 0.06;
+      const mesh = meshRefs.current.get(p.id);
+      if (mesh) placeParticleMesh(mesh, p, 0.9, true);
+      if (p.life <= 0) died = true;
+    }
+    if (died) {
+      liveRef.current = liveRef.current.filter((p) => p.life > 0);
+      publishParticleViews(liveRef.current, publishedIds, setParticles);
+    }
+
+    lensScaleRef.current = Math.max(0, lensScaleRef.current - 0.2);
+    glowScaleRef.current = Math.max(0, glowScaleRef.current - 0.18);
+    const lens = lensScaleRef.current;
+    const glow = glowScaleRef.current;
+    if (lensGroupRef.current) {
+      lensGroupRef.current.visible = lens > 0.1;
+      lensGroupRef.current.scale.setScalar(lens);
+    }
+    const lensOpacity = [0.3, 0.15, 0.4];
+    lensMats.current.forEach((mat, i) => {
+      if (mat) mat.opacity = lens * lensOpacity[i];
+    });
+    if (glowMeshRef.current) {
+      glowMeshRef.current.visible = glow > 0.1;
+      glowMeshRef.current.scale.setScalar(glow);
+    }
+    if (glowMatRef.current) glowMatRef.current.opacity = glow * 0.25;
   });
   
+  const initialLens = intensity * 1.5;
+  const initialGlow = intensity * 2;
+
   return (
     <group>
-      {lensFlareScale > 0.1 && (
-        <group position={position}>
-          <mesh>
-            <ringGeometry args={[lensFlareScale * 0.3, lensFlareScale * 0.5, 32]} />
-            <meshBasicMaterial 
-              color={color1} 
-              transparent 
-              opacity={lensFlareScale * 0.3} 
-              side={THREE.DoubleSide}
-            />
-          </mesh>
-          <mesh>
-            <ringGeometry args={[lensFlareScale * 0.6, lensFlareScale * 0.8, 32]} />
-            <meshBasicMaterial 
-              color={color2} 
-              transparent 
-              opacity={lensFlareScale * 0.15} 
-              side={THREE.DoubleSide}
-            />
-          </mesh>
-          <mesh>
-            <circleGeometry args={[lensFlareScale * 0.4, 32]} />
-            <meshBasicMaterial 
-              color="#ffffff" 
-              transparent 
-              opacity={lensFlareScale * 0.4} 
-              side={THREE.DoubleSide}
-            />
-          </mesh>
-        </group>
-      )}
-      
-      {glowScale > 0.1 && (
-        <mesh position={position}>
-          <sphereGeometry args={[glowScale * 0.3, 16, 16]} />
-          <meshBasicMaterial 
-            color={color1} 
-            transparent 
-            opacity={glowScale * 0.25}
+      <group ref={lensGroupRef} position={position} scale={initialLens} visible={initialLens > 0.1}>
+        <mesh>
+          <ringGeometry args={[0.3, 0.5, 32]} />
+          <meshBasicMaterial
+            ref={(mat) => { lensMats.current[0] = mat; }}
+            color={color1}
+            transparent
+            opacity={initialLens * 0.3}
+            side={THREE.DoubleSide}
           />
         </mesh>
-      )}
-      
+        <mesh>
+          <ringGeometry args={[0.6, 0.8, 32]} />
+          <meshBasicMaterial
+            ref={(mat) => { lensMats.current[1] = mat; }}
+            color={color2}
+            transparent
+            opacity={initialLens * 0.15}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+        <mesh>
+          <circleGeometry args={[0.4, 32]} />
+          <meshBasicMaterial
+            ref={(mat) => { lensMats.current[2] = mat; }}
+            color="#ffffff"
+            transparent
+            opacity={initialLens * 0.4}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      </group>
+
+      <mesh ref={glowMeshRef} position={position} scale={initialGlow} visible={initialGlow > 0.1}>
+        <sphereGeometry args={[0.3, 16, 16]} />
+        <meshBasicMaterial
+          ref={glowMatRef}
+          color={color1}
+          transparent
+          opacity={initialGlow * 0.25}
+        />
+      </mesh>
+
       {particles.map(p => (
-        <mesh key={p.id} position={p.position}>
-          <sphereGeometry args={[p.size * p.life, 6, 6]} />
-          <meshBasicMaterial color={p.color} transparent opacity={p.life * 0.9} />
+        <mesh
+          key={p.id}
+          ref={(el) => {
+            if (el) {
+              meshRefs.current.set(p.id, el);
+              const live = liveRef.current.find((item) => item.id === p.id);
+              if (live) placeParticleMesh(el, live, 0.9, true);
+            } else {
+              meshRefs.current.delete(p.id);
+            }
+          }}
+        >
+          <sphereGeometry args={[p.size, 6, 6]} />
+          <meshBasicMaterial color={p.color} transparent opacity={0.9} />
         </mesh>
       ))}
     </group>

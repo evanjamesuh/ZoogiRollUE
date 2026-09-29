@@ -1,4 +1,5 @@
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
+import { BUMPER_SCORE, KNOCKOUT_PENALTY, KNOCKOUT_SCORE_ORB, KNOCKOUT_SCORE_PLAYER, ZONE_SCORE_ORB } from "@/lib/arenaConstants";
 import { motion, AnimatePresence } from "framer-motion";
 import { Eye, EyeOff, Home, HelpCircle, Users, User, Zap, Crosshair, Star, Trophy, Coins, Info, X, Phone, Video, Move, Check, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, ChevronUp, ChevronDown, RotateCcw, RotateCw, Minus, Plus, Anchor, Download, ScanEye, Camera, Target, Lock, Flame, Package, MapPin, Palette } from "lucide-react";
 import { moveSelectedElementByArrows, confirmPlacements, rotateSelectedElement, snapToGround, getIncrement, setIncrement } from "./DeveloperMoveControls";
@@ -88,14 +89,101 @@ function HoldButton({ onAction, className, title, children }: HoldButtonProps) {
 
 const getAbilityTriggerText = (zoogiId: string): string => {
   switch (zoogiId) {
-    case "wolfgang": return "Tap ability button while moving to spawn wolf clones";
-    case "hotstreak": return "Tap ability button to drop explosive grenade";
-    case "lars": return "Ricochets toward nearest target after hits";
-    case "pinpoint": return "Lock onto targets for precise aiming";
-    case "bolt": return "Tap ability button for lightning explosion";
+    case "wolfgang": return "Tap Pack while moving to send homing clones";
+    case "hotstreak": return "Tap Explosion to blast everything nearby";
+    case "lars": return "Tap Ricochet, then hit something to home in";
+    case "pinpoint": return "Tap Lock-On, then tap an orb or opponent";
+    case "bolt": return "Tap Shock to phase through enemies and stun them";
+    case "wraps": return "Tap Bind to slow enemies you touch";
     default: return "";
   }
 };
+
+function useDevTools() {
+  const [enabled, setEnabled] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const debug = new URLSearchParams(window.location.search).get("debug");
+    return debug !== null && debug !== "colliders";
+  });
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "`") return;
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) return;
+      setEnabled((on) => !on);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  return enabled;
+}
+
+function CharacterAbilityButton({ zoogiId, entity }: {
+  zoogiId: string;
+  entity: {
+    id: string;
+    wolfgangAbilityUnlocked: boolean;
+    hotstreakAbilityUnlocked: boolean;
+    boltAbilityUnlocked: boolean;
+    larsAbilityUnlocked: boolean;
+    wrapsAbilityUnlocked: boolean;
+  };
+}) {
+  const activateWolfgangAbility = useZoogiGame((state) => state.activateWolfgangAbility);
+  const activateHotstreakAbility = useZoogiGame((state) => state.activateHotstreakAbility);
+  const activateLarsAbility = useZoogiGame((state) => state.activateLarsAbility);
+  const activateBoltAbility = useZoogiGame((state) => state.activateBoltAbility);
+  const activateWrapsAbility = useZoogiGame((state) => state.activateWrapsAbility);
+  const toggleLockOn = useZoogiGame((state) => state.toggleLockOn);
+  const lockOnEnabled = useZoogiGame((state) => state.lockOnEnabled);
+
+  const spec: Record<string, { label: string; unlocked: boolean; onClick: () => void; active?: boolean }> = {
+    wolfgang: { label: "Pack", unlocked: entity.wolfgangAbilityUnlocked, onClick: () => activateWolfgangAbility(entity.id) },
+    hotstreak: { label: "Explosion", unlocked: entity.hotstreakAbilityUnlocked, onClick: () => activateHotstreakAbility(entity.id) },
+    lars: { label: "Ricochet", unlocked: entity.larsAbilityUnlocked, onClick: () => activateLarsAbility(entity.id) },
+    bolt: { label: "Shock", unlocked: entity.boltAbilityUnlocked, onClick: () => activateBoltAbility(entity.id) },
+    wraps: { label: "Bind", unlocked: entity.wrapsAbilityUnlocked, onClick: () => activateWrapsAbility(entity.id) },
+    pinpoint: { label: "Lock-On", unlocked: true, onClick: toggleLockOn, active: lockOnEnabled },
+  };
+  const ability = spec[zoogiId];
+  if (!ability) return null;
+
+  const ready = ability.unlocked;
+  return (
+    <button
+      onClick={ready ? ability.onClick : undefined}
+      disabled={!ready}
+      className={`px-3 py-2 rounded-xl backdrop-blur-sm transition-all flex flex-col items-center min-w-[76px] ${
+        !ready
+          ? "bg-gray-700/80 text-white/50 cursor-not-allowed"
+          : ability.active
+            ? "bg-purple-500 text-white ring-2 ring-purple-200"
+            : "bg-amber-500 text-black hover:bg-amber-400"
+      }`}
+      title={ready ? getAbilityTriggerText(zoogiId) : "Knock a star orb off the island to unlock"}
+    >
+      {ready ? <Zap size={18} /> : <Lock size={18} />}
+      <span className="text-[11px] font-bold leading-tight mt-1">{ability.label}</span>
+      <span className="text-[9px] uppercase tracking-wide">{ready ? "Ready" : "Locked"}</span>
+    </button>
+  );
+}
+
+function modeRules(gameMode: string): { title: string; blurb: string } {
+  if (gameMode === "ringer_royale") {
+    return { title: "Ringer Royale", blurb: "Knock opponents out of the ring!" };
+  }
+  if (gameMode === "practice") {
+    return { title: "Marble Arena", blurb: "Knock orbs and opponents off the island." };
+  }
+  if (gameMode === "local_multiplayer") {
+    return { title: "Local Match", blurb: "Take turns. Knock orbs and opponents off the island." };
+  }
+  return { title: "Classic Match", blurb: "Take turns. Knock orbs and opponents off the island." };
+}
 
 function XPToast({ amount, reason, timestamp }: { amount: number; reason: string; timestamp: number }) {
   const { removeXpGain } = useProgression();
@@ -286,7 +374,9 @@ export function GameUI() {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const isLocalMultiplayerMode = gameMode === "local_multiplayer";
   const [showPlayerPanel, setShowPlayerPanel] = useState(true);
-  const [showPanelHint, setShowPanelHint] = useState(true);
+  const [showPanelHint, setShowPanelHint] = useState(false);
+  const devTools = useDevTools();
+  const abilityNotice = useZoogiGame((state) => state.abilityNotice);
   const [showMapEditorPanel, setShowMapEditorPanel] = useState(false);
   const [showBackgroundPanel, setShowBackgroundPanel] = useState(false);
   const prevLevelRef = useRef(level);
@@ -294,46 +384,17 @@ export function GameUI() {
   const wasLocalMultiplayerRef = useRef(false);
   
   const isMapEditor = gameMode === "map_editor";
-  const autoHideTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const AUTO_HIDE_DELAY = 5000;
-  
-  const resetAutoHideTimer = useCallback(() => {
-    if (autoHideTimerRef.current) {
-      clearTimeout(autoHideTimerRef.current);
-    }
-    if (showPlayerPanel && !isMapEditor && !isLocalMultiplayerMode) {
-      autoHideTimerRef.current = setTimeout(() => {
-        setShowPlayerPanel(false);
-      }, AUTO_HIDE_DELAY);
-    }
-  }, [showPlayerPanel, isMapEditor, isLocalMultiplayerMode]);
-  
+
   useEffect(() => {
-    resetAutoHideTimer();
-    return () => {
-      if (autoHideTimerRef.current) {
-        clearTimeout(autoHideTimerRef.current);
+    if (!abilityNotice) return;
+    const wait = Math.max(0, abilityNotice.until - Date.now());
+    const timer = setTimeout(() => {
+      if (useZoogiGame.getState().abilityNotice?.until === abilityNotice.until) {
+        useZoogiGame.setState({ abilityNotice: null });
       }
-    };
-  }, [showPlayerPanel, resetAutoHideTimer]);
-  
-  useEffect(() => {
-    if (isMapEditor || isLocalMultiplayerMode) return;
-    
-    const handleActivity = () => {
-      if (showPlayerPanel) {
-        resetAutoHideTimer();
-      }
-    };
-    
-    window.addEventListener("pointerdown", handleActivity);
-    window.addEventListener("keydown", handleActivity);
-    
-    return () => {
-      window.removeEventListener("pointerdown", handleActivity);
-      window.removeEventListener("keydown", handleActivity);
-    };
-  }, [showPlayerPanel, isMapEditor, isLocalMultiplayerMode, resetAutoHideTimer]);
+    }, wait);
+    return () => clearTimeout(timer);
+  }, [abilityNotice]);
   
   useEffect(() => {
     if (level > prevLevelRef.current && level > 1) {
@@ -344,13 +405,6 @@ export function GameUI() {
   }, [level]);
   
   useEffect(() => {
-    if (isLocalMultiplayerMode && !wasLocalMultiplayerRef.current) {
-      prevPanelStateRef.current = showPlayerPanel;
-      setShowPlayerPanel(false);
-      setShowPanelHint(true);
-    } else if (!isLocalMultiplayerMode && wasLocalMultiplayerRef.current) {
-      setShowPlayerPanel(prevPanelStateRef.current);
-    }
     wasLocalMultiplayerRef.current = isLocalMultiplayerMode;
   }, [isLocalMultiplayerMode]);
   
@@ -729,6 +783,14 @@ export function GameUI() {
   return (
     <div className="fixed inset-0 pointer-events-none z-10">
       
+      {abilityNotice && (
+        <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+          <div className="bg-black/85 text-white font-bold px-4 py-2 rounded-xl border border-yellow-400 shadow-lg text-sm">
+            {abilityNotice.text}
+          </div>
+        </div>
+      )}
+
       <div className="absolute top-0 left-0 right-0 h-1.5 bg-black/30">
         <motion.div 
           className="h-full bg-gradient-to-r from-purple-500 to-blue-500"
@@ -908,7 +970,7 @@ export function GameUI() {
                 )}
                 
                 <div className="mt-3 pt-2 border-t border-white/20">
-                  <p className="text-white/50 text-xs mb-1">Passive Ability</p>
+                  <p className="text-white/50 text-xs mb-1">Ability</p>
                   <p className="text-white/90 text-sm font-semibold">{displayEntity.zoogi.ability}</p>
                   <p className="text-white/60 text-xs">{getAbilityTriggerText(displayEntity.zoogi.id)}</p>
                   {displayEntity.zoogi.id === "lars" && displayEntity.larsRicochetBoost > 1 && (
@@ -975,32 +1037,15 @@ export function GameUI() {
                   </div>
                 )}
                 
-                {restrictionPhaseActive && restrictionPhaseStartTime && (
-                  <div className="mt-3 pt-2 border-t border-red-400/30">
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className="w-2 h-2 rounded-full bg-red-400 animate-pulse" />
-                      <p className="text-red-300 text-xs font-bold uppercase">Ring Restriction</p>
-                    </div>
-                    <p className="text-red-200/70 text-[10px]">
-                      -75 pts if knocked out • +100 pts for knockouts
-                    </p>
-                    <p className="text-white/50 text-[10px]">
-                      Ends after 5 min or all orbs out
-                    </p>
+                <div className="mt-3 pt-2 border-t border-cyan-400/30">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full bg-cyan-400" />
+                    <p className="text-cyan-300 text-xs font-bold uppercase">{modeRules(gameMode).title}</p>
                   </div>
-                )}
-                
-                {!restrictionPhaseActive && (
-                  <div className="mt-3 pt-2 border-t border-cyan-400/30">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-cyan-400" />
-                      <p className="text-cyan-300 text-xs font-bold uppercase">Ringer Royale</p>
-                    </div>
-                    <p className="text-cyan-200/70 text-[10px]">
-                      Knock opponents out of the ring!
-                    </p>
-                  </div>
-                )}
+                  <p className="text-cyan-200/70 text-[10px]">
+                    {modeRules(gameMode).blurb}
+                  </p>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
@@ -1081,9 +1126,11 @@ export function GameUI() {
           <div className="bg-black/70 rounded-xl p-3 backdrop-blur-sm text-center">
             <p className="text-white/60 text-xs mb-1">Points</p>
             <div className="text-xs text-white/70 space-y-1">
-              <p>Orb knock-off: <span className="text-yellow-400">+50</span></p>
-              <p>Enemy knock-off: <span className="text-yellow-400">+100</span></p>
-              <p>Fall off edge: <span className="text-red-400">-75</span></p>
+              <p>Orb knock-off: <span className="text-yellow-400">+{KNOCKOUT_SCORE_ORB}</span></p>
+              <p>Opponent knock-off: <span className="text-yellow-400">+{KNOCKOUT_SCORE_PLAYER}</span></p>
+              <p>Bumper touch: <span className="text-yellow-400">+{BUMPER_SCORE}</span></p>
+              <p>Score zone: <span className="text-yellow-400">+{ZONE_SCORE_ORB}</span></p>
+              <p>Fall off the island: <span className="text-red-400">-{KNOCKOUT_PENALTY}</span></p>
             </div>
           </div>
         )}
@@ -1106,43 +1153,27 @@ export function GameUI() {
           )}
         </button>
         
-        {/* Clone Ability - Gold Star Orb unlock */}
-        {displayEntity.wolfgangAbilityUnlocked && (
-          <button
-            onClick={activateWolfgangAbility}
-            disabled={!canUseWolfgangAbility()}
-            className="p-3 rounded-xl backdrop-blur-sm transition-all relative bg-amber-500/80 text-white hover:bg-amber-600/80 animate-pulse ring-2 ring-amber-300/50"
-            title="Clone Ability - Spawn wolf clones! (One-time use)"
-          >
-            <Users size={20} />
-            <span className="absolute -top-1 -right-1 text-xs">⭐</span>
-          </button>
-        )}
-        
-        {/* Explosion Ability - Red Star Orb unlock */}
-        {displayEntity.hotstreakAbilityUnlocked && (
-          <button
-            onClick={activateHotstreakAbility}
-            disabled={!canUseHotstreakAbility()}
-            className="p-3 rounded-xl backdrop-blur-sm transition-all relative bg-red-500/80 text-white hover:bg-red-600/80 animate-pulse ring-2 ring-red-300/50"
-            title="Explosion Ability - Blast everything away! (One-time use)"
-          >
-            <Flame size={20} />
-            <span className="absolute -top-1 -right-1 text-xs text-red-200">⭐</span>
-          </button>
-        )}
-        
-        {/* Stun Ability - Blue Star Orb unlock */}
-        {displayEntity.boltAbilityUnlocked && (
-          <button
-            onClick={activateBoltAbility}
-            disabled={!canUseBoltAbility()}
-            className="p-3 rounded-xl backdrop-blur-sm transition-all relative bg-blue-500/80 text-white hover:bg-blue-600/80 animate-pulse ring-2 ring-blue-300/50"
-            title="Stun Ability - Shock and stun enemies! (One-time use)"
-          >
-            <Zap size={20} />
-            <span className="absolute -top-1 -right-1 text-xs text-blue-200">⭐</span>
-          </button>
+        <CharacterAbilityButton zoogiId={displayEntity.zoogi.id} entity={displayEntity} />
+        {devTools && (
+          <div className="flex flex-col gap-1">
+            <button
+              onClick={() => useZoogiGame.getState().debugUnlockPower(displayEntity.id)}
+              className="px-2 py-1 rounded-lg bg-amber-700/90 text-white text-[10px] font-bold"
+              title="Debug: unlock this marble's power"
+            >
+              Unlock mine
+            </button>
+            <button
+              onClick={() => {
+                const foe = useZoogiGame.getState().enemies.find((enemy) => !enemy.isKnockedOut);
+                if (foe) useZoogiGame.getState().debugUnlockPower(foe.id);
+              }}
+              className="px-2 py-1 rounded-lg bg-orange-700/90 text-white text-[10px] font-bold"
+              title="Debug: unlock the next opponent's power"
+            >
+              Unlock foe
+            </button>
+          </div>
         )}
         
         {/* Orb Multiplier Control */}
@@ -1253,53 +1284,57 @@ export function GameUI() {
           <HelpCircle size={20} />
         </button>
         
-        <button
-          onClick={() => setShowCollisionTuningPanel(!showCollisionTuningPanel)}
-          className={`p-3 rounded-xl backdrop-blur-sm transition-all ${
-            showCollisionTuningPanel
-              ? "bg-cyan-500/90 text-white ring-2 ring-white"
-              : "bg-cyan-600/70 text-white hover:bg-cyan-500/80"
-          }`}
-          title="Collision Tuning"
-        >
-          <Target size={20} />
-        </button>
-        
-        <button
-          onClick={() => setShowAiControlsPanel(!showAiControlsPanel)}
-          className={`p-3 rounded-xl backdrop-blur-sm transition-all ${
-            showAiControlsPanel
-              ? "bg-orange-500/90 text-white ring-2 ring-white"
-              : "bg-orange-600/70 text-white hover:bg-orange-500/80"
-          }`}
-          title="AI Controls"
-        >
-          <Zap size={20} />
-        </button>
-        
-        <button
-          onClick={() => useZoogiGame.getState().toggleDeveloperCamera()}
-          className={`p-3 rounded-xl backdrop-blur-sm transition-all ${
-            useZoogiGame.getState().developerCamera
-              ? "bg-yellow-500/90 text-black ring-2 ring-white"
-              : "bg-gray-700/70 text-white/80 hover:bg-gray-600/80"
-          }`}
-          title="Developer Camera (free roam)"
-        >
-          <Video size={20} />
-        </button>
-        
-        <button
-          onClick={() => useZoogiGame.getState().toggleDeveloperMoveMode()}
-          className={`p-3 rounded-xl backdrop-blur-sm transition-all ${
-            useZoogiGame.getState().developerMoveMode
-              ? "bg-orange-500/90 text-black ring-2 ring-white"
-              : "bg-gray-700/70 text-white/80 hover:bg-gray-600/80"
-          }`}
-          title="Developer Move (click and drag elements)"
-        >
-          <Move size={20} />
-        </button>
+        {devTools && (
+          <>
+            <button
+              onClick={() => setShowCollisionTuningPanel(!showCollisionTuningPanel)}
+              className={`p-3 rounded-xl backdrop-blur-sm transition-all ${
+                showCollisionTuningPanel
+                  ? "bg-cyan-500/90 text-white ring-2 ring-white"
+                  : "bg-cyan-600/70 text-white hover:bg-cyan-500/80"
+              }`}
+              title="Collision Tuning"
+            >
+              <Target size={20} />
+            </button>
+            
+            <button
+              onClick={() => setShowAiControlsPanel(!showAiControlsPanel)}
+              className={`p-3 rounded-xl backdrop-blur-sm transition-all ${
+                showAiControlsPanel
+                  ? "bg-orange-500/90 text-white ring-2 ring-white"
+                  : "bg-orange-600/70 text-white hover:bg-orange-500/80"
+              }`}
+              title="AI Controls"
+            >
+              <Zap size={20} />
+            </button>
+            
+            <button
+              onClick={() => useZoogiGame.getState().toggleDeveloperCamera()}
+              className={`p-3 rounded-xl backdrop-blur-sm transition-all ${
+                useZoogiGame.getState().developerCamera
+                  ? "bg-yellow-500/90 text-black ring-2 ring-white"
+                  : "bg-gray-700/70 text-white/80 hover:bg-gray-600/80"
+              }`}
+              title="Developer Camera (free roam)"
+            >
+              <Video size={20} />
+            </button>
+            
+            <button
+              onClick={() => useZoogiGame.getState().toggleDeveloperMoveMode()}
+              className={`p-3 rounded-xl backdrop-blur-sm transition-all ${
+                useZoogiGame.getState().developerMoveMode
+                  ? "bg-orange-500/90 text-black ring-2 ring-white"
+                  : "bg-gray-700/70 text-white/80 hover:bg-gray-600/80"
+              }`}
+              title="Developer Move (click and drag elements)"
+            >
+              <Move size={20} />
+            </button>
+          </>
+        )}
         
       </div>
       

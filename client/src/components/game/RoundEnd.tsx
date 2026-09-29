@@ -104,8 +104,9 @@ export function RoundEnd() {
   
   const knockouts = (playerEntity as any)?.knockouts || 0;
   const orbsCollected = (playerEntity as any)?.orbsCollected || 0;
+  const playerName = playerEntity?.zoogi?.name || "You";
   
-  const isWinning = enemies.every(e => score > (e.score || 0));
+  const isWinning = enemies.every(e => score >= (e.score || 0));
 
   return (
     <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex items-center justify-center z-50 overflow-hidden">
@@ -201,20 +202,24 @@ export function RoundEnd() {
           >
             <div className="flex items-center justify-center gap-2 mb-3">
               <Trophy className="w-5 h-5 text-yellow-400" />
-              <span className="text-white/90 font-semibold">Your Score</span>
+              <span className="text-white/90 font-semibold">Round Scores</span>
             </div>
-            <motion.p
-              initial={{ scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ delay: 0.6, type: "spring", stiffness: 200 }}
-              className="text-5xl font-black text-yellow-400 mb-4"
-            >
-              {score}
-            </motion.p>
+            <div className="space-y-2 mb-4">
+              <StatBar label={playerName} value={score} color="text-yellow-400" delay={0.55} />
+              {enemies.map((enemy, index) => (
+                <StatBar
+                  key={enemy.id || index}
+                  label={enemy.zoogi?.name || `Opponent ${index + 1}`}
+                  value={enemy.score || 0}
+                  color="text-orange-300"
+                  delay={0.65 + index * 0.08}
+                />
+              ))}
+            </div>
             
             <div className="space-y-2">
-              <StatBar label="Knockouts" value={knockouts} color="text-red-400" delay={0.7} />
-              <StatBar label="Orbs Collected" value={orbsCollected} color="text-cyan-400" delay={0.8} />
+              <StatBar label="Knockouts" value={knockouts} color="text-red-400" delay={0.85} />
+              <StatBar label="Orbs Collected" value={orbsCollected} color="text-cyan-400" delay={0.95} />
             </div>
           </motion.div>
           

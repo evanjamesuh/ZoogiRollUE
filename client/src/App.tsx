@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useState } from "react";
-import { useZoogiGame } from "@/lib/stores/useZoogiGame";
+import { useZoogiGame, ZOOGI_ROSTER } from "@/lib/stores/useZoogiGame";
 import { useAudio } from "@/lib/stores/useAudio";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
@@ -38,7 +38,16 @@ import { MusicVisualizer } from "@/components/game/MusicVisualizer";
 import { RingerCreator } from "@/components/game/RingerCreator";
 import { RingerTrials } from "@/components/game/RingerTrials";
 import { VantaDotsBackground } from "@/components/ui/VantaDotsBackground";
+import { PowerPreview } from "@/components/game/PowerPreview";
 import "@fontsource/inter";
+
+function usePowerPreview(): boolean {
+  const [enabled] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).get("powerPreview") === "1";
+  });
+  return enabled;
+}
 
 function RingerTrialsLoading() {
   const setPhase = useZoogiGame((state) => state.setPhase);
@@ -67,7 +76,21 @@ function RingerTrialsLoading() {
 }
 
 function App() {
+  const powerPreview = usePowerPreview();
   const phase = useZoogiGame((state) => state.phase);
+
+  useEffect(() => {
+    const debug = new URLSearchParams(window.location.search).get("debug");
+    if (debug === null || debug === "colliders") return;
+    const debugWindow = window as unknown as {
+      __zoogi?: typeof useZoogiGame;
+      __roster?: typeof ZOOGI_ROSTER;
+      __audio?: typeof useAudio;
+    };
+    debugWindow.__zoogi = useZoogiGame;
+    debugWindow.__roster = ZOOGI_ROSTER;
+    debugWindow.__audio = useAudio;
+  }, []);
   const { setHitSound, setSuccessSound, setMenuMusic, menuMusic, isMuted, stopMenuMusic, initAudioContext } = useAudio();
 
   useEffect(() => {
@@ -110,6 +133,14 @@ function App() {
 
   const showVideoBackground = ["local_setup", "arena_editor", "feature_hub"].includes(phase);
   const showVantaBackground = ["menu", "character_selection", "map_selection", "shop", "zoogipedia", "ringer_creator"].includes(phase);
+
+  if (powerPreview) {
+    return (
+      <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>
+        <PowerPreview />
+      </div>
+    );
+  }
 
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>

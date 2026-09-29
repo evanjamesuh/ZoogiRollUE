@@ -1,4 +1,5 @@
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
+import { endCardResult } from "@/lib/matchResult";
 import { motion } from "framer-motion";
 import ReactConfetti from "react-confetti";
 import { useState, useEffect } from "react";
@@ -13,7 +14,17 @@ interface LeaderboardEntry {
 }
 
 export function GameOver() {
-  const { isVictory, score, playerEntity, returnToMenu, setPhase, restartWithSameZoogi } = useZoogiGame();
+  const { isVictory, score, playerEntity, enemies, playerRoundWins, enemyRoundWins, returnToMenu, setPhase, restartWithSameZoogi } = useZoogiGame();
+  // `score` is this round's points. The match result is rounds won.
+  const result = endCardResult({
+    isVictory,
+    playerRoundWins,
+    enemyRoundWins,
+    opponents: enemies.map((enemy) => ({
+      id: enemy.id,
+      name: enemy.zoogi?.name || "Computer",
+    })),
+  });
   const [dimensions, setDimensions] = useState({ width: window.innerWidth, height: window.innerHeight });
   const [playerName, setPlayerName] = useState("");
   const [submitted, setSubmitted] = useState(false);
@@ -96,19 +107,19 @@ export function GameOver() {
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.2 }}
         >
-          {isVictory ? (
+          {result.kind === "defeat" ? (
             <>
-              <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500 mb-2">
-                VICTORY!
+              <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-pink-500 mb-2">
+                {result.headline}
               </h1>
-              <p className="text-white/70">All 3 rounds complete!</p>
+              <p className="text-white/70">{result.detail}</p>
             </>
           ) : (
             <>
-              <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-pink-500 mb-2">
-                GAME OVER
+              <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-orange-500 mb-2">
+                {result.headline}
               </h1>
-              <p className="text-white/70">Better luck next time!</p>
+              <p className="text-white/70">{result.detail}</p>
             </>
           )}
         </motion.div>
@@ -119,8 +130,18 @@ export function GameOver() {
           transition={{ delay: 0.4, type: "spring" }}
           className="my-8"
         >
-          <p className="text-white/60 text-sm uppercase">Final Score</p>
-          <p className="text-6xl font-bold text-yellow-400">{score}</p>
+          <p className="text-white/60 text-sm uppercase tracking-wide">Rounds won</p>
+          <div className="mt-3 flex items-center justify-center gap-6">
+            <div className="text-center min-w-[4.5rem]">
+              <p className="text-white text-sm font-semibold">{result.playerLabel}</p>
+              <p className="text-6xl font-black text-yellow-400 leading-none mt-1">{result.playerRounds}</p>
+            </div>
+            <p className="text-2xl font-bold text-white/50 pt-5">to</p>
+            <div className="text-center min-w-[4.5rem]">
+              <p className="text-white text-sm font-semibold">{result.opponentLabel}</p>
+              <p className="text-6xl font-black text-orange-300 leading-none mt-1">{result.opponentRounds}</p>
+            </div>
+          </div>
         </motion.div>
 
         {playerEntity && (

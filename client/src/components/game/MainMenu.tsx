@@ -93,9 +93,24 @@ function MiniRadioPlayer() {
   );
 }
 
+function rosterZoogiForCollection(item: { modelUrl: string; meshyTaskId: string }) {
+  const fileId = item.modelUrl.match(/\/([^/?#]+)\.glb(?:$|\?)/i)?.[1]?.toLowerCase();
+  const taskId = item.meshyTaskId.startsWith("default_")
+    ? item.meshyTaskId.slice("default_".length).toLowerCase()
+    : null;
+  for (const id of [fileId, taskId]) {
+    if (!id) continue;
+    const match = ZOOGI_ROSTER.find((zoogi) => zoogi.id === id);
+    if (match) return match;
+  }
+  return null;
+}
+
 export function MainMenu() {
   const setPhase = useZoogiGame((state) => state.setPhase);
   const setGameMode = useZoogiGame((state) => state.setGameMode);
+  const selectZoogi = useZoogiGame((state) => state.selectZoogi);
+  const selectCustomZoogi = useZoogiGame((state) => state.selectCustomZoogi);
   const { setMenuMusic, playMenuMusic, stopMenuMusic, isMuted } = useAudio();
   const { user, fetchMe } = useAuth();
   const [showLeaderboard, setShowLeaderboard] = useState(false);
@@ -362,7 +377,32 @@ export function MainMenu() {
         )}
         
         {showCollections && (
-          <MyCollections onBack={() => setShowCollections(false)} />
+          <MyCollections
+            onBack={() => setShowCollections(false)}
+            onSelectZoogi={(zoogi) => {
+              const rosterZoogi = rosterZoogiForCollection(zoogi);
+              if (rosterZoogi) {
+                selectZoogi(rosterZoogi);
+              } else {
+                selectCustomZoogi({
+                  id: `collection_${zoogi.id}`,
+                  name: zoogi.name,
+                  modelUrl: zoogi.modelUrl,
+                  thumbnailUrl: zoogi.thumbnailUrl || undefined,
+                  stats: {
+                    speed: zoogi.speed ?? 5,
+                    power: zoogi.power ?? 5,
+                    control: 5,
+                    ability: 5,
+                  },
+                  createdAt: new Date(zoogi.createdAt).getTime(),
+                });
+              }
+              setShowCollections(false);
+              setGameMode("classic");
+              setPhase("character_selection");
+            }}
+          />
         )}
         
         {showCustomization && (

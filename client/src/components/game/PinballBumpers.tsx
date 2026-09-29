@@ -1,29 +1,34 @@
 import * as THREE from "three";
-import { Component, type ReactNode, useRef, useState, useEffect, useMemo } from "react";
+import { useRef, useState, useEffect, useMemo, Suspense, Component, ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { useAudio } from "@/lib/stores/useAudio";
 import { BUMPER_MODEL_URL } from "@/lib/arenaColliders";
 
-/** A missing bumper model should not take down the whole court. */
-class BumperBoundary extends Component<{ children: ReactNode; position: [number, number, number] }, { failed: boolean }> {
-  state = { failed: false };
+class BumperModelErrorBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
   static getDerivedStateFromError() {
-    return { failed: true };
+    return { hasError: true };
   }
   render() {
-    if (this.state.failed) {
-      const [x, y, z] = this.props.position;
-      return (
-        <mesh position={[x, (y || 0) + 0.7, z]}>
-          <cylinderGeometry args={[0.7, 0.82, 1.3, 16]} />
-          <meshStandardMaterial color="#c45512" roughness={0.45} metalness={0.2} />
-        </mesh>
-      );
-    }
-    return this.props.children;
+    return this.state.hasError ? this.props.fallback : this.props.children;
   }
+}
+
+function BumperStandIn() {
+  return (
+    <mesh position={[0, 0.55, 0]} castShadow>
+      <cylinderGeometry args={[0.9, 1.05, 1.1, 20]} />
+      <meshStandardMaterial color="#F59E0B" emissive="#F59E0B" emissiveIntensity={0.35} />
+    </mesh>
+  );
+}
+
+function BumperModel() {
+  const { scene } = useGLTF(BUMPER_MODEL_URL);
+  const cloned = useMemo(() => scene.clone(true), [scene]);
+  return <primitive object={cloned} />;
 }
 
 export function PinballBumpers() {
@@ -33,9 +38,7 @@ export function PinballBumpers() {
   return (
     <group>
       {pinballBumpers.map((bumper) => (
-        <BumperBoundary key={bumper.id} position={bumper.position}>
-          <PinballBumper bumper={bumper} />
-        </BumperBoundary>
+        <PinballBumper key={bumper.id} bumper={bumper} />
       ))}
     </group>
   );
@@ -58,8 +61,6 @@ function PinballBumper({ bumper }: PinballBumperProps) {
   const [glowIntensity, setGlowIntensity] = useState(0);
   const lastHitTimeRef = useRef(0);
   const { playSound } = useAudio();
-  const { scene } = useGLTF(BUMPER_MODEL_URL);
-  const cloned = useMemo(() => scene.clone(true), [scene]);
 
   useEffect(() => {
     if (bumper.lastHitTime && bumper.lastHitTime > lastHitTimeRef.current) {
@@ -99,7 +100,11 @@ function PinballBumper({ bumper }: PinballBumperProps) {
       position={[bumper.position[0], bumper.position[1], bumper.position[2]]}
       scale={[1, 1, 1]}
     >
-      <primitive object={cloned} />
+      <BumperModelErrorBoundary fallback={<BumperStandIn />}>
+        <Suspense fallback={<BumperStandIn />}>
+          <BumperModel />
+        </Suspense>
+      </BumperModelErrorBoundary>
       <pointLight
         ref={glowRef}
         position={[0, 1, 0]}
@@ -110,4 +115,3 @@ function PinballBumper({ bumper }: PinballBumperProps) {
     </group>
   );
 }
-

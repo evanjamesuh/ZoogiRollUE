@@ -33,6 +33,13 @@ export const ROLLING_DRAG = 0.011;
 /** Below this, a marble is treated as stopped. */
 export const REST_SPEED = 0.02;
 
+/**
+ * Frozen Ring patches keep more speed than open ice, and still lose speed.
+ * Damping stays under 1 and drag stays positive so a patch cannot motor a marble.
+ */
+export const ICE_LINEAR_DAMPING = 0.992;
+export const ICE_ROLLING_DRAG = 0.002;
+
 /** Marble-on-marble bounce. Orb hits stay softer so scoring contact is unchanged. */
 export const MARBLE_RESTITUTION = 0.8;
 

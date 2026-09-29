@@ -1,5 +1,5 @@
 import { Canvas, useThree, useFrame } from "@react-three/fiber";
-import { Suspense } from "react";
+import { Component, ReactNode, Suspense } from "react";
 import { Arena } from "./Arena";
 import { ColliderDebug } from "./ColliderDebug";
 import { PlayerZoogi, EnemyZoogi, LocalMultiplayerZoogi } from "./Zoogi";
@@ -8,7 +8,8 @@ import { PhysicsManager } from "./PhysicsManager";
 import { GameUI } from "./GameUI";
 import { Lights } from "./Lights";
 import { GameCamera } from "./GameCamera";
-import { WolfClones, ExplosionEffect, MotionTrails, LaunchBurst, WindParticles, ImpactSparks, CollisionBurstEffects } from "./Effects";
+import { WolfClones, MotionTrails, LaunchBurst, WindParticles, ImpactSparks, CollisionBurstEffects } from "./Effects";
+import { ExplosionBlast, PowerUnlockFlash, StunBurst } from "./PowerEffects";
 import { OrbCaptureEffects } from "./OrbCaptureEffect";
 import { FallingEntities } from "./FallingEntities";
 import { DeveloperMoveControls } from "./DeveloperMoveControls";
@@ -20,12 +21,12 @@ import { EditorPlacedModels } from "./EditorPlacedModels";
 import { TransformGizmo } from "./TransformGizmo";
 import { WallSegmentGizmo } from "./WallSegmentGizmo";
 import { InnerWallSegmentGizmo } from "./InnerWallSegmentGizmo";
-import { useZoogiGame } from "@/lib/stores/useZoogiGame";
+import { resolveUnlockSpot, useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { Sky, Environment } from "@react-three/drei";
 import * as THREE from "three";
 import { PostFX } from "./PostFX";
 import { ImpactFX } from "./ImpactFX";
-import { useCallback, useEffect, useRef, useMemo } from "react";
+import { useCallback, useEffect, useRef, useMemo, useState } from "react";
 import { triggerArcPeakCameraEffect, triggerArcPeakFreezeOnly, clearArcPeakCameraEffect } from "@/lib/stores/useCameraEffects";
 import { useMapDecorations } from "@/hooks/useMapDecorations";
 
@@ -110,6 +111,101 @@ function ArcPeakOverlayWrapper() {
   );
 }
 
+const unlockProbe = new THREE.Vector3();
+
+function exitIsOnScreen(camera: THREE.Camera, position: [number, number, number]): boolean {
+  camera.updateWorldMatrix(true, false);
+  unlockProbe.set(position[0], Math.max(position[1], 0.5) + 0.9, position[2]);
+  const dist = unlockProbe.distanceTo(camera.position);
+  if (dist < 1.2 || dist > 36) return false;
+  unlockProbe.project(camera);
+  return unlockProbe.z >= -1 && unlockProbe.z <= 0.98 && Math.abs(unlockProbe.x) < 0.78 && Math.abs(unlockProbe.y) < 0.7;
+}
+
+function MatchUnlockFlash({
+  flash,
+}: {
+  flash: { id: string; position: [number, number, number]; startTime: number; color: string; anchorId: string };
+}) {
+  const camera = useThree((state) => state.camera);
+  const playerEntity = useZoogiGame((state) => state.playerEntity);
+  const enemies = useZoogiGame((state) => state.enemies);
+  const spot = useRef<[number, number, number] | null>(null);
+  const [, setVersion] = useState(0);
+  const anchor = playerEntity?.id === flash.anchorId
+    ? playerEntity
+    : enemies.find((enemy) => enemy.id === flash.anchorId) ?? null;
+
+  useFrame(() => {
+    if (spot.current) return;
+    const state = useZoogiGame.getState();
+    const live = state.playerEntity?.id === flash.anchorId
+      ? state.playerEntity
+      : state.enemies.find((enemy) => enemy.id === flash.anchorId) ?? null;
+    const anchorPos = live ? [live.position[0], live.position[1], live.position[2]] as [number, number, number] : null;
+    const onScreen = exitIsOnScreen(camera, flash.position);
+    spot.current = resolveUnlockSpot(flash.position, anchorPos, onScreen);
+    setVersion((version) => version + 1);
+  });
+
+  // Until the follow camera has been sampled, keep the burst on the unlocking marble
+  // so an exit point behind the camera cannot be the only thing we draw.
+  const position = spot.current ?? resolveUnlockSpot(
+    flash.position,
+    anchor ? [anchor.position[0], anchor.position[1], anchor.position[2]] : null,
+    false,
+  );
+
+  return (
+    <PowerUnlockFlash
+      position={position}
+      startTime={flash.startTime}
+      radius={5.6}
+      color={flash.color}
+    />
+  );
+}
+
+function MatchPowerVisuals() {
+  const showExplosion = useZoogiGame((state) => state.showExplosion);
+  const powerUnlocks = useZoogiGame((state) => state.powerUnlocks);
+  const now = Date.now();
+
+  return (
+    <>
+      {showExplosion && showExplosion.color === "yellow" && (
+        <StunBurst
+          key={showExplosion.timestamp}
+          position={showExplosion.position}
+          startTime={showExplosion.timestamp}
+          radius={showExplosion.radius ?? 8}
+        />
+      )}
+      {showExplosion && showExplosion.color !== "yellow" && (
+        <ExplosionBlast
+          key={showExplosion.timestamp}
+          position={showExplosion.position}
+          startTime={showExplosion.timestamp}
+          radius={showExplosion.radius ?? 8}
+        />
+      )}
+      {powerUnlocks.filter((flash) => now - flash.startTime < 4000).map((flash) => (
+        <MatchUnlockFlash key={flash.id} flash={flash} />
+      ))}
+    </>
+  );
+}
+
+class OptionalSceneBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  render() {
+    return this.state.hasError ? null : this.props.children;
+  }
+}
+
 export function Game() {
   const { enemies, selectedMap, gameMode, localPlayers } = useZoogiGame();
   
@@ -149,11 +245,14 @@ export function Game() {
         
         {selectedMap === "ice" && <fog attach="fog" args={['#c8e6f8', 60, 150]} />}
         
-        <Suspense fallback={null}>
-          {selectedMap === "ice" && <GradientSky />}
-          {selectedMap !== "ice" && selectedMap !== "neon" && <Sky sunPosition={currentSky.sunPosition} />}
-          {selectedMap !== "ice" && selectedMap !== "neon" && <Environment preset="sunset" background={false} />}
-          
+        <OptionalSceneBoundary>
+          <Suspense fallback={null}>
+            {selectedMap === "ice" && <GradientSky />}
+            {selectedMap !== "ice" && selectedMap !== "neon" && <Sky sunPosition={currentSky.sunPosition} />}
+            {selectedMap !== "ice" && selectedMap !== "neon" && <Environment preset="sunset" background={false} />}
+          </Suspense>
+        </OptionalSceneBoundary>
+
           <Lights />
           
           <Arena theme={selectedMap || "grass"} />
@@ -194,7 +293,7 @@ export function Game() {
           {gameMode !== "map_editor" && <OrbManager />}
           
           <WolfClones />
-          <ExplosionEffect />
+          <MatchPowerVisuals />
           <OrbCaptureEffects />
           
           <FallingEntities />
@@ -223,7 +322,6 @@ export function Game() {
           <DeveloperMoveControls key={`dev-controls-${selectedMap || "grass"}`} />
           
           <GameCamera />
-        </Suspense>
       </Canvas>
       
       <GameUI />

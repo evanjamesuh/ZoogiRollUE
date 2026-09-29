@@ -44,11 +44,11 @@ export const ZOOGI_MODELS: Record<string, ZoogiModelSettings> = {
 
 /**
  * Files to fetch as soon as the game loads, so a match does not wait on them.
- * Lars is not in this list: his file may not be installed yet, and the match
- * loads /models/lars.glb the moment a roster entry uses him.
+ * Lars is included with the others, so /models/lars.glb is already downloading
+ * before a match starts instead of showing the blue ball while it loads.
  */
 export function zoogiModelPreloadUrls(): string[] {
-  return ["wolfgang", "hotstreak", "pinpoint", "bolt", "wraps"].map((id) => ZOOGI_MODELS[id].url);
+  return ["wolfgang", "hotstreak", "pinpoint", "bolt", "wraps", "lars"].map((id) => ZOOGI_MODELS[id].url);
 }
 
 /**
