@@ -1,17 +1,23 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  ARABIAN_STAGE,
   BUMPER_RADIUS,
   MARBLE_RADIUS,
   ORB_RADIUS,
+  arabianPlayTransform,
   bumperSolids,
   collectMatchSolids,
   countClearLanes,
   getIcePatches,
   getMapLayout,
+  getWinterCampVersion,
+  knockoffOffsetForMap,
   laneIsClear,
   pointInsideSolid,
   resolveSolidCollision,
+  setWinterCampActive,
+  subscribeWinterCamp,
 } from "./arenaColliders.ts";
 
 const MAPS = ["grass", "ice", "lava", "space", "saturn"] as const;
@@ -134,14 +140,85 @@ test("fitted stages keep the knockoff on the measured floor", () => {
   const space = getMapLayout("space");
   const saturn = getMapLayout("saturn");
   const lava = getMapLayout("lava");
+  const grass = getMapLayout("grass");
   assert.ok(space);
   assert.ok(saturn);
   assert.ok(lava);
-  assert.ok(space.floorRadius > 14 && space.knockoffRadius < 20);
-  assert.ok(saturn.floorRadius > 14 && saturn.knockoffRadius < 22);
+  assert.ok(grass);
+  assert.ok(space.floorRadius > 14 && space.floorRadius < space.knockoffRadius);
+  assert.ok(Math.abs(space.knockoffRadius - 15.6) < 0.02, "cosmic out line is the inner face of the lip");
+  assert.deepEqual(ARABIAN_STAGE.plazaCenter, [0, 0]);
+  assert.ok(Math.abs(saturn.knockoffRadius - 15.5) < 0.02, "arabian plaza circle sits on the origin");
+  assert.ok(saturn.knockoffRadius - saturn.floorRadius < 0.6, "fallback disk ends at the out line");
+  const placed = arabianPlayTransform();
+  assert.ok(Math.abs(placed.x - 256.72) < 0.05, "stage shift +4 x");
+  assert.ok(Math.abs(placed.z - 10.72) < 0.05, "stage shift +16 z");
+  assert.equal(lava.scenery.length, 6, "south outer hoodoo is present");
   for (const hoodoo of lava.scenery) {
-    assert.ok(hoodoo.radius < 0.9, `${hoodoo.id} still uses the fallback cap radius`);
+    assert.ok(hoodoo.radius <= 0.25 * 2.8 + 1e-6, `${hoodoo.id} is trimmed to the stone`);
+    assert.ok(hoodoo.radius >= 0.25 * 2 - 1e-6, `${hoodoo.id} radius`);
   }
+  assert.equal(grass.knockoffRadius, 15.5);
+  const tree = grass.scenery.find((solid) => solid.id.startsWith("Tree1"));
+  assert.ok(tree && tree.radius < 0.5, "Tree1 collider is the trunk");
+  for (const rock of grass.scenery.filter((solid) => solid.kind === "rock")) {
+    assert.ok(rock.radius <= 3, `${rock.id} still uses the old oversized disk`);
+  }
+  for (const score of grass.zones.filter((zone) => !zone.isSpawn)) {
+    assert.ok(score.distance + SCORE_ZONE_RADIUS <= 13.5, "score zone hangs off the grass");
+  }
+  const spawns = grass.zones.filter((zone) => zone.isSpawn);
+  const south = spawns[1];
+  assert.ok(south);
+  const southZ = Math.sin(south.angle) * south.distance;
+  assert.ok(southZ < 7.5, "south spawn is under the big tree canopy");
+});
+
+test("knockoff centre stays on the origin for every map", () => {
+  for (const id of [...MAPS, null]) {
+    assert.deepEqual(knockoffOffsetForMap(id), { x: 0, y: 0, z: 0 });
+  }
+});
+
+test("frozen ring camp walls match the drawn props and stay off until the model loads", () => {
+  setWinterCampActive(false);
+  const idle = collectMatchSolids({ map: "ice", bumpers: [], landedRocks: [], editorModels: [] });
+  assert.equal(idle.some((solid) => solid.kind === "prop"), false);
+
+  setWinterCampActive(true);
+  const live = collectMatchSolids({ map: "ice", bumpers: [], landedRocks: [], editorModels: [] });
+  const byId = new Map(live.map((solid) => [solid.id, solid]));
+  assert.equal(byId.get("wall-16a")?.radius, 1.15);
+  assert.equal(byId.get("wall-16b")?.radius, 1.15);
+  assert.equal(byId.get("wall-16c")?.radius, 1.15);
+  assert.equal(byId.get("wall-16"), undefined);
+  assert.equal(byId.get("tower-17a")?.radius, 2.05);
+  assert.equal(byId.get("tower-17b")?.radius, 2.05);
+  assert.equal(byId.get("tower-19")?.radius, 2.05);
+  assert.equal(byId.get("box-13")?.radius, 1.05);
+  assert.equal(byId.get("barrel-15")?.radius, 0.67);
+  assert.equal(byId.get("rail-12")?.radius, 1.19);
+  setWinterCampActive(false);
+});
+
+test("the collider overlay can hear when camp solids turn on", () => {
+  setWinterCampActive(false);
+  let notices = 0;
+  const unsubscribe = subscribeWinterCamp(() => {
+    notices += 1;
+  });
+  const before = getWinterCampVersion();
+  setWinterCampActive(true);
+  assert.equal(notices, 1);
+  assert.ok(getWinterCampVersion() > before);
+  setWinterCampActive(true);
+  assert.equal(notices, 1);
+  setWinterCampActive(false);
+  assert.equal(notices, 2);
+  unsubscribe();
+  setWinterCampActive(true);
+  assert.equal(notices, 2);
+  setWinterCampActive(false);
 });
 
 test("an editor-placed bumper collides at the bumper radius", () => {

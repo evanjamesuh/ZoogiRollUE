@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { useRef, useMemo, Suspense, Component, ReactNode } from "react";
+import { useRef, useMemo, useLayoutEffect, Suspense, Component, ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGLTF, useAnimations, Center } from "@react-three/drei";
 import { useZoogiGame, CustomArenaDecoration } from "@/lib/stores/useZoogiGame";
@@ -25,7 +25,7 @@ import { EditorScoringZones } from "./EditorScoringZones";
 import { ScoringZones } from "./ScoringZones";
 import { PinballBumpers } from "./PinballBumpers";
 import { ARENA_RADIUS } from "@/lib/arenaConstants";
-import { ARABIAN_STAGE, COSMOS_STAGE, GRASS_STAGE, WINTER_STAGE, arabianPlayTransform, getMapLayout } from "@/lib/arenaColliders";
+import { ARABIAN_STAGE, COSMOS_STAGE, GRASS_STAGE, WINTER_STAGE, arabianPlayTransform, getMapLayout, setWinterCampActive } from "@/lib/arenaColliders";
 
 export { ARENA_RADIUS };
 
@@ -341,6 +341,13 @@ function WinterLocationScene() {
   });
 
   const winterScale = WINTER_STAGE.modelScale;
+
+  // Camp solids match this mesh. If the file fails to load, this never runs.
+  useLayoutEffect(() => {
+    setWinterCampActive(true);
+    return () => setWinterCampActive(false);
+  }, []);
+
   return (
     <group ref={groupRef} position={[0, WINTER_STAGE.modelOffsetY, 0]} scale={[winterScale, winterScale, winterScale]}>
       <primitive object={scene} />
@@ -621,13 +628,16 @@ interface ArenaProps {
   theme?: "grass" | "ice" | "lava" | "space" | "saturn";
 }
 
-class MeshyArenaErrorBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { hasError: boolean }> {
-  constructor(props: { children: ReactNode; fallback: ReactNode }) {
+class MeshyArenaErrorBoundary extends Component<{ children: ReactNode; fallback: ReactNode; onError?: () => void }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode; fallback: ReactNode; onError?: () => void }) {
     super(props);
     this.state = { hasError: false };
   }
   static getDerivedStateFromError() { return { hasError: true }; }
-  componentDidCatch(error: Error) { console.error("Meshy arena loading error:", error); }
+  componentDidCatch(error: Error) {
+    console.error("Meshy arena loading error:", error);
+    this.props.onError?.();
+  }
   render() { return this.state.hasError ? this.props.fallback : this.props.children; }
 }
 
@@ -743,17 +753,21 @@ export function Arena({ theme = "grass" }: ArenaProps) {
   const colors = themeColors[currentTheme as keyof typeof themeColors] || themeColors.grass;
 
   const isIceTheme = currentTheme === "ice";
-  const floorRadius = getMapLayout(currentTheme)?.floorRadius ?? ARENA_RADIUS;
-  const stageFallback = <PlayfieldDisk radius={floorRadius} color={colors.platform} />;
+  const layout = getMapLayout(currentTheme);
+  const floorRadius = layout?.floorRadius ?? ARENA_RADIUS;
+  // The stand-in disk matches the knockout line, so rolling off what you
+  // see is the same as crossing the scoring ring.
+  const standInRadius = layout?.knockoffRadius ?? floorRadius;
+  const stageFallback = <PlayfieldDisk radius={standInRadius} color={colors.platform} />;
   
   return (
     <group>
       {/* Lava has no stage model. The disk is the playfield, the same size as the knockoff ring. */}
       {currentTheme === "lava" && (
         <>
-          <PlayfieldDisk radius={floorRadius} color={colors.platform} />
-          <EdgeRing radius={floorRadius} color={colors.edge} />
-          <DangerZone radius={floorRadius} color={colors.edge} />
+          <PlayfieldDisk radius={standInRadius} color={colors.platform} />
+          <EdgeRing radius={standInRadius} color={colors.edge} />
+          <DangerZone radius={standInRadius} color={colors.edge} />
         </>
       )}
       
@@ -767,7 +781,7 @@ export function Arena({ theme = "grass" }: ArenaProps) {
         </MeshyArenaErrorBoundary>
       )}
       {isIceTheme && (
-        <MeshyArenaErrorBoundary fallback={stageFallback}>
+        <MeshyArenaErrorBoundary fallback={stageFallback} onError={() => setWinterCampActive(false)}>
           <Suspense fallback={null}>
             <WinterLocationScene />
           </Suspense>
@@ -855,9 +869,9 @@ export function Arena({ theme = "grass" }: ArenaProps) {
   );
 }
 
-function PlayfieldDisk({ radius, color }: { radius: number; color: string }) {
+function PlayfieldDisk({ radius, color, center = [0, 0, 0] }: { radius: number; color: string; center?: [number, number, number] }) {
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
+    <mesh rotation={[-Math.PI / 2, 0, 0]} position={center} receiveShadow>
       <circleGeometry args={[radius, 64]} />
       <meshStandardMaterial color={color} />
     </mesh>
