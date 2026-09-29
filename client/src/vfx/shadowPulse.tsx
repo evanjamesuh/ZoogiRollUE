@@ -18,7 +18,7 @@ import { seedShadowSuck, seedShadowWave, stepShadowSuck, stepShadowWave } from "
 import { usePlayedClock } from "./bursts";
 
 const SUCK_CAP = 18;
-const WAVE_CAP = 28;
+const WAVE_CAP = 36;
 const WRAP_CAP = 10;
 const SUCK_POINTS = 16;
 const TENDRIL_POINTS = 22;
@@ -27,10 +27,10 @@ function shadowBudget() {
   const low = getVfxQuality() === "low";
   return {
     suck: low ? 8 : 16,
-    wave: low ? 12 : 26,
+    wave: low ? 14 : 32,
     wrap: low ? 6 : 10,
     suckRibbons: low ? 2 : 4,
-    sizeScale: low ? 1.35 : 1,
+    sizeScale: low ? 1.45 : 1,
   };
 }
 
@@ -188,8 +188,8 @@ export function ShadowPulseLook({
     const veil = waveIn * (1 - smoothstep((elapsed - 1.28) / 1.15));
     ground.uniforms.uTime.value = state.clock.elapsedTime;
     ground.uniforms.uFront.value = Math.min(1, front / radius);
-    ground.uniforms.uEdge.value = edgeFade * 0.48;
-    ground.uniforms.uVeil.value = veil * 0.85;
+    ground.uniforms.uEdge.value = edgeFade * 0.32;
+    ground.uniforms.uVeil.value = veil * 0.55;
 
     let intensity = 0;
     if (elapsed < 0.26) intensity = (elapsed / 0.26) * 5.2;
@@ -241,7 +241,7 @@ function ShadowTendril({ phase }: { phase: number }) {
       const rad = 0.56 + Math.sin(u * Math.PI) * 0.16;
       points[i].set(Math.cos(ang) * rad, y, Math.sin(ang) * rad);
     }
-    writeRibbon(geo, points, 0.15, state.camera.position);
+    writeRibbon(geo, points, 0.22, state.camera.position);
     material.uniforms.uFade.value = 0.92;
     material.uniforms.uTime.value = time;
   });
@@ -254,7 +254,7 @@ function FaintGlint() {
   const material = useMemo(() => {
     const mat = new THREE.ShaderMaterial({
       uniforms: {
-        uSize: { value: 0.42 },
+        uSize: { value: 0.5 },
         uColor: { value: new THREE.Color("#b69cff") },
         uTime: { value: 0 },
       },
@@ -314,7 +314,7 @@ export function ShadowWrap() {
         vy: 0,
         vz: 0,
         life: 60,
-        size: 0.48 + (i % 3) * 0.12,
+        size: 0.62 + (i % 3) * 0.16,
         grow: 0,
         spin: (rand() - 0.5) * 0.4,
         r: ink[0],

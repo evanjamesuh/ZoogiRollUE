@@ -45,10 +45,12 @@ function PreviewCamera() {
       : undefined;
     if (aimed) focus.current.set(aimed[0], aimed[1], aimed[2]);
     else focus.current.set(0, 0.4, 0);
+    // A focused close-up sits near the marble so a stun wrap reads; the wide close shot stays back.
+    const tight = !!aimed;
     base.current.set(
       focus.current.x,
-      focus.current.y + (close ? 4.2 : 17.6),
-      focus.current.z + (close ? 6.6 : 15.6),
+      focus.current.y + (close ? (tight ? 1.55 : 4.2) : 17.6),
+      focus.current.z + (close ? (tight ? 2.35 : 6.6) : 15.6),
     );
     const shake = useGameFeel.getState().screenShake;
     let amp = 0;
@@ -311,7 +313,7 @@ export function PowerPreview() {
               { id, position: [2.6, 0.5, -1.8] },
               { id: id + 1, position: [-3.1, 0.5, 1.6] },
             ]);
-            window.setTimeout(() => setShadowBinds([]), 4500);
+            window.setTimeout(() => setShadowBinds([]), 8000);
           }}
         />
         <PreviewButton

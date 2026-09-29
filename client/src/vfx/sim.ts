@@ -720,7 +720,7 @@ export function seedShadowWave(
       : band < 0.72
         ? 0.46 + rand() * 0.3
         : 0.16 + rand() * 0.24;
-    const size = (front ? 1.28 + rand() * 0.52 : 1.05 + rand() * 0.75) * sizeScale;
+    const size = (front ? 1.55 + rand() * 0.65 : band < 0.72 ? 1.4 + rand() * 0.8 : 1.75 + rand() * 0.85) * sizeScale;
     const [r, g, b] = shadowInk(rand);
     spawnSprite(pool, {
       x: Math.cos(ang) * 0.25,
@@ -775,6 +775,6 @@ export function stepShadowWave(pool: SpritePool, radius: number, elapsed: number
     pool.py[i] = 0.15 + crest + bob + pool.vy[i];
     pool.size[i] = size;
     pool.rot[i] += pool.spin[i] * dt;
-    pool.opacity[i] = fadeIn * fadeOut * (0.7 + targetFrac * 0.22);
+    pool.opacity[i] = fadeIn * fadeOut * (0.84 + targetFrac * 0.14);
   }
 }

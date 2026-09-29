@@ -419,7 +419,7 @@ void main() {
   float edge = smoothstep(0.5, 0.18, dist);
   float core = exp(-dist * dist * 36.0);
   float pulse = 0.7 + 0.3 * sin(uTime * 2.6);
-  vec3 col = uColor * (edge * 0.05 + core * 0.55) * pulse;
+  vec3 col = uColor * (edge * 0.08 + core * 0.85) * pulse;
   gl_FragColor = vec4(col, 1.0);
 }
 `;
