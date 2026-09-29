@@ -170,55 +170,45 @@ function EmberField() {
 /** Knockout line. The moat and the crust lip both meet this radius, with no gap. */
 const LAVA_EDGE = 18.6;
 
-function pulseEmissive(mesh: THREE.Mesh | null, base: number, amount: number, wave: number) {
-  const mat = mesh?.material;
-  if (mat && !Array.isArray(mat) && mat instanceof THREE.MeshStandardMaterial) {
-    mat.emissiveIntensity = base + wave * amount;
-  }
-}
-
 function LavaMoat() {
-  const meltRef = useRef<THREE.Mesh>(null);
-  const deepRef = useRef<THREE.Mesh>(null);
+  const meltRef = useRef<THREE.MeshBasicMaterial>(null);
   useFrame((state) => {
+    const mat = meltRef.current;
+    if (!mat) return;
     const wave = Math.sin(state.clock.elapsedTime * 1.7);
-    pulseEmissive(meltRef.current, 1.9, 0.22, wave);
-    pulseEmissive(deepRef.current, 1.05, 0.16, wave);
+    // Linear HDR yellow. Bloom already thresholds at 1.15, so the rim glows
+    // and no longer sits in the same orange as the floor.
+    mat.color.r = 2.5 + wave * 0.2;
+    mat.color.g = 1.05 + wave * 0.06;
+    mat.color.b = 0.08;
   });
   return (
-    <group>
-      {/* Gold melt hard against the knockout line, then a deeper red moat. */}
-      <mesh ref={meltRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.02, 0]}>
-        <ringGeometry args={[LAVA_EDGE, 19.85, 80]} />
-        <meshStandardMaterial color="#ffe08a" emissive="#ffb018" emissiveIntensity={1.9} roughness={0.34} metalness={0.05} />
+    <group position={[0, 0.07, 0]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} renderOrder={2}>
+        <ringGeometry args={[LAVA_EDGE, 19.7, 80]} />
+        <meshBasicMaterial ref={meltRef} color="#ffcc33" toneMapped={false} fog={false} />
       </mesh>
-      <mesh ref={deepRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.03, 0]}>
-        <ringGeometry args={[19.85, 24.5, 72]} />
-        <meshStandardMaterial color="#c42a06" emissive="#ff3c08" emissiveIntensity={1.05} roughness={0.5} metalness={0.04} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.012, 0]} renderOrder={1}>
+        <ringGeometry args={[19.7, 24.5, 80]} />
+        <meshBasicMaterial color="#d01208" toneMapped={false} fog={false} />
       </mesh>
     </group>
   );
 }
 
-/** Low basalt crust on the floor, ending exactly on the knockout line. */
+/** Dark crust on the floor, ending exactly on the knockout line. */
 function BasaltLip() {
-  const geometry = useMemo(() => {
-    const crest = 0.085;
-    const points = [
-      new THREE.Vector2(17.35, 0.028),
-      new THREE.Vector2(17.9, 0.036),
-      new THREE.Vector2(18.28, 0.05),
-      new THREE.Vector2(18.48, 0.068),
-      new THREE.Vector2(LAVA_EDGE, crest),
-      new THREE.Vector2(LAVA_EDGE, 0.02),
-    ];
-    return new THREE.LatheGeometry(points, 80);
-  }, []);
-
   return (
-    <mesh geometry={geometry}>
-      <meshStandardMaterial color="#14110f" roughness={0.96} metalness={0.02} emissive="#2a120c" emissiveIntensity={0.18} />
-    </mesh>
+    <group>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.065, 0]} renderOrder={2}>
+        <ringGeometry args={[16.4, LAVA_EDGE, 96]} />
+        <meshBasicMaterial color="#100e0c" fog={false} />
+      </mesh>
+      <mesh position={[0, 0.1, 0]} renderOrder={3}>
+        <cylinderGeometry args={[LAVA_EDGE, LAVA_EDGE, 0.16, 96, 1, true]} />
+        <meshBasicMaterial color="#161311" side={THREE.DoubleSide} fog={false} />
+      </mesh>
+    </group>
   );
 }
 
