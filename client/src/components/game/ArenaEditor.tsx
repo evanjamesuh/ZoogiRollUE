@@ -311,6 +311,7 @@ function EditorArena({
       case "ice": return "#81D4FA";
       case "lava": return "#FF5722";
       case "space": return "#7C4DFF";
+      case "tomb": return "#E0B88A";
       default: return "#4CAF50";
     }
   }, [theme]);

@@ -16,6 +16,7 @@ import { DeveloperMoveControls } from "./DeveloperMoveControls";
 import { Tutorial } from "./Tutorial";
 import { ArcPeakOverlay } from "./ArcPeakOverlay";
 import { HitEffects, ScreenFlash, FireBursts, WallSparks, CartoonExplosions, CartoonStarbursts, CartoonSparks } from "./GameFeelEffects";
+import { ImpactField } from "@/vfx/impacts";
 import { ArcSelector } from "./ArcSelector";
 import { EditorPlacedModels } from "./EditorPlacedModels";
 import { TransformGizmo } from "./TransformGizmo";
@@ -23,6 +24,7 @@ import { WallSegmentGizmo } from "./WallSegmentGizmo";
 import { InnerWallSegmentGizmo } from "./InnerWallSegmentGizmo";
 import { resolveUnlockSpot, useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { Sky, Environment } from "@react-three/drei";
+import { MapAtmosphere } from "./ComicMapDressing";
 import * as THREE from "three";
 import { PostFX } from "./PostFX";
 import { ImpactFX } from "./ImpactFX";
@@ -224,16 +226,17 @@ export function Game() {
   
   useMapDecorations();
 
-  const skySettings = {
-    grass: { sunPosition: [100, 20, 100] as [number, number, number] },
-    ice: { sunPosition: [100, 50, 100] as [number, number, number] },
-    lava: { sunPosition: [100, 5, 100] as [number, number, number] },
-    space: { sunPosition: [100, 80, 100] as [number, number, number] },
-    saturn: { sunPosition: [100, 60, 100] as [number, number, number] },
-    neon: { sunPosition: [40, 30, 80] as [number, number, number] }
-  };
-
-  const currentSky = skySettings[selectedMap || "grass"] || skySettings.grass;
+  const meadowSun = [100, 20, 100] as [number, number, number];
+  const comicMap = selectedMap === "lava" || selectedMap === "space" || selectedMap === "saturn" || selectedMap === "tomb";
+  const background =
+    selectedMap === "neon" ? "#070814" :
+    selectedMap === "grass" ? "#7ecbf5" :
+    selectedMap === "ice" ? "#87CEEB" :
+    selectedMap === "lava" ? "#1a0c18" :
+    selectedMap === "space" ? "#070414" :
+    selectedMap === "saturn" ? "#070314" :
+    selectedMap === "tomb" ? "#120818" :
+    "#1a1a2e";
 
   return (
     <>
@@ -255,15 +258,17 @@ export function Game() {
         }}
         style={{ position: "absolute", inset: 0 }}
       >
-        <color attach="background" args={[selectedMap === "neon" ? "#070814" : (selectedMap === "space" || selectedMap === "saturn") ? "#0a0a1a" : selectedMap === "ice" ? "#87CEEB" : "#1a1a2e"]} />
+        <color attach="background" args={[background]} />
         
         {selectedMap === "ice" && <fog attach="fog" args={['#c8e6f8', 60, 150]} />}
+        {selectedMap === "grass" && <fog attach="fog" args={['#d7ebf8', 58, 390]} />}
         
         <OptionalSceneBoundary>
           <Suspense fallback={null}>
             {selectedMap === "ice" && <GradientSky />}
-            {selectedMap !== "ice" && selectedMap !== "neon" && <Sky sunPosition={currentSky.sunPosition} />}
-            {selectedMap !== "ice" && selectedMap !== "neon" && <Environment preset="sunset" background={false} />}
+            {comicMap && <MapAtmosphere map={selectedMap} />}
+            {!comicMap && selectedMap !== "ice" && selectedMap !== "grass" && selectedMap !== "neon" && <Sky sunPosition={meadowSun} />}
+            {!comicMap && selectedMap !== "ice" && selectedMap !== "grass" && selectedMap !== "neon" && <Environment preset="sunset" background={false} />}
           </Suspense>
         </OptionalSceneBoundary>
 
@@ -325,6 +330,7 @@ export function Game() {
           <CartoonExplosions />
           <CartoonStarbursts />
           <CartoonSparks />
+          <ImpactField />
           
           <ArcSelector />
           

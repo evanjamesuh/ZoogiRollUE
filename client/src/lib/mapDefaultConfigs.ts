@@ -213,8 +213,29 @@ export const SPACE_MAP_DEFAULT_CONFIG: MapDefaultConfig = {
   }))
 };
 
+export const TOMB_MAP_DEFAULT_CONFIG: MapDefaultConfig = {
+  wallSettings: {
+    outerWallEnabled: false,
+    middleWallEnabled: false,
+    innerWallEnabled: false,
+    knockoffBoundaryRadius: getMapLayout("tomb")?.knockoffRadius ?? 15.5,
+    knockoffBoundaryWidth: 0.5,
+  },
+  elementTransforms: {
+    knockoffBoundaryOffset: { x: 0, y: 0, z: 0 },
+  },
+  zoneEditorConfigs: (getMapLayout("tomb")?.zones ?? []).map((zone) => ({
+    id: zone.id,
+    angle: zone.angle,
+    distance: zone.distance,
+    visible: zone.visible,
+    isSpawn: zone.isSpawn,
+  })),
+};
+
 export const MAP_DEFAULT_CONFIGS: Record<string, MapDefaultConfig> = {
-  space: SPACE_MAP_DEFAULT_CONFIG
+  space: SPACE_MAP_DEFAULT_CONFIG,
+  tomb: TOMB_MAP_DEFAULT_CONFIG,
 };
 
 export function getMapDefaultConfig(mapId: string): MapDefaultConfig | null {

@@ -1491,6 +1491,32 @@ test("a knockoff offset does not carry from one map into the next", async () => 
   useZoogiGame.getState().startGame();
   assert.deepEqual(useZoogiGame.getState().elementTransforms.knockoffBoundaryOffset, { x: 0, y: 0, z: 0 });
   assert.equal(useZoogiGame.getState().wallSettings.knockoffBoundaryRadius, 15.5);
+
+  for (const mapId of ["grass", "ice", "saturn"] as const) {
+    useZoogiGame.setState({
+      selectedMap: mapId,
+      elementTransforms: {
+        ...useZoogiGame.getState().elementTransforms,
+        knockoffBoundaryOffset: { x: -9.9, y: 0, z: -4.8 },
+      },
+    });
+    useZoogiGame.getState().startGame();
+    const state = useZoogiGame.getState();
+    assert.deepEqual(state.elementTransforms.knockoffBoundaryOffset, { x: 0, y: 0, z: 0 }, mapId);
+    assert.equal(state.wallSettings.knockoffBoundaryRadius, 15.5, mapId);
+    const spawns = state.zoneEditorConfigs.filter((zone) => zone.isSpawn);
+    const scores = state.zoneEditorConfigs.filter((zone) => !zone.isSpawn);
+    assert.equal(spawns.length, 4, mapId);
+    assert.equal(scores.length, 4, mapId);
+    for (const spawn of spawns) {
+      assert.equal(spawn.distance, 8, mapId);
+      assert.ok(spawn.distance + 0.5 < 15.2, `${mapId} spawn leaves the floor`);
+    }
+    for (const score of scores) {
+      assert.equal(score.distance, 9.4, mapId);
+      assert.ok(score.distance + 4 <= 15.2, `${mapId} score zone leaves the floor`);
+    }
+  }
 });
 
 test("frozen ring ice patches coast without speeding a marble up", async () => {
