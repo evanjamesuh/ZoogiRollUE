@@ -34,7 +34,7 @@ import { triggerAbilityCameraEffect, triggerKnockoffCameraEffect, triggerCollisi
 import { getDeviceId } from "@/lib/deviceId";
 import { COSMOS_STAGE, GRASS_STAGE, arabianPlayTransform, collectMatchSolids, getIcePatches, getMapLayout, knockoffOffsetForMap, resolveSolidCollision } from "../arenaColliders";
 import { isOutsideNeonCourt, resolveNeonRails } from "../neonCourt";
-import { ICE_LINEAR_DAMPING, ICE_ROLLING_DRAG, LINEAR_DAMPING, LOCKON_LAUNCH_SPEED, MARBLE_RESTITUTION, MAX_PLANAR_SPEED, REST_SPEED, ROLLING_DRAG } from "../simFeel";
+import { FALL_GRAVITY_STEP, FALL_OUT_Y, ICE_ROLLING_DRAG, LOCKON_LAUNCH_SPEED, MARBLE_RESTITUTION, MAX_PLANAR_SPEED, REST_SPEED, ROLLING_DRAG, SETTLE_DELAY_STEPS } from "../simFeel";
 import { ORB_REST_Y, ZOOGI_REST_Y } from "../restHeight";
 
 export const DEFAULT_BACKGROUND_SETTINGS = {
@@ -445,6 +445,8 @@ interface GameEntity {
   respawnAt: number | null;
   respawnPadIndex: number | null;
   isKnockedOut: boolean;
+  /** Left the floor and is falling. The body stays visible until it drops out. */
+  offTheFloor?: boolean;
   spawnImmunity: boolean; // Immune to score penalties until entering the ring
   spawnPointIndex: number; // Which spawn point this player uses
 }
@@ -1337,7 +1339,7 @@ const initializeGame = (
 let lastTurnEndedAt = 0;
 let turnWatchKey = "";
 let turnReadyForLaunch = false;
-let turnSlowFrames = 0;
+let settleHoldSteps = 0;
 
 /** Fold this round's score into the round-win counters. A tied round goes to the player. */
 function awardRoundWin(
@@ -1391,8 +1393,8 @@ function actorTakingTurn(state: {
   isPlayerTurn: boolean;
   turnIndex: number;
   currentLocalPlayerIndex: number;
-  playerEntity: { velocity: [number, number, number]; isKnockedOut?: boolean; isRespawning?: boolean } | null;
-  enemies: { velocity: [number, number, number]; isKnockedOut?: boolean; isRespawning?: boolean }[];
+  playerEntity: { velocity: [number, number, number]; isKnockedOut?: boolean; isRespawning?: boolean; offTheFloor?: boolean } | null;
+  enemies: { velocity: [number, number, number]; isKnockedOut?: boolean; isRespawning?: boolean; offTheFloor?: boolean }[];
 }) {
   if (state.gameMode === "local_multiplayer") {
     if (state.currentLocalPlayerIndex <= 0) return state.playerEntity;
@@ -3604,6 +3606,21 @@ export const useZoogiGame = create<ZoogiGameState>()(
       // call leaves it set so the next physics step can try again.
       set({ turnHasLaunched: false });
 
+      const seatOnPad = (entity: GameEntity, spawnIndex: number): GameEntity => ({
+        ...entity,
+        position: respawnInsidePlayfield(
+          spawnIndex,
+          get().zoneEditorConfigs,
+          get().selectedMap,
+          get().wallSettings.knockoffBoundaryRadius ?? 18,
+        ),
+        velocity: [0, 0, 0],
+        isKnockedOut: false,
+        isRespawning: false,
+        respawnAt: null,
+        offTheFloor: false,
+      });
+
       const { enemies, turnIndex, isPlayerTurn, gameMode, localPlayers, currentLocalPlayerIndex, playerEntity, zoneEditorConfigs, zoneControlActive, updateZoneOwnership, checkZoneControlActivation, clearScoredZones } = get();
       
       // Clear scored zones at end of turn for next turn
@@ -3682,29 +3699,19 @@ export const useZoogiGame = create<ZoogiGameState>()(
         const { zoneEditorConfigs } = get();
         
         if (nextIndex === 0) {
-          const currentPlayer = get().playerEntity;
-          const needsRespawn = readyToPlaceBack(currentPlayer);
-          const spawnPos = needsRespawn ? getSpawnPointPosition(currentPlayer?.spawnPointIndex ?? 0, zoneEditorConfigs) : null;
-          
           set((s) => ({
             isPlayerTurn: true,
         turnHasLaunched: false,
             currentLocalPlayerIndex: nextIndex,
             playerEntity: s.playerEntity ? {
-              ...clearSkippedStun(0, s.playerEntity),
-              ...(spawnPos ? { position: spawnPos, velocity: [0, 0, 0] as [number, number, number], isKnockedOut: false, isRespawning: false, respawnAt: null } : {}),
+              ...seatOnPad(clearSkippedStun(0, s.playerEntity), s.playerEntity.spawnPointIndex ?? 0),
               hotstreakAbilityUsedThisTurn: false,
               wolfgangAbilityUsedThisTurn: false,
               boltAbilityUsedThisTurn: false
             } : null,
             enemies: s.enemies.map((enemy, idx) => clearSkippedStun(idx + 1, enemy)),
           }));
-          if (needsRespawn) console.log(`Player 1 respawned at spawn point for their turn`);
         } else {
-          const currentEnemy = get().enemies[nextIndex - 1];
-          const needsRespawn = readyToPlaceBack(currentEnemy);
-          const spawnPos = needsRespawn ? getSpawnPointPosition(currentEnemy?.spawnPointIndex ?? nextIndex, zoneEditorConfigs) : null;
-          
           set((s) => ({
             isPlayerTurn: true,
         turnHasLaunched: false,
@@ -3712,15 +3719,13 @@ export const useZoogiGame = create<ZoogiGameState>()(
             playerEntity: s.playerEntity ? clearSkippedStun(0, s.playerEntity) : null,
             enemies: s.enemies.map((e, idx) => 
               idx === nextIndex - 1 ? {
-                ...clearSkippedStun(idx + 1, e),
-                ...(spawnPos ? { position: spawnPos, velocity: [0, 0, 0] as [number, number, number], isKnockedOut: false, isRespawning: false, respawnAt: null } : {}),
+                ...seatOnPad(clearSkippedStun(idx + 1, e), e.spawnPointIndex ?? nextIndex),
                 hotstreakAbilityUsedThisTurn: false,
                 wolfgangAbilityUsedThisTurn: false,
                 boltAbilityUsedThisTurn: false
               } : clearSkippedStun(idx + 1, e)
             )
           }));
-          if (needsRespawn) console.log(`Player ${nextIndex + 1} respawned at spawn point for their turn`);
         }
         console.log(`Local multiplayer: Now ${localPlayers[nextIndex]?.name}'s turn (index ${nextIndex})`);
         
@@ -3752,39 +3757,37 @@ export const useZoogiGame = create<ZoogiGameState>()(
         return { index, enemies: next };
       };
       const handPlayerTurn = (list: GameEntity[], clearPlayerStun: boolean) => {
-        const currentPlayer = get().playerEntity;
-        const needsRespawn = readyToPlaceBack(currentPlayer);
-        const { zoneEditorConfigs } = get();
-        const spawnPos = needsRespawn ? respawnInsidePlayfield(currentPlayer?.spawnPointIndex ?? 0, zoneEditorConfigs, get().selectedMap, get().wallSettings.knockoffBoundaryRadius) : null;
         set((s) => ({
           isPlayerTurn: true,
         turnHasLaunched: false,
           turnIndex: 0,
           enemies: list,
           playerEntity: s.playerEntity ? {
-            ...(clearPlayerStun ? releaseStun(s.playerEntity) : s.playerEntity),
-            ...(spawnPos ? { position: spawnPos, velocity: [0, 0, 0] as [number, number, number], isKnockedOut: false, isRespawning: false, respawnAt: null } : {}),
+            ...seatOnPad(clearPlayerStun ? releaseStun(s.playerEntity) : s.playerEntity, s.playerEntity.spawnPointIndex ?? 0),
             hotstreakAbilityUsedThisTurn: false,
             wolfgangAbilityUsedThisTurn: false,
             boltAbilityUsedThisTurn: false,
           } : null,
         }));
-        if (needsRespawn) console.log(`Player respawned at spawn point for their turn`);
+      };
+      const handEnemyTurn = (list: GameEntity[], index: number) => {
+        const next = list.map((enemy) => ({ ...enemy }));
+        if (next[index]) {
+          next[index] = seatOnPad(next[index], next[index].spawnPointIndex ?? index);
+        }
+        set({ isPlayerTurn: false, turnIndex: index, enemies: next });
       };
 
       const advanced = skipStunnedEnemies(isPlayerTurn ? 0 : turnIndex + 1, enemies);
       if (advanced.index < advanced.enemies.length) {
-        set({ isPlayerTurn: false, turnIndex: advanced.index, enemies: advanced.enemies });
+        handEnemyTurn(advanced.enemies, advanced.index);
       } else if (get().playerEntity?.isStunned) {
         console.log("Player is stunned, skipping turn");
         const afterPlayer = skipStunnedEnemies(0, advanced.enemies);
         if (afterPlayer.index < afterPlayer.enemies.length) {
-          set((s) => ({
-            isPlayerTurn: false,
-            turnIndex: afterPlayer.index,
-            enemies: afterPlayer.enemies,
-            playerEntity: s.playerEntity ? releaseStun(s.playerEntity) : null,
-          }));
+          const released = get().playerEntity ? releaseStun(get().playerEntity as GameEntity) : null;
+          if (released) set({ playerEntity: released });
+          handEnemyTurn(afterPlayer.enemies, afterPlayer.index);
         } else {
           handPlayerTurn(afterPlayer.enemies, true);
         }
@@ -4521,16 +4524,13 @@ export const useZoogiGame = create<ZoogiGameState>()(
       let orbsToRemove: string[] = [];
       
       const applyFriction = (vel: [number, number, number], onIce = false): [number, number, number] => {
-        const damping = onIce ? ICE_LINEAR_DAMPING : LINEAR_DAMPING;
         const drag = onIce ? ICE_ROLLING_DRAG : ROLLING_DRAG;
-        let vx = vel[0] * damping;
-        let vz = vel[2] * damping;
-        const speed = Math.hypot(vx, vz);
-        if (speed < REST_SPEED) return [0, 0, 0];
+        const speed = Math.hypot(vel[0], vel[2]);
+        if (speed < REST_SPEED) return [0, vel[1], 0];
         const slowed = speed - drag;
-        if (slowed < REST_SPEED) return [0, 0, 0];
+        if (slowed < REST_SPEED) return [0, vel[1], 0];
         const scale = slowed / speed;
-        return [vx * scale, 0, vz * scale];
+        return [vel[0] * scale, vel[1], vel[2] * scale];
       };
       
       const resolveCollision = (
@@ -5843,22 +5843,8 @@ export const useZoogiGame = create<ZoogiGameState>()(
       // Night Circuit knocks a marble out as soon as it leaves the floor.
       // The other maps still wait for the restriction phase.
       const knockoutLive = isRestricted || state.selectedMap === "neon";
-      if (playerOut && !playerIsInvulnerable && !playerIsRespawning && !playerIsKnockedOut && !playerHasSpawnImmunity) {
+      if (playerOut && !playerIsInvulnerable && !playerIsRespawning && !playerIsKnockedOut && !playerHasSpawnImmunity && !player.offTheFloor) {
         if (knockoutLive) {
-          // Add player to falling entities for visual effect
-          const playerFalling: FallingEntity = {
-            id: `fall-player-${Date.now()}`,
-            entityType: "player",
-            position: [...player.position] as [number, number, number],
-            velocity: [...player.velocity] as [number, number, number],
-            fallVelocityY: 0,
-            color: player.zoogi.color,
-            zoogiId: player.zoogi.id,
-            hasLanded: false,
-            createdAt: Date.now()
-          };
-          newFallingEntities.push(playerFalling);
-          
           if (gameMode === "local_multiplayer") {
             // Apply penalty to knocked out player (never go below 0)
             player.score = Math.max(0, player.score - KNOCKOUT_PENALTY);
@@ -5899,21 +5885,14 @@ export const useZoogiGame = create<ZoogiGameState>()(
             player.lastHitByEnemyId = null;
           }
           
-          // Schedule delayed respawn at green pad
+          // Keep the shot. Gravity takes the marble off the open edge.
+          // The turn waits until it has fallen out and the court is still.
           const targetPadIndex = currentRespawnPadIndex;
           currentRespawnPadIndex = (currentRespawnPadIndex + 1) % WALL_OWNERSHIP_GAP_ANGLES.length;
-          
-          // Stop the marble now. Waiting for it to roll to a halt off the
-          // island left the turn stuck until the round timer ran out.
-          player.velocity = [0, 0, 0];
-          player.isKnockedOut = true;
-          player.isRespawning = true;
-          player.respawnAt = now + KNOCKOUT_RESPAWN_BEAT;
+          player.offTheFloor = true;
           player.respawnPadIndex = targetPadIndex;
-          const playersTurn = gameMode === "local_multiplayer" ? currentLocalPlayerIndex === 0 : state.isPlayerTurn;
-          if (gameMode !== "ringer_royale" && playersTurn) endTurnAfterTick = true;
           get().showAbilityNotice(`Fell off! -${KNOCKOUT_PENALTY}`);
-          console.log(`Player knocked out! Respawning in ${KNOCKOUT_RESPAWN_BEAT}ms`);
+          console.log(`Player left the floor`);
         }
       }
       
@@ -5958,7 +5937,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
       
       enemies = enemies.map((enemy, enemyIndex) => {
         // Skip if already respawning or knocked out
-        if (enemy.isRespawning || enemy.isKnockedOut) return enemy;
+        if (enemy.isRespawning || enemy.isKnockedOut || enemy.offTheFloor) return enemy;
         
         // Use configured knockoff boundary
         const enemyAdjustedX = enemy.position[0] - knockoffOffsetForPlayers.x;
@@ -5970,22 +5949,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
           : dist > knockoffRadiusForPlayers;
         if (enemyOut && knockoutLive && !enemyIsInvulnerable) {
           const localPlayerIndex = enemyIndex + 1;
-          
-          // Add enemy to falling entities for visual effect
-          const enemyFalling: FallingEntity = {
-            id: `fall-enemy-${enemyIndex}-${Date.now()}`,
-            entityType: "enemy",
-            entityIndex: enemyIndex,
-            position: [...enemy.position] as [number, number, number],
-            velocity: [...enemy.velocity] as [number, number, number],
-            fallVelocityY: 0,
-            color: enemy.zoogi.color,
-            zoogiId: enemy.zoogi.id,
-            hasLanded: false,
-            createdAt: Date.now()
-          };
-          newFallingEntities.push(enemyFalling);
-          
+
           if (gameMode === "local_multiplayer") {
             // Award points to attacker
             if (enemy.lastHitByLocalPlayerIndex !== null) {
@@ -6015,19 +5979,12 @@ export const useZoogiGame = create<ZoogiGameState>()(
           const targetPadIndex = currentRespawnPadIndex;
           currentRespawnPadIndex = (currentRespawnPadIndex + 1) % WALL_OWNERSHIP_GAP_ANGLES.length;
           
-          const enemyTurn = gameMode === "local_multiplayer"
-            ? currentLocalPlayerIndex === enemyIndex + 1
-            : !state.isPlayerTurn && state.turnIndex === enemyIndex;
-          if (gameMode !== "ringer_royale" && enemyTurn) endTurnAfterTick = true;
           return {
             ...enemy,
-            velocity: [0, 0, 0] as [number, number, number],
             lastHitByPlayer: false,
             lastHitByLocalPlayerIndex: null,
             score: Math.max(0, enemy.score - KNOCKOUT_PENALTY),
-            isKnockedOut: true,
-            isRespawning: true,
-            respawnAt: now + KNOCKOUT_RESPAWN_BEAT,
+            offTheFloor: true,
             respawnPadIndex: targetPadIndex
           };
         }
@@ -6104,97 +6061,10 @@ export const useZoogiGame = create<ZoogiGameState>()(
         const adjustedX = orb.position[0] - knockoffOffset.x;
         const adjustedZ = orb.position[2] - knockoffOffset.z;
         const dist = Math.sqrt(adjustedX ** 2 + adjustedZ ** 2);
-        const orbSpeed = Math.sqrt(orb.velocity[0] ** 2 + orb.velocity[2] ** 2);
-        
-        // If already marked as out of ring, check if momentum has stopped
-        if (orb.isOutOfRing) {
-          if (orbSpeed < 0.02) {
-            // Orb has stopped moving - deactivate it
-            return {
-              ...orb,
-              isActive: false
-            };
-          }
-          // Continue with momentum
-          return orb;
-        }
-        
-        // Check if orb STOPPED inside a score zone (non-spawn zones award 15 points when orb stops)
-        const { zoneEditorConfigs, triggerOrbCaptureEffect } = get();
-        let updatedOrb = { ...orb };
-        
-        // Only process if zoneEditorConfigs is valid and has entries
-        if (zoneEditorConfigs && zoneEditorConfigs.length > 0) {
-          const scoreZones = zoneEditorConfigs.filter(z => z && z.visible && !z.isSpawn && z.id);
-          
-          for (const zone of scoreZones) {
-            const zoneX = Math.cos(zone.angle) * zone.distance;
-            const zoneZ = Math.sin(zone.angle) * zone.distance;
-            const dxZone = orb.position[0] - zoneX;
-            const dzZone = orb.position[2] - zoneZ;
-            const distToZone = Math.sqrt(dxZone * dxZone + dzZone * dzZone);
-            
-            // Check if orb is inside the score zone AND has stopped moving (orbSpeed < 0.02)
-            if (distToZone < SCORE_ZONE_RADIUS && orbSpeed < 0.02) {
-              // Check if orb hasn't already been captured in this zone
-              if (updatedOrb.capturedInZone !== zone.id) {
-                // Award points to whoever last hit the orb
-                let attackerColor = "#00FFFF"; // Default cyan for zone capture
-                
-                if (updatedOrb.lastHitByLocalPlayerIndex !== null) {
-                  const attackerLocalIndex = updatedOrb.lastHitByLocalPlayerIndex;
-                  if (attackerLocalIndex === 0) {
-                    player.score += ZONE_SCORE_ORB;
-                    set((s) => ({ score: s.score + ZONE_SCORE_ORB }));
-                    attackerColor = player.zoogi.color;
-                    console.log(`🎯 Orb CAPTURED in zone ${zone.id}! Local player 0 scored +${ZONE_SCORE_ORB}!`);
-                  } else {
-                    const attackerEnemyIndex = attackerLocalIndex - 1;
-                    if (attackerEnemyIndex >= 0 && attackerEnemyIndex < enemies.length) {
-                      attackerColor = enemies[attackerEnemyIndex].zoogi.color;
-                      enemies[attackerEnemyIndex] = {
-                        ...enemies[attackerEnemyIndex],
-                        score: enemies[attackerEnemyIndex].score + ZONE_SCORE_ORB
-                      };
-                      console.log(`🎯 Orb CAPTURED in zone ${zone.id}! Local player ${attackerLocalIndex} scored +${ZONE_SCORE_ORB}!`);
-                    }
-                  }
-                } else if (updatedOrb.lastHitBy === "player") {
-                  player.score += ZONE_SCORE_ORB;
-                  set((s) => ({ score: s.score + ZONE_SCORE_ORB }));
-                  attackerColor = player.zoogi.color;
-                  console.log(`🎯 Orb CAPTURED in zone ${zone.id}! Player scored +${ZONE_SCORE_ORB}!`);
-                } else if (updatedOrb.lastHitBy === "enemy" && updatedOrb.lastHitByEnemyId) {
-                  const attackerIndex = enemies.findIndex(e => e.id === updatedOrb.lastHitByEnemyId);
-                  if (attackerIndex >= 0) {
-                    attackerColor = enemies[attackerIndex].zoogi.color;
-                    enemies[attackerIndex] = {
-                      ...enemies[attackerIndex],
-                      score: enemies[attackerIndex].score + ZONE_SCORE_ORB
-                    };
-                    console.log(`🎯 Orb CAPTURED in zone ${zone.id}! Enemy ${enemies[attackerIndex].zoogi.name} scored +${ZONE_SCORE_ORB}!`);
-                  }
-                }
-                
-                // Trigger sci-fi capture effect
-                triggerOrbCaptureEffect(orb.id, orb.position, attackerColor);
-                
-                // Trigger visual feedback (flash for zone capture)
-                get().triggerKnockoffBoundaryFlash(attackerColor, 1);
-                
-                // Mark this orb as captured in this zone (can only score once per zone per orb)
-                updatedOrb = {
-                  ...updatedOrb,
-                  capturedInZone: zone.id
-                };
-              }
-            }
-          }
-        }
-        
-        // Apply zone scoring updates to orb
-        orb = updatedOrb;
-        
+
+        // Already off the floor. Gravity finishes the fall; touching a zone does not score.
+        if (orb.isOutOfRing) return orb;
+
         const orbOut = state.selectedMap === "neon"
           ? isOutsideNeonCourt(adjustedX, adjustedZ)
           : dist > knockoffRadius;
@@ -6296,19 +6166,64 @@ export const useZoogiGame = create<ZoogiGameState>()(
       ));
 
       const ridingArc = (arc: { type?: string | null } | null | undefined) => arc?.type === "over";
+      const dropOrRest = (
+        position: [number, number, number],
+        velocity: [number, number, number],
+        falling: boolean,
+        restY: number,
+      ): { position: [number, number, number]; velocity: [number, number, number]; fellOut: boolean } => {
+        if (!falling) {
+          return {
+            position: [position[0], restY, position[2]],
+            velocity: [velocity[0], 0, velocity[2]],
+            fellOut: false,
+          };
+        }
+        const vy = velocity[1] - FALL_GRAVITY_STEP;
+        const y = position[1] + vy;
+        if (y < FALL_OUT_Y) {
+          return {
+            position: [position[0], y, position[2]],
+            velocity: [0, 0, 0],
+            fellOut: true,
+          };
+        }
+        return {
+          position: [position[0], y, position[2]],
+          velocity: [velocity[0], vy, velocity[2]],
+          fellOut: false,
+        };
+      };
       if (!ridingArc(player.arcMovement)) {
-        player.position = [player.position[0], ZOOGI_REST_Y, player.position[2]];
+        const dropped = dropOrRest(player.position, player.velocity, !!player.offTheFloor, ZOOGI_REST_Y);
+        player.position = dropped.position;
+        player.velocity = dropped.velocity;
+        if (dropped.fellOut) {
+          player.isKnockedOut = true;
+          player.isRespawning = true;
+          player.offTheFloor = false;
+        }
       }
-      enemies = enemies.map((enemy) => (
-        ridingArc(enemy.arcMovement)
-          ? enemy
-          : { ...enemy, position: [enemy.position[0], ZOOGI_REST_Y, enemy.position[2]] as [number, number, number] }
-      ));
-      orbs = orbs.map((orb) => (
-        orb.isActive
-          ? { ...orb, position: [orb.position[0], ORB_REST_Y, orb.position[2]] as [number, number, number] }
-          : orb
-      ));
+      enemies = enemies.map((enemy) => {
+        if (ridingArc(enemy.arcMovement)) return enemy;
+        const dropped = dropOrRest(enemy.position, enemy.velocity, !!enemy.offTheFloor, ZOOGI_REST_Y);
+        return {
+          ...enemy,
+          position: dropped.position,
+          velocity: dropped.velocity,
+          ...(dropped.fellOut ? { isKnockedOut: true, isRespawning: true, offTheFloor: false } : {}),
+        };
+      });
+      orbs = orbs.map((orb) => {
+        if (!orb.isActive) return orb;
+        const dropped = dropOrRest(orb.position, orb.velocity, !!orb.isOutOfRing, ORB_REST_Y);
+        return {
+          ...orb,
+          position: dropped.position,
+          velocity: dropped.velocity,
+          isActive: dropped.fellOut ? false : orb.isActive,
+        };
+      });
 
       const stateUpdates: Partial<ZoogiGameState> = {
         playerEntity: player,
@@ -6360,28 +6275,38 @@ export const useZoogiGame = create<ZoogiGameState>()(
         if (watchKey !== turnWatchKey) {
           turnWatchKey = watchKey;
           turnReadyForLaunch = false;
-          turnSlowFrames = 0;
+          settleHoldSteps = 0;
         }
         const actor = actorTakingTurn(settled);
-        if (actor && (actor.isKnockedOut || actor.isRespawning)) {
-          get().endTurn();
-        } else if (actor && !actor.isKnockedOut) {
+        if (actor && !turnReadyForLaunch) {
           const actorSpeed = Math.hypot(actor.velocity[0], actor.velocity[2]);
-          if (!turnReadyForLaunch) {
-            if (actorSpeed < 0.02) turnReadyForLaunch = true;
-          } else if (actorSpeed > 0.08 && !settled.turnHasLaunched) {
-            set({ turnHasLaunched: true });
-            turnSlowFrames = 0;
-          } else if (get().turnHasLaunched) {
-            if (actorSpeed < 0.02) {
-              get().endTurn();
-            } else if (actorSpeed < 0.12) {
-              turnSlowFrames += 1;
-              if (turnSlowFrames > 40) get().endTurn();
-            } else {
-              turnSlowFrames = 0;
-            }
+          if (actorSpeed < REST_SPEED) turnReadyForLaunch = true;
+        } else if (actor && !settled.turnHasLaunched) {
+          const actorSpeed = Math.hypot(actor.velocity[0], actor.velocity[2]);
+          if (actorSpeed > 0.08) set({ turnHasLaunched: true });
+        }
+        const bodySettled = (body: { velocity: [number, number, number]; position: [number, number, number]; isKnockedOut?: boolean; isRespawning?: boolean; offTheFloor?: boolean } | null) => {
+          if (!body) return true;
+          if (body.isKnockedOut || body.isRespawning) return true;
+          if (body.offTheFloor || body.position[1] < ZOOGI_REST_Y - 0.05) return false;
+          return Math.hypot(body.velocity[0], body.velocity[2]) < REST_SPEED;
+        };
+        const orbSettled = (orb: { isActive: boolean; isOutOfRing?: boolean; position: [number, number, number]; velocity: [number, number, number] }) => {
+          if (!orb.isActive) return true;
+          if (orb.isOutOfRing || orb.position[1] < ORB_REST_Y - 0.05) return false;
+          return Math.hypot(orb.velocity[0], orb.velocity[2]) < REST_SPEED;
+        };
+        const marbles = [settled.playerEntity, ...settled.enemies];
+        const courtStill = marbles.every(bodySettled) && settled.orbs.every(orbSettled);
+        const shotHappened = get().turnHasLaunched || !!(actor && (actor.isKnockedOut || actor.isRespawning || actor.offTheFloor));
+        if (shotHappened && courtStill) {
+          settleHoldSteps += 1;
+          if (settleHoldSteps >= SETTLE_DELAY_STEPS) {
+            settleHoldSteps = 0;
+            get().endTurn();
           }
+        } else {
+          settleHoldSteps = 0;
         }
       }
     }

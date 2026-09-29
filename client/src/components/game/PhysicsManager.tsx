@@ -2,7 +2,6 @@ import { useFrame } from "@react-three/fiber";
 import { useRef } from "react";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { useAudio } from "@/lib/stores/useAudio";
-import { useCameraEffects } from "@/lib/stores/useCameraEffects";
 import { FIXED_DT, stepAccumulator } from "@/lib/fixedTimestep";
 import { setInterpAlpha, setInterpFrame, type Vec3 } from "@/lib/renderInterp";
 import { SETTLE_GRACE_SECONDS } from "@/lib/simFeel";
@@ -34,13 +33,11 @@ export function PhysicsManager() {
   // Priority 1 runs before the meshes read positions, so interpolation is fresh.
   useFrame((state, delta) => {
     const store = useZoogiGame.getState();
-    const cameraEffects = useCameraEffects.getState();
 
     if (store.phase !== "playing") return;
 
-    if (cameraEffects.isFrozen) return;
-
-    const timeScale = store.slowMotionFactor * cameraEffects.computedTimeScale;
+    // Hit-pause and slow-motion stay visual. The sim always steps in real time.
+    const timeScale = 1;
     const stepped = stepAccumulator(accumulatorRef.current, delta, timeScale);
     accumulatorRef.current = stepped.accumulator;
 
@@ -66,7 +63,7 @@ export function PhysicsManager() {
     }
 
     // The match clock follows real time. The sim above does not.
-    store.tickTimers(Math.min(delta, 0.1) * timeScale);
+    store.tickTimers(Math.min(delta, 0.1));
 
     const { playerEntity, enemies, isPlayerTurn, turnIndex, endTurn, setMovementStopped, allMovementStopped, lastCollisionTime } = useZoogiGame.getState();
 

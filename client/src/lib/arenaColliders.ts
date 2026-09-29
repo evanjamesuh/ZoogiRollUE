@@ -1,7 +1,7 @@
 import { getSnowmanPositions } from "./arenaConstants";
 import { arenaScaleFor } from "./arenaScale";
 import { neonCourtLayout } from "./neonCourt";
-import { BUMPER_RESTITUTION } from "./simFeel";
+import { BUMPER_RESTITUTION, ROCK_RESTITUTION } from "./simFeel";
 
 /**
  * Solid shapes the marble simulation uses.
@@ -490,7 +490,7 @@ export function resolveSolidCollision(
   vel: [number, number, number],
   entityRadius: number,
   solids: SolidCircle[],
-  restitution = 0.72,
+  restitution = ROCK_RESTITUTION,
 ): { pos: [number, number, number]; vel: [number, number, number]; hits: string[] } {
   let x = pos[0];
   let z = pos[2];

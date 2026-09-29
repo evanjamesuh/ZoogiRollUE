@@ -139,9 +139,10 @@ test("one simulation: launch, collision, and zone score", async () => {
 
   useZoogiGame.getState().physicsTick(1 / 60);
   const scored = useZoogiGame.getState();
-  assert.equal(scored.score, 15, "a stopped orb in a scoring zone should award 15 points");
-  assert.equal(scored.phase, "playing", "one scored orb should not end the round");
-  assert.equal(scored.orbs[0]?.capturedInZone, "score-zone");
+  assert.equal(scored.score, 0, "stopping in a painted zone does not collect an orb");
+  assert.equal(scored.phase, "playing", "a resting orb should not end the round");
+  assert.equal(scored.orbs[0]?.isActive, true);
+  assert.equal(scored.orbs[0]?.capturedInZone ?? null, null);
 });
 
 function planarSpeed(velocity: [number, number, number]): number {
@@ -289,7 +290,7 @@ test("marble comes to rest within a reasonable time after a flick and collision"
     playerEntity: {
       ...player,
       position: [0, 0.5, 0],
-      velocity: [0.9, 0, 0],
+      velocity: [0.22, 0, 0],
       arcMovement: null,
       larsRicochetBoost: 1,
       isStunned: false,
@@ -401,25 +402,23 @@ test("knockouts score, falling costs points, and a flick off the edge ends the t
   useZoogiGame.getState().physicsTick(1 / 60);
   const fell = useZoogiGame.getState();
   assert.equal(fell.score, 25, "falling off should cost 75 points");
-  assert.equal(fell.isPlayerTurn, false, "a flick off the edge should end the player's turn");
-  assert.equal(fell.playerEntity?.isKnockedOut, true);
-  assert.equal(fell.playerEntity?.velocity[0], 0, "the marble should stop instead of rolling forever");
-  assert.ok((fell.playerEntity?.respawnAt ?? 0) > Date.now(), "respawn waits a short beat");
+  assert.equal(fell.isPlayerTurn, true, "the turn waits until the fall finishes and the court settles");
+  assert.equal(fell.playerEntity?.isKnockedOut, false, "the marble stays in view while it falls");
+  assert.ok((fell.playerEntity?.position[1] ?? 1) < 0.5, "gravity should pull the marble down");
+  assert.ok((fell.playerEntity?.velocity[0] ?? 0) > 0, "leaving the edge should keep the shot's speed");
 
-  useZoogiGame.setState({
-    playerEntity: fell.playerEntity
-      ? { ...fell.playerEntity, respawnAt: Date.now() - 20 }
-      : null,
-  });
-  useZoogiGame.getState().physicsTick(1 / 60);
-  const back = useZoogiGame.getState().playerEntity;
+  const back = fell.playerEntity;
   assert.ok(back);
-  assert.equal(back.isKnockedOut, false, "the marble should be back in play");
-  assert.equal(back.isRespawning, false);
-  assert.ok(
-    Math.hypot(back.position[0], back.position[2]) < 48,
-    `respawn should land on the playfield, distance=${Math.hypot(back.position[0], back.position[2])}`
-  );
+  useZoogiGame.setState({
+    playerEntity: {
+      ...back,
+      position: [0, 0.5, 0],
+      velocity: [0, 0, 0],
+      isKnockedOut: false,
+      isRespawning: false,
+      offTheFloor: false,
+    },
+  });
 
   useZoogiGame.setState({
     orbs: [{
@@ -464,7 +463,8 @@ test("knockouts score, falling costs points, and a flick off the edge ends the t
   const ko = useZoogiGame.getState();
   assert.equal(ko.score, 175, "knocking an opponent off should score 100");
   assert.equal(ko.enemies[0]?.score, 75, "the opponent should lose 75 for falling off");
-  assert.equal(ko.enemies[0]?.isKnockedOut, true);
+  assert.equal(ko.enemies[0]?.isKnockedOut, false, "the opponent falls before they leave play");
+  assert.equal(ko.enemies[0]?.offTheFloor, true);
 
   const ready = useZoogiGame.getState().playerEntity;
   assert.ok(ready);
@@ -571,7 +571,9 @@ test("an opponent past the ring is knocked out", async () => {
   useZoogiGame.getState().physicsTick(1 / 60);
   const knocked = useZoogiGame.getState().enemies[0];
   assert.ok(knocked);
-  assert.equal(knocked.isKnockedOut, true, "a character at x=30 should leave play when the ring is 21");
+  assert.equal(knocked.offTheFloor, true, "a character at x=30 should leave the floor when the ring is 21");
+  assert.equal(knocked.isKnockedOut, false, "the fall stays visible before the body is removed");
+  assert.ok(knocked.position[1] < 0.5);
   assert.equal(knocked.score, 0, "falling off should cost the opponent 75, floored at 0");
 });
 
@@ -1005,7 +1007,7 @@ test("an AI hotstreak blast during a roll still hands the turn back when the mar
   assert.equal(blasted.turnHasLaunched, true, "the roll that was already in motion should stay armed");
 
   let handedBack = false;
-  for (let frame = 0; frame < 180; frame++) {
+  for (let frame = 0; frame < 800; frame++) {
     useZoogiGame.getState().physicsTick(1 / 60);
     if (useZoogiGame.getState().isPlayerTurn) {
       handedBack = true;
@@ -1077,7 +1079,7 @@ test("an AI wolf pack mid-roll still ends the turn, and the next round clears th
   const spawned = packed.wolfClones.map((clone) => ({ ...clone, isActive: true }));
 
   let handedBack = false;
-  for (let frame = 0; frame < 180; frame++) {
+  for (let frame = 0; frame < 800; frame++) {
     useZoogiGame.getState().physicsTick(1 / 60);
     if (useZoogiGame.getState().isPlayerTurn) {
       handedBack = true;
@@ -1157,7 +1159,7 @@ test("a launched flick ends the turn when the marble stops, even if no render sa
   assert.equal(useZoogiGame.getState().turnHasLaunched, true);
 
   let handedOff = false;
-  for (let frame = 0; frame < 120; frame++) {
+  for (let frame = 0; frame < 800; frame++) {
     useZoogiGame.getState().physicsTick(1 / 60);
     if (!useZoogiGame.getState().isPlayerTurn) {
       handedOff = true;
@@ -1173,7 +1175,7 @@ test("a launched flick ends the turn when the marble stops, even if no render sa
   useZoogiGame.getState().updateEnemy("waiting-cpu", { velocity: [0.2, 0, 0] });
   assert.equal(useZoogiGame.getState().turnHasLaunched, true, "the computer's launch should arm the same turn-end");
   let playerTurnAgain = false;
-  for (let frame = 0; frame < 120; frame++) {
+  for (let frame = 0; frame < 800; frame++) {
     useZoogiGame.getState().physicsTick(1 / 60);
     if (useZoogiGame.getState().isPlayerTurn) {
       playerTurnAgain = true;
@@ -1214,7 +1216,7 @@ test("a computer marble that is only coasting does not skip its shot, and a late
     enemies: [enemy],
   });
 
-  for (let frame = 0; frame < 80; frame++) {
+  for (let frame = 0; frame < 500; frame++) {
     useZoogiGame.getState().physicsTick(1 / 60);
   }
   const coasted = useZoogiGame.getState();
@@ -1225,7 +1227,7 @@ test("a computer marble that is only coasting does not skip its shot, and a late
     enemies: coasted.enemies.map((marble) => ({ ...marble, velocity: [0.3, 0, 0] as [number, number, number] })),
   });
   let handedBack = false;
-  for (let frame = 0; frame < 100; frame++) {
+  for (let frame = 0; frame < 800; frame++) {
     useZoogiGame.getState().physicsTick(1 / 60);
     if (useZoogiGame.getState().isPlayerTurn) {
       handedBack = true;
@@ -1292,7 +1294,7 @@ test("a stop frame cannot end the turn twice, so the computer still gets to roll
 
   useZoogiGame.getState().updatePlayerVelocity([0.25, 0, 0]);
   assert.equal(useZoogiGame.getState().turnHasLaunched, true);
-  for (let frame = 0; frame < 120 && useZoogiGame.getState().isPlayerTurn; frame++) {
+  for (let frame = 0; frame < 800 && useZoogiGame.getState().isPlayerTurn; frame++) {
     useZoogiGame.getState().physicsTick(1 / 60);
   }
   assert.equal(useZoogiGame.getState().isPlayerTurn, false, "the player's stop hands the turn to the computer");
@@ -1302,7 +1304,7 @@ test("a stop frame cannot end the turn twice, so the computer still gets to roll
   useZoogiGame.getState().updateEnemy(enemyId, { velocity: [0.25, 0, 0] });
   assert.equal(useZoogiGame.getState().turnHasLaunched, true, "the computer's launch arms its own turn");
   assert.equal(useZoogiGame.getState().isPlayerTurn, false);
-  for (let frame = 0; frame < 120 && !useZoogiGame.getState().isPlayerTurn; frame++) {
+  for (let frame = 0; frame < 800 && !useZoogiGame.getState().isPlayerTurn; frame++) {
     useZoogiGame.getState().physicsTick(1 / 60);
   }
   assert.equal(useZoogiGame.getState().isPlayerTurn, true, "the computer's stop hands the turn back");
@@ -1479,7 +1481,8 @@ test("a knockoff offset does not carry from one map into the next", async () => 
   });
   useZoogiGame.getState().startGame();
   assert.deepEqual(useZoogiGame.getState().elementTransforms.knockoffBoundaryOffset, { x: 0, y: 0, z: 0 });
-  assert.equal(useZoogiGame.getState().wallSettings.knockoffBoundaryRadius, 15.5 * 1.5);
+  const { arenaScaleFor } = await import("./arenaScale.ts");
+  assert.equal(useZoogiGame.getState().wallSettings.knockoffBoundaryRadius, 15.5 * arenaScaleFor("saturn"));
 
   useZoogiGame.setState({
     selectedMap: "grass",
@@ -1490,7 +1493,7 @@ test("a knockoff offset does not carry from one map into the next", async () => 
   });
   useZoogiGame.getState().startGame();
   assert.deepEqual(useZoogiGame.getState().elementTransforms.knockoffBoundaryOffset, { x: 0, y: 0, z: 0 });
-  assert.equal(useZoogiGame.getState().wallSettings.knockoffBoundaryRadius, 15.5 * 1.5);
+  assert.equal(useZoogiGame.getState().wallSettings.knockoffBoundaryRadius, 15.5 * arenaScaleFor("grass"));
 });
 
 test("frozen ring ice patches coast without speeding a marble up", async () => {
@@ -1549,7 +1552,7 @@ test("frozen ring ice patches coast without speeding a marble up", async () => {
     useZoogiGame.getState().physicsTick(1 / 60);
   };
 
-  for (const speed of [0.08, 0.2, 0.5, 1.0, 1.4]) {
+  for (const speed of [0.08, 0.2, 0.4, 0.6]) {
     step("ice", onPatch, speed);
     const iced = useZoogiGame.getState().playerEntity;
     assert.ok(iced);

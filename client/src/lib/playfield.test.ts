@@ -238,6 +238,12 @@ test("knockout uses the enlarged edge on every arena", async () => {
       },
     });
     useZoogiGame.getState().physicsTick(1 / 60);
+    const falling = useZoogiGame.getState().playerEntity;
+    assert.equal(falling?.isKnockedOut, false, `${map} stays visible at the start of the fall`);
+    assert.ok((falling?.position[1] ?? 1) < ZOOGI_REST_Y, `${map} gravity`);
+    for (let step = 0; step < 120 && !useZoogiGame.getState().playerEntity?.isKnockedOut; step++) {
+      useZoogiGame.getState().physicsTick(1 / 60);
+    }
     const knocked = useZoogiGame.getState().playerEntity;
     assert.equal(knocked?.isKnockedOut, true, `${map} outside`);
     if (map === "neon") assert.equal(isOutsideNeonCourt(outside[0], outside[2]), true);
@@ -281,5 +287,5 @@ test("a full flick still crosses the enlarged arena", async () => {
   assert.ok(ended);
   const traveled = farthest - startX;
   assert.ok(traveled > layout.floorRadius, `full flick reached ${traveled} on a floor of radius ${layout.floorRadius}`);
-  assert.equal(ended.isKnockedOut, false);
+  assert.equal(ended.isKnockedOut || ended.offTheFloor, true, "a full flick flies off the open edge");
 });
