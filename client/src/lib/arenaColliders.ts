@@ -70,6 +70,108 @@ export const ARABIAN_STAGE = {
   knockoffRadius: 15.5,
 };
 
+/**
+ * Pharaoh's Tomb. No stage model: the sandstone disk is drawn at this radius,
+ * and the knockoff line is that same circle.
+ */
+export const TOMB_STAGE = {
+  floorRadius: 15.5,
+  knockoffRadius: 15.5,
+};
+
+export type TombPieceKind = "block" | "pillar" | "boulder" | "wall" | "brazier";
+
+export interface TombPiece {
+  id: string;
+  kind: TombPieceKind;
+  /** Radians, from +X toward +Z. */
+  angle: number;
+  distance: number;
+  x: number;
+  z: number;
+  /**
+   * Horizontal reach toward the origin. A marble-height solid uses this as its
+   * collider radius. Backdrop pieces use it as the distance from the piece
+   * centre to the innermost point, so the whole prop stays outside the ring.
+   */
+  radius: number;
+  height: number;
+  /** Wall length, or the same as radius for round props. */
+  width: number;
+}
+
+function tombPiece(
+  id: string,
+  kind: TombPieceKind,
+  angleDeg: number,
+  distance: number,
+  radius: number,
+  height: number,
+  width: number,
+): TombPiece {
+  const angle = (angleDeg * Math.PI) / 180;
+  return {
+    id,
+    kind,
+    angle,
+    distance,
+    radius,
+    height,
+    width,
+    x: Math.cos(angle) * distance,
+    z: Math.sin(angle) * distance,
+  };
+}
+
+/**
+ * Rounded sandstone bumpers just inside the rim. Angles sit off the cardinal
+ * spawn lanes and off the score-zone disks, with wide gaps so a marble still
+ * has an open roll to the edge.
+ */
+export function getTombBlocks(): TombPiece[] {
+  return [
+    tombPiece("sandstone-0", "block", 55, 13.4, 1.2, 1.05, 1.2),
+    tombPiece("sandstone-1", "block", 150, 13.3, 1.15, 0.98, 1.15),
+    tombPiece("sandstone-2", "block", 238, 13.45, 1.2, 1.08, 1.2),
+    tombPiece("sandstone-3", "block", 328, 13.2, 1.1, 0.95, 1.1),
+  ];
+}
+
+/** Walls, pillars, boulders and braziers. All of these sit fully outside the knockoff line and are not solids. */
+export function getTombBackdrop(): TombPiece[] {
+  const walls = [
+    [200, 5.6],
+    [252, 3.4],
+    [308, 6.2],
+    [18, 4.6],
+    [68, 5.2],
+    [122, 3.8],
+    [162, 5.8],
+  ].map(([deg, height], i) => tombPiece(`wall-${i}`, "wall", deg, 23.2, 0.7, height, 6.4));
+  const pillars = [
+    [186, 6.6],
+    [236, 4.1],
+    [286, 7.0],
+    [346, 5.2],
+    [42, 6.1],
+    [96, 3.5],
+    [146, 5.7],
+  ].map(([deg, height], i) => tombPiece(`pillar-${i}`, "pillar", deg, 18.95, 0.7, height, 0.7));
+  const boulders = [
+    tombPiece("boulder-0", "boulder", 214, 20.5, 1.5, 1.65, 1.5),
+    tombPiece("boulder-1", "boulder", 268, 20.1, 1.3, 1.4, 1.3),
+    tombPiece("boulder-2", "boulder", 332, 20.8, 1.55, 1.75, 1.55),
+    tombPiece("boulder-3", "boulder", 12, 20.3, 1.2, 1.25, 1.2),
+    tombPiece("boulder-4", "boulder", 84, 21.1, 1.65, 1.85, 1.65),
+    tombPiece("boulder-5", "boulder", 138, 20.2, 1.35, 1.45, 1.35),
+  ];
+  const braziers = [
+    tombPiece("brazier-0", "brazier", 90, 17.5, 0.42, 1.15, 0.42),
+    tombPiece("brazier-1", "brazier", 270, 17.5, 0.42, 1.15, 0.42),
+  ];
+  return [...walls, ...pillars, ...boulders, ...braziers];
+}
+
 export function arabianPlayTransform(): { x: number; y: number; z: number; scale: number } {
   const scale = ARABIAN_STAGE.modelScale;
   const [x, y, z] = ARABIAN_STAGE.plazaAnchor;
@@ -376,6 +478,20 @@ const LAYOUTS: Record<string, MapLayout> = {
   ),
   space: buildLayout("space", COSMOS_STAGE.floorRadius, COSMOS_STAGE.knockoffRadius, [], 8.5, DIAGONAL),
   saturn: buildLayout("saturn", ARABIAN_STAGE.floorRadius, ARABIAN_STAGE.knockoffRadius, [], 8.5, DIAGONAL),
+  tomb: buildLayout(
+    "tomb",
+    TOMB_STAGE.floorRadius,
+    TOMB_STAGE.knockoffRadius,
+    getTombBlocks().map((block) => ({
+      id: block.id,
+      x: block.x,
+      z: block.z,
+      radius: block.radius,
+      kind: "rock" as const,
+    })),
+    6.6,
+    DIAGONAL,
+  ),
 };
 
 export function getMapLayout(mapId: string | null | undefined): MapLayout | null {

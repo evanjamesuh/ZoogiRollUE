@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { useRef, useMemo, useLayoutEffect, Suspense, Component, ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGLTF, useAnimations, Center } from "@react-three/drei";
-import { useZoogiGame, CustomArenaDecoration } from "@/lib/stores/useZoogiGame";
+import { useZoogiGame, CustomArenaDecoration, type MapTheme } from "@/lib/stores/useZoogiGame";
 import { Trees } from "./Trees";
 import { IcePatches } from "./IcePatches";
 import { Clouds } from "./Clouds";
@@ -27,6 +27,8 @@ import { PinballBumpers } from "./PinballBumpers";
 import { NeonCourtArena } from "./NeonCourtArena";
 import { ARENA_RADIUS } from "@/lib/arenaConstants";
 import { ARABIAN_STAGE, COSMOS_STAGE, GRASS_STAGE, WINTER_STAGE, arabianPlayTransform, getMapLayout, setWinterCampActive } from "@/lib/arenaColliders";
+import { PharaohTombArena } from "./PharaohTombArena";
+import { ArabianNightDressing, CosmicVoidDressing, VolcanicPitDressing } from "./ComicMapDressing";
 
 export { ARENA_RADIUS };
 
@@ -626,7 +628,7 @@ function CustomDecorations() {
 }
 
 interface ArenaProps {
-  theme?: "grass" | "ice" | "lava" | "space" | "saturn" | "neon";
+  theme?: MapTheme;
 }
 
 class MeshyArenaErrorBoundary extends Component<{ children: ReactNode; fallback: ReactNode; onError?: () => void }, { hasError: boolean }> {
@@ -743,16 +745,17 @@ export function Arena({ theme = "grass" }: ArenaProps) {
   const gameMode = useZoogiGame(state => state.gameMode);
   const currentTheme = selectedMap || theme;
   
-  const themeColors = {
+  const themeColors: Record<MapTheme, { platform: string; edge: string; glow: string }> = {
     grass: { platform: "#4CAF50", edge: "#2E7D32", glow: "#81C784" },
     ice: { platform: "#81D4FA", edge: "#0288D1", glow: "#B3E5FC" },
     lava: { platform: "#FF5722", edge: "#BF360C", glow: "#FF8A65" },
     space: { platform: "#7C4DFF", edge: "#311B92", glow: "#B388FF" },
     saturn: { platform: "#3E2723", edge: "#FFA726", glow: "#FFB74D" },
-    neon: { platform: "#14161f", edge: "#ff3ec8", glow: "#22e7ff" }
+    tomb: { platform: "#E0B88A", edge: "#A87848", glow: "#FFD2A8" },
+    neon: { platform: "#14161f", edge: "#ff3ec8", glow: "#22e7ff" },
   };
   
-  const colors = themeColors[currentTheme as keyof typeof themeColors] || themeColors.grass;
+  const colors = themeColors[currentTheme] || themeColors.grass;
 
   const isIceTheme = currentTheme === "ice";
   const layout = getMapLayout(currentTheme);
@@ -767,9 +770,10 @@ export function Arena({ theme = "grass" }: ArenaProps) {
       {/* Lava has no stage model. The disk is the playfield, the same size as the knockoff ring. */}
       {currentTheme === "lava" && (
         <>
-          <PlayfieldDisk radius={standInRadius} color={colors.platform} />
+          <PlayfieldDisk radius={standInRadius} color={colors.platform} emissive="#ff4a00" emissiveIntensity={0.7} />
           <EdgeRing radius={standInRadius} color={colors.edge} />
           <DangerZone radius={standInRadius} color={colors.edge} />
+          <VolcanicPitDressing />
         </>
       )}
       
@@ -801,6 +805,7 @@ export function Arena({ theme = "grass" }: ArenaProps) {
         </MeshyArenaErrorBoundary>
       )}
       {currentTheme === "space" && <SpaceBackground />}
+      {currentTheme === "space" && <CosmicVoidDressing />}
       {currentTheme === "saturn" && (
         <MeshyArenaErrorBoundary fallback={stageFallback}>
           <Suspense fallback={stageFallback}>
@@ -808,6 +813,8 @@ export function Arena({ theme = "grass" }: ArenaProps) {
           </Suspense>
         </MeshyArenaErrorBoundary>
       )}
+      {currentTheme === "saturn" && <ArabianNightDressing />}
+      {currentTheme === "tomb" && <PharaohTombArena />}
       {currentTheme === "neon" && <NeonCourtArena />}
       
       {customArenaId && <CustomDecorations />}
@@ -874,11 +881,17 @@ export function Arena({ theme = "grass" }: ArenaProps) {
   );
 }
 
-function PlayfieldDisk({ radius, color, center = [0, 0, 0] }: { radius: number; color: string; center?: [number, number, number] }) {
+function PlayfieldDisk({ radius, color, center = [0, 0, 0], emissive, emissiveIntensity = 0 }: { radius: number; color: string; center?: [number, number, number]; emissive?: string; emissiveIntensity?: number }) {
+  const ref = useRef<THREE.Mesh>(null);
+  useFrame((state) => {
+    if (!emissive || !ref.current) return;
+    const material = ref.current.material as THREE.MeshStandardMaterial;
+    material.emissiveIntensity = emissiveIntensity + Math.sin(state.clock.elapsedTime * 1.6) * 0.16;
+  });
   return (
-    <mesh rotation={[-Math.PI / 2, 0, 0]} position={center} receiveShadow>
+    <mesh ref={ref} rotation={[-Math.PI / 2, 0, 0]} position={center} receiveShadow>
       <circleGeometry args={[radius, 64]} />
-      <meshStandardMaterial color={color} />
+      <meshStandardMaterial color={color} emissive={emissive ?? "#000000"} emissiveIntensity={emissiveIntensity} />
     </mesh>
   );
 }
@@ -897,11 +910,11 @@ function EdgeRing({ radius, color }: { radius: number; color: string }) {
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
         <ringGeometry args={[radius - 1.5, radius - 1, 64]} />
         <meshStandardMaterial 
-          color="#FFD700" 
+          color="#ff7a22" 
           transparent 
-          opacity={0.4}
-          emissive="#FFD700"
-          emissiveIntensity={0.2}
+          opacity={0.55}
+          emissive="#ff5a10"
+          emissiveIntensity={0.9}
         />
       </mesh>
       
@@ -931,7 +944,9 @@ function DangerZone({ radius, color }: { radius: number; color: string }) {
     <mesh ref={pulseRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
       <ringGeometry args={[radius - 2, radius, 64]} />
       <meshStandardMaterial 
-        color="#FF0000" 
+        color="#ff6a18" 
+        emissive="#ff4a00"
+        emissiveIntensity={0.45}
         transparent 
         opacity={0.3}
         side={THREE.DoubleSide}

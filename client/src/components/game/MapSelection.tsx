@@ -33,6 +33,7 @@ const DEFAULT_ASSETS: AssetData = {
     lava: null,
     space: null,
     saturn: null,
+    tomb: null,
     neon: null,
   },
   previewVideos: {
@@ -41,6 +42,7 @@ const DEFAULT_ASSETS: AssetData = {
     lava: null,
     space: null,
     saturn: null,
+    tomb: null,
     neon: null,
   },
 };

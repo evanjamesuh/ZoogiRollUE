@@ -7,5 +7,6 @@ vite.config.ts.*
 .env
 client/public/models/
 client/public/portraits/
-client/public/textures/
+client/public/textures/*
+!client/public/textures/comic/
 client/public/geometries/
