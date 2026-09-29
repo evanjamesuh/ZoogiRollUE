@@ -19,7 +19,7 @@ Until you enroll, you can still look at the Xcode project. You cannot install th
 
 - The app name on the home screen is **Zoogi Roll**.
 - The bundle id is `com.evanjames.zoogiroll`. That is a placeholder. Change it in one file, `capacitor.config.ts`, on the `appId` line. Then run `npm run cap:sync`.
-- The icon and the launch picture are made from the Zoogi picture in `client/public/icons/zoogi-512.png`. They are not a new character.
+- The icon is Wolfgang, the wolf face already drawn in the game when a portrait photo is missing. The launch picture shows that same face and the name Zoogi Roll. It is not a new character.
 - The app opens in landscape and also allows portrait. It is full screen. The buttons already sit inside the phone's safe areas. The page does not rubber-band when you drag past the edge.
 - The Xcode project is the `ios/` folder. On a Mac, open `ios/App/App.xcodeproj` after the steps below. `npx cap open ios` opens it for you.
 
@@ -109,11 +109,10 @@ Apple also reviews the binary. Common notes for a game like this: the app must d
 | `npm run dev` | Play on this PC, same as before |
 | `npm run build` | Website bundle, same as before |
 
-Regenerate the icon and splash from the existing Zoogi picture with:
+Regenerate the icon and splash from Wolfgang's drawn portrait with:
 
 ```sh
 node script/ios-art.mjs
-npx capacitor-assets generate --ios
 ```
 
-Then commit the new pictures under `ios/` if you want them in the Xcode project.
+That writes the pictures under `assets/` and copies every iPhone icon and launch size into `ios/`, including the dark launch picture. Commit those pictures if you want them in the Xcode project.
