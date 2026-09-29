@@ -202,11 +202,11 @@ export function CharacterSelection() {
         <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
       )}
       
-      <div className="flex-1 flex flex-col p-4 relative z-10 overflow-y-auto">
+      <div className="allow-pan-y flex-1 flex flex-col p-4 relative z-10 overflow-y-auto">
         <motion.h1
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-2xl md:text-3xl font-bold text-white text-center mb-4 mt-40"
+          className="text-2xl md:text-3xl font-bold text-white text-center mb-3 mt-14 landscape:mt-2"
         >
           Choose Your Zoogi
         </motion.h1>
@@ -229,7 +229,7 @@ export function CharacterSelection() {
           {canScrollPrev && (
             <button
               onClick={scrollPrev}
-              className="absolute left-0 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/60 rounded-full flex items-center justify-center text-white z-10"
+              className="absolute left-0 top-1/2 -translate-y-1/2 w-11 h-11 bg-black/60 rounded-full flex items-center justify-center text-white z-10"
             >
               <ChevronLeft size={20} />
             </button>
@@ -237,7 +237,7 @@ export function CharacterSelection() {
           {canScrollNext && (
             <button
               onClick={scrollNext}
-              className="absolute right-0 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/60 rounded-full flex items-center justify-center text-white z-10"
+              className="absolute right-0 top-1/2 -translate-y-1/2 w-11 h-11 bg-black/60 rounded-full flex items-center justify-center text-white z-10"
             >
               <ChevronRight size={20} />
             </button>
@@ -361,7 +361,7 @@ export function CharacterSelection() {
               <motion.button
                 whileTap={{ scale: 0.9 }}
                 onClick={decrementAiPlayerCount}
-                className="w-8 h-8 flex items-center justify-center bg-white/20 hover:bg-white/30 rounded-full transition-colors"
+                className="w-11 h-11 flex items-center justify-center bg-white/20 hover:bg-white/30 rounded-full transition-colors"
                 disabled={aiPlayerCount === 0}
               >
                 <Minus className="w-4 h-4 text-white" />
@@ -370,7 +370,7 @@ export function CharacterSelection() {
               <motion.button
                 whileTap={{ scale: 0.9 }}
                 onClick={incrementAiPlayerCount}
-                className="w-8 h-8 flex items-center justify-center bg-white/20 hover:bg-white/30 rounded-full transition-colors"
+                className="w-11 h-11 flex items-center justify-center bg-white/20 hover:bg-white/30 rounded-full transition-colors"
                 disabled={aiPlayerCount === 3}
               >
                 <Plus className="w-4 h-4 text-white" />
@@ -385,7 +385,7 @@ export function CharacterSelection() {
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           onClick={() => setPhase("menu")}
-          className="px-6 py-3 bg-white/10 text-white font-semibold rounded-full hover:bg-white/20 transition-colors"
+          className="min-h-12 px-6 py-3 bg-white/10 text-white font-semibold rounded-full hover:bg-white/20 transition-colors"
         >
           Back
         </motion.button>
@@ -401,7 +401,7 @@ export function CharacterSelection() {
               setPhase("map_selection");
             }
           }}
-          className={`flex-1 max-w-xs px-6 py-3 font-bold rounded-full transition-all ${
+          className={`flex-1 max-w-xs min-h-12 px-6 py-3 font-bold rounded-full transition-all ${
             hasSelection 
               ? "bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg shadow-green-500/50" 
               : "bg-white/20 text-white/50 cursor-not-allowed"

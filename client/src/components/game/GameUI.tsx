@@ -13,6 +13,7 @@ import { CollisionTuningPanel } from "./CollisionTuningPanel";
 import { AIControlsPanel } from "./AIControlsPanel";
 import { exportAllOffsets } from "@/lib/treeOffsets";
 import { NeonScoreboard } from "./NeonScoreboard";
+import { prefersCompactHud } from "@/lib/mobileGraphics";
 import { useAudio } from "@/lib/stores/useAudio";
 import { useProgression } from "@/lib/stores/useProgression";
 import { useEffect, useState, useRef, useCallback, useMemo, PointerEvent as ReactPointerEvent } from "react";
@@ -161,7 +162,7 @@ function CharacterAbilityButton({ zoogiId, entity }: {
     <button
       onClick={ready ? ability.onClick : undefined}
       disabled={!ready}
-      className={`px-3 py-2 rounded-xl backdrop-blur-sm transition-all flex flex-col items-center min-w-[76px] ${
+      className={`min-h-12 min-w-[76px] px-3 py-2 rounded-xl backdrop-blur-sm transition-all flex flex-col items-center ${
         !ready
           ? "bg-gray-700/80 text-white/50 cursor-not-allowed"
           : ability.active
@@ -379,7 +380,7 @@ export function GameUI() {
   const [showBirdsEyeTutorial, setShowBirdsEyeTutorial] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const isLocalMultiplayerMode = gameMode === "local_multiplayer";
-  const [showPlayerPanel, setShowPlayerPanel] = useState(true);
+  const [showPlayerPanel, setShowPlayerPanel] = useState(() => !prefersCompactHud());
   const [showPanelHint, setShowPanelHint] = useState(false);
   const devTools = useDevTools();
   const abilityNotice = useZoogiGame((state) => state.abilityNotice);
@@ -896,8 +897,8 @@ export function GameUI() {
         )}
       </AnimatePresence>
       
-      <div className="absolute top-4 sm:top-6 left-2 sm:left-4 right-2 sm:right-4 flex flex-wrap sm:flex-nowrap justify-between items-start gap-2 pointer-events-auto">
-        <div className="bg-black/70 rounded-lg sm:rounded-xl p-2 sm:p-4 backdrop-blur-sm transition-all">
+      <div className={`absolute left-2 sm:left-4 right-2 sm:right-4 flex flex-wrap sm:flex-nowrap justify-between items-start gap-2 pointer-events-none ${selectedMap === "neon" ? "hud-top-neon" : "hud-top"}`}>
+        <div className="pointer-events-auto max-w-[70%] bg-black/70 rounded-lg sm:rounded-xl p-2 sm:p-4 backdrop-blur-sm transition-all">
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="relative">
               <div
@@ -930,7 +931,7 @@ export function GameUI() {
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <h3 className="text-white font-bold">{displayEntity.zoogi.name}</h3>
+                <h3 className="text-white font-bold truncate max-w-[34vw] sm:max-w-none">{displayEntity.zoogi.name}</h3>
                 <span className="px-1.5 py-0.5 bg-purple-600/80 rounded text-xs text-white font-bold">Lv.{level}</span>
                 <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-yellow-600/80 rounded text-xs text-white font-bold">
                   <Coins className="w-3 h-3" />
@@ -1080,7 +1081,7 @@ export function GameUI() {
         </AnimatePresence>
       </div>
 
-      <div className="absolute bottom-2 sm:bottom-4 left-2 sm:left-4 right-2 sm:right-4 flex justify-between items-end gap-2">
+      <div className="hud-bottom absolute flex justify-between items-end gap-2 pointer-events-none">
         <div className="bg-black/70 rounded-lg sm:rounded-xl p-2 sm:p-4 backdrop-blur-sm">
           {isLocalMultiplayer ? (
             <div>
@@ -1153,11 +1154,11 @@ export function GameUI() {
         )}
       </div>
       
-      <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col gap-3 pointer-events-auto">
+      <div className="hud-side absolute top-1/2 -translate-y-1/2 flex flex-col gap-3 pointer-events-auto">
         {/* Lock-On Control - Moved to top to avoid overlap with player scores */}
         <button
           onClick={toggleLockOn}
-          className={`p-3 rounded-xl backdrop-blur-sm transition-all relative ${
+          className={`min-h-11 min-w-11 p-3 rounded-xl backdrop-blur-sm transition-all relative ${
             lockOnEnabled
               ? "bg-purple-500/80 text-white ring-2 ring-purple-300" 
               : "bg-purple-500/50 text-white/80 hover:bg-purple-500/70"

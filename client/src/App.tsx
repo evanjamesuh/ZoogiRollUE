@@ -136,14 +136,14 @@ function App() {
 
   if (powerPreview) {
     return (
-      <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>
+      <div style={{ width: "100%", height: "100%", position: "relative", overflow: "hidden" }}>
         <PowerPreview />
       </div>
     );
   }
 
   return (
-    <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>
+    <div style={{ width: "100%", height: "100%", position: "relative", overflow: "hidden" }}>
       {showVantaBackground && (
         <VantaDotsBackground 
           color="#ff8820"
