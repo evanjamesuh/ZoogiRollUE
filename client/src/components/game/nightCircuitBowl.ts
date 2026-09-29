@@ -1,6 +1,7 @@
 /**
- * Night Circuit grandstand decks. Every box sits outside the playable court
- * (|x| > 12.4 or |z| > 8.4) so the bowl can grow without touching gameplay.
+ * Night Circuit grandstand decks. Visual only: these boxes are not colliders.
+ * The court ends at |x| = 12 and |z| = 8. Every deck stays several meters
+ * outside that line so the bowl reads as a pit around the floor.
  * Face is the side that looks at the court.
  */
 export type BowlFace = "north" | "south" | "east" | "west";
@@ -11,31 +12,35 @@ export type BowlDeck = {
   face: BowlFace;
 };
 
-/** Far bowl, stepping up and back. The near tiers fill the gameplay frame. */
+/**
+ * Far bowl, about twice the old reach. The first tier is the one the tight
+ * camera still catches along the top of the frame; the rest climbs back
+ * into the dark.
+ */
 export const FAR_DECKS: BowlDeck[] = [
-  { pos: [0, 0.95, -9.3], size: [38, 1.7, 1.5], face: "north" },
-  { pos: [0, 1.85, -10.85], size: [42, 1.85, 1.55], face: "north" },
-  { pos: [0, 2.55, -12.45], size: [46, 1.9, 1.6], face: "north" },
-  { pos: [0, 3.15, -14.15], size: [50, 1.9, 1.7], face: "north" },
-  { pos: [0, 3.55, -16], size: [54, 1.8, 1.85], face: "north" },
-  { pos: [0, 3.85, -17.9], size: [56, 1.7, 1.9], face: "north" },
+  { pos: [0, 3.0, -14.85], size: [76, 3.7, 3.3], face: "north" },
+  { pos: [0, 3.7, -20.35], size: [84, 3.8, 3.2], face: "north" },
+  { pos: [0, 5.5, -24.7], size: [92, 3.8, 3.4], face: "north" },
+  { pos: [0, 7.2, -29.3], size: [100, 3.8, 3.6], face: "north" },
+  { pos: [0, 8.6, -34.1], size: [108, 3.6, 3.8], face: "north" },
+  { pos: [0, 9.8, -39.0], size: [116, 3.4, 4.0], face: "north" },
 ];
 
-/** Flanks beside the court, stepping out and up. */
+/** Flanks set back from the side rails, stepping out and up. */
 export const SIDE_DECKS: BowlDeck[] = [
-  { pos: [-14.6, 1.7, -1.2], size: [2.6, 3.2, 13.5], face: "west" },
-  { pos: [14.6, 1.7, -1.2], size: [2.6, 3.2, 13.5], face: "east" },
-  { pos: [-17.8, 3.55, -1.6], size: [3.0, 3.5, 15], face: "west" },
-  { pos: [17.8, 3.55, -1.6], size: [3.0, 3.5, 15], face: "east" },
-  { pos: [-21.2, 5.55, -2.0], size: [3.2, 3.6, 16.5], face: "west" },
-  { pos: [21.2, 5.55, -2.0], size: [3.2, 3.6, 16.5], face: "east" },
+  { pos: [-21.2, 4.65, -1.05], size: [5.6, 6.4, 24], face: "west" },
+  { pos: [21.2, 4.65, -1.05], size: [5.6, 6.4, 24], face: "east" },
+  { pos: [-27.65, 4.5, 0.95], size: [6.2, 7.0, 28], face: "west" },
+  { pos: [27.65, 4.5, 0.95], size: [6.2, 7.0, 28], face: "east" },
+  { pos: [-34.65, 5.6, 2.95], size: [6.6, 7.2, 32], face: "west" },
+  { pos: [34.65, 5.6, 2.95], size: [6.6, 7.2, 32], face: "east" },
 ];
 
 /** Near end of the bowl, behind the camera until a rally opens the view. */
 export const END_DECKS: BowlDeck[] = [
-  { pos: [0, 1.8, 11.4], size: [40, 3.3, 2.5], face: "south" },
-  { pos: [0, 3.9, 14.6], size: [48, 3.6, 2.7], face: "south" },
-  { pos: [0, 6.1, 17.9], size: [54, 3.8, 2.9], face: "south" },
+  { pos: [0, 3.55, 23.4], size: [84, 6.6, 5.4], face: "south" },
+  { pos: [0, 7.5, 30.2], size: [100, 7.2, 5.8], face: "south" },
+  { pos: [0, 11.4, 37.2], size: [116, 7.6, 6.2], face: "south" },
 ];
 
 export const BOWL_DECKS: BowlDeck[] = [...FAR_DECKS, ...SIDE_DECKS, ...END_DECKS];

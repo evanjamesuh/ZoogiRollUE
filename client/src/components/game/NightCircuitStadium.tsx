@@ -23,53 +23,22 @@ function DeckMesh({ deck, envMap }: { deck: BowlDeck; envMap: THREE.Texture | nu
 function RoofLip({ deck, envMap }: { deck: BowlDeck; envMap: THREE.Texture | null }) {
   const [cx, cy, cz] = deck.pos;
   const [sx, sy, sz] = deck.size;
-  const y = cy + sy / 2 + 0.16;
-  const z = cz + sz / 2 + 0.55;
+  const y = cy + sy / 2 + 0.12;
+  const z = cz + sz / 2 + 0.28;
   return (
     <mesh position={[cx, y, z]} receiveShadow>
-      <boxGeometry args={[sx + 1.2, 0.28, 1.35]} />
+      <boxGeometry args={[sx * 0.72, 0.22, 0.7]} />
       <meshStandardMaterial {...GLOSS} envMap={envMap ?? undefined} />
     </mesh>
   );
 }
 
-function CrownRig({ deck }: { deck: BowlDeck }) {
-  const [cx, cy, cz] = deck.pos;
-  const [sx, sy, sz] = deck.size;
-  const y = cy + sy / 2 + 0.42;
-  const z = cz + sz / 2 - 0.05;
-  const lamps = [-0.82, -0.5, -0.18, 0.18, 0.5, 0.82];
-  return (
-    <group position={[cx, y, z]}>
-      <mesh>
-        <boxGeometry args={[sx * 0.86, 0.12, 0.16]} />
-        <meshStandardMaterial color="#141a28" metalness={0.78} roughness={0.24} />
-      </mesh>
-      {lamps.map((t) => {
-        const x = t * sx * 0.42;
-        const tint = x < 0 ? "#22e7ff" : "#ff2bd6";
-        return (
-          <mesh key={t} position={[x, -0.22, 0.08]}>
-            <sphereGeometry args={[0.16, 10, 8]} />
-            <meshStandardMaterial color="#fff6ea" emissive={tint} emissiveIntensity={2.2} toneMapped={false} />
-          </mesh>
-        );
-      })}
-    </group>
-  );
-}
-
 /**
- * The Night Circuit bowl: tall far tiers, flank decks, and a near end,
- * with a roof lip and a small crown rig. Crowd lights mount with it.
+ * Doubled Night Circuit bowl. Decks stay outside the fall-off pit.
+ * A single dark lip marks the rear roof. Crowd lights mount with it.
  */
 export function NightCircuitStadium({ envMap }: { envMap: THREE.Texture | null }) {
-  const crown = FAR_DECKS[2];
   const upper = FAR_DECKS[FAR_DECKS.length - 1];
-  const lip = FAR_DECKS[0];
-  const lipY = lip.pos[1] + lip.size[1] / 2 + 0.05;
-  const lipZ = lip.pos[2] + lip.size[2] / 2 + 0.04;
-  const lipHalf = lip.size[0] / 2 - 0.4;
 
   return (
     <group>
@@ -82,18 +51,7 @@ export function NightCircuitStadium({ envMap }: { envMap: THREE.Texture | null }
       {END_DECKS.map((deck) => (
         <DeckMesh key={`end-${deck.pos.join(",")}`} deck={deck} envMap={envMap} />
       ))}
-      <RoofLip deck={crown} envMap={envMap} />
       <RoofLip deck={upper} envMap={envMap} />
-      <CrownRig deck={crown} />
-      <CrownRig deck={upper} />
-      <mesh position={[-lipHalf / 2, lipY, lipZ]}>
-        <boxGeometry args={[lipHalf, 0.08, 0.1]} />
-        <meshStandardMaterial color="#22e7ff" emissive="#22e7ff" emissiveIntensity={1.9} toneMapped={false} />
-      </mesh>
-      <mesh position={[lipHalf / 2, lipY, lipZ]}>
-        <boxGeometry args={[lipHalf, 0.08, 0.1]} />
-        <meshStandardMaterial color="#ff2bd6" emissive="#ff2bd6" emissiveIntensity={1.9} toneMapped={false} />
-      </mesh>
       <NightCircuitCrowd />
     </group>
   );
