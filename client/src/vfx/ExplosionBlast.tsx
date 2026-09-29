@@ -107,23 +107,22 @@ export function ExplosionBlast({
     }
     if (flash.current && flashMat.current) {
       flash.current.quaternion.copy(state.camera.quaternion);
-      const size = Math.max(0.001, radius * (0.42 + flashAmt * 0.55));
-      flash.current.scale.setScalar(size);
+      const breadth = Math.min(3.6, 1.6 + radius * 0.25);
+      flash.current.scale.setScalar(Math.max(0.001, breadth));
       flash.current.visible = flashAmt > 0.02;
-      const hot = Math.max(flashAmt, 0.001);
-      flashMat.current.opacity = Math.min(1, flashAmt * 1.15);
-      flashMat.current.color.setRGB(2.5 * hot, 1.15 * hot, 0.32 * hot);
+      flashMat.current.opacity = flashAmt;
+      flashMat.current.color.setRGB(3.4, 1.7, 0.62);
     }
     if (scorchMat.current) {
-      const arrive = Math.min(1, elapsed / 0.1);
-      const fade = elapsed < 1.15 ? 1 : Math.max(0, 1 - (elapsed - 1.15) / 2.55);
-      scorchMat.current.opacity = 0.92 * arrive * fade;
+      const arrive = Math.min(1, elapsed / 0.12);
+      const fade = elapsed < 1.2 ? 1 : Math.max(0, 1 - (elapsed - 1.2) / 2.4);
+      scorchMat.current.opacity = 0.6 * arrive * fade;
     }
     {
-      const wave = Math.min(1, elapsed / 0.5);
-      const fade = elapsed < 0.5 ? Math.min(1, elapsed / 0.06) : Math.max(0, 1 - (elapsed - 0.5) / 0.42);
-      ringMaterial.uniforms.uWave.value = 0.04 + wave * 0.9;
-      ringMaterial.uniforms.uOpacity.value = 0.78 * fade;
+      const wave = Math.min(1, elapsed / 0.32);
+      const fade = elapsed < 0.22 ? Math.min(1, elapsed / 0.04) : Math.max(0, 1 - (elapsed - 0.22) / 0.16);
+      ringMaterial.uniforms.uWave.value = 0.06 + wave * 0.9;
+      ringMaterial.uniforms.uOpacity.value = 0.22 * fade;
     }
 
     if (!shook.current && frozenElapsed === undefined) {
@@ -143,7 +142,7 @@ export function ExplosionBlast({
   return (
     <group position={[px, 0, pz]} renderOrder={3}>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]}>
-        <circleGeometry args={[radius * 0.92, 48]} />
+        <circleGeometry args={[radius * 0.5, 40]} />
         <meshBasicMaterial
           ref={scorchMat}
           map={textures.scorch}
@@ -182,8 +181,8 @@ export function ExplosionBlast({
         />
       </mesh>
       <InstancedSprites pool={smoke} mode="smoke" />
-      <InstancedSprites pool={fire} mode="additive" />
-      <InstancedSprites pool={embers} mode="additive" />
+      <InstancedSprites pool={fire} mode="fire" />
+      <InstancedSprites pool={embers} mode="ember" />
     </group>
   );
 }

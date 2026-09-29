@@ -66,15 +66,18 @@ function canvasTexture(size: number, paint: (data: Uint8ClampedArray, size: numb
 }
 
 function paintSmoke(data: Uint8ClampedArray, size: number): void {
+  const cell = size / 2;
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      const u = (x + 0.5) / size - 0.5;
-      const v = (y + 0.5) / size - 0.5;
+      const cx = Math.floor(x / cell);
+      const cy = Math.floor(y / cell);
+      const u = ((x % cell) + 0.5) / cell - 0.5;
+      const v = ((y % cell) + 0.5) / cell - 0.5;
       const d = Math.hypot(u, v) * 2;
-      const radial = d >= 1 ? 0 : Math.pow(Math.max(0, 1 - d * d), 0.45);
-      const n = fbm(u * 5.5 + 3.2, v * 5.5 + 1.4);
-      const alpha = radial * (0.62 + 0.38 * n);
-      const tone = 175 + n * 70;
+      const falloff = Math.exp(-d * d * 1.25);
+      const n = fbm(u * 3.1 + cx * 5.7 + 1.3, v * 3.4 + cy * 4.9 + 2.8);
+      const alpha = falloff * (0.22 + 0.78 * n);
+      const tone = 168 + n * 60;
       const i = (y * size + x) * 4;
       data[i] = tone;
       data[i + 1] = tone * 0.96;
@@ -109,15 +112,15 @@ function paintScorch(data: Uint8ClampedArray, size: number): void {
       const u = (x + 0.5) / size - 0.5;
       const v = (y + 0.5) / size - 0.5;
       const d = Math.hypot(u, v) * 2;
-      const n = fbm(u * 3.4 + 2.2, v * 3.4 + 8.1);
-      const ragged = d < 0.62 ? 1 : Math.max(0, 1 - (d - 0.62) / 0.4);
-      const alpha = ragged * (0.72 + 0.28 * n);
+      const n = fbm(u * 4.2 + 1.7, v * 3.6 + 6.4);
+      const ragged = Math.exp(-d * d * 1.15) * (0.55 + 0.45 * n);
+      const alpha = ragged * (d < 1.05 ? 1 : 0);
       const i = (y * size + x) * 4;
-      const tone = 8 + n * 14;
+      const tone = 10 + n * 16;
       data[i] = tone;
-      data[i + 1] = tone * 0.72;
-      data[i + 2] = tone * 0.5;
-      data[i + 3] = Math.max(0, Math.min(255, alpha * 255));
+      data[i + 1] = tone * 0.7;
+      data[i + 2] = tone * 0.48;
+      data[i + 3] = Math.max(0, Math.min(255, alpha * 220));
     }
   }
 }
@@ -125,7 +128,7 @@ function paintScorch(data: Uint8ClampedArray, size: number): void {
 export function retainVfxTextures(): VfxTextures {
   users += 1;
   if (!smokeTex || !emberTex || !scorchTex) {
-    smokeTex = canvasTexture(128, paintSmoke);
+    smokeTex = canvasTexture(256, paintSmoke);
     emberTex = canvasTexture(64, paintEmber);
     scorchTex = canvasTexture(128, paintScorch);
   }

@@ -25,7 +25,10 @@ const MARBLES: { position: Vec3; color: string }[] = [
 
 function PreviewCamera() {
   const camera = useThree((state) => state.camera);
-  const base = useMemo(() => new THREE.Vector3(0, 18, 16), []);
+  const base = useMemo(() => {
+    const close = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("vfxClose") === "1";
+    return close ? new THREE.Vector3(0, 4.6, 6.6) : new THREE.Vector3(0, 18, 16);
+  }, []);
   useLayoutEffect(() => {
     camera.position.copy(base);
     camera.lookAt(0, 0.4, 0);

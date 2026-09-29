@@ -8,13 +8,13 @@ import { createSpritePool } from "./pool";
 import { nextRand } from "./random";
 import { COLD_EMBER_CAP, WISP_CAP, emitColdEmber, emitMist, stepColdEmbers, stepMist } from "./sim";
 import { WOLF_FRAG, WOLF_VERT } from "./shaders";
-import { useVfxTextures } from "./textures";
 
 export type Vec3 = [number, number, number];
 
 let sharedGeometry: THREE.BufferGeometry | null = null;
 let geometryUsers = 0;
 let wolfDrop = 0;
+let wolfFit = 1;
 
 const compose = new THREE.Matrix4();
 const composePos = new THREE.Vector3();
@@ -43,55 +43,62 @@ function place(
   return geometry;
 }
 
-function ball(
-  x: number,
-  y: number,
-  z: number,
-  sx: number,
-  sy: number,
-  sz: number,
-  rx = 0,
-  ry = 0,
-  rz = 0,
-): THREE.BufferGeometry {
-  return place(new THREE.SphereGeometry(1, 12, 9), x, y, z, sx, sy, sz, rx, ry, rz);
+function tag(geometry: THREE.BufferGeometry, limb: number, pivot: THREE.Vector3): THREE.BufferGeometry {
+  const count = geometry.getAttribute("position").count;
+  const limbs = new Float32Array(count);
+  const pivots = new Float32Array(count * 3);
+  limbs.fill(limb);
+  for (let i = 0; i < count; i++) {
+    pivots[i * 3] = pivot.x;
+    pivots[i * 3 + 1] = pivot.y;
+    pivots[i * 3 + 2] = pivot.z;
+  }
+  geometry.setAttribute("aLimb", new THREE.BufferAttribute(limbs, 1));
+  geometry.setAttribute("aPivot", new THREE.BufferAttribute(pivots, 3));
+  return geometry;
+}
+
+function capsule(radius: number, length: number, x: number, y: number, z: number, rx = 0, ry = 0, rz = 0): THREE.BufferGeometry {
+  return place(new THREE.CapsuleGeometry(radius, length, 3, 8), x, y, z, 1, 1, 1, rx, ry, rz);
 }
 
 function buildWolfGeometry(): THREE.BufferGeometry {
+  const bodyPivot = new THREE.Vector3(0, 0.35, 0);
+  const rump = new THREE.Vector3(0, 0.4, -0.62);
   const parts: THREE.BufferGeometry[] = [
-    ball(0, 0.58, 0.05, 0.32, 0.24, 0.4),
-    ball(0, 0.42, -0.28, 0.26, 0.2, 0.34),
-    ball(0, 0.46, -0.58, 0.3, 0.22, 0.28),
-    ball(0, 0.36, 0.38, 0.16, 0.14, 0.2, -0.35),
-    ball(0, 0.22, 0.62, 0.18, 0.15, 0.2),
-    ball(0, 0.14, 0.86, 0.09, 0.08, 0.2),
-    ball(0, 0.12, 1.02, 0.05, 0.045, 0.06),
-    place(new THREE.ConeGeometry(1, 1, 8), -0.09, 0.46, 0.55, 0.06, 0.26, 0.05, 0.15, 0, -0.4),
-    place(new THREE.ConeGeometry(1, 1, 8), 0.09, 0.46, 0.55, 0.06, 0.26, 0.05, 0.15, 0, 0.4),
-    ball(0, 0.5, -0.82, 0.1, 0.1, 0.16),
-    ball(0, 0.66, -1.0, 0.14, 0.13, 0.14, 0.45),
-    ball(0, 0.82, -1.12, 0.12, 0.12, 0.12, 0.35),
-    ball(0, 0.92, -1.22, 0.08, 0.08, 0.09),
-    ball(-0.18, 0.34, 0.28, 0.08, 0.2, 0.09, -0.95),
-    ball(-0.18, 0.08, 0.52, 0.06, 0.18, 0.055, -0.3),
-    ball(-0.18, -0.1, 0.64, 0.07, 0.04, 0.09),
-    ball(0.18, 0.32, 0.02, 0.08, 0.16, 0.08, 0.85),
-    ball(0.18, 0.08, -0.08, 0.055, 0.15, 0.05, 0.15),
-    ball(0.18, -0.08, -0.06, 0.065, 0.04, 0.08),
-    ball(-0.17, 0.28, -0.62, 0.085, 0.2, 0.09, 0.8),
-    ball(-0.17, 0.02, -0.82, 0.06, 0.18, 0.055, 0.2),
-    ball(-0.17, -0.14, -0.92, 0.07, 0.04, 0.09),
-    ball(0.17, 0.32, -0.32, 0.085, 0.18, 0.09, -0.65),
-    ball(0.17, 0.06, -0.12, 0.06, 0.17, 0.055, -0.15),
-    ball(0.17, -0.12, -0.02, 0.07, 0.04, 0.09),
+    tag(capsule(0.24, 0.55, 0, 0.48, -0.02, Math.PI / 2, 0, 0), 0, bodyPivot),
+    tag(place(new THREE.SphereGeometry(0.28, 14, 10), 0, 0.55, 0.28, 1, 0.92, 1.05), 0, bodyPivot),
+    tag(place(new THREE.SphereGeometry(0.18, 12, 10), 0, 0.36, 0.62, 0.82, 0.78, 1.15), 0, bodyPivot),
+    tag(place(new THREE.SphereGeometry(0.11, 10, 8), 0, 0.28, 0.92, 0.62, 0.55, 1.45), 0, bodyPivot),
+    tag(place(new THREE.ConeGeometry(0.07, 0.26, 8), -0.1, 0.72, 0.58, 1, 1, 1, 0.15, 0, -0.35), 0, bodyPivot),
+    tag(place(new THREE.ConeGeometry(0.07, 0.26, 8), 0.1, 0.72, 0.58, 1, 1, 1, 0.15, 0, 0.35), 0, bodyPivot),
+    tag(capsule(0.07, 0.48, -0.16, -0.02, 0.46, -0.7, 0, 0), 1, new THREE.Vector3(-0.16, 0.28, 0.32)),
+    tag(capsule(0.07, 0.46, 0.16, 0.02, 0.08, 0.55, 0, 0), 2, new THREE.Vector3(0.16, 0.28, 0.16)),
+    tag(capsule(0.075, 0.5, -0.15, -0.04, -0.58, 0.65, 0, 0), 3, new THREE.Vector3(-0.15, 0.24, -0.42)),
+    tag(capsule(0.075, 0.48, 0.15, 0.0, -0.22, -0.45, 0, 0), 4, new THREE.Vector3(0.15, 0.24, -0.28)),
+    tag(capsule(0.1, 0.28, 0, 0.55, -0.78, 0.7, 0, 0), 5, rump),
+    tag(capsule(0.13, 0.22, 0, 0.72, -1.02, 0.9, 0, 0), 5, rump),
+    tag(place(new THREE.SphereGeometry(0.12, 10, 8), 0, 0.86, -1.16, 1, 1, 1), 5, rump),
   ];
   const merged = mergeGeometries(parts, false);
   for (const part of parts) part.dispose();
   if (!merged) return new THREE.SphereGeometry(0.4, 10, 8);
   merged.computeBoundingBox();
+  const box = merged.boundingBox;
+  const height = box ? box.max.y - box.min.y : 1;
+  const fit = 1.5 / Math.max(height, 0.001);
+  wolfFit = fit;
+  merged.scale(fit, fit, fit);
+  const pivots = merged.getAttribute("aPivot");
+  for (let i = 0; i < pivots.count; i++) {
+    pivots.setXYZ(i, pivots.getX(i) * fit, pivots.getY(i) * fit, pivots.getZ(i) * fit);
+  }
+  merged.computeBoundingBox();
   const minY = merged.boundingBox?.min.y ?? 0;
   wolfDrop = -0.5 - minY;
   merged.translate(0, wolfDrop, 0);
+  for (let i = 0; i < pivots.count; i++) pivots.setY(i, pivots.getY(i) + wolfDrop);
+  merged.computeVertexNormals();
   merged.computeBoundingSphere();
   return merged;
 }
@@ -118,12 +125,12 @@ const local = new THREE.Vector3();
 const emitAt = new THREE.Vector3();
 
 const MIST_ANCHORS: Array<[number, number, number]> = [
-  [0, 0.55, 0.15],
-  [0, 0.35, -0.45],
-  [0, 0.25, 0.7],
-  [0, 0.7, -1.05],
-  [0.2, 0.4, -0.1],
-  [-0.2, 0.4, -0.1],
+  [0, 0.55, 0.25],
+  [0, 0.42, -0.35],
+  [0, 0.36, 0.75],
+  [0, 0.7, -0.95],
+  [0.22, 0.48, 0.05],
+  [-0.22, 0.48, 0.05],
 ];
 
 function WolfTrail({ anchor }: { anchor: RefObject<THREE.Group | null> }) {
@@ -152,7 +159,7 @@ function WolfTrail({ anchor }: { anchor: RefObject<THREE.Group | null> }) {
         sample.lerpVectors(prevPos, worldPos, s / stamps);
         const slot = MIST_ANCHORS[state.anchor % MIST_ANCHORS.length];
         state.anchor += 1;
-        local.set(slot[0], slot[1] + wolfDrop, slot[2]);
+        local.set(slot[0] * wolfFit, slot[1] * wolfFit + wolfDrop, slot[2] * wolfFit);
         local.applyQuaternion(group.quaternion).multiplyScalar(group.scale.x);
         emitAt.copy(sample).add(local);
         emitMist(wisps, emitAt.x, emitAt.y, emitAt.z, backX, backZ, nextRand(state));
@@ -179,7 +186,7 @@ function WolfTrail({ anchor }: { anchor: RefObject<THREE.Group | null> }) {
   return createPortal(
     <>
       <InstancedSprites pool={wisps} mode="mist" />
-      <InstancedSprites pool={embers} mode="additive" />
+      <InstancedSprites pool={embers} mode="ember" />
     </>,
     scene,
   );
@@ -199,7 +206,6 @@ export function SpectralWolf({
   const group = useRef<THREE.Group>(null);
   const velRef = useRef(velocity);
   velRef.current = velocity;
-  const textures = useVfxTextures();
   const geometry = useMemo(() => retainWolfGeometry(), []);
   const lastWorld = useRef(new THREE.Vector3(position[0], position[1], position[2]));
   const sawWorld = useRef(false);
@@ -208,15 +214,17 @@ export function SpectralWolf({
     uniforms: {
       uTime: { value: 0 },
       uFade: { value: 1 },
-      uNoise: { value: textures.smoke },
     },
     vertexShader: WOLF_VERT,
     fragmentShader: WOLF_FRAG,
     transparent: true,
     depthWrite: false,
+    depthTest: true,
     toneMapped: false,
-    side: THREE.DoubleSide,
-  }), [textures.smoke]);
+    blending: THREE.AdditiveBlending,
+    side: THREE.FrontSide,
+    wireframe: false,
+  }), []);
 
   useEffect(() => {
     return () => {
@@ -258,7 +266,7 @@ export function SpectralWolf({
 
   return (
     <>
-      <group ref={group} position={position} scale={1.22}>
+      <group ref={group} position={position}>
         <mesh geometry={geometry} material={material} renderOrder={4} />
       </group>
       <WolfTrail anchor={group} />

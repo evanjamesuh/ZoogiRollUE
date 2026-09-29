@@ -81,7 +81,7 @@ export function stepSmoke(pool: SpritePool, elapsed: number, dt: number): void {
     pool.pz[i] += pool.vz[i] * dt;
     pool.rot[i] += pool.spin[i] * dt;
     const age = 1 - pool.life[i] / pool.maxLife[i];
-    const fadeIn = age < 0.06 ? age / 0.06 : 1;
+    const fadeIn = age < 0.22 ? age / 0.22 : 1;
     const fadeOut = 1 - smoothstep((age - 0.42) / 0.58);
     pool.opacity[i] = 0.84 * fadeIn * fadeOut;
     pool.size[i] = pool.size0[i] + pool.grow[i] * age;
@@ -93,22 +93,23 @@ export function seedBlastFire(pool: SpritePool, radius: number, rand: () => numb
   const count = Math.min(pool.capacity, Math.max(4, Math.round(particleBudget().fire * radiusSpan(radius))));
   for (let n = 0; n < count; n++) {
     const ang = rand() * Math.PI * 2;
-    const spread = radius * (0.02 + rand() * 0.08);
-    const life = 0.3 + rand() * 0.2;
+    const spread = 0.15 + rand() * 0.45;
+    const life = 0.42 + rand() * 0.12;
+    const breadth = 2.5 + rand() * 0.7;
     spawnSprite(pool, {
-      x: Math.cos(ang) * spread,
-      y: originY + rand() * 0.2,
-      z: Math.sin(ang) * spread,
-      vx: Math.cos(ang) * radius * (0.15 + rand() * 0.35),
-      vy: 1.3 + rand() * 2.6,
-      vz: Math.sin(ang) * radius * (0.15 + rand() * 0.35),
+      x: Math.cos(ang) * spread * Math.min(1, radius / 6),
+      y: originY + (rand() - 0.2) * 0.35,
+      z: Math.sin(ang) * spread * Math.min(1, radius / 6),
+      vx: Math.cos(ang) * (0.15 + rand() * 0.35),
+      vy: 0.4 + rand() * 1.1,
+      vz: Math.sin(ang) * (0.15 + rand() * 0.35),
       life,
-      size: radius * (0.12 + rand() * 0.08),
-      grow: radius * (0.26 + rand() * 0.16),
-      spin: (rand() - 0.5) * 1.4,
+      size: breadth * Math.min(1, 0.55 + radius / 16),
+      grow: (0.9 + rand() * 0.6) * Math.min(1, 0.55 + radius / 16),
+      spin: (rand() - 0.5) * 0.8,
       r: 1,
-      g: 0.62 + rand() * 0.28,
-      b: 0.08 + rand() * 0.1,
+      g: 0.7 + rand() * 0.3,
+      b: 0.2,
       seed: rand() * 20 + n,
     });
   }
@@ -131,8 +132,8 @@ export function stepFire(pool: SpritePool, _elapsed: number, dt: number): void {
     pool.pz[i] += pool.vz[i] * dt;
     pool.rot[i] += pool.spin[i] * dt;
     const age = 1 - pool.life[i] / pool.maxLife[i];
-    const fadeIn = age < 0.05 ? age / 0.05 : 1;
-    const fadeOut = 1 - smoothstep((age - 0.35) / 0.65);
+    const fadeIn = age < 0.04 ? age / 0.04 : 1;
+    const fadeOut = 1 - smoothstep((age - 0.58) / 0.42);
     pool.opacity[i] = fadeIn * fadeOut;
     pool.r[i] = 1;
     pool.g[i] = 0.82 - age * 0.48;
@@ -158,7 +159,7 @@ export function seedBlastEmbers(pool: SpritePool, radius: number, rand: () => nu
       vy: 3.4 + rand() * 6.4,
       vz: Math.sin(ang) * speed,
       life,
-      size: (0.28 + rand() * 0.62) * scale,
+      size: (0.16 + rand() * 0.22) * scale,
       grow: 0.12 * scale,
       spin: (rand() - 0.5) * 6,
       r: 1,
