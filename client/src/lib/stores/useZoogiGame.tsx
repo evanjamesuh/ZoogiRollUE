@@ -664,6 +664,10 @@ interface ZoogiGameState {
   playerRoundWins: number;
   enemyRoundWins: Map<string, number>;
   isPlayerTurn: boolean;
+  // Set when the marble whose turn it is is actually launched. The turn ends
+  // in the physics step once that marble stops, so a missed React frame cannot
+  // leave the round stuck on "Your Turn".
+  turnHasLaunched: boolean;
   turnIndex: number;
   allMovementStopped: boolean;
   
@@ -1306,6 +1310,25 @@ const initializeGame = (
 };
 
 let lastTurnEndedAt = 0;
+let turnWatchKey = "";
+let turnReadyForLaunch = false;
+let turnSlowFrames = 0;
+
+function actorTakingTurn(state: {
+  gameMode: string;
+  isPlayerTurn: boolean;
+  turnIndex: number;
+  currentLocalPlayerIndex: number;
+  playerEntity: { velocity: [number, number, number]; isKnockedOut?: boolean } | null;
+  enemies: { velocity: [number, number, number]; isKnockedOut?: boolean }[];
+}) {
+  if (state.gameMode === "local_multiplayer") {
+    if (state.currentLocalPlayerIndex <= 0) return state.playerEntity;
+    return state.enemies[state.currentLocalPlayerIndex - 1] ?? null;
+  }
+  if (state.isPlayerTurn) return state.playerEntity;
+  return state.enemies[state.turnIndex] ?? state.enemies[0] ?? null;
+}
 
 function unlockPatchForZoogi(zoogiId: string): Partial<GameEntity> {
   switch (zoogiId) {
@@ -1694,6 +1717,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
     playerRoundWins: 0,
     enemyRoundWins: new Map<string, number>(),
     isPlayerTurn: true,
+        turnHasLaunched: false,
     turnIndex: 0,
     allMovementStopped: true,
     
@@ -2898,6 +2922,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         playerRoundWins: 0,
         enemyRoundWins: new Map<string, number>(),
         isPlayerTurn: true,
+        turnHasLaunched: false,
         turnIndex: 0,
         allMovementStopped: true,
         gameTimer: 300,
@@ -2998,6 +3023,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         playerRoundWins: 0,
         enemyRoundWins: new Map<string, number>(),
         isPlayerTurn: true,
+        turnHasLaunched: false,
         turnIndex: 0,
         allMovementStopped: true,
         gameTimer: 9999,
@@ -3062,7 +3088,8 @@ export const useZoogiGame = create<ZoogiGameState>()(
       
       if (currentRound >= maxRounds) {
         const maxEnemyWins = Math.max(...Array.from(newEnemyRoundWins.values()), 0);
-        const playerWins = newPlayerRoundWins > maxEnemyWins;
+        // Same tie rule as a single round: a tie goes to the player, never a defeat screen.
+        const playerWins = newPlayerRoundWins >= maxEnemyWins;
         console.log(`Game over after ${maxRounds} rounds! Player wins: ${newPlayerRoundWins}, Best enemy: ${maxEnemyWins}`);
         get().endGame(playerWins);
         return;
@@ -3087,8 +3114,10 @@ export const useZoogiGame = create<ZoogiGameState>()(
         score: 0,
         gameTimer: 300,
         isPlayerTurn: true,
+        turnHasLaunched: false,
         turnIndex: 0,
         allMovementStopped: true,
+        wolfClones: [],
         ...playfieldSettings(roundMap, get().wallSettings, get().backgroundSettings),
         playerEntity: playerEntity ? {
           ...playerEntity,
@@ -3137,9 +3166,11 @@ export const useZoogiGame = create<ZoogiGameState>()(
         playerRoundWins: 0,
         enemyRoundWins: new Map<string, number>(),
         isPlayerTurn: true,
+        turnHasLaunched: false,
         turnIndex: 0,
         allMovementStopped: true,
         gameTimer: 300,
+        wolfClones: [],
         showTutorial: false,
         tutorialStep: 0,
         developerMoveMode: false,
@@ -3192,6 +3223,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         playerRoundWins: 0,
         enemyRoundWins: new Map<string, number>(),
         isPlayerTurn: true,
+        turnHasLaunched: false,
         turnIndex: 0,
         birdsEyeView: false,
         firstPersonView: false,
@@ -3258,9 +3290,13 @@ export const useZoogiGame = create<ZoogiGameState>()(
         };
       }
       
+      const playersLaunch = launchSpeed > 0.05
+        && state.gameMode !== "ringer_royale"
+        && (state.gameMode === "local_multiplayer" ? state.currentLocalPlayerIndex === 0 : state.isPlayerTurn);
       return { 
         playerEntity: { ...state.playerEntity, velocity: cappedVelocity, arcMovement, lastHitByEnemyId: null },
-        arcType: null
+        arcType: null,
+        ...(playersLaunch ? { turnHasLaunched: true } : {}),
       };
     }),
     
@@ -3296,19 +3332,24 @@ export const useZoogiGame = create<ZoogiGameState>()(
         };
       }
       
+      const localLaunch = launchSpeed > 0.05
+        && state.gameMode === "local_multiplayer"
+        && state.currentLocalPlayerIndex === playerIndex;
       if (playerIndex === 0) {
         set((state) => ({
           playerEntity: state.playerEntity 
             ? { ...state.playerEntity, velocity: cappedVelocity, arcMovement } 
             : null,
-          arcType: null
+          arcType: null,
+          ...(localLaunch ? { turnHasLaunched: true } : {}),
         }));
       } else {
         set((state) => ({
           enemies: state.enemies.map((e, i) => 
             i === playerIndex - 1 ? { ...e, velocity: cappedVelocity, arcMovement } : e
           ),
-          arcType: null
+          arcType: null,
+          ...(localLaunch ? { turnHasLaunched: true } : {}),
         }));
       }
     },
@@ -3325,11 +3366,20 @@ export const useZoogiGame = create<ZoogiGameState>()(
       }));
     },
     
-    updateEnemy: (id, updates) => set((state) => ({
-      enemies: state.enemies.map(e => 
-        e.id === id ? { ...e, ...updates } : e
-      )
-    })),
+    updateEnemy: (id, updates) => set((state) => {
+      const speed = updates.velocity ? Math.hypot(updates.velocity[0], updates.velocity[2]) : 0;
+      const index = state.enemies.findIndex(e => e.id === id);
+      const theirTurn = state.gameMode === "local_multiplayer"
+        ? state.currentLocalPlayerIndex === index + 1
+        : !state.isPlayerTurn && state.turnIndex === index;
+      const launched = speed > 0.05 && theirTurn && state.gameMode !== "ringer_royale";
+      return {
+        enemies: state.enemies.map(e => 
+          e.id === id ? { ...e, ...updates } : e
+        ),
+        ...(launched ? { turnHasLaunched: true } : {}),
+      };
+    }),
     
     respawnEnemy: (id) => {
       set((state) => {
@@ -3449,6 +3499,9 @@ export const useZoogiGame = create<ZoogiGameState>()(
       const turnNow = Date.now();
       if (turnNow - lastTurnEndedAt < 450) return;
       lastTurnEndedAt = turnNow;
+      // Drop the launch flag only after the turn really advances. A debounced
+      // call leaves it set so the next physics step can try again.
+      set({ turnHasLaunched: false });
 
       const { enemies, turnIndex, isPlayerTurn, gameMode, localPlayers, currentLocalPlayerIndex, playerEntity, zoneEditorConfigs, zoneControlActive, updateZoneOwnership, checkZoneControlActivation, clearScoredZones } = get();
       
@@ -3534,6 +3587,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
           
           set((s) => ({
             isPlayerTurn: true,
+        turnHasLaunched: false,
             currentLocalPlayerIndex: nextIndex,
             playerEntity: s.playerEntity ? {
               ...clearSkippedStun(0, s.playerEntity),
@@ -3552,6 +3606,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
           
           set((s) => ({
             isPlayerTurn: true,
+        turnHasLaunched: false,
             currentLocalPlayerIndex: nextIndex,
             playerEntity: s.playerEntity ? clearSkippedStun(0, s.playerEntity) : null,
             enemies: s.enemies.map((e, idx) => 
@@ -3602,6 +3657,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         const spawnPos = needsRespawn ? respawnInsidePlayfield(currentPlayer?.spawnPointIndex ?? 0, zoneEditorConfigs, get().selectedMap, get().wallSettings.knockoffBoundaryRadius) : null;
         set((s) => ({
           isPlayerTurn: true,
+        turnHasLaunched: false,
           turnIndex: 0,
           enemies: list,
           playerEntity: s.playerEntity ? {
@@ -3777,6 +3833,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         playerRoundWins: 0,
         enemyRoundWins: new Map<string, number>(),
         isPlayerTurn: true,
+        turnHasLaunched: false,
         turnIndex: 0,
         currentLocalPlayerIndex: 0,
         allMovementStopped: true,
@@ -3822,6 +3879,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         playerRoundWins: 0,
         enemyRoundWins: new Map<string, number>(),
         isPlayerTurn: true,
+        turnHasLaunched: false,
         turnIndex: 0,
         allMovementStopped: true,
         gameTimer: 0,
@@ -4196,7 +4254,11 @@ export const useZoogiGame = create<ZoogiGameState>()(
         // Final round complete - end game
         const playerScore = state.score;
         const maxEnemyScore = Math.max(...state.enemies.map(e => e.score), 0);
-        const playerWins = playerScore > maxEnemyScore;
+        // Earlier rounds award a tie to the player (startNextRound). The clock
+        // running out on the last round used to require a strictly higher score,
+        // so a 0–0 final round showed "Better luck next time!".
+        const playerWins = playerScore >= maxEnemyScore;
+        console.log(`Final round over: player ${playerScore} vs ${maxEnemyScore}, win=${playerWins}`);
         get().endGame(playerWins);
         return;
       }
@@ -6141,6 +6203,44 @@ export const useZoogiGame = create<ZoogiGameState>()(
       
       orbsToRemove.forEach(id => get().removeOrb(id));
       if (endTurnAfterTick) get().endTurn();
+
+      // End the turn from the simulation, not from a React render. The marble
+      // components only noticed a flick was over when one frame saw the speed
+      // fall through 0.02. If physics finished the whole roll before that
+      // render committed, the shot lock stayed on and the computer never moved.
+      // A launch is real once this marble has been still on this turn and then
+      // rolled. Coasting in from the previous hit does not count, so the
+      // computer still gets to take its own shot.
+      const settled = get();
+      if (settled.phase === "playing" && settled.gameMode !== "ringer_royale") {
+        const watchKey = settled.gameMode === "local_multiplayer"
+          ? `L${settled.currentRound}:${settled.currentLocalPlayerIndex}`
+          : `C${settled.currentRound}:${settled.isPlayerTurn ? "p" : "e"}${settled.turnIndex}`;
+        if (watchKey !== turnWatchKey) {
+          turnWatchKey = watchKey;
+          turnReadyForLaunch = false;
+          turnSlowFrames = 0;
+        }
+        const actor = actorTakingTurn(settled);
+        if (actor && !actor.isKnockedOut) {
+          const actorSpeed = Math.hypot(actor.velocity[0], actor.velocity[2]);
+          if (!turnReadyForLaunch) {
+            if (actorSpeed < 0.02) turnReadyForLaunch = true;
+          } else if (actorSpeed > 0.08 && !settled.turnHasLaunched) {
+            set({ turnHasLaunched: true });
+            turnSlowFrames = 0;
+          } else if (get().turnHasLaunched) {
+            if (actorSpeed < 0.02) {
+              get().endTurn();
+            } else if (actorSpeed < 0.12) {
+              turnSlowFrames += 1;
+              if (turnSlowFrames > 40) get().endTurn();
+            } else {
+              turnSlowFrames = 0;
+            }
+          }
+        }
+      }
     }
   }))
 );

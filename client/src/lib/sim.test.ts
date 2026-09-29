@@ -828,3 +828,165 @@ test("practice mode places star orbs", async () => {
   const kinds = new Set(stars.map((orb) => orb.starOrbType));
   assert.equal(kinds.size, 3);
 });
+
+test("a launched flick ends the turn when the marble stops, even if no render saw the slowdown", async () => {
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  const useZoogiGame = await playingMarble();
+  const player = useZoogiGame.getState().playerEntity;
+  assert.ok(player);
+  useZoogiGame.setState({
+    phase: "playing",
+    gameMode: "classic",
+    isPlayerTurn: true,
+    turnIndex: 0,
+    turnHasLaunched: false,
+    gameTimer: 200,
+    orbs: [],
+    mushrooms: [],
+    pinballBumpers: [],
+    zoneEditorConfigs: [],
+    wallSettings: { ...useZoogiGame.getState().wallSettings, knockoffBoundaryRadius: 50 },
+    playerEntity: {
+      ...player,
+      position: [0, 0.5, 0],
+      velocity: [0, 0, 0],
+      isKnockedOut: false,
+      isRespawning: false,
+      spawnImmunity: false,
+    },
+    enemies: [{
+      ...player,
+      id: "waiting-cpu",
+      isPlayer: false,
+      position: [4, 0.5, 0],
+      velocity: [0, 0, 0],
+      isKnockedOut: false,
+      isRespawning: false,
+    }],
+  });
+
+  useZoogiGame.getState().physicsTick(1 / 60);
+  assert.equal(useZoogiGame.getState().isPlayerTurn, true, "a marble that has not been launched should keep the turn");
+
+  useZoogiGame.getState().updatePlayerVelocity([0.2, 0, 0]);
+  assert.equal(useZoogiGame.getState().turnHasLaunched, true);
+
+  let handedOff = false;
+  for (let frame = 0; frame < 120; frame++) {
+    useZoogiGame.getState().physicsTick(1 / 60);
+    if (!useZoogiGame.getState().isPlayerTurn) {
+      handedOff = true;
+      break;
+    }
+  }
+  const settled = useZoogiGame.getState();
+  assert.equal(handedOff, true, "the turn should pass to the computer once the flick stops");
+  assert.equal(settled.turnHasLaunched, false);
+  assert.equal(planarSpeed(settled.playerEntity?.velocity ?? [1, 0, 0]), 0);
+
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  useZoogiGame.getState().updateEnemy("waiting-cpu", { velocity: [0.2, 0, 0] });
+  assert.equal(useZoogiGame.getState().turnHasLaunched, true, "the computer's launch should arm the same turn-end");
+  let playerTurnAgain = false;
+  for (let frame = 0; frame < 120; frame++) {
+    useZoogiGame.getState().physicsTick(1 / 60);
+    if (useZoogiGame.getState().isPlayerTurn) {
+      playerTurnAgain = true;
+      break;
+    }
+  }
+  assert.equal(playerTurnAgain, true, "the computer's turn should end when its marble stops");
+});
+
+test("a computer marble that is only coasting does not skip its shot, and a later roll does end the turn", async () => {
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  const useZoogiGame = await playingMarble();
+  const player = useZoogiGame.getState().playerEntity;
+  assert.ok(player);
+  const enemy = {
+    ...player,
+    id: "coast-cpu",
+    isPlayer: false,
+    position: [4, 0.5, 0] as [number, number, number],
+    velocity: [0.35, 0, 0] as [number, number, number],
+    isKnockedOut: false,
+    isRespawning: false,
+  };
+  useZoogiGame.setState({
+    phase: "playing",
+    gameMode: "classic",
+    currentRound: 4,
+    isPlayerTurn: false,
+    turnIndex: 0,
+    turnHasLaunched: false,
+    gameTimer: 200,
+    orbs: [],
+    mushrooms: [],
+    pinballBumpers: [],
+    zoneEditorConfigs: [],
+    wallSettings: { ...useZoogiGame.getState().wallSettings, knockoffBoundaryRadius: 50 },
+    playerEntity: { ...player, position: [0, 0.5, 0], velocity: [0, 0, 0], isKnockedOut: false, isRespawning: false },
+    enemies: [enemy],
+  });
+
+  for (let frame = 0; frame < 80; frame++) {
+    useZoogiGame.getState().physicsTick(1 / 60);
+  }
+  const coasted = useZoogiGame.getState();
+  assert.equal(coasted.isPlayerTurn, false, "sliding in from the last hit should not use up the computer's turn");
+  assert.equal(planarSpeed(coasted.enemies[0]?.velocity ?? [1, 0, 0]), 0);
+
+  useZoogiGame.setState({
+    enemies: coasted.enemies.map((marble) => ({ ...marble, velocity: [0.3, 0, 0] as [number, number, number] })),
+  });
+  let handedBack = false;
+  for (let frame = 0; frame < 100; frame++) {
+    useZoogiGame.getState().physicsTick(1 / 60);
+    if (useZoogiGame.getState().isPlayerTurn) {
+      handedBack = true;
+      break;
+    }
+  }
+  assert.equal(handedBack, true, "once the computer actually rolls, stopping should hand the turn back");
+});
+
+test("a tied final round is not a loss", async () => {
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  const useZoogiGame = await playingMarble();
+  const player = useZoogiGame.getState().playerEntity;
+  assert.ok(player);
+  useZoogiGame.setState({
+    phase: "playing",
+    gameMode: "classic",
+    currentRound: 3,
+    maxRounds: 3,
+    score: 0,
+    gameTimer: 0.4,
+    isVictory: false,
+    playerEntity: { ...player, score: 0 },
+    enemies: [{
+      ...player,
+      id: "tied-cpu",
+      isPlayer: false,
+      score: 0,
+    }],
+  });
+  useZoogiGame.getState().tickTimers(1);
+  const finished = useZoogiGame.getState();
+  assert.equal(finished.phase, "game_over");
+  assert.equal(finished.isVictory, true, "a 0–0 final round should not show a defeat");
+
+  useZoogiGame.setState({
+    phase: "playing",
+    currentRound: 3,
+    maxRounds: 3,
+    score: 10,
+    gameTimer: 0.4,
+    isVictory: false,
+    enemies: finished.enemies.map((enemy) => ({ ...enemy, score: 40 })),
+  });
+  useZoogiGame.getState().tickTimers(1);
+  const lost = useZoogiGame.getState();
+  assert.equal(lost.phase, "game_over");
+  assert.equal(lost.isVictory, false, "a final round the opponent won should still be a loss");
+});
