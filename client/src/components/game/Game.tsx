@@ -24,7 +24,7 @@ import { InnerWallSegmentGizmo } from "./InnerWallSegmentGizmo";
 import { resolveUnlockSpot, useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { Sky, Environment } from "@react-three/drei";
 import * as THREE from "three";
-import { EffectComposer, Bloom } from "@react-three/postprocessing";
+import { MoodyBloom } from "@/vfx/MoodyBloom";
 import { useCallback, useEffect, useRef, useMemo, useState } from "react";
 import { triggerArcPeakCameraEffect, triggerArcPeakFreezeOnly, clearArcPeakCameraEffect } from "@/lib/stores/useCameraEffects";
 import { useMapDecorations } from "@/hooks/useMapDecorations";
@@ -320,14 +320,7 @@ export function Game() {
           
           <ArcSelector />
           
-          <EffectComposer>
-            <Bloom 
-              intensity={0.8}
-              luminanceThreshold={0.6}
-              luminanceSmoothing={0.3}
-              mipmapBlur
-            />
-          </EffectComposer>
+          <MoodyBloom />
           
           <PhysicsManager />
           

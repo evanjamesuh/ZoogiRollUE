@@ -482,81 +482,10 @@ export function CartoonExplosions() {
   );
 }
 
-function CartoonExplosionEffect({ explosion }: { explosion: { id: string; position: [number, number, number]; timestamp: number; showBoom: boolean } }) {
-  const groupRef = useRef<THREE.Group>(null);
-  const discRef = useRef<THREE.Mesh>(null);
-  const cracksRef = useRef<THREE.Group>(null);
-  
-  const crackCount = 6;
-  
-  const crackData = useMemo(() => {
-    const data = [];
-    for (let i = 0; i < crackCount; i++) {
-      const angle = (i / crackCount) * Math.PI * 2 + Math.random() * 0.3;
-      data.push({
-        angle,
-        length: 1.5 + Math.random() * 1.0,
-        width: 0.08 + Math.random() * 0.04
-      });
-    }
-    return data;
-  }, []);
-  
-  useFrame(() => {
-    if (!groupRef.current || !discRef.current || !cracksRef.current) return;
-    
-    const elapsed = (Date.now() - explosion.timestamp) / 1000;
-    const duration = 1.0;
-    const progress = Math.min(elapsed / duration, 1);
-    
-    const expandProgress = Math.min(elapsed * 4, 1);
-    const fadeProgress = Math.max(0, (progress - 0.3) / 0.7);
-    
-    const discScale = 2.5 * expandProgress;
-    discRef.current.scale.set(discScale, discScale, 1);
-    
-    if (discRef.current.material instanceof THREE.MeshBasicMaterial) {
-      discRef.current.material.opacity = Math.max(0, 0.7 * (1 - fadeProgress));
-    }
-    
-    cracksRef.current.children.forEach((crack, i) => {
-      const data = crackData[i];
-      const crackExpand = Math.min(elapsed * 5, 1);
-      crack.scale.set(data.width, data.length * crackExpand, 1);
-      
-      if ((crack as THREE.Mesh).material instanceof THREE.MeshBasicMaterial) {
-        ((crack as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = Math.max(0, 0.9 * (1 - fadeProgress));
-      }
-    });
-  });
-  
-  const floorY = 0.02;
-  
-  return (
-    <group ref={groupRef} position={[explosion.position[0], floorY, explosion.position[2]]}>
-      <mesh ref={discRef} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[1, 16]} />
-        <meshBasicMaterial color="#1a1a1a" transparent opacity={0.7} depthWrite={false} />
-      </mesh>
-      
-      <group ref={cracksRef}>
-        {crackData.map((data, i) => (
-          <mesh 
-            key={i} 
-            rotation={[-Math.PI / 2, 0, data.angle]}
-            position={[
-              Math.cos(data.angle) * data.length * 0.5,
-              0.01,
-              Math.sin(data.angle) * data.length * 0.5
-            ]}
-          >
-            <planeGeometry args={[1, 1]} />
-            <meshBasicMaterial color="#333333" transparent opacity={0.9} depthWrite={false} />
-          </mesh>
-        ))}
-      </group>
-    </group>
-  );
+function CartoonExplosionEffect(_explosion: { explosion: { id: string; position: [number, number, number]; timestamp: number; showBoom: boolean } }) {
+  // The flat scorch disc used to sit under Hotstreak's blast. The volumetric
+  // explosion draws the scorch, smoke, and flash now.
+  return null;
 }
 
 export function CartoonStarbursts() {

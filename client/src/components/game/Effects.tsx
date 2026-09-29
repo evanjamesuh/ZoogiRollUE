@@ -4,6 +4,7 @@ import { useFrame } from "@react-three/fiber";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { useGameFeel } from "@/lib/stores/useGameFeel";
 import { WolfCloneLook } from "./PowerEffects";
+import { SmokeBurstField } from "@/vfx/bursts";
 
 const ZOOGI_COLORS: Record<string, string> = {
   wolfgang: "#6B7280",
@@ -487,6 +488,7 @@ export function WolfClones() {
   
   return (
     <>
+      <SmokeBurstField />
       {wolfClones.filter(c => c.isActive).map((clone) => (
         <WolfClone key={clone.id} clone={clone} />
       ))}

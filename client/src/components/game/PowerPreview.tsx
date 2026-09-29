@@ -1,7 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { useAudio } from "@/lib/stores/useAudio";
+import { useGameFeel } from "@/lib/stores/useGameFeel";
+import { MoodyBloom } from "@/vfx/MoodyBloom";
+import { SmokeBurstField } from "@/vfx/bursts";
 import {
   ExplosionBlast,
   PowerUnlockFlash,
@@ -22,10 +25,26 @@ const MARBLES: { position: Vec3; color: string }[] = [
 
 function PreviewCamera() {
   const camera = useThree((state) => state.camera);
+  const base = useMemo(() => new THREE.Vector3(0, 18, 22), []);
   useLayoutEffect(() => {
-    camera.position.set(0, 18, 22);
+    camera.position.copy(base);
     camera.lookAt(0, 0.4, 0);
-  }, [camera]);
+  }, [camera, base]);
+  useFrame(() => {
+    const shake = useGameFeel.getState().screenShake;
+    let amp = 0;
+    if (shake) {
+      const elapsed = Date.now() - shake.startTime;
+      const progress = elapsed / shake.duration;
+      if (progress < 1) amp = shake.intensity * (1 - progress);
+    }
+    camera.position.set(
+      base.x + (amp ? (Math.random() - 0.5) * amp * 2.4 : 0),
+      base.y + (amp ? (Math.random() - 0.5) * amp : 0),
+      base.z,
+    );
+    camera.lookAt(0, 0.4, 0);
+  });
   return null;
 }
 
@@ -107,9 +126,10 @@ export function PowerPreview() {
     const id = idRef.current++;
     const startTime = Date.now();
     setBlasts((prev) => [...prev, { id, kind, position, startTime }]);
+    const life = kind === "explosion" ? 2800 : 1200;
     window.setTimeout(() => {
       setBlasts((prev) => prev.filter((blast) => blast.id !== id));
-    }, 1200);
+    }, life);
   };
 
   return (
@@ -131,6 +151,8 @@ export function PowerPreview() {
         <directionalLight position={[12, 18, 8]} intensity={1.15} />
         <hemisphereLight args={["#cfe8ff", "#2d4a32", 0.35]} />
         <Ground />
+        <SmokeBurstField />
+        <MoodyBloom />
         {blasts.map((blast) => {
           if (blast.kind === "explosion") {
             return (
