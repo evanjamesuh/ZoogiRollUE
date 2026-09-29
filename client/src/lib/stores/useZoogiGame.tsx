@@ -5401,10 +5401,18 @@ export const useZoogiGame = create<ZoogiGameState>()(
           }
         });
         
-        const finalDist = Math.sqrt(clone.position[0] ** 2 + clone.position[2] ** 2);
         const speed = Math.sqrt(clone.velocity[0] ** 2 + clone.velocity[2] ** 2);
         const cloneKnockoff = state.wallSettings.knockoffBoundaryRadius ?? 50;
-        clone.isActive = speed > 0.015 && finalDist <= cloneKnockoff + 0.5;
+        const cloneOffset = state.elementTransforms.knockoffBoundaryOffset ?? { x: 0, y: 0, z: 0 };
+        const cloneOut = centerPastOpenEdge(
+          state.selectedMap,
+          clone.position[0] - cloneOffset.x,
+          clone.position[2] - cloneOffset.z,
+          cloneKnockoff,
+          CLONE_RADIUS,
+          matchSolids,
+        );
+        clone.isActive = speed > 0.015 && !cloneOut;
         
         wolfClonesUpdated[ci] = clone;
       });

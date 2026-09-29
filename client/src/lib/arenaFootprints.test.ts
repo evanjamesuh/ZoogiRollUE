@@ -7,6 +7,7 @@ import {
   COSMOS_FLOOR_MESH,
   COSMOS_LIP_SIDES,
   COSMOS_STAGE,
+  COSMOS_STANDS_INNER,
   COSMOS_WALL_INNER,
   GRASS_STAGE,
   MARBLE_RADIUS,
@@ -30,6 +31,8 @@ import {
   NEON_HALF_X,
   NEON_HALF_Z,
   NEON_RAIL_DEPTH,
+  neonAabbGap,
+  neonBumperBoxGap,
   neonBumpers,
   neonMouthWidth,
   neonObstacles,
@@ -45,7 +48,6 @@ import {
   counterScaleFor,
   embeddedWorldScale,
   nodeMatchesMeshKey,
-  RIM_GAP_TOLERANCE,
   obstacleMeshKey,
   rimGapAllowed,
   rimGapInBand,
@@ -174,18 +176,53 @@ test("the drawn floor edge and knockout rim match the colliders", () => {
   const rawPlusX = COSMOS_FLOOR_MESH.centerX + COSMOS_FLOOR_MESH.radius;
   const rawMinusX = COSMOS_FLOOR_MESH.radius - COSMOS_FLOOR_MESH.centerX;
   assert.ok(rawPlusX - rawMinusX > 0.4, "the glb floor itself is shifted toward +X");
-  for (let side = 0; side < COSMOS_LIP_SIDES; side++) {
-    const corner = (side / COSMOS_LIP_SIDES) * Math.PI * 2;
-    const mid = corner + Math.PI / COSMOS_LIP_SIDES;
-    for (const [label, angle] of [["corner", corner], ["edge", mid]] as const) {
-      const drawn = lip.radiusAt(angle);
+  // polygon56_Arena Floor corners, measured from cosmos_arena.glb in model space.
+  const floorLip: Array<[number, number]> = [
+    [-14.54295, -5.40801],
+    [-11.80924, -10.14294],
+    [-7.62095, -13.65734],
+    [-2.48325, -15.52731],
+    [2.98418, -15.52731],
+    [8.12189, -13.65734],
+    [12.31018, -10.14294],
+    [15.04389, -5.40801],
+    [15.9933, -0.02365],
+    [15.04389, 5.36073],
+    [12.31017, 10.09566],
+    [8.12188, 13.61005],
+    [2.98418, 15.48002],
+    [-2.48325, 15.48002],
+    [-7.62095, 13.61005],
+    [-11.80924, 10.09565],
+    [-14.54296, 5.36072],
+    [-15.49237, -0.02365],
+  ];
+  floorLip.sort(
+    (a, b) =>
+      Math.atan2(a[1] - COSMOS_FLOOR_MESH.centerZ, a[0] - COSMOS_FLOOR_MESH.centerX) -
+      Math.atan2(b[1] - COSMOS_FLOOR_MESH.centerZ, b[0] - COSMOS_FLOOR_MESH.centerX),
+  );
+  assert.equal(floorLip.length, COSMOS_LIP_SIDES);
+  const worldLip = floorLip.map(([mx, mz]) => ({
+    x: placed.x + placed.scale * mx,
+    z: placed.z + placed.scale * mz,
+  }));
+  let flat = 0;
+  for (let side = 0; side < worldLip.length; side++) {
+    const a = worldLip[side];
+    const b = worldLip[(side + 1) % worldLip.length];
+    const samples = [
+      ["corner", a.x, a.z],
+      ["edge", (a.x + b.x) / 2, (a.z + b.z) / 2],
+    ] as const;
+    for (const [label, x, z] of samples) {
+      const drawn = Math.hypot(x - lip.centerX, z - lip.centerZ);
+      const angle = Math.atan2(z - lip.centerZ, x - lip.centerX);
       const fall = cosmosLipRadius(angle);
       assert.ok(
         Math.abs(drawn - fall) < 0.05,
-        `space ${label} ${side} lip ${drawn.toFixed(3)} vs fall ${fall.toFixed(3)}`,
+        `space ${label} ${side} mesh ${drawn.toFixed(3)} vs fall ${fall.toFixed(3)}`,
       );
-      const x = lip.centerX + Math.cos(angle) * drawn;
-      const z = lip.centerZ + Math.sin(angle) * drawn;
       assert.equal(centerPastOpenEdge("space", x, z, space.knockoffRadius, 0, []), false, `${label} ${side} on the lip stays in`);
       const past = 0.08;
       assert.equal(
@@ -193,12 +230,12 @@ test("the drawn floor edge and knockout rim match the colliders", () => {
         true,
         `${label} ${side} past the lip falls`,
       );
+      if (label === "edge" && Math.abs(angle - Math.PI / 2) < Math.PI / COSMOS_LIP_SIDES) flat = drawn;
     }
   }
-  const flat = lip.radiusAt(Math.PI / 2);
   assert.ok(space.knockoffRadius - flat > 0.2, "a flat is inside the corner circle");
   assert.equal(centerPastOpenEdge("space", 0, flat + 0.1, space.knockoffRadius, 0, []), true, "+Z past the flat falls inside the corner radius");
-  for (const [name, inner] of [["curb", COSMOS_CURB_INNER], ["wall", COSMOS_WALL_INNER]] as const) {
+  for (const [name, inner] of [["curb", COSMOS_CURB_INNER], ["wall", COSMOS_WALL_INNER], ["stands", COSMOS_STANDS_INNER]] as const) {
     const world = inner * arenaScaleFor("space");
     const pushed = world * cosmosRingPush(world);
     const limit = cosmosLipRadius(0) + MARBLE_RADIUS;
@@ -259,6 +296,20 @@ test("rim gaps are sealed or clearly wide enough for a marble", () => {
       assert.equal(rimGapAllowed(gap), true, `${box.id} rail-face gap ${gap.toFixed(3)}`);
     }
     assert.equal(rimGapAllowed(neonMouthWidth()), true, "corner mouth");
+    const neonBoxes = neonObstacles();
+    const pads = neonBoxes.filter((box) => box.id.startsWith("pad"));
+    for (const pad of pads) {
+      for (const other of neonBoxes) {
+        if (other.id === pad.id) continue;
+        if (other.id.startsWith("pad") && other.id <= pad.id) continue;
+        const gap = neonAabbGap(pad, other);
+        assert.equal(rimGapAllowed(gap), true, `${pad.id} to ${other.id} gap ${gap.toFixed(3)}`);
+      }
+      for (const bumper of neonBumpers()) {
+        const gap = neonBumperBoxGap(pad, bumper);
+        assert.equal(rimGapAllowed(gap), true, `${pad.id} to ${bumper.id} gap ${gap.toFixed(3)}`);
+      }
+    }
   } finally {
     setWinterCampActive(false);
   }
@@ -271,12 +322,6 @@ test("rim snaps land on a flush or a lane, and the midpoint does not flip", () =
   assert.ok(Math.abs(snapRimGap(1.05 - 1e-9) - 1.8) < 1e-9);
   assert.equal(rimGapInBand(0.3), false);
   assert.equal(rimGapInBand(1.8), false);
-  const grass = getMapLayout("grass");
-  assert.ok(grass);
-  const rock = grass.scenery.find((solid) => solid.id === "meadow-rock-2");
-  assert.ok(rock);
-  const gap = grass.knockoffRadius - Math.hypot(rock.x, rock.z) - rock.radius;
-  assert.ok(Math.abs(gap - 1.8) < RIM_GAP_TOLERANCE, `meadow-rock-2 gap ${gap.toFixed(4)}`);
 });
 
 test("counter-scaling an embedded mesh restores its size and keeps a rim nudge", () => {

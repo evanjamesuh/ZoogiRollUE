@@ -6,9 +6,9 @@
  * copied from another game's layout, marks, or meshes.
  */
 
-import type { MapLayout, ZonePlacement } from "./arenaColliders";
+import { BUMPER_RADIUS, MARBLE_RADIUS, type MapLayout, type ZonePlacement } from "./arenaColliders";
 import { arenaScaleFor } from "./arenaScale";
-import { MARBLE_WIDTH, RIM_GAP_LANE, rimGapInBand, rimGapWidths, snapRimGap, type RimGapAdjustment } from "./obstaclePlacement";
+import { MARBLE_WIDTH, RIM_GAP_FLUSH, RIM_GAP_LANE, rimGapInBand, rimGapWidths, snapRimGap, type RimGapAdjustment } from "./obstaclePlacement";
 import { MAX_PLANAR_SPEED, RAIL_RESTITUTION } from "./simFeel";
 
 /** Authored court, in today's units. Readers multiply by the neon arenaScale. */
@@ -99,21 +99,37 @@ export interface NeonBumper {
 /**
  * Posts and taller pylons. All of them use the shared bumper circle,
  * so a marble bounces at BUMPER_RADIUS. They stay off the corner mouths.
+ * A slot against a pad that a marble almost fits is closed or opened
+ * after the pads have taken their lane.
  */
-/** Bumper posts in today's units, for markings drawn inside the arena group. */
+const NEON_BUMPER_UNITS: NeonBumper[] = [
+  { id: "neon-post-a", x: -5.1, z: 2.7 },
+  { id: "neon-post-b", x: 4.2, z: 3.4 },
+  { id: "neon-post-c", x: -3.4, z: -4.6 },
+  { id: "neon-pylon-west", x: -6.6, z: 5.6 },
+  { id: "neon-pylon-east", x: 5.8, z: -2.6 },
+];
+
+const NEON_SPAWN_UNITS = [
+  { id: "spawn-0", x: -6.4, z: -1.1 },
+  { id: "spawn-1", x: 6.6, z: 1.05 },
+  { id: "spawn-2", x: -1.15, z: 4.15 },
+  { id: "spawn-3", x: 1.2, z: -4.05 },
+];
+
+function neonSpawnPoints(): Array<{ id: string; x: number; z: number }> {
+  const scale = courtScale();
+  return NEON_SPAWN_UNITS.map((spawn) => ({ id: spawn.id, x: spawn.x * scale, z: spawn.z * scale }));
+}
+
+/** Bumper posts in the floor texture's units. The texture group is scaled with the court. */
 export function neonBumperMarks(): NeonBumper[] {
-  return [
-    { id: "neon-post-a", x: -5.1, z: 2.7 },
-    { id: "neon-post-b", x: 4.2, z: 3.4 },
-    { id: "neon-post-c", x: -3.4, z: -4.6 },
-    { id: "neon-pylon-west", x: -6.6, z: 5.6 },
-    { id: "neon-pylon-east", x: 5.8, z: -2.6 },
-  ];
+  const scale = courtScale();
+  return neonBumpers().map((bumper) => ({ ...bumper, x: bumper.x / scale, z: bumper.z / scale }));
 }
 
 export function neonBumpers(): NeonBumper[] {
-  const scale = courtScale();
-  return neonBumperMarks().map((bumper) => ({ ...bumper, x: bumper.x * scale, z: bumper.z * scale }));
+  return placedNeon().bumpers;
 }
 
 export interface NeonBox {
@@ -188,11 +204,11 @@ function nearestRailFace(box: NeonBox): { gap: number; dx: number; dz: number } 
 function clearNeonSpawns(box: NeonBox): number {
   const need = MARBLE_WIDTH / 2 + 0.35 + 0.02;
   let dx = 0;
-  const spawns = neonCourtLayout().zones.filter((zone) => zone.isSpawn);
+  const spawns = neonSpawnPoints();
   for (let pass = 0; pass < 4; pass++) {
     for (const spawn of spawns) {
-      const x = Math.cos(spawn.angle) * spawn.distance;
-      const z = Math.sin(spawn.angle) * spawn.distance;
+      const x = spawn.x;
+      const z = spawn.z;
       const nearestX = Math.min(box.maxX, Math.max(box.minX, x));
       const nearestZ = Math.min(box.maxZ, Math.max(box.minZ, z));
       const gz = z - nearestZ;
@@ -263,13 +279,135 @@ function placeNeonObstacles(): { boxes: NeonBox[]; adjustments: RimGapAdjustment
   return { boxes, adjustments };
 }
 
+/** Gap between two boxes. Overlap comes back negative. */
+export function neonAabbGap(a: NeonBox, b: NeonBox): number {
+  const dx = Math.max(a.minX - b.maxX, b.minX - a.maxX, 0);
+  const dz = Math.max(a.minZ - b.maxZ, b.minZ - a.maxZ, 0);
+  if (dx === 0 && dz === 0) {
+    const overlapX = Math.min(a.maxX, b.maxX) - Math.max(a.minX, b.minX);
+    const overlapZ = Math.min(a.maxZ, b.maxZ) - Math.max(a.minZ, b.minZ);
+    return -Math.min(overlapX, overlapZ);
+  }
+  return Math.hypot(dx, dz);
+}
+
+/** Gap from a bumper's circle to the nearest point on a box. */
+export function neonBumperBoxGap(box: NeonBox, bumper: NeonBumper, radius = BUMPER_RADIUS): number {
+  const nearestX = Math.min(box.maxX, Math.max(box.minX, bumper.x));
+  const nearestZ = Math.min(box.maxZ, Math.max(box.minZ, bumper.z));
+  return Math.hypot(bumper.x - nearestX, bumper.z - nearestZ) - radius;
+}
+
+function bumperBeside(box: NeonBox, x: number, z: number, radius: number, targetGap: number): { x: number; z: number } {
+  const nearestX = Math.min(box.maxX, Math.max(box.minX, x));
+  const nearestZ = Math.min(box.maxZ, Math.max(box.minZ, z));
+  let dx = x - nearestX;
+  let dz = z - nearestZ;
+  let dist = Math.hypot(dx, dz);
+  if (dist < 1e-6) {
+    const cx = (box.minX + box.maxX) / 2;
+    const cz = (box.minZ + box.maxZ) / 2;
+    dx = x - cx;
+    dz = z - cz;
+    dist = Math.hypot(dx, dz);
+    if (dist < 1e-6) {
+      dx = 1;
+      dz = 0;
+      dist = 1;
+    }
+  }
+  const targetDist = targetGap + radius;
+  return {
+    x: nearestX + (dx / dist) * targetDist,
+    z: nearestZ + (dz / dist) * targetDist,
+  };
+}
+
+function bumperSitsClear(x: number, z: number, boxes: NeonBox[]): boolean {
+  if (Math.abs(x) + BUMPER_RADIUS >= neonPlayHalfX() - 1) return false;
+  if (Math.abs(z) + BUMPER_RADIUS >= neonPlayHalfZ() - 1) return false;
+  const spawnNeed = BUMPER_RADIUS + MARBLE_RADIUS + 0.3;
+  for (const spawn of neonSpawnPoints()) {
+    if (Math.hypot(x - spawn.x, z - spawn.z) <= spawnNeed) return false;
+  }
+  for (const box of boxes) {
+    if (neonBumperBoxGap(box, { id: "", x, z }) < 0) return false;
+  }
+  return true;
+}
+
+/**
+ * A pad that leaves a marble almost, but not quite, able to pass a post
+ * is closed to 0.3 or opened to 1.8. Pads stay where the rail lane put
+ * them; the post moves. When one post is boxed in by two pads, the side
+ * that clears every slot wins.
+ */
+function placeNeonBumpers(boxes: NeonBox[]): { bumpers: NeonBumper[]; adjustments: RimGapAdjustment[] } {
+  const scale = courtScale();
+  const bumpers = NEON_BUMPER_UNITS.map((bumper) => ({ ...bumper, x: bumper.x * scale, z: bumper.z * scale }));
+  const adjustments: RimGapAdjustment[] = [];
+  const bandCount = (x: number, z: number) =>
+    boxes.reduce((count, box) => count + (rimGapInBand(neonBumperBoxGap(box, { id: "", x, z })) ? 1 : 0), 0);
+
+  for (let pass = 0; pass < 8; pass++) {
+    let moved = false;
+    for (const bumper of bumpers) {
+      const stuck = bandCount(bumper.x, bumper.z);
+      if (stuck === 0) continue;
+      let best: { x: number; z: number; boxId: string; before: number; after: number; shift: number } | null = null;
+      for (const box of boxes) {
+        const before = neonBumperBoxGap(box, bumper);
+        if (!rimGapInBand(before)) continue;
+        const preferred = snapRimGap(before);
+        const alternate = Math.abs(preferred - RIM_GAP_FLUSH * MARBLE_WIDTH) < 1e-6 ? RIM_GAP_LANE * MARBLE_WIDTH : RIM_GAP_FLUSH * MARBLE_WIDTH;
+        for (const target of [preferred, alternate]) {
+          const next = bumperBeside(box, bumper.x, bumper.z, BUMPER_RADIUS, target);
+          if (!bumperSitsClear(next.x, next.z, boxes)) continue;
+          const remaining = bandCount(next.x, next.z);
+          if (remaining >= stuck) continue;
+          const shift = Math.hypot(next.x - bumper.x, next.z - bumper.z);
+          if (!best || remaining < bandCount(best.x, best.z) || (remaining === bandCount(best.x, best.z) && shift < best.shift)) {
+            best = { x: next.x, z: next.z, boxId: box.id, before, after: target, shift };
+          }
+        }
+      }
+      if (!best) continue;
+      adjustments.push({
+        meshKey: bumper.id,
+        ids: [bumper.id],
+        kind: "mouth",
+        direction: best.after > best.before ? "opened" : "closed",
+        dx: best.x - bumper.x,
+        dz: best.z - bumper.z,
+        distance: best.shift,
+        clearances: [{ id: `${bumper.id}-${best.boxId}`, before: rimGapWidths(best.before), after: rimGapWidths(best.after) }],
+      });
+      bumper.x = best.x;
+      bumper.z = best.z;
+      moved = true;
+    }
+    if (!moved) break;
+  }
+  return { bumpers, adjustments };
+}
+
+function placedNeon(): { boxes: NeonBox[]; bumpers: NeonBumper[]; adjustments: RimGapAdjustment[] } {
+  const obstacles = placeNeonObstacles();
+  const bumpers = placeNeonBumpers(obstacles.boxes);
+  return {
+    boxes: obstacles.boxes,
+    bumpers: bumpers.bumpers,
+    adjustments: [...obstacles.adjustments, ...bumpers.adjustments],
+  };
+}
+
 /** Pad centers move out with the court. The boxes themselves stay the same size. */
 export function neonObstacles(): NeonBox[] {
-  return placeNeonObstacles().boxes;
+  return placedNeon().boxes;
 }
 
 export function neonRimGapAdjustments(): RimGapAdjustment[] {
-  const adjustments = placeNeonObstacles().adjustments;
+  const adjustments = placedNeon().adjustments;
   const authoredMouth = NEON_CORNER_GAP * courtScale();
   const mouth = neonMouthWidth();
   if (Math.abs(mouth - authoredMouth) > 1e-6) {
@@ -308,10 +446,7 @@ export function neonCourtLayout(): MapLayout {
     scenery: [],
     bumpers: neonBumpers(),
     zones: [
-      zoneAt("spawn-0", -6.4 * scale, -1.1 * scale, true),
-      zoneAt("spawn-1", 6.6 * scale, 1.05 * scale, true),
-      zoneAt("spawn-2", -1.15 * scale, 4.15 * scale, true),
-      zoneAt("spawn-3", 1.2 * scale, -4.05 * scale, true),
+      ...neonSpawnPoints().map((spawn) => zoneAt(spawn.id, spawn.x, spawn.z, true)),
       zoneAt("score-0", 7.6 * scale, 4.55 * scale, false),
       zoneAt("score-1", -7.7 * scale, 4.4 * scale, false),
       zoneAt("score-2", 7.8 * scale, -4.35 * scale, false),

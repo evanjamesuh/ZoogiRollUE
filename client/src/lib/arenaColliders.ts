@@ -58,10 +58,12 @@ export const WINTER_STAGE = {
  * on the 15.6 knockout. The fall check uses the same 18-gon, so a marble
  * leaves at the lip on the flats as well as the corners.
  *
- * polygon30 (Arena Wall Barrier, the curb) and polygon67 (Arena Wall) are
- * pushed out until their inner faces clear the farthest fall line by one
- * marble radius. The numbers below are those inner faces after the play
- * transform and before that push, at arena scale 1.
+ * polygon30 (Arena Wall Barrier, the curb), polygon67 (Arena Wall), and
+ * polygon72 (Crowd Stands, including its reflection) are pushed out until
+ * their inner faces clear the farthest fall line by one marble radius.
+ * The numbers below are those inner faces after the play transform and
+ * before that push, at arena scale 1. The stands' vertices begin near
+ * 15.04; the inner edges sit further in, about half a marble inside a flat.
  */
 export const COSMOS_FLOOR_MESH = {
   centerX: 0.25045,
@@ -75,6 +77,8 @@ export const COSMOS_LIP_SIDES = 18;
 export const COSMOS_CURB_INNER = 14.544;
 /** Inner-face radius of the arena wall before it is pushed out. */
 export const COSMOS_WALL_INNER = 14.834;
+/** Inner-face radius of the crowd stands before they are pushed out. */
+export const COSMOS_STANDS_INNER = 14.885;
 
 export const COSMOS_STAGE = {
   floorRadius: 15.6,
@@ -126,9 +130,10 @@ export function cosmosLipRadius(angle: number): number {
   return cosmosDrawnLip().radiusAt(angle);
 }
 
-/** "curb" is Arena Wall Barrier. "wall" is Arena Wall, not the barrier. */
-export function cosmosRingRole(name: string): "curb" | "wall" | null {
+/** "curb" is Arena Wall Barrier. "wall" is Arena Wall, not the barrier. "stands" is Crowd Stands. */
+export function cosmosRingRole(name: string): "curb" | "wall" | "stands" | null {
   const normalized = name.toLowerCase().replace(/[_]+/g, " ");
+  if (normalized.includes("crowd stands")) return "stands";
   if (normalized.includes("arena wall barrier")) return "curb";
   if (normalized.includes("arena wall")) return "wall";
   return null;

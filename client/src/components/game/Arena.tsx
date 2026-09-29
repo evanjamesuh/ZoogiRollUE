@@ -31,7 +31,7 @@ import { ArabianArena, FrozenArena, MeadowArena } from "./RoundMapArenas";
 
 export { ARENA_RADIUS };
 
-/** Scale the curb and wall out from the floor centre so a marble clears them before it falls. */
+/** Scale the curb, wall, and crowd stands out from the floor centre so a marble clears them before it falls. */
 function pushCosmosRings(scene: THREE.Object3D) {
   const placed = cosmosPlayTransform();
   scene.updateWorldMatrix(true, true);
