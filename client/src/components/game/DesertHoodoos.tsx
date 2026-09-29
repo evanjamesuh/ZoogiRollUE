@@ -5,6 +5,7 @@ import { useGLTF } from "@react-three/drei";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { useAudio } from "@/lib/stores/useAudio";
 import { getHoodooDecor, type HoodooDecor } from "@/lib/arenaColliders";
+import { fittedHoodooGeometry, HOODOO_LOCAL_COLLIDER_RADIUS } from "./volcanicHoodooFit";
 
 type HoodooData = HoodooDecor;
 
@@ -23,7 +24,14 @@ function StylizedHoodoo({ hoodoo }: { hoodoo: HoodooData }) {
   const lastHitTimeRef = useRef(0);
   
   const model = useGLTF("/models/stylized_desert_hoodoo.glb");
-  const clonedScene = useMemo(() => model.scene.clone(), [model.scene]);
+  const clonedScene = useMemo(() => {
+    const root = model.scene.clone(true);
+    root.traverse((obj) => {
+      if (!(obj instanceof THREE.Mesh)) return;
+      obj.geometry = fittedHoodooGeometry(obj.geometry);
+    });
+    return root;
+  }, [model.scene]);
   
   const playerEntity = useZoogiGame(state => state.playerEntity);
   const enemies = useZoogiGame(state => state.enemies);
@@ -80,15 +88,14 @@ function StylizedHoodoo({ hoodoo }: { hoodoo: HoodooData }) {
 }
 
 function FallbackHoodoo({ hoodoo }: { hoodoo: HoodooData }) {
+  // Same local space as the fitted mesh: radius 0.25, base on the ground after the lift.
+  const height = 0.75;
+  const base = -0.367;
   return (
-    <group position={hoodoo.position} scale={hoodoo.scale}>
-      <mesh position={[0, 0.8, 0]} castShadow>
-        <cylinderGeometry args={[0.3, 0.5, 1.6, 8]} />
-        <meshStandardMaterial color="#CD853F" roughness={0.9} />
-      </mesh>
-      <mesh position={[0, 2.0, 0]} castShadow>
-        <cylinderGeometry args={[0.6, 0.3, 0.8, 8]} />
-        <meshStandardMaterial color="#D2691E" roughness={0.9} />
+    <group position={hoodoo.position} scale={hoodoo.scale} rotation={[0, hoodoo.rotation, 0]}>
+      <mesh position={[0, base + height / 2, 0]} castShadow>
+        <cylinderGeometry args={[HOODOO_LOCAL_COLLIDER_RADIUS, HOODOO_LOCAL_COLLIDER_RADIUS, height, 12]} />
+        <meshStandardMaterial color="#3a332c" roughness={0.94} />
       </mesh>
     </group>
   );
