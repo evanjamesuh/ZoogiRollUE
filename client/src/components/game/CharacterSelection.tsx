@@ -12,6 +12,8 @@ const PORTRAIT_IMAGES: Record<string, string> = {
   pinpoint: "/portraits/pinpoint.png",
   bolt: "/portraits/bolt.png",
   wraps: "/portraits/wraps.png",
+  lars: "/portraits/lars.png",
+  nightshade: "/portraits/nightshade.png",
 };
 
 function StatBar({ label, value, color }: { label: string; value: number; color: string }) {

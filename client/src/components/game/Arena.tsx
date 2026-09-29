@@ -24,6 +24,7 @@ import { EditorWallBlocks } from "./EditorWallBlocks";
 import { EditorScoringZones } from "./EditorScoringZones";
 import { ScoringZones } from "./ScoringZones";
 import { PinballBumpers } from "./PinballBumpers";
+import { NeonCourtArena } from "./NeonCourtArena";
 import { ARENA_RADIUS } from "@/lib/arenaConstants";
 import { COSMOS_STAGE, getMapLayout } from "@/lib/arenaColliders";
 import { PharaohTombArena } from "./PharaohTombArena";
@@ -424,6 +425,7 @@ export function Arena({ theme = "grass" }: ArenaProps) {
     space: { platform: "#7C4DFF", edge: "#311B92", glow: "#B388FF" },
     saturn: { platform: "#3E2723", edge: "#FFA726", glow: "#FFB74D" },
     tomb: { platform: "#E0B88A", edge: "#A87848", glow: "#FFD2A8" },
+    neon: { platform: "#14161f", edge: "#ff3ec8", glow: "#22e7ff" },
   };
   
   const colors = themeColors[currentTheme] || themeColors.grass;
@@ -468,6 +470,7 @@ export function Arena({ theme = "grass" }: ArenaProps) {
       {currentTheme === "saturn" && <ArabianArena />}
       {currentTheme === "saturn" && <ArabianNightDressing />}
       {currentTheme === "tomb" && <PharaohTombArena />}
+      {currentTheme === "neon" && <NeonCourtArena />}
       
       {customArenaId && <CustomDecorations />}
       
@@ -478,25 +481,27 @@ export function Arena({ theme = "grass" }: ArenaProps) {
       
       {/* Walls removed - DestructibleRingWall and OuterRingWall disabled */}
       
-      <group 
-        position={[
-          elementTransforms.zonesOffset.x,
-          elementTransforms.zonesOffset.y,
-          elementTransforms.zonesOffset.z
-        ]}
-        rotation={[
-          elementTransforms.zonesRotation?.x ?? 0,
-          elementTransforms.zonesRotation?.y ?? 0,
-          elementTransforms.zonesRotation?.z ?? 0
-        ]}
-      >
-        <ControlPointZones
-          enabled={true}
-          zoneRadius={ARENA_RADIUS + 6}
-          captureSpeed={0.5}
-          scorePerSecond={1}
-        />
-      </group>
+      {currentTheme !== "neon" && (
+        <group 
+          position={[
+            elementTransforms.zonesOffset.x,
+            elementTransforms.zonesOffset.y,
+            elementTransforms.zonesOffset.z
+          ]}
+          rotation={[
+            elementTransforms.zonesRotation?.x ?? 0,
+            elementTransforms.zonesRotation?.y ?? 0,
+            elementTransforms.zonesRotation?.z ?? 0
+          ]}
+        >
+          <ControlPointZones
+            enabled={true}
+            zoneRadius={ARENA_RADIUS + 6}
+            captureSpeed={0.5}
+            scorePerSecond={1}
+          />
+        </group>
+      )}
       
       {/* InnerBarrierWalls removed */}
       
@@ -508,7 +513,7 @@ export function Arena({ theme = "grass" }: ArenaProps) {
         <ScoringZones />
       )}
       
-      {gameMode === "map_editor" && (
+      {currentTheme !== "neon" && gameMode === "map_editor" && (
         <KnockoffBoundaryRing 
           radius={wallSettings.knockoffBoundaryRadius ?? 12} 
           width={wallSettings.knockoffBoundaryWidth ?? 0.3}
@@ -518,7 +523,7 @@ export function Arena({ theme = "grass" }: ArenaProps) {
         />
       )}
       
-      {(gameMode === "classic" || gameMode === "ringer_royale" || gameMode === "local_multiplayer" || gameMode === "practice") && (
+      {currentTheme !== "neon" && (gameMode === "classic" || gameMode === "ringer_royale" || gameMode === "local_multiplayer" || gameMode === "practice") && (
         <KnockoffBoundaryRing 
           radius={wallSettings.knockoffBoundaryRadius ?? 21} 
           width={wallSettings.knockoffBoundaryWidth ?? 0.5}

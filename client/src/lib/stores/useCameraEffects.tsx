@@ -263,6 +263,7 @@ interface CameraEffectsState {
   clearByPriority: (minPriority: number) => void;
   clearAllEffects: () => void;
   update: (delta: number) => void;
+  triggerFreeze: (seconds: number) => void;
 }
 
 export const useCameraEffects = create<CameraEffectsState>((set, get) => ({
@@ -448,18 +449,29 @@ export const useCameraEffects = create<CameraEffectsState>((set, get) => ({
     set({ activeEffects: [], freezeTimeLeft: 0, isFrozen: false });
   },
   
+  triggerFreeze: (seconds: number) => {
+    const capped = Math.min(0.2, Math.max(0, seconds));
+    if (capped <= 0) return;
+    set((state) => ({
+      freezeTimeLeft: Math.max(state.freezeTimeLeft, capped),
+      isFrozen: true,
+    }));
+  },
+
   update: (delta: number) => {
     const { activeEffects, baseZoom, baseTilt, freezeTimeLeft } = get();
     const now = Date.now();
-    
-    // Handle freeze frame (delta is in seconds, freezeTimeLeft is in seconds)
-    if (freezeTimeLeft > 0) {
-      const newFreezeTime = Math.max(0, freezeTimeLeft - delta);
-      set({ 
-        freezeTimeLeft: newFreezeTime,
-        isFrozen: newFreezeTime > 0
-      });
-      if (newFreezeTime > 0) return; // Skip update while frozen
+
+    // Count the freeze down here, then keep going once it hits zero.
+    // The later set() must not write the pre-tick value back, or a hit-stop
+    // never ends and the sim stays paused with speed still on the marble.
+    let remainingFreeze = freezeTimeLeft;
+    if (remainingFreeze > 0) {
+      remainingFreeze = Math.max(0, remainingFreeze - delta);
+      if (remainingFreeze > 0) {
+        set({ freezeTimeLeft: remainingFreeze, isFrozen: true });
+        return;
+      }
     }
     
     let zoom = baseZoom;
@@ -524,8 +536,8 @@ export const useCameraEffects = create<CameraEffectsState>((set, get) => ({
       computedOffset: offset,
       computedLockTarget: lockTarget,
       computedTargetPosition: targetWorldPosition,
-      freezeTimeLeft: newFreezeTime > 0 ? newFreezeTime : freezeTimeLeft,
-      isFrozen: newFreezeTime > 0 || freezeTimeLeft > 0
+      freezeTimeLeft: newFreezeTime,
+      isFrozen: newFreezeTime > 0
     });
   }
 }));

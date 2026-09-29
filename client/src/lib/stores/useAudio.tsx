@@ -2,8 +2,11 @@ import { create } from "zustand";
 import {
   bindPowerAudioMute,
   installPowerAudioGestureResume,
+  playBindWrap as playBindWrapSound,
+  playShadowPulse as playShadowPulseSound,
   playExplosion as playExplosionSound,
   playPowerUnlock as playPowerUnlockSound,
+  playRicochetPing as playRicochetPingSound,
   playStunEnd as playStunEndSound,
   playStunZap as playStunZapSound,
   playWolfDash as playWolfDashSound,
@@ -53,6 +56,9 @@ interface AudioState {
   playExplosion: () => void;
   playStunZap: () => void;
   playStunEnd: () => void;
+  playRicochetPing: (kind?: "arm" | "hit") => void;
+  playBindWrap: () => void;
+  playShadowPulse: () => void;
   
   setIntensity: (level: IntensityLevel) => void;
   updateIntensityFromGameState: (playerSpeed: number, recentCollisions: number, nearbyEnemies: number) => void;
@@ -491,6 +497,15 @@ export const useAudio = create<AudioState>((set, get) => ({
   },
   playStunEnd: () => {
     playStunEndSound();
+  },
+  playRicochetPing: (kind: "arm" | "hit" = "arm") => {
+    playRicochetPingSound(kind);
+  },
+  playBindWrap: () => {
+    playBindWrapSound();
+  },
+  playShadowPulse: () => {
+    playShadowPulseSound();
   }
 }));
 

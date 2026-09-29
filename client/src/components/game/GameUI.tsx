@@ -12,6 +12,7 @@ import { ZoneEditorPanel } from "./ZoneEditorPanel";
 import { CollisionTuningPanel } from "./CollisionTuningPanel";
 import { AIControlsPanel } from "./AIControlsPanel";
 import { exportAllOffsets } from "@/lib/treeOffsets";
+import { NeonScoreboard } from "./NeonScoreboard";
 import { useAudio } from "@/lib/stores/useAudio";
 import { useProgression } from "@/lib/stores/useProgression";
 import { useEffect, useState, useRef, useCallback, useMemo, PointerEvent as ReactPointerEvent } from "react";
@@ -95,6 +96,7 @@ const getAbilityTriggerText = (zoogiId: string): string => {
     case "pinpoint": return "Tap Lock-On, then tap an orb or opponent";
     case "bolt": return "Tap Shock to phase through enemies and stun them";
     case "wraps": return "Tap Bind to slow enemies you touch";
+    case "nightshade": return "Tap Shadow to freeze nearby opponents";
     default: return "";
   }
 };
@@ -124,11 +126,13 @@ function useDevTools() {
 function CharacterAbilityButton({ zoogiId, entity }: {
   zoogiId: string;
   entity: {
+    id: string;
     wolfgangAbilityUnlocked: boolean;
     hotstreakAbilityUnlocked: boolean;
     boltAbilityUnlocked: boolean;
     larsAbilityUnlocked: boolean;
     wrapsAbilityUnlocked: boolean;
+    nightshadeAbilityUnlocked: boolean;
   };
 }) {
   const activateWolfgangAbility = useZoogiGame((state) => state.activateWolfgangAbility);
@@ -136,15 +140,17 @@ function CharacterAbilityButton({ zoogiId, entity }: {
   const activateLarsAbility = useZoogiGame((state) => state.activateLarsAbility);
   const activateBoltAbility = useZoogiGame((state) => state.activateBoltAbility);
   const activateWrapsAbility = useZoogiGame((state) => state.activateWrapsAbility);
+  const activateNightshadeAbility = useZoogiGame((state) => state.activateNightshadeAbility);
   const toggleLockOn = useZoogiGame((state) => state.toggleLockOn);
   const lockOnEnabled = useZoogiGame((state) => state.lockOnEnabled);
 
   const spec: Record<string, { label: string; unlocked: boolean; onClick: () => void; active?: boolean }> = {
-    wolfgang: { label: "Pack", unlocked: entity.wolfgangAbilityUnlocked, onClick: activateWolfgangAbility },
-    hotstreak: { label: "Explosion", unlocked: entity.hotstreakAbilityUnlocked, onClick: activateHotstreakAbility },
-    lars: { label: "Ricochet", unlocked: entity.larsAbilityUnlocked, onClick: activateLarsAbility },
-    bolt: { label: "Shock", unlocked: entity.boltAbilityUnlocked, onClick: activateBoltAbility },
-    wraps: { label: "Bind", unlocked: entity.wrapsAbilityUnlocked, onClick: activateWrapsAbility },
+    wolfgang: { label: "Pack", unlocked: entity.wolfgangAbilityUnlocked, onClick: () => activateWolfgangAbility(entity.id) },
+    hotstreak: { label: "Explosion", unlocked: entity.hotstreakAbilityUnlocked, onClick: () => activateHotstreakAbility(entity.id) },
+    lars: { label: "Ricochet", unlocked: entity.larsAbilityUnlocked, onClick: () => activateLarsAbility(entity.id) },
+    bolt: { label: "Shock", unlocked: entity.boltAbilityUnlocked, onClick: () => activateBoltAbility(entity.id) },
+    wraps: { label: "Bind", unlocked: entity.wrapsAbilityUnlocked, onClick: () => activateWrapsAbility(entity.id) },
+    nightshade: { label: "Shadow", unlocked: entity.nightshadeAbilityUnlocked, onClick: () => activateNightshadeAbility(entity.id) },
     pinpoint: { label: "Lock-On", unlocked: true, onClick: toggleLockOn, active: lockOnEnabled },
   };
   const ability = spec[zoogiId];
@@ -361,6 +367,7 @@ function LaunchPadHeightControl() {
 
 export function GameUI() {
   const { playerEntity, enemies, score, orbs, currentRound, maxRounds, playerRoundWins, isPlayerTurn, birdsEyeView, toggleBirdsEyeView, firstPersonView, toggleFirstPersonView, overShoulderView, toggleOverShoulderView, launchPadView, toggleLaunchPadView, setPhase, gameTimer, openTutorial, gameMode, localPlayers, currentLocalPlayerIndex, activateWolfgangAbility, canUseWolfgangAbility, activateHotstreakAbility, canUseHotstreakAbility, activateBoltAbility, canUseBoltAbility, lockOnEnabled, toggleLockOn, sessionId, arcType, setArcType, straightMode, toggleStraightMode, tangentOffset, setTangentOffset, lockOnTargetId, triggerArcLaunch, orbMultiplier, incrementOrbMultiplier, decrementOrbMultiplier, restrictionPhaseActive, restrictionPhaseStartTime } = useZoogiGame();
+  const selectedMap = useZoogiGame((state) => state.selectedMap);
   const showCollisionTuningPanel = useZoogiGame((state) => state.showCollisionTuningPanel);
   const setShowCollisionTuningPanel = useZoogiGame((state) => state.setShowCollisionTuningPanel);
   const showAiControlsPanel = useZoogiGame((state) => state.showAiControlsPanel);
@@ -781,6 +788,15 @@ export function GameUI() {
 
   return (
     <div className="fixed inset-0 pointer-events-none z-10">
+      {selectedMap === "neon" && (
+        <NeonScoreboard
+          playerScore={score}
+          foeScore={enemies.reduce((best, enemy) => Math.max(best, enemy.score), 0)}
+          round={currentRound}
+          maxRounds={maxRounds}
+          timer={timerDisplay}
+        />
+      )}
       
       {abilityNotice && (
         <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
@@ -979,7 +995,7 @@ export function GameUI() {
                   )}
                 </div>
                 
-                <div className="mt-3 pt-2 border-t border-white/20 flex items-center justify-between gap-3">
+                {selectedMap !== "neon" && <div className="mt-3 pt-2 border-t border-white/20 flex items-center justify-between gap-3">
                   <div className="text-center">
                     <p className="text-white/50 text-[10px] uppercase">Round</p>
                     <p className="text-lg font-bold text-purple-400">{currentRound}/{maxRounds}</p>
@@ -1008,7 +1024,7 @@ export function GameUI() {
                       </div>
                     </div>
                   </div>
-                </div>
+                </div>}
                 
                 {wallOwnershipMode && (gameMode === "ringer_royale" || gameMode === "local_multiplayer") && (
                   <div className="mt-3 pt-2 border-t border-cyan-400/30">
@@ -1108,15 +1124,17 @@ export function GameUI() {
                           background: `radial-gradient(circle at 30% 30%, ${enemy.zoogi.secondaryColor}, ${enemy.zoogi.color})`,
                         }}
                       />
-                      <span className="text-xs text-yellow-400 font-bold mt-1">{enemy.score}</span>
+                      {selectedMap !== "neon" && <span className="text-xs text-yellow-400 font-bold mt-1">{enemy.score}</span>}
                     </div>
                   ))}
                 </div>
               </div>
+              {selectedMap !== "neon" && (
               <div className="border-l border-white/20 pl-4">
                 <p className="text-white/60 text-xs uppercase">Score</p>
                 <p className="text-2xl font-bold text-yellow-400">{score}</p>
               </div>
+              )}
             </div>
           )}
         </div>
@@ -1153,6 +1171,27 @@ export function GameUI() {
         </button>
         
         <CharacterAbilityButton zoogiId={displayEntity.zoogi.id} entity={displayEntity} />
+        {devTools && (
+          <div className="flex flex-col gap-1">
+            <button
+              onClick={() => useZoogiGame.getState().debugUnlockPower(displayEntity.id)}
+              className="px-2 py-1 rounded-lg bg-amber-700/90 text-white text-[10px] font-bold"
+              title="Debug: unlock this marble's power"
+            >
+              Unlock mine
+            </button>
+            <button
+              onClick={() => {
+                const foe = useZoogiGame.getState().enemies.find((enemy) => !enemy.isKnockedOut);
+                if (foe) useZoogiGame.getState().debugUnlockPower(foe.id);
+              }}
+              className="px-2 py-1 rounded-lg bg-orange-700/90 text-white text-[10px] font-bold"
+              title="Debug: unlock the next opponent's power"
+            >
+              Unlock foe
+            </button>
+          </div>
+        )}
         
         {/* Orb Multiplier Control */}
         {gameMode === "practice" && (

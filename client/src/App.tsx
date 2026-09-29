@@ -75,7 +75,7 @@ function RingerTrialsLoading() {
   );
 }
 
-const PLAY_MAPS: MapTheme[] = ["grass", "ice", "lava", "space", "saturn", "tomb"];
+const PLAY_MAPS: MapTheme[] = ["grass", "ice", "lava", "space", "saturn", "tomb", "neon"];
 
 /** Opens a match directly: /?play=grass&debug=colliders&view=top */
 function usePlayShortcut() {
@@ -101,6 +101,19 @@ function App() {
   const powerPreview = usePowerPreview();
   usePlayShortcut();
   const phase = useZoogiGame((state) => state.phase);
+
+  useEffect(() => {
+    const debug = new URLSearchParams(window.location.search).get("debug");
+    if (debug === null || debug === "colliders") return;
+    const debugWindow = window as unknown as {
+      __zoogi?: typeof useZoogiGame;
+      __roster?: typeof ZOOGI_ROSTER;
+      __audio?: typeof useAudio;
+    };
+    debugWindow.__zoogi = useZoogiGame;
+    debugWindow.__roster = ZOOGI_ROSTER;
+    debugWindow.__audio = useAudio;
+  }, []);
   const { setHitSound, setSuccessSound, setMenuMusic, menuMusic, isMuted, stopMenuMusic, initAudioContext } = useAudio();
 
   useEffect(() => {

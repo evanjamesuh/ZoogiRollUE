@@ -1,3 +1,11 @@
+import {
+  ARENA_FOV_DEG,
+  ARENA_PITCH,
+  actionBounds,
+  cameraOffset,
+  clampDistance,
+  fitDistance,
+} from "./cameraRig";
 import { ROUND_KNOCKOFF_RADIUS } from "./roundRim";
 
 export interface Aabb {
@@ -43,11 +51,13 @@ export type RingPieceAction = "hide" | "push" | "clip" | "keep";
 /**
  * Hide the painted playfield slab and the arabian sky shells.
  * Building faces are also named FrontSide/BackSide, so the name alone does
- * not hide them. A flat slab centred on the ring is the old floor.
+ * not hide them. FrontSide_5 is the sky shell hidden on the cached GLB;
+ * the round arena draws a clone, so that mesh has to be named here too.
+ * A flat slab centred on the ring is the old floor.
  */
 export function shouldHideRingPiece(name: string, box: Aabb): boolean {
   if (/sky|skydome|backdrop/i.test(name)) return true;
-  if (/^(FrontSide_18|FrontSide_20|BackSide_2)$/.test(name)) return true;
+  if (/^(FrontSide_5|FrontSide_18|FrontSide_20|BackSide_2)$/.test(name)) return true;
   const size = boxSize(box);
   const xz = Math.max(size.x, size.z);
   if (size.y > 120 && xz > 400) return true;
@@ -120,12 +130,11 @@ export function translationToClear(box: Aabb, limit: number, maxCenter = 32): { 
   return { dx: dirX * hi, dz: dirZ * hi };
 }
 
-/** Gameplay camera: 16 out and 18 up from a marble, about 48 degrees. */
-export const GAMEPLAY_CAM_DISTANCE = 16;
-export const GAMEPLAY_CAM_HEIGHT = 18;
-const GAMEPLAY_SPAWN_DISTANCE = 8;
-const GAMEPLAY_V_HALF = (25 * Math.PI) / 180;
-const GAMEPLAY_H_HALF = Math.atan(Math.tan(GAMEPLAY_V_HALF) * (16 / 9));
+/** Match camera from cameraRig: 53° down, FOV 44, fixed heading on +Z. */
+const LOOK_Y = 0.35;
+const GAMEPLAY_ASPECT = 16 / 9;
+const GAMEPLAY_V_HALF = ((ARENA_FOV_DEG * Math.PI) / 180) / 2;
+const GAMEPLAY_H_HALF = Math.atan(Math.tan(GAMEPLAY_V_HALF) * GAMEPLAY_ASPECT);
 
 export interface SightCamera {
   x: number;
@@ -135,32 +144,57 @@ export interface SightCamera {
   pz: number;
 }
 
-/** Every spawn, and the orbit angles the follow camera can sit at. */
+function rigSightCamera(points: { x: number; z: number }[]): SightCamera {
+  const bounds = actionBounds(points, 0);
+  const lookX = ((bounds.minX + bounds.maxX) / 2) * 0.7;
+  const lookZ = ((bounds.minZ + bounds.maxZ) / 2) * 0.7;
+  const distance = clampDistance(
+    fitDistance(bounds, ARENA_PITCH, ARENA_FOV_DEG, GAMEPLAY_ASPECT, 2.6),
+    13.5,
+    34,
+  );
+  const offset = cameraOffset(distance, ARENA_PITCH);
+  return {
+    x: lookX + offset.x,
+    y: offset.y,
+    z: lookZ + offset.z,
+    px: lookX,
+    pz: lookZ,
+  };
+}
+
+function ringPoints(radius: number, count: number): { x: number; z: number }[] {
+  return Array.from({ length: count }, (_, i) => {
+    const angle = (i / count) * Math.PI * 2;
+    return { x: Math.cos(angle) * radius, z: Math.sin(angle) * radius };
+  });
+}
+
+/** Layouts the fixed-heading match camera actually frames. */
 export function gameplayCameras(): SightCamera[] {
-  const cameras: SightCamera[] = [];
-  for (let spawnIndex = 0; spawnIndex < 4; spawnIndex += 1) {
-    const spawn = (spawnIndex * Math.PI) / 2;
-    const px = Math.cos(spawn) * GAMEPLAY_SPAWN_DISTANCE;
-    const pz = Math.sin(spawn) * GAMEPLAY_SPAWN_DISTANCE;
-    for (let step = 0; step < 12; step += 1) {
-      const orbit = (step / 12) * Math.PI * 2;
-      cameras.push({
-        x: px + Math.sin(orbit) * GAMEPLAY_CAM_DISTANCE,
-        y: GAMEPLAY_CAM_HEIGHT,
-        z: pz + Math.cos(orbit) * GAMEPLAY_CAM_DISTANCE,
-        px,
-        pz,
-      });
-    }
-  }
-  return cameras;
+  return [
+    rigSightCamera([{ x: 0, z: 0 }]),
+    rigSightCamera(ringPoints(8, 4)),
+    rigSightCamera(ringPoints(12, 4)),
+    rigSightCamera(ringPoints(14, 2)),
+    rigSightCamera([
+      { x: 0, z: 12 },
+      { x: 0, z: -12 },
+      { x: 12, z: 0 },
+      { x: -12, z: 0 },
+    ]),
+    rigSightCamera([
+      { x: 0, z: 14 },
+      { x: 0, z: -4 },
+    ]),
+  ];
 }
 
 const SIGHT_CAMERAS = gameplayCameras();
 
 function grassPointInFrame(cam: SightCamera, gx: number, gz: number): boolean {
   const lx = cam.px - cam.x;
-  const ly = -cam.y;
+  const ly = LOOK_Y - cam.y;
   const lz = cam.pz - cam.z;
   const llen = Math.hypot(lx, ly, lz);
   const vx = gx - cam.x;

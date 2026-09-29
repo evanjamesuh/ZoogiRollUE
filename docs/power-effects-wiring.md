@@ -1,6 +1,8 @@
 # Wiring power sounds and effects
 
-These pieces are standalone. Nothing in the match calls them yet. `isMuted` in `useAudio` still starts `true`, so a power stays silent until the player unmutes. Do not add audio files. Do not add point lights that mount when a power starts; the new effects use emissive and additive materials so a mid-match shader compile does not hitch.
+The match now calls these pieces. `isMuted` in `useAudio` still starts `true`, so a power stays silent until the player unmutes. Do not add audio files. Do not add point lights that mount when a power starts; the new effects use emissive and additive materials so a mid-match shader compile does not hitch.
+
+Bolt's stun lasts until the stunned marble's turn is skipped, so the match mounts `StunnedIndicator` with `pulse` instead of a shrinking countdown. Lars Ricochet and Wraps Bind reuse their ground rings, pop them in with a short scale, and play `playRicochetPing` / `playBindWrap`. AI opponents call the same ability actions with their own entity id.
 
 Import the visuals from `client/src/components/game/PowerEffects.tsx`. Play sounds through the store (`useAudio.getState().playExplosion()` and the matching methods below) or call the functions in `client/src/lib/powerSounds.ts` directly. Both paths check the mute flag.
 

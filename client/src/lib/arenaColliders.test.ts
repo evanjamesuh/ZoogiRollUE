@@ -21,7 +21,8 @@ import {
   setWinterCampActive,
   subscribeWinterCamp,
 } from "./arenaColliders.ts";
-import { foliageBlocksRingView, GAMEPLAY_CAM_DISTANCE, GAMEPLAY_CAM_HEIGHT, ringPieceAction, shouldHideRingPiece, translationToClear, type Aabb } from "./ringPlacement.ts";
+import { ARENA_FOV_DEG, ARENA_PITCH_DEG } from "./cameraRig.ts";
+import { foliageBlocksRingView, gameplayCameras, ringPieceAction, shouldHideRingPiece, translationToClear, type Aabb } from "./ringPlacement.ts";
 import { MEADOW_BACKDROP_RADIUS, forestTopY, meadowForestPieces } from "./meadowDressing.ts";
 
 const MAPS = ["grass", "ice", "lava", "space", "saturn", "tomb"] as const;
@@ -372,7 +373,7 @@ function box(minX: number, minY: number, minZ: number, maxX: number, maxY: numbe
 test("ring placement hides the playfield slab and pushes props outside", () => {
   const floor = box(-16, 0, -16, 16, 0.4, 16);
   assert.equal(shouldHideRingPiece("PlazaFloor", floor), true);
-  assert.equal(shouldHideRingPiece("FrontSide_5", box(-80, 0, -80, 80, 40, 80)), false);
+  assert.equal(shouldHideRingPiece("FrontSide_5", box(-80, 0, -80, 80, 40, 80)), true);
   assert.equal(shouldHideRingPiece("BackSide_2", box(-800, -50, -800, 800, 400, 800)), true);
   assert.equal(shouldHideRingPiece("FrontSide_20", box(0, 0, 0, 1, 1, 1)), true);
   const pool = box(2, 0, 4, 7, 0.3, 9);
@@ -415,9 +416,13 @@ test("meadow forest stays outside the knockoff and under the camera", () => {
 });
 
 test("meadow canopies must stay under the gameplay camera", () => {
-  const elevation = Math.atan2(GAMEPLAY_CAM_HEIGHT, GAMEPLAY_CAM_DISTANCE) * (180 / Math.PI);
-  assert.ok(elevation > 45 && elevation < 60, `camera sits at ${elevation.toFixed(1)} degrees`);
-  assert.equal(foliageBlocksRingView(0, 12, 18), true, "a tall crown just outside the ring covers the grass");
+  const cam = gameplayCameras()[0];
+  const elevation = Math.atan2(cam.y - 0.35, Math.hypot(cam.x - cam.px, cam.z - cam.pz)) * (180 / Math.PI);
+  assert.ok(Math.abs(elevation - ARENA_PITCH_DEG) < 1.5, `camera sits at ${elevation.toFixed(1)} degrees`);
+  assert.equal(ARENA_PITCH_DEG, 53);
+  assert.equal(ARENA_FOV_DEG, 44);
+  assert.ok(cam.z > 0, "the match camera stays on the +Z side");
+  assert.equal(foliageBlocksRingView(0, 14, 17), true, "a tall crown just outside the ring covers the grass");
   assert.equal(foliageBlocksRingView(0, 0.8, 18), false, "a low shrub stays under the sightline");
   assert.equal(foliageBlocksRingView(0, 6, 42), false, "a crown well past the camera frames the far side");
 });
