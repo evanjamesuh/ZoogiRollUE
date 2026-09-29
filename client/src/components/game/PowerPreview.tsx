@@ -25,7 +25,7 @@ const MARBLES: { position: Vec3; color: string }[] = [
 
 function PreviewCamera() {
   const camera = useThree((state) => state.camera);
-  const base = useMemo(() => new THREE.Vector3(0, 18, 22), []);
+  const base = useMemo(() => new THREE.Vector3(0, 18, 16), []);
   useLayoutEffect(() => {
     camera.position.copy(base);
     camera.lookAt(0, 0.4, 0);
@@ -126,7 +126,7 @@ export function PowerPreview() {
     const id = idRef.current++;
     const startTime = Date.now();
     setBlasts((prev) => [...prev, { id, kind, position, startTime }]);
-    const life = kind === "explosion" ? 2800 : 1200;
+    const life = kind === "explosion" ? 4600 : 1200;
     window.setTimeout(() => {
       setBlasts((prev) => prev.filter((blast) => blast.id !== id));
     }, life);
@@ -137,7 +137,7 @@ export function PowerPreview() {
       <Canvas
         shadows
         dpr={[1, 2]}
-        camera={{ position: [0, 18, 22], fov: 50, near: 0.1, far: 200 }}
+        camera={{ position: [0, 18, 16], fov: 50, near: 0.1, far: 200 }}
         gl={{
           antialias: true,
           preserveDrawingBuffer: true,

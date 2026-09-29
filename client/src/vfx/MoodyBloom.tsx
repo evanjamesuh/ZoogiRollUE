@@ -1,26 +1,52 @@
-import { useMemo } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useFrame } from "@react-three/fiber";
 import { Bloom, EffectComposer } from "@react-three/postprocessing";
+import {
+  bloomParams,
+  getVfxQuality,
+  isVfxQualityLocked,
+  setVfxQuality,
+  subscribeVfxQuality,
+  type VfxQuality,
+} from "./quality";
 
 /**
- * Soft bloom that catches HDR sparks, the blast core, and wolf rim light.
- * The threshold sits above ordinary scene colors so the arena itself stays flat.
+ * Soft bloom for HDR sparks, the fireball, and wolf rim light.
+ * `?vfx=high` or `?vfx=low` locks the cost. Otherwise a run of slow frames
+ * drops the bloom resolution so the blast does not stall the match.
  */
 export function MoodyBloom() {
-  const mobile = useMemo(() => {
-    if (typeof window === "undefined") return false;
-    return window.matchMedia("(pointer: coarse)").matches || window.innerWidth < 900;
-  }, []);
+  const [quality, setQuality] = useState<VfxQuality>(getVfxQuality);
+  const watch = useRef({ warm: 0, slow: 0, dropped: false });
+
+  useEffect(() => subscribeVfxQuality(() => setQuality(getVfxQuality())), []);
+
+  useFrame((_, dt) => {
+    const state = watch.current;
+    if (state.dropped || isVfxQualityLocked()) return;
+    const step = Math.min(Math.max(dt, 0), 0.25);
+    state.warm += step;
+    if (state.warm < 1.4) return;
+    if (step > 0.042) state.slow += 1;
+    else state.slow = Math.max(0, state.slow - 1);
+    if (state.slow >= 20) {
+      state.dropped = true;
+      setVfxQuality("low");
+    }
+  });
+
+  const bloom = bloomParams(quality);
 
   return (
     <EffectComposer multisampling={0} enableNormalPass={false}>
       <Bloom
-        intensity={mobile ? 0.28 : 0.38}
+        intensity={bloom.intensity}
         luminanceThreshold={1.05}
-        luminanceSmoothing={0.2}
+        luminanceSmoothing={0.22}
         mipmapBlur
-        radius={0.5}
-        levels={4}
-        resolutionScale={mobile ? 0.35 : 0.45}
+        radius={bloom.radius}
+        levels={bloom.levels}
+        resolutionScale={bloom.resolutionScale}
       />
     </EffectComposer>
   );

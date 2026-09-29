@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { SpritePool } from "./pool";
-import { EMBER_FRAG, SMOKE_FRAG, SPRITE_VERT } from "./shaders";
+import { EMBER_FRAG, MIST_FRAG, SMOKE_FRAG, SPRITE_VERT } from "./shaders";
 import { useVfxTextures } from "./textures";
 
 const scratch = new THREE.Matrix4();
@@ -10,7 +10,7 @@ const scratchPos = new THREE.Vector3();
 const scratchQuat = new THREE.Quaternion();
 const scratchScale = new THREE.Vector3();
 
-export type SpriteMode = "smoke" | "additive";
+export type SpriteMode = "smoke" | "additive" | "mist";
 
 /**
  * Draws a pooled sprite field with one instanced draw. The owner steps the
@@ -29,27 +29,25 @@ export function InstancedSprites({ pool, mode }: { pool: SpritePool; mode: Sprit
   }, [pool]);
 
   const material = useMemo(() => {
-    const map = mode === "smoke" ? textures.smoke : textures.ember;
+    const map = mode === "additive" ? textures.ember : textures.smoke;
+    const fragment = mode === "additive" ? EMBER_FRAG : mode === "mist" ? MIST_FRAG : SMOKE_FRAG;
     const mat = new THREE.ShaderMaterial({
       uniforms: { uMap: { value: map } },
       vertexShader: SPRITE_VERT,
-      fragmentShader: mode === "smoke" ? SMOKE_FRAG : EMBER_FRAG,
+      fragmentShader: fragment,
       transparent: true,
       depthWrite: false,
       depthTest: true,
       toneMapped: false,
       side: THREE.DoubleSide,
     });
-    if (mode === "smoke") {
-      mat.blending = THREE.CustomBlending;
-      mat.blendSrc = THREE.OneFactor;
-      mat.blendDst = THREE.OneMinusSrcAlphaFactor;
-      mat.blendEquation = THREE.AddEquation;
-    } else {
+    if (mode === "additive") {
       mat.blending = THREE.CustomBlending;
       mat.blendSrc = THREE.OneFactor;
       mat.blendDst = THREE.OneFactor;
       mat.blendEquation = THREE.AddEquation;
+    } else {
+      mat.blending = THREE.NormalBlending;
     }
     return mat;
   }, [mode, textures]);
@@ -101,7 +99,7 @@ export function InstancedSprites({ pool, mode }: { pool: SpritePool; mode: Sprit
       ref={meshRef}
       args={[geometry, material, pool.capacity]}
       frustumCulled={false}
-      renderOrder={mode === "additive" ? 4 : 2}
+      renderOrder={mode === "additive" ? 5 : mode === "mist" ? 3 : 2}
     />
   );
 }

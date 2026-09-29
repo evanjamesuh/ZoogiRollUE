@@ -110,14 +110,15 @@ function paintScorch(data: Uint8ClampedArray, size: number): void {
       const u = (x + 0.5) / size - 0.5;
       const v = (y + 0.5) / size - 0.5;
       const d = Math.hypot(u, v) * 2;
-      const n = fbm(u * 3.2 + 2.2, v * 3.2 + 8.1);
-      const blot = n * (1 - d * 0.65);
-      const alpha = blot > 0.38 ? Math.min(1, (blot - 0.38) / 0.35) * (d < 1 ? 1 : 0) : 0;
+      const n = fbm(u * 3.4 + 2.2, v * 3.4 + 8.1);
+      const ragged = d < 0.62 ? 1 : Math.max(0, 1 - (d - 0.62) / 0.4);
+      const alpha = ragged * (0.72 + 0.28 * n);
       const i = (y * size + x) * 4;
-      data[i] = 28 + n * 24;
-      data[i + 1] = 18 + n * 12;
-      data[i + 2] = 12 + n * 8;
-      data[i + 3] = Math.max(0, Math.min(255, alpha * 210));
+      const tone = 8 + n * 14;
+      data[i] = tone;
+      data[i + 1] = tone * 0.72;
+      data[i + 2] = tone * 0.5;
+      data[i + 3] = Math.max(0, Math.min(255, alpha * 255));
     }
   }
 }

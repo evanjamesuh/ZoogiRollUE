@@ -35,10 +35,28 @@ varying vec3 vColor;
 varying vec2 vUv;
 
 void main() {
-  vec4 tex = texture2D(uMap, vUv);
-  float alpha = tex.a * vOpacity;
-  if (alpha < 0.012) discard;
-  gl_FragColor = vec4(vColor * tex.rgb * alpha, alpha);
+  float mask = texture2D(uMap, vUv).a;
+  float alpha = mask * vOpacity;
+  if (alpha < 0.03) discard;
+  float core = smoothstep(0.18, 0.72, mask);
+  vec3 warmEdge = vec3(0.62, 0.30, 0.13);
+  vec3 col = mix(warmEdge, vColor, core);
+  gl_FragColor = vec4(col, alpha);
+}
+`;
+
+export const MIST_FRAG = /* glsl */ `
+uniform sampler2D uMap;
+varying float vOpacity;
+varying vec3 vColor;
+varying vec2 vUv;
+
+void main() {
+  float mask = texture2D(uMap, vUv).a;
+  float alpha = mask * vOpacity;
+  if (alpha < 0.025) discard;
+  vec3 col = vColor * (0.62 + 0.5 * mask);
+  gl_FragColor = vec4(col, alpha);
 }
 `;
 
@@ -52,7 +70,7 @@ void main() {
   vec4 tex = texture2D(uMap, vUv);
   float alpha = tex.a * vOpacity;
   if (alpha < 0.02) discard;
-  gl_FragColor = vec4(vColor * tex.rgb * alpha * 2.6, 1.0);
+  gl_FragColor = vec4(vColor * tex.rgb * alpha * 3.6, 1.0);
 }
 `;
 
@@ -67,20 +85,19 @@ void main() {
 export const RING_FRAG = /* glsl */ `
 uniform float uWave;
 uniform float uOpacity;
-uniform float uTime;
 varying vec2 vUv;
 
 void main() {
   vec2 p = vUv * 2.0 - 1.0;
-  float ang = atan(p.y, p.x);
-  float r = length(p) + sin(ang * 7.0 + uTime * 5.0) * 0.012;
-  float width = 0.035 + uWave * 0.02;
+  float r = length(p);
+  float width = 0.075;
   float d = r - uWave;
   float band = exp(-(d * d) / (width * width));
-  float alpha = band * uOpacity * (1.0 - smoothstep(0.92, 1.02, r));
-  if (alpha < 0.01) discard;
-  vec3 col = mix(vec3(0.85, 0.28, 0.08), vec3(1.15, 0.72, 0.38), clamp(band, 0.0, 1.0));
-  gl_FragColor = vec4(col * alpha, alpha);
+  float edge = 1.0 - smoothstep(0.9, 1.04, r);
+  float alpha = band * uOpacity * edge;
+  if (alpha < 0.02) discard;
+  vec3 dust = mix(vec3(0.62, 0.48, 0.32), vec3(0.34, 0.26, 0.18), smoothstep(0.35, 1.0, band));
+  gl_FragColor = vec4(dust, alpha * 0.9);
 }
 `;
 
@@ -105,14 +122,14 @@ varying vec3 vWorld;
 void main() {
   vec3 n = normalize(vNormal);
   vec3 viewDir = normalize(cameraPosition - vWorld);
-  float fres = pow(1.0 - clamp(abs(dot(n, viewDir)), 0.0, 1.0), 1.65);
-  vec2 uv = vWorld.xz * 0.45 + vec2(uTime * 0.06, uTime * 0.035);
-  float smoke = texture2D(uNoise, uv).a;
-  float body = smoothstep(0.15, 0.8, smoke);
-  vec3 deep = vec3(0.08, 0.14, 0.24);
-  vec3 rim = vec3(0.75, 0.9, 1.35);
-  vec3 col = mix(deep, rim, 0.22 + fres * 0.78) * (1.05 + fres * 1.15);
-  float alpha = (0.34 + body * 0.22 + fres * 0.4) * uFade;
+  float fres = pow(1.0 - clamp(abs(dot(n, viewDir)), 0.0, 1.0), 1.45);
+  vec2 uv = vWorld.xz * 0.55 + vec2(uTime * 0.07, uTime * 0.04);
+  float smoke = texture2D(uNoise, fract(uv)).a;
+  float wisp = smoothstep(0.2, 0.85, smoke);
+  vec3 deep = vec3(0.04, 0.09, 0.16);
+  vec3 rim = vec3(0.62, 0.84, 1.2);
+  vec3 col = mix(deep, rim, fres) * (0.75 + fres * 1.35);
+  float alpha = (0.05 + wisp * 0.06 + fres * 0.78) * uFade;
   if (alpha < 0.02) discard;
   gl_FragColor = vec4(col, alpha);
 }

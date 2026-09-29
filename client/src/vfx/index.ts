@@ -4,10 +4,14 @@ export { InstancedSprites } from "./InstancedSprites";
 export type { SpriteMode } from "./InstancedSprites";
 export {
   seedBlastSmoke,
+  seedBlastFire,
   seedBlastEmbers,
   seedColdBurst,
   stepSmoke,
+  stepFire,
   stepEmbers,
+  stepPuff,
+  stepMist,
   stepWisps,
   stepColdEmbers,
   emitWisp,

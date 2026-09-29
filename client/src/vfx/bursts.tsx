@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import { clearSpritePool, createSpritePool } from "./pool";
 import { mulberry32 } from "./random";
-import { BURST_CAP, seedColdBurst, stepSmoke } from "./sim";
+import { BURST_CAP, seedColdBurst, stepPuff } from "./sim";
 import { InstancedSprites } from "./InstancedSprites";
 
 export interface SmokeBurst {
@@ -53,7 +53,7 @@ function ColdPuff({ burst }: { burst: SmokeBurst }) {
     if (closed.current) return;
     const step = Math.min(dt, 1 / 30);
     elapsed.current += step;
-    stepSmoke(pool, elapsed.current, step);
+    stepPuff(pool, elapsed.current, step);
     if (elapsed.current > 1.15) {
       closed.current = true;
       dismissSmokeBurst(burst.id);
@@ -85,9 +85,16 @@ export function usePlayedClock(frozenElapsed?: number) {
   return (clockElapsed: number, dt: number) => {
     if (frozenElapsed !== undefined) return { elapsed: Math.max(0, frozenElapsed), dt: 0 };
     if (origin.current === null) origin.current = clockElapsed;
+    const hold = typeof window !== "undefined"
+      ? (window as Window & { __vfxHold?: number }).__vfxHold
+      : undefined;
+    if (typeof hold === "number" && played.current >= hold) {
+      return { elapsed: played.current, dt: 0 };
+    }
     const uncapped = Math.max(0, clockElapsed - origin.current);
     const step = Math.min(Math.max(dt, 0), 1 / 30);
-    const next = Math.min(uncapped, played.current + step);
+    let next = Math.min(uncapped, played.current + step);
+    if (typeof hold === "number" && next > hold) next = hold;
     const used = next - played.current;
     played.current = next;
     return { elapsed: next, dt: used };
