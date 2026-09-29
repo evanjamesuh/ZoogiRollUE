@@ -67,6 +67,31 @@ test("a missing panel tells the reader which file to put in public/comics", () =
   assert.match(missingComicPanelMessage(3), /client\/public\/comics\/intro/);
 });
 
+test("the authored camera is found after three.js strips dots from its name", () => {
+  const scene = new THREE.Group();
+  const camera = new THREE.PerspectiveCamera(32, 16 / 9, 0.1, 200);
+  camera.name = THREE.PropertyBinding.sanitizeNodeName(comicCameraName(6));
+  camera.position.set(-1.9, -0.25, 6.3);
+  const aim = new THREE.Object3D();
+  aim.name = THREE.PropertyBinding.sanitizeNodeName(comicAimName(6));
+  aim.position.set(-0.85, 1.15, 0);
+  const letters = new THREE.Group();
+  letters.name = THREE.PropertyBinding.sanitizeNodeName(comicLettersName(6));
+  const ink = new THREE.MeshBasicMaterial();
+  ink.name = "Letter_ink";
+  const text = new THREE.Mesh(new THREE.BufferGeometry(), ink);
+  letters.add(text);
+  camera.add(letters);
+  scene.add(camera, aim);
+
+  assert.equal(camera.name, "Camera0005");
+  const prepared = prepareComicPanel(scene, 6);
+  assert.equal(prepared.camera, camera);
+  assert.ok(prepared.aim.distanceTo(aim.position) < 1e-4);
+  assert.equal(ink.toneMapped, false);
+  assert.equal(isUnderComicLetters(text), true);
+});
+
 test("balloon, caption, and lettering materials skip tone mapping", () => {
   assert.equal(isComicLetteringMaterial("Balloon_white"), true);
   assert.equal(isComicLetteringMaterial("Caption_cream"), true);

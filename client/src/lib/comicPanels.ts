@@ -47,7 +47,7 @@ export function introComicTitle(page: number): string {
 }
 
 export function missingComicPanelMessage(page: number): string {
-  return `The file ${introComicPanelUrl(page)} is missing. It belongs in client/public/comics/intro/.`;
+  return `The file ${introComicPanelUrl(page)} is missing or could not be read. It belongs in client/public/comics/intro/.`;
 }
 
 export function stepComicPage(page: number, delta: number, count = INTRO_COMIC_PAGE_COUNT): number {
@@ -149,6 +149,18 @@ export interface PreparedComicPanel {
   orbit: ComicOrbitLimits;
 }
 
+/** glTF node names lose "." when three.js makes them safe for animation tracks. */
+export function findComicNode(scene: THREE.Object3D, rawName: string): THREE.Object3D | undefined {
+  const sanitized = THREE.PropertyBinding.sanitizeNodeName(rawName);
+  const direct = scene.getObjectByName(rawName) ?? scene.getObjectByName(sanitized);
+  if (direct) return direct;
+  let found: THREE.Object3D | undefined;
+  scene.traverse((obj) => {
+    if (!found && obj.userData?.name === rawName) found = obj;
+  });
+  return found;
+}
+
 function meshMaterials(mesh: THREE.Mesh): THREE.Material[] {
   if (!mesh.material) return [];
   return Array.isArray(mesh.material) ? mesh.material : [mesh.material];
@@ -183,16 +195,23 @@ export function prepareComicPanel(scene: THREE.Object3D, page: number): Prepared
     scene.add(ambient);
   }
 
-  const named = scene.getObjectByName(comicCameraName(page));
-  const camera = named && (named as THREE.PerspectiveCamera).isPerspectiveCamera
+  const named = findComicNode(scene, comicCameraName(page));
+  let camera = named && (named as THREE.PerspectiveCamera).isPerspectiveCamera
     ? named as THREE.PerspectiveCamera
     : null;
+  if (!camera && named) {
+    named.traverse((obj) => {
+      if (!camera && (obj as THREE.PerspectiveCamera).isPerspectiveCamera) {
+        camera = obj as THREE.PerspectiveCamera;
+      }
+    });
+  }
   if (!camera) {
     throw new Error(`Panel ${page} has no camera named ${comicCameraName(page)}.`);
   }
 
   const aim = new THREE.Vector3();
-  const aimNode = scene.getObjectByName(comicAimName(page));
+  const aimNode = findComicNode(scene, comicAimName(page));
   if (aimNode) {
     aimNode.getWorldPosition(aim);
   } else {
