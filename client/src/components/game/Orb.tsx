@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { useRef, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
+import { visualPosition } from "@/lib/renderInterp";
 import { Glint } from "@/vfx/powerLooks";
 
 function FloatingStar({ position, color = "#FFD700" }: { position: [number, number, number]; color?: string }) {
@@ -102,11 +103,8 @@ export function Orb({ orbId }: OrbProps) {
   useFrame((state, delta) => {
     if (!groupRef.current || !orb || !orb.isActive) return;
     
-    groupRef.current.position.set(
-      orb.position[0],
-      orb.position[1],
-      orb.position[2]
-    );
+    const vis = visualPosition(orb.id, orb.position);
+    groupRef.current.position.set(vis[0], vis[1], vis[2]);
     
     if (coinRef.current) {
       bobPhase.current += delta * 2.0;
@@ -155,15 +153,10 @@ export function Orb({ orbId }: OrbProps) {
             <meshBasicMaterial transparent opacity={0} />
           </mesh>
         </group>
+        {isLockedOn && (
+          <Glint position={[0, 0.15, 0]} size={0.62} color="#d5e8ff" />
+        )}
       </group>
-      
-      {isLockedOn && (
-        <Glint
-          position={[orb.position[0], orb.position[1] + 0.15, orb.position[2]]}
-          size={0.62}
-          color="#d5e8ff"
-        />
-      )}
       
       <pointLight
         position={[orb.position[0], orb.position[1] + 0.5, orb.position[2]]}

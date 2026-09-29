@@ -12,6 +12,7 @@ import { ZoneEditorPanel } from "./ZoneEditorPanel";
 import { CollisionTuningPanel } from "./CollisionTuningPanel";
 import { AIControlsPanel } from "./AIControlsPanel";
 import { exportAllOffsets } from "@/lib/treeOffsets";
+import { NeonScoreboard } from "./NeonScoreboard";
 import { useAudio } from "@/lib/stores/useAudio";
 import { useProgression } from "@/lib/stores/useProgression";
 import { useEffect, useState, useRef, useCallback, useMemo, PointerEvent as ReactPointerEvent } from "react";
@@ -366,6 +367,7 @@ function LaunchPadHeightControl() {
 
 export function GameUI() {
   const { playerEntity, enemies, score, orbs, currentRound, maxRounds, playerRoundWins, isPlayerTurn, birdsEyeView, toggleBirdsEyeView, firstPersonView, toggleFirstPersonView, overShoulderView, toggleOverShoulderView, launchPadView, toggleLaunchPadView, setPhase, gameTimer, openTutorial, gameMode, localPlayers, currentLocalPlayerIndex, activateWolfgangAbility, canUseWolfgangAbility, activateHotstreakAbility, canUseHotstreakAbility, activateBoltAbility, canUseBoltAbility, lockOnEnabled, toggleLockOn, sessionId, arcType, setArcType, straightMode, toggleStraightMode, tangentOffset, setTangentOffset, lockOnTargetId, triggerArcLaunch, orbMultiplier, incrementOrbMultiplier, decrementOrbMultiplier, restrictionPhaseActive, restrictionPhaseStartTime } = useZoogiGame();
+  const selectedMap = useZoogiGame((state) => state.selectedMap);
   const showCollisionTuningPanel = useZoogiGame((state) => state.showCollisionTuningPanel);
   const setShowCollisionTuningPanel = useZoogiGame((state) => state.setShowCollisionTuningPanel);
   const showAiControlsPanel = useZoogiGame((state) => state.showAiControlsPanel);
@@ -786,6 +788,15 @@ export function GameUI() {
 
   return (
     <div className="fixed inset-0 pointer-events-none z-10">
+      {selectedMap === "neon" && (
+        <NeonScoreboard
+          playerScore={score}
+          foeScore={enemies.reduce((best, enemy) => Math.max(best, enemy.score), 0)}
+          round={currentRound}
+          maxRounds={maxRounds}
+          timer={timerDisplay}
+        />
+      )}
       
       {abilityNotice && (
         <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
@@ -984,7 +995,7 @@ export function GameUI() {
                   )}
                 </div>
                 
-                <div className="mt-3 pt-2 border-t border-white/20 flex items-center justify-between gap-3">
+                {selectedMap !== "neon" && <div className="mt-3 pt-2 border-t border-white/20 flex items-center justify-between gap-3">
                   <div className="text-center">
                     <p className="text-white/50 text-[10px] uppercase">Round</p>
                     <p className="text-lg font-bold text-purple-400">{currentRound}/{maxRounds}</p>
@@ -1013,7 +1024,7 @@ export function GameUI() {
                       </div>
                     </div>
                   </div>
-                </div>
+                </div>}
                 
                 {wallOwnershipMode && (gameMode === "ringer_royale" || gameMode === "local_multiplayer") && (
                   <div className="mt-3 pt-2 border-t border-cyan-400/30">
@@ -1113,15 +1124,17 @@ export function GameUI() {
                           background: `radial-gradient(circle at 30% 30%, ${enemy.zoogi.secondaryColor}, ${enemy.zoogi.color})`,
                         }}
                       />
-                      <span className="text-xs text-yellow-400 font-bold mt-1">{enemy.score}</span>
+                      {selectedMap !== "neon" && <span className="text-xs text-yellow-400 font-bold mt-1">{enemy.score}</span>}
                     </div>
                   ))}
                 </div>
               </div>
+              {selectedMap !== "neon" && (
               <div className="border-l border-white/20 pl-4">
                 <p className="text-white/60 text-xs uppercase">Score</p>
                 <p className="text-2xl font-bold text-yellow-400">{score}</p>
               </div>
+              )}
             </div>
           )}
         </div>
