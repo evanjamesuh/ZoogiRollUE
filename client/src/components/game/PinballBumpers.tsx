@@ -1,18 +1,41 @@
 import * as THREE from "three";
-import { useRef, useState, useEffect, useMemo } from "react";
+import { Component, type ReactNode, useRef, useState, useEffect, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { useAudio } from "@/lib/stores/useAudio";
 import { BUMPER_MODEL_URL } from "@/lib/arenaColliders";
 
+/** A missing bumper model should not take down the whole court. */
+class BumperBoundary extends Component<{ children: ReactNode; position: [number, number, number] }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    if (this.state.failed) {
+      const [x, y, z] = this.props.position;
+      return (
+        <mesh position={[x, (y || 0) + 0.7, z]}>
+          <cylinderGeometry args={[0.7, 0.82, 1.3, 16]} />
+          <meshStandardMaterial color="#c45512" roughness={0.45} metalness={0.2} />
+        </mesh>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export function PinballBumpers() {
-  const { pinballBumpers } = useZoogiGame();
+  const { pinballBumpers, selectedMap } = useZoogiGame();
+  if (selectedMap === "neon") return null;
 
   return (
     <group>
       {pinballBumpers.map((bumper) => (
-        <PinballBumper key={bumper.id} bumper={bumper} />
+        <BumperBoundary key={bumper.id} position={bumper.position}>
+          <PinballBumper bumper={bumper} />
+        </BumperBoundary>
       ))}
     </group>
   );
@@ -88,4 +111,3 @@ function PinballBumper({ bumper }: PinballBumperProps) {
   );
 }
 
-useGLTF.preload(BUMPER_MODEL_URL);

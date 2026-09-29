@@ -7,11 +7,13 @@ import { resolveZoogiModel, rollMarble, zoogiModelPreloadUrls, type ZoogiModelSe
 import { useAudio } from "@/lib/stores/useAudio";
 import { useProgression } from "@/lib/stores/useProgression";
 import { triggerLaunchFeel } from "@/lib/stores/useGameFeel";
+import { visualPosition } from "@/lib/renderInterp";
+import { AI_LAUNCH_DELAY, LAUNCH_POWER_MULTIPLIER, MAX_LAUNCH_SPEED } from "@/lib/simFeel";
 import { triggerLaunchCameraEffect, clearAimCameraEffect } from "@/lib/stores/useCameraEffects";
 import { getSkinEffect, getRainbowColor } from "@/lib/skinEffects";
 
 // Global scale control - adjust this to resize ALL Zoogis uniformly
-let globalZoogiScale = 0.5;
+let globalZoogiScale = 0.86;
 
 export function getGlobalZoogiScale(): number {
   return globalZoogiScale;
@@ -234,8 +236,6 @@ function ZoogiModelSwitch({ zoogiId, hasShield = false, hasSpawnImmunity = false
   );
 }
 
-const LAUNCH_POWER_MULTIPLIER = 0.22;
-const MAX_LAUNCH_SPEED = 1.4;
 
 const ZOOGI_TRAJECTORY_COLORS: Record<string, string> = {
   wolfgang: "#6B7280",   // gray
@@ -590,14 +590,11 @@ export function PlayerZoogi() {
   useFrame(() => {
     if (!meshRef.current || !playerEntity) return;
     
-    meshRef.current.position.set(
-      playerEntity.position[0],
-      playerEntity.position[1],
-      playerEntity.position[2]
-    );
+    const playerVis = visualPosition(playerEntity.id, playerEntity.position);
+    meshRef.current.position.set(playerVis[0], playerVis[1], playerVis[2]);
     
     const speed = Math.sqrt(playerEntity.velocity[0] ** 2 + playerEntity.velocity[2] ** 2);
-    rollMarble(meshRef.current, playerEntity.position[0], playerEntity.position[2], getGlobalZoogiScale());
+    rollMarble(meshRef.current, playerVis[0], playerVis[2], getGlobalZoogiScale());
     
     meshRef.current.scale.set(1, 1, 1);
     
@@ -930,10 +927,11 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
   useFrame((_, delta) => {
     if (!meshRef.current || !enemy || !playerEntity) return;
     
-    meshRef.current.position.set(enemy.position[0], enemy.position[1], enemy.position[2]);
+    const enemyVis = visualPosition(enemy.id, enemy.position);
+    meshRef.current.position.set(enemyVis[0], enemyVis[1], enemyVis[2]);
     
     const speed = Math.sqrt(enemy.velocity[0] ** 2 + enemy.velocity[2] ** 2);
-    rollMarble(meshRef.current, enemy.position[0], enemy.position[2], getGlobalZoogiScale());
+    rollMarble(meshRef.current, enemyVis[0], enemyVis[2], getGlobalZoogiScale());
     
     meshRef.current.scale.set(1, 1, 1);
     
@@ -959,7 +957,7 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
     if (canLaunchFFA || canLaunchTurnBased) {
       aiTimerRef.current += delta;
       
-      const launchDelay = isFreeForAll ? ffaCooldownRef.current * aiControls.reactionDelay : 0.8 * aiControls.reactionDelay;
+      const launchDelay = isFreeForAll ? ffaCooldownRef.current * aiControls.reactionDelay : AI_LAUNCH_DELAY * aiControls.reactionDelay;
       if (aiTimerRef.current > launchDelay) {
         if (enemy.isStunned) {
           console.log(`Enemy ${enemy.zoogi.name} cannot launch - stunned!`);
@@ -1135,8 +1133,8 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
         const distance = Math.sqrt(dx * dx + dz * dz);
         
         if (distance > 0.1) {
-          const statMaxSpeed = 0.7 + (enemy.zoogi.stats.power / 100) * 0.4;
-          const AI_MAX_LAUNCH_SPEED = Math.min(1.4, statMaxSpeed);
+          const statFraction = 0.72 + (enemy.zoogi.stats.power / 100) * 0.28;
+          const AI_MAX_LAUNCH_SPEED = MAX_LAUNCH_SPEED * statFraction;
           const targetIsPlayer = chosenTarget.type === 'player';
           const targetNearEdge = isNearEdge(chosenTarget.position);
           
@@ -1479,14 +1477,11 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
   useFrame(() => {
     if (!meshRef.current || !entity) return;
     
-    meshRef.current.position.set(
-      entity.position[0],
-      entity.position[1],
-      entity.position[2]
-    );
+    const localVis = visualPosition(entity.id, entity.position);
+    meshRef.current.position.set(localVis[0], localVis[1], localVis[2]);
     
     const speed = Math.sqrt(entity.velocity[0] ** 2 + entity.velocity[2] ** 2);
-    rollMarble(meshRef.current, entity.position[0], entity.position[2], getGlobalZoogiScale());
+    rollMarble(meshRef.current, localVis[0], localVis[2], getGlobalZoogiScale());
     
     meshRef.current.scale.set(1, 1, 1);
     

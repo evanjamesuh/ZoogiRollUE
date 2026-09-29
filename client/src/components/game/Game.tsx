@@ -23,7 +23,8 @@ import { InnerWallSegmentGizmo } from "./InnerWallSegmentGizmo";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { Sky, Environment } from "@react-three/drei";
 import * as THREE from "three";
-import { EffectComposer, Bloom } from "@react-three/postprocessing";
+import { PostFX } from "./PostFX";
+import { ImpactFX } from "./ImpactFX";
 import { useCallback, useEffect, useRef, useMemo } from "react";
 import { triggerArcPeakCameraEffect, triggerArcPeakFreezeOnly, clearArcPeakCameraEffect } from "@/lib/stores/useCameraEffects";
 import { useMapDecorations } from "@/hooks/useMapDecorations";
@@ -119,7 +120,8 @@ export function Game() {
     ice: { sunPosition: [100, 50, 100] as [number, number, number] },
     lava: { sunPosition: [100, 5, 100] as [number, number, number] },
     space: { sunPosition: [100, 80, 100] as [number, number, number] },
-    saturn: { sunPosition: [100, 60, 100] as [number, number, number] }
+    saturn: { sunPosition: [100, 60, 100] as [number, number, number] },
+    neon: { sunPosition: [40, 30, 80] as [number, number, number] }
   };
 
   const currentSky = skySettings[selectedMap || "grass"] || skySettings.grass;
@@ -143,14 +145,14 @@ export function Game() {
         }}
         style={{ position: "absolute", inset: 0 }}
       >
-        <color attach="background" args={[(selectedMap === "space" || selectedMap === "saturn") ? "#0a0a1a" : selectedMap === "ice" ? "#87CEEB" : "#1a1a2e"]} />
+        <color attach="background" args={[selectedMap === "neon" ? "#070814" : (selectedMap === "space" || selectedMap === "saturn") ? "#0a0a1a" : selectedMap === "ice" ? "#87CEEB" : "#1a1a2e"]} />
         
         {selectedMap === "ice" && <fog attach="fog" args={['#c8e6f8', 60, 150]} />}
         
         <Suspense fallback={null}>
           {selectedMap === "ice" && <GradientSky />}
-          {selectedMap !== "ice" && <Sky sunPosition={currentSky.sunPosition} />}
-          {selectedMap !== "ice" && <Environment preset="sunset" background={false} />}
+          {selectedMap !== "ice" && selectedMap !== "neon" && <Sky sunPosition={currentSky.sunPosition} />}
+          {selectedMap !== "ice" && selectedMap !== "neon" && <Environment preset="sunset" background={false} />}
           
           <Lights />
           
@@ -213,14 +215,8 @@ export function Game() {
           
           <ArcSelector />
           
-          <EffectComposer>
-            <Bloom 
-              intensity={0.8}
-              luminanceThreshold={0.6}
-              luminanceSmoothing={0.3}
-              mipmapBlur
-            />
-          </EffectComposer>
+          <ImpactFX />
+          <PostFX />
           
           <PhysicsManager />
           

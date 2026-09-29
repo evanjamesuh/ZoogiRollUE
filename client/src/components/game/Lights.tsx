@@ -1,8 +1,13 @@
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
+import { NeonCourtLights } from "./NeonCourtArena";
 
 export function Lights() {
   const selectedMap = useZoogiGame((state) => state.selectedMap);
   const isIce = selectedMap === "ice";
+
+  if (selectedMap === "neon") {
+    return <NeonCourtLights />;
+  }
 
   if (isIce) {
     return (
