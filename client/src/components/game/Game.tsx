@@ -158,6 +158,7 @@ export function Game() {
         <color attach="background" args={[background]} />
         
         {selectedMap === "ice" && <fog attach="fog" args={['#c8e6f8', 60, 150]} />}
+        {selectedMap === "grass" && <fog attach="fog" args={['#d7ebf8', 58, 390]} />}
         
         <OptionalSceneBoundary>
           <Suspense fallback={null}>

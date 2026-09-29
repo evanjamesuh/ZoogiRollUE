@@ -12,7 +12,7 @@ import {
 } from "@/lib/arenaColliders";
 import { GRASS_RIM, ROUND_FLOOR_RADIUS, ROUND_KNOCKOFF_RADIUS, rimPosition, type RimMark } from "@/lib/roundRim";
 import { RING_VISUAL_LIMIT, ringPieceAction, type Aabb } from "@/lib/ringPlacement";
-import { MEADOW_GROUND_Y, forestTopY, meadowForestPieces, type ForestPiece } from "@/lib/meadowDressing";
+import { MEADOW_BACKDROP_RADIUS, MEADOW_GROUND_RADIUS, MEADOW_GROUND_Y, forestTopY, meadowForestPieces, type ForestPiece } from "@/lib/meadowDressing";
 
 const EDGE = ROUND_KNOCKOFF_RADIUS;
 const RIM_INNER = 14.7;
@@ -294,7 +294,7 @@ function useTiledGrass(repeat: number) {
 
 function MeadowFloor() {
   const grass = useTiledGrass(7);
-  const outer = useTiledGrass(10);
+  const outer = useTiledGrass(80);
   return (
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} receiveShadow>
@@ -309,13 +309,13 @@ function MeadowFloor() {
         <torusGeometry args={[(ROUND_FLOOR_RADIUS + ROUND_KNOCKOFF_RADIUS) / 2, 0.16, 10, 80]} />
         <meshStandardMaterial color="#e7f0c2" roughness={0.78} />
       </mesh>
-      <mesh position={[0, -0.12, 0]} receiveShadow>
-        <cylinderGeometry args={[ROUND_KNOCKOFF_RADIUS, ROUND_KNOCKOFF_RADIUS + 0.12, 0.24, 80, 1, true]} />
-        <meshStandardMaterial color="#7f9a48" roughness={1} side={THREE.DoubleSide} />
+      <mesh position={[0, MEADOW_GROUND_Y / 2, 0]} receiveShadow>
+        <cylinderGeometry args={[ROUND_KNOCKOFF_RADIUS, ROUND_KNOCKOFF_RADIUS + 0.22, -MEADOW_GROUND_Y, 80, 1, true]} />
+        <meshStandardMaterial color="#6d8a3c" roughness={1} side={THREE.DoubleSide} />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, MEADOW_GROUND_Y, 0]} receiveShadow>
-        <ringGeometry args={[ROUND_KNOCKOFF_RADIUS + 0.05, 19.2, 80]} />
-        <meshStandardMaterial map={outer} color="#d5e2a6" roughness={1} />
+        <circleGeometry args={[MEADOW_GROUND_RADIUS, 96]} />
+        <meshStandardMaterial map={outer} color="#e4efc0" roughness={1} />
       </mesh>
     </group>
   );
@@ -369,36 +369,109 @@ function MeadowRim() {
   );
 }
 
-function ForestTree({ piece }: { piece: ForestPiece }) {
-  const top = forestTopY(piece);
-  const localTop = top - MEADOW_GROUND_Y;
-  const greens = piece.kind === "tree" ? ["#3eae4c", "#2f8a3c"] : ["#4cba58", "#2f7d3a"];
+const FOREST_BANDS: { max: number; leaf: string; shade: string; bark: string }[] = [
+  { max: 24, leaf: "#3eae4c", shade: "#2f8a3c", bark: "#6a452c" },
+  { max: 42, leaf: "#6aaa78", shade: "#568c68", bark: "#746048" },
+  { max: 80, leaf: "#9cbfa8", shade: "#8aaf9c", bark: "#8a9484" },
+  { max: 120, leaf: "#c5d8d4", shade: "#b7cdc8", bark: "#b0c0c0" },
+  { max: 999, leaf: "#d7e7f0", shade: "#cfe3ee", bark: "#d0e0ea" },
+];
+
+function ForestBand({
+  pieces,
+  leaf,
+  shade,
+  bark,
+  shadow,
+}: {
+  pieces: ForestPiece[];
+  leaf: string;
+  shade: string;
+  bark: string;
+  shadow: boolean;
+}) {
+  const canopyRef = useRef<THREE.InstancedMesh>(null);
+  const puffRef = useRef<THREE.InstancedMesh>(null);
+  const trunkRef = useRef<THREE.InstancedMesh>(null);
+  const trees = useMemo(() => pieces.filter((piece) => piece.kind === "tree"), [pieces]);
+
+  useLayoutEffect(() => {
+    const dummy = new THREE.Object3D();
+    pieces.forEach((piece, i) => {
+      const centerY = forestTopY(piece) - piece.canopy;
+      dummy.position.set(piece.x, centerY, piece.z);
+      dummy.rotation.set(0, piece.rot, 0);
+      dummy.scale.setScalar(piece.canopy);
+      dummy.updateMatrix();
+      canopyRef.current?.setMatrixAt(i, dummy.matrix);
+      const outward = Math.hypot(piece.x, piece.z) || 1;
+      dummy.position.set(
+        piece.x + (piece.x / outward) * piece.canopy * 0.22,
+        centerY - piece.canopy * 0.42,
+        piece.z + (piece.z / outward) * piece.canopy * 0.22,
+      );
+      dummy.scale.setScalar(piece.canopy * 0.55);
+      dummy.updateMatrix();
+      puffRef.current?.setMatrixAt(i, dummy.matrix);
+    });
+    if (canopyRef.current) canopyRef.current.instanceMatrix.needsUpdate = true;
+    if (puffRef.current) puffRef.current.instanceMatrix.needsUpdate = true;
+    trees.forEach((piece, i) => {
+      dummy.position.set(piece.x, MEADOW_GROUND_Y + piece.trunk / 2, piece.z);
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.set(0.24, piece.trunk, 0.24);
+      dummy.updateMatrix();
+      trunkRef.current?.setMatrixAt(i, dummy.matrix);
+    });
+    if (trunkRef.current) trunkRef.current.instanceMatrix.needsUpdate = true;
+  }, [pieces, trees]);
+
+  if (pieces.length === 0) return null;
   return (
-    <group position={[piece.x, MEADOW_GROUND_Y, piece.z]} rotation={[0, piece.rot, 0]}>
-      {piece.kind === "tree" && (
-        <mesh position={[0, piece.trunk / 2, 0]} castShadow receiveShadow>
-          <cylinderGeometry args={[0.16, 0.26, piece.trunk, 6]} />
-          <meshStandardMaterial color="#6a452c" roughness={0.94} />
-        </mesh>
+    <group>
+      <instancedMesh ref={canopyRef} args={[undefined, undefined, pieces.length]} castShadow={shadow} receiveShadow>
+        <sphereGeometry args={[1, 8, 6]} />
+        <meshStandardMaterial color={leaf} roughness={0.88} />
+      </instancedMesh>
+      <instancedMesh ref={puffRef} args={[undefined, undefined, pieces.length]} castShadow={shadow} receiveShadow>
+        <sphereGeometry args={[1, 7, 5]} />
+        <meshStandardMaterial color={shade} roughness={0.9} />
+      </instancedMesh>
+      {trees.length > 0 && (
+        <instancedMesh ref={trunkRef} args={[undefined, undefined, trees.length]} castShadow={shadow} receiveShadow>
+          <cylinderGeometry args={[1, 1.15, 1, 6]} />
+          <meshStandardMaterial color={bark} roughness={0.94} />
+        </instancedMesh>
       )}
-      <mesh position={[0, localTop - piece.canopy, 0]} castShadow receiveShadow>
-        <sphereGeometry args={[piece.canopy, 12, 9]} />
-        <meshStandardMaterial color={greens[0]} roughness={0.82} />
-      </mesh>
-      <mesh position={[piece.canopy * 0.28, localTop - piece.canopy * 1.45, piece.canopy * 0.1]} castShadow>
-        <sphereGeometry args={[piece.canopy * 0.55, 8, 7]} />
-        <meshStandardMaterial color={greens[1]} roughness={0.84} />
-      </mesh>
     </group>
   );
 }
 
 function MeadowForest() {
-  const pieces = useMemo(() => meadowForestPieces(), []);
+  const bands = useMemo(() => {
+    const pieces = meadowForestPieces();
+    return FOREST_BANDS.map((band, index) => {
+      const min = index === 0 ? 0 : FOREST_BANDS[index - 1].max;
+      return {
+        ...band,
+        pieces: pieces.filter((piece) => {
+          const dist = Math.hypot(piece.x, piece.z);
+          return dist >= min && dist < band.max;
+        }),
+      };
+    });
+  }, []);
   return (
     <group>
-      {pieces.map((piece) => (
-        <ForestTree key={piece.id} piece={piece} />
+      {bands.map((band) => (
+        <ForestBand
+          key={band.max}
+          pieces={band.pieces}
+          leaf={band.leaf}
+          shade={band.shade}
+          bark={band.bark}
+          shadow={band.max <= 42}
+        />
       ))}
     </group>
   );
@@ -410,33 +483,59 @@ function MeadowBackdrop() {
     const image = source.image as CanvasImageSource & { width: number; height: number };
     const w = image.width;
     const h = image.height;
+    const skyCap = Math.round(h * 0.55);
+    const groundCap = Math.round(h * 0.28);
     const canvas = document.createElement("canvas");
     canvas.width = w * 2;
-    canvas.height = h;
+    canvas.height = skyCap + h + groundCap;
     const ctx = canvas.getContext("2d");
     if (ctx) {
-      ctx.drawImage(image, 0, 0, w, h);
-      ctx.save();
-      ctx.translate(w * 2, 0);
-      ctx.scale(-1, 1);
-      ctx.drawImage(image, 0, 0, w, h);
-      ctx.restore();
+      const sky = "#7ecbf5";
+      const earth = "#d7ebf8";
+      ctx.fillStyle = sky;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      const draw = (dx: number, flip: boolean) => {
+        ctx.save();
+        if (flip) {
+          ctx.translate(dx + w, 0);
+          ctx.scale(-1, 1);
+          ctx.drawImage(image, 0, skyCap, w, h);
+        } else {
+          ctx.drawImage(image, dx, skyCap, w, h);
+        }
+        ctx.restore();
+      };
+      draw(0, false);
+      draw(w, true);
+      const groundFade = ctx.createLinearGradient(0, canvas.height, 0, skyCap + h * 0.62);
+      groundFade.addColorStop(0, earth);
+      groundFade.addColorStop(0.45, "rgba(215, 235, 248, 0.75)");
+      groundFade.addColorStop(1, "rgba(215, 235, 248, 0)");
+      ctx.fillStyle = groundFade;
+      ctx.fillRect(0, skyCap + h * 0.62, canvas.width, canvas.height - (skyCap + h * 0.62));
+      const skyFade = ctx.createLinearGradient(0, 0, 0, skyCap + h * 0.38);
+      skyFade.addColorStop(0, sky);
+      skyFade.addColorStop(0.42, sky);
+      skyFade.addColorStop(1, "rgba(126, 203, 245, 0)");
+      ctx.fillStyle = skyFade;
+      ctx.fillRect(0, 0, canvas.width, skyCap + h * 0.38);
     }
     const tex = new THREE.CanvasTexture(canvas);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.wrapS = THREE.RepeatWrapping;
     tex.wrapT = THREE.ClampToEdgeWrapping;
-    // Two mirrored copies, twice around the cylinder, cropped to the village and sky.
-    tex.repeat.set(4, 0.72);
-    tex.offset.set(0, 0.2);
+    const height = 108;
+    const tileWorldW = height * (canvas.width / canvas.height);
+    tex.repeat.set((Math.PI * 2 * MEADOW_BACKDROP_RADIUS) / tileWorldW, 1);
     tex.anisotropy = 8;
     tex.needsUpdate = true;
     return tex;
   }, [source]);
 
+  const height = 108;
   return (
-    <mesh position={[0, 3.15, 0]} rotation={[0, 0.4, 0]}>
-      <cylinderGeometry args={[19.5, 19.5, 7.1, 80, 1, true]} />
+    <mesh position={[0, -6 + height / 2, 0]}>
+      <cylinderGeometry args={[MEADOW_BACKDROP_RADIUS, MEADOW_BACKDROP_RADIUS, height, 96, 1, true]} />
       <meshBasicMaterial map={map} side={THREE.BackSide} toneMapped={false} />
     </mesh>
   );

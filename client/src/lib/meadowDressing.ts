@@ -1,9 +1,11 @@
 /**
- * Forest ring around the meadow clearing. Pieces sit outside the knockoff
- * line and their crowns stay under the gameplay camera's sightlines.
- * The arena component draws these exact sizes.
+ * Forest around the meadow clearing. Pieces sit outside the knockoff line,
+ * on the decorative ground, and their crowns stay under the gameplay camera.
+ * The arena draws these exact sizes. Nothing here is a collider.
  */
-export const MEADOW_GROUND_Y = -0.06;
+export const MEADOW_GROUND_Y = -0.48;
+export const MEADOW_BACKDROP_RADIUS = 168;
+export const MEADOW_GROUND_RADIUS = 174;
 
 export interface ForestPiece {
   id: string;
@@ -25,35 +27,45 @@ function seeded(seed: number) {
   };
 }
 
-export function meadowForestPieces(): ForestPiece[] {
-  const rand = seeded(77);
-  const pieces: ForestPiece[] = [];
-  for (let i = 0; i < 12; i += 1) {
-    const angle = (i / 12) * Math.PI * 2 + (rand() - 0.5) * 0.18;
-    const dist = 17.55 + rand() * 0.55;
+function ring(
+  rand: () => number,
+  pieces: ForestPiece[],
+  id: string,
+  kind: "tree" | "bush",
+  count: number,
+  r0: number,
+  r1: number,
+  trunk0: number,
+  trunk1: number,
+  can0: number,
+  can1: number,
+) {
+  for (let i = 0; i < count; i += 1) {
+    const angle = (i / count) * Math.PI * 2 + (rand() - 0.5) * ((Math.PI * 2) / count) * 0.65;
+    const dist = r0 + rand() * (r1 - r0);
+    const trunk = trunk0 + rand() * (trunk1 - trunk0);
+    const canopy = can0 + rand() * (can1 - can0);
     pieces.push({
-      id: `tree-${i}`,
-      kind: "tree",
+      id: `${id}-${i}`,
+      kind,
       x: Math.cos(angle) * dist,
       z: Math.sin(angle) * dist,
       rot: rand() * Math.PI * 2,
-      trunk: 0.85 + rand() * 0.35,
-      canopy: 0.72 + rand() * 0.22,
+      trunk,
+      canopy,
     });
   }
-  for (let i = 0; i < 22; i += 1) {
-    const angle = (i / 22) * Math.PI * 2 + 0.07 + rand() * 0.06;
-    const dist = 16.28 + (i % 2) * 0.35 + rand() * 0.2;
-    pieces.push({
-      id: `bush-${i}`,
-      kind: "bush",
-      x: Math.cos(angle) * dist,
-      z: Math.sin(angle) * dist,
-      rot: rand() * Math.PI,
-      trunk: 0,
-      canopy: 0.48 + rand() * 0.18,
-    });
-  }
+}
+
+export function meadowForestPieces(): ForestPiece[] {
+  const rand = seeded(77);
+  const pieces: ForestPiece[] = [];
+  ring(rand, pieces, "bush", "bush", 28, 16.7, 17.6, 0, 0, 0.55, 0.85);
+  ring(rand, pieces, "tree", "tree", 16, 18.4, 22.5, 1.15, 1.85, 0.85, 1.2);
+  ring(rand, pieces, "mid", "tree", 22, 25, 38, 2.8, 4.4, 1.6, 2.3);
+  ring(rand, pieces, "far", "tree", 32, 42, 72, 4.2, 6.2, 2.2, 3.2);
+  ring(rand, pieces, "horizon", "tree", 48, 78, 112, 5.5, 8, 2.8, 4);
+  ring(rand, pieces, "haze", "tree", 64, 118, 152, 6.5, 9.5, 3.4, 4.8);
   return pieces;
 }
 
