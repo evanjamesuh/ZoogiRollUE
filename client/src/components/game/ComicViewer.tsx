@@ -1,347 +1,350 @@
-import { useState, useRef, useEffect, Suspense, useMemo, Component, ReactNode } from "react";
+import { Component, ReactNode, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { OrbitControls, useGLTF, Html, PerspectiveCamera } from "@react-three/drei";
-import { ChevronLeft, ChevronUp, ChevronDown, Home, Loader2, BookOpen } from "lucide-react";
+import { OrbitControls, useGLTF } from "@react-three/drei";
+import { BookOpen, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import * as THREE from "three";
+import {
+  COMIC_VIEW_EXPOSURE,
+  INTRO_COMIC_PAGE_COUNT,
+  comicCommandForKey,
+  comicCommandForSwipe,
+  comicCommandForTap,
+  comicPanelUrlsToKeep,
+  introComicPanelUrl,
+  introComicTitle,
+  missingComicPanelMessage,
+  prepareComicPanel,
+  stepComicPage,
+} from "@/lib/comicPanels";
+import { retainComicPanel, syncComicPanelCache } from "@/lib/comicPanelCache";
 
 interface ComicViewerProps {
   onBack: () => void;
 }
 
-interface ComicPanel {
-  id: string;
-  name: string;
-  modelUrl: string;
-  width: number;
-  height: number;
-}
+type ManualCamera = THREE.PerspectiveCamera & { manual?: boolean };
 
-const SAMPLE_PANELS: ComicPanel[] = [
-  { id: "header", name: "Header", modelUrl: "/attached_assets/header.w100h50_1768883315034.glb", width: 100, height: 50 },
-  { id: "panel1", name: "Panel 1", modelUrl: "/attached_assets/black.w100h25_1768883315033.glb", width: 100, height: 25 },
-  { id: "footer", name: "Footer", modelUrl: "/attached_assets/footer.w100h50_1768883315034.glb", width: 100, height: 50 },
-];
+function ComicPanelStage({ page, onReady }: { page: number; onReady: (page: number) => void }) {
+  const url = introComicPanelUrl(page);
+  const gltf = useGLTF(url);
+  const prepared = useMemo(() => prepareComicPanel(gltf.scene, page), [gltf.scene, page]);
+  const set = useThree((state) => state.set);
+  const size = useThree((state) => state.size);
+  const frames = useRef(0);
+  const revealedPage = useRef(0);
 
-interface PanelErrorBoundaryProps {
-  children: ReactNode;
-  panelName: string;
-}
+  useLayoutEffect(() => {
+    retainComicPanel(url, gltf.scene);
+    const camera = prepared.camera as ManualCamera;
+    camera.manual = true;
+    camera.aspect = size.width / Math.max(1, size.height);
+    camera.updateProjectionMatrix();
+    set({ camera });
+    frames.current = 0;
+  }, [url, gltf.scene, prepared.camera, set, size.width, size.height]);
 
-interface PanelErrorBoundaryState {
-  hasError: boolean;
-}
-
-class PanelErrorBoundary extends Component<PanelErrorBoundaryProps, PanelErrorBoundaryState> {
-  constructor(props: PanelErrorBoundaryProps) {
-    super(props);
-    this.state = { hasError: false };
-  }
-
-  static getDerivedStateFromError(): PanelErrorBoundaryState {
-    return { hasError: true };
-  }
-
-  componentDidCatch(error: Error) {
-    console.error("Comic panel load error:", this.props.panelName, error);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <mesh>
-          <planeGeometry args={[6, 3]} />
-          <meshBasicMaterial color="#1a1a2e" />
-        </mesh>
-      );
-    }
-    return this.props.children;
-  }
-}
-
-function ComicPanelModelInner({ panel, isActive }: { panel: ComicPanel; isActive: boolean }) {
-  const groupRef = useRef<THREE.Group>(null);
-  const { scene } = useGLTF(panel.modelUrl);
-  
-  const clonedScene = useMemo(() => scene.clone(), [scene]);
-  
-  useEffect(() => {
-    console.log("Comic panel loaded:", panel.id);
-    clonedScene.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.castShadow = false;
-        child.receiveShadow = false;
-      }
-    });
-  }, [clonedScene, panel.id]);
-
+  // The first frame compiles shaders. Reveal the panel on the frame after that
+  // so the loader stays up instead of flashing a blank canvas.
   useFrame(() => {
-    if (groupRef.current) {
-      const targetScale = isActive ? 1 : 0.85;
-      const currentScale = groupRef.current.scale.x;
-      const newScale = currentScale + (targetScale - currentScale) * 0.1;
-      if (Math.abs(newScale - currentScale) > 0.001) {
-        groupRef.current.scale.setScalar(newScale);
-      }
-    }
-  });
-
-  return (
-    <group ref={groupRef}>
-      <primitive object={clonedScene} scale={3} />
-    </group>
-  );
-}
-
-function PanelFallback() {
-  return (
-    <mesh>
-      <planeGeometry args={[6, 3]} />
-      <meshBasicMaterial color="#333" wireframe />
-    </mesh>
-  );
-}
-
-function ComicPanelModel({ panel, position, isActive }: { panel: ComicPanel; position: [number, number, number]; isActive: boolean }) {
-  return (
-    <group position={position}>
-      <PanelErrorBoundary panelName={panel.name}>
-        <Suspense fallback={<PanelFallback />}>
-          <ComicPanelModelInner panel={panel} isActive={isActive} />
-        </Suspense>
-      </PanelErrorBoundary>
-    </group>
-  );
-}
-
-function ComicScene({ panels, currentPanelIndex }: { panels: ComicPanel[]; currentPanelIndex: number }) {
-  const { camera } = useThree();
-  const targetY = useRef(0);
-  const panelSpacing = 8;
-  
-  useEffect(() => {
-    targetY.current = -currentPanelIndex * panelSpacing;
-  }, [currentPanelIndex, panelSpacing]);
-  
-  useFrame(() => {
-    const diff = targetY.current - camera.position.y;
-    if (Math.abs(diff) > 0.01) {
-      camera.position.y += diff * 0.08;
+    if (revealedPage.current === page) return;
+    frames.current += 1;
+    if (frames.current >= 2) {
+      revealedPage.current = page;
+      onReady(page);
     }
   });
 
   return (
     <>
-      <ambientLight intensity={0.8} />
-      <directionalLight position={[5, 10, 5]} intensity={0.6} />
-      
-      {panels.map((panel, index) => (
-        <ComicPanelModel 
-          key={panel.id}
-          panel={panel} 
-          position={[0, -index * panelSpacing, 0]} 
-          isActive={index === currentPanelIndex}
-        />
-      ))}
+      <primitive object={gltf.scene} />
+      <OrbitControls
+        camera={prepared.camera}
+        target={prepared.aim}
+        makeDefault
+        enablePan={false}
+        enableDamping
+        dampingFactor={0.08}
+        rotateSpeed={0.55}
+        zoomSpeed={0.6}
+        minDistance={prepared.orbit.minDistance}
+        maxDistance={prepared.orbit.maxDistance}
+        minPolarAngle={prepared.orbit.minPolarAngle}
+        maxPolarAngle={prepared.orbit.maxPolarAngle}
+        minAzimuthAngle={prepared.orbit.minAzimuthAngle}
+        maxAzimuthAngle={prepared.orbit.maxAzimuthAngle}
+        touches={{
+          ONE: THREE.TOUCH.PAN,
+          TWO: THREE.TOUCH.DOLLY_ROTATE,
+        }}
+      />
     </>
+  );
+}
+
+interface PanelErrorBoundaryProps {
+  page: number;
+  children: ReactNode;
+}
+
+interface PanelErrorBoundaryState {
+  failed: boolean;
+}
+
+class PanelErrorBoundary extends Component<PanelErrorBoundaryProps, PanelErrorBoundaryState> {
+  state: PanelErrorBoundaryState = { failed: false };
+
+  static getDerivedStateFromError(): PanelErrorBoundaryState {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error("Comic panel failed to load:", introComicPanelUrl(this.props.page), error);
+  }
+
+  render() {
+    if (this.state.failed) return <MissingPanel page={this.props.page} />;
+    return this.props.children;
+  }
+}
+
+function MissingPanel({ page }: { page: number }) {
+  return (
+    <div className="flex flex-1 items-center justify-center px-6 py-10">
+      <div className="max-w-md text-center">
+        <p className="text-lg font-semibold text-white">
+          Panel {page}, {introComicTitle(page)}, couldn’t be loaded
+        </p>
+        <p className="mt-3 text-sm leading-relaxed text-white/75">{missingComicPanelMessage(page)}</p>
+      </div>
+    </div>
   );
 }
 
 function LoadingOverlay() {
   return (
-    <Html center>
+    <div className="absolute inset-0 z-10 flex items-center justify-center bg-[#07080f]">
       <div className="flex flex-col items-center gap-3 text-white">
-        <Loader2 className="w-8 h-8 animate-spin" />
-        <span className="text-sm">Loading panel...</span>
+        <Loader2 className="h-8 w-8 animate-spin text-cyan-300" />
+        <span className="text-sm font-medium">Loading panel…</span>
       </div>
-    </Html>
+    </div>
+  );
+}
+
+function ComicFrame({ children }: { children: ReactNode }) {
+  const outerRef = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const el = outerRef.current;
+    if (!el) return;
+    const fit = () => {
+      const width = el.clientWidth;
+      const height = el.clientHeight;
+      const aspect = 16 / 9;
+      let frameWidth = width;
+      let frameHeight = frameWidth / aspect;
+      if (frameHeight > height) {
+        frameHeight = height;
+        frameWidth = frameHeight * aspect;
+      }
+      setBox({
+        width: Math.max(0, Math.floor(frameWidth)),
+        height: Math.max(0, Math.floor(frameHeight)),
+      });
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={outerRef} className="flex min-h-0 w-full flex-1 items-center justify-center">
+      <div className="relative bg-black" style={{ width: box.width, height: box.height }}>
+        {box.width > 0 && children}
+      </div>
+    </div>
   );
 }
 
 export function ComicViewer({ onBack }: ComicViewerProps) {
-  const [currentPanelIndex, setCurrentPanelIndex] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const panels = SAMPLE_PANELS;
-  
+  const [page, setPage] = useState(1);
+  const [readyPage, setReadyPage] = useState(0);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const onBackRef = useRef(onBack);
+  onBackRef.current = onBack;
+  const markReady = useCallback((shownPage: number) => setReadyPage(shownPage), []);
+
+  const go = (delta: number) => setPage((current) => stepComicPage(current, delta));
+
   useEffect(() => {
-    const timer = setTimeout(() => setIsLoading(false), 1000);
-    return () => clearTimeout(timer);
+    const keep = comicPanelUrlsToKeep(page);
+    const next = keep[1];
+    if (next) {
+      Promise.resolve(useGLTF.preload(next)).catch(() => {
+        // Reaching that page shows the missing-file message.
+      });
+    }
+    syncComicPanelCache(keep);
+  }, [page]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const command = comicCommandForKey(event.key);
+      if (!command) return;
+      if (command !== "close" && target?.closest("button, input, textarea, a")) return;
+      event.preventDefault();
+      if (command === "close") onBackRef.current();
+      if (command === "next") go(1);
+      if (command === "prev") go(-1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const goToNextPanel = () => {
-    if (currentPanelIndex < panels.length - 1) {
-      setCurrentPanelIndex(prev => prev + 1);
-    }
-  };
-
-  const goToPrevPanel = () => {
-    if (currentPanelIndex > 0) {
-      setCurrentPanelIndex(prev => prev - 1);
-    }
-  };
-
-  const goToFirstPanel = () => {
-    setCurrentPanelIndex(0);
-  };
-
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      switch (e.key) {
-        case "ArrowDown":
-        case "ArrowRight":
-        case " ":
-          e.preventDefault();
-          goToNextPanel();
-          break;
-        case "ArrowUp":
-        case "ArrowLeft":
-          e.preventDefault();
-          goToPrevPanel();
-          break;
-        case "Home":
-          e.preventDefault();
-          goToFirstPanel();
-          break;
-        case "Escape":
-          onBack();
-          break;
+    const el = frameRef.current;
+    if (!el) return;
+    let startX = 0;
+    let startY = 0;
+    let startTime = 0;
+    let pointerId = -1;
+
+    const onDown = (event: PointerEvent) => {
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+      pointerId = event.pointerId;
+      startX = event.clientX;
+      startY = event.clientY;
+      startTime = performance.now();
+    };
+
+    const onUp = (event: PointerEvent) => {
+      if (event.pointerId !== pointerId) return;
+      pointerId = -1;
+      const dx = event.clientX - startX;
+      const dy = event.clientY - startY;
+      const elapsed = performance.now() - startTime;
+      if (event.pointerType !== "mouse" && elapsed < 500) {
+        const swipe = comicCommandForSwipe(dx, dy);
+        if (swipe === "next") {
+          go(1);
+          return;
+        }
+        if (swipe === "prev") {
+          go(-1);
+          return;
+        }
+      }
+      if (Math.abs(dx) < 12 && Math.abs(dy) < 12 && elapsed < 400) {
+        const rect = el.getBoundingClientRect();
+        const tap = comicCommandForTap(event.clientX - rect.left, rect.width);
+        if (tap === "next") go(1);
+        if (tap === "prev") go(-1);
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [currentPanelIndex, panels.length]);
-
-  useEffect(() => {
-    let touchStartY = 0;
-    let touchStartX = 0;
-    
-    const handleTouchStart = (e: TouchEvent) => {
-      touchStartY = e.touches[0].clientY;
-      touchStartX = e.touches[0].clientX;
-    };
-    
-    const handleTouchEnd = (e: TouchEvent) => {
-      const touchEndY = e.changedTouches[0].clientY;
-      const touchEndX = e.changedTouches[0].clientX;
-      const diffY = touchStartY - touchEndY;
-      const diffX = touchStartX - touchEndX;
-      
-      if (Math.abs(diffY) > Math.abs(diffX) && Math.abs(diffY) > 50) {
-        if (diffY > 0) {
-          goToNextPanel();
-        } else {
-          goToPrevPanel();
-        }
-      } else if (Math.abs(diffX) > 50) {
-        if (diffX > 0) {
-          goToNextPanel();
-        } else {
-          goToPrevPanel();
-        }
-      }
-    };
-    
-    window.addEventListener("touchstart", handleTouchStart);
-    window.addEventListener("touchend", handleTouchEnd);
+    el.addEventListener("pointerdown", onDown);
+    el.addEventListener("pointerup", onUp);
     return () => {
-      window.removeEventListener("touchstart", handleTouchStart);
-      window.removeEventListener("touchend", handleTouchEnd);
+      el.removeEventListener("pointerdown", onDown);
+      el.removeEventListener("pointerup", onUp);
     };
-  }, [currentPanelIndex, panels.length]);
+  }, []);
+
+  const loading = readyPage !== page;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-gradient-to-b from-gray-900 via-black to-gray-900">
-      <div className="absolute top-4 left-4 z-10">
-        <button
-          onClick={onBack}
-          className="flex items-center gap-2 px-4 py-2 bg-black/60 backdrop-blur-sm text-white rounded-full hover:bg-black/80 transition-colors"
-        >
-          <ChevronLeft size={20} />
-          <span className="font-medium">Back</span>
-        </button>
-      </div>
-
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10">
-        <div className="flex items-center gap-2 px-4 py-2 bg-black/60 backdrop-blur-sm rounded-full">
-          <BookOpen size={18} className="text-cyan-400" />
-          <span className="text-white font-bold">3D Comic</span>
-        </div>
-      </div>
-
-      <div className="flex-1 relative">
-        {isLoading ? (
-          <div className="absolute inset-0 flex items-center justify-center bg-black">
-            <div className="flex flex-col items-center gap-4">
-              <div className="w-24 h-24 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin" />
-              <span className="text-white text-lg font-medium animate-pulse">Loading 3D Comic...</span>
-            </div>
-          </div>
-        ) : (
-          <Canvas 
-            shadows={false}
-            gl={{ 
-              antialias: false,
-              powerPreference: "low-power",
-              failIfMajorPerformanceCaveat: false
-            }}
+    <div
+      className="fixed inset-0 z-50 flex flex-col bg-[#07080f] text-white select-none"
+      style={{ touchAction: "none" }}
+      data-testid="comic-viewer"
+    >
+      <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 py-3">
+        <div>
+          <button
+            type="button"
+            onClick={onBack}
+            data-testid="comic-back"
+            className="flex items-center gap-1 rounded-full bg-white/10 px-3 py-2 text-sm font-medium hover:bg-white/20"
           >
-            <color attach="background" args={["#0a0a0f"]} />
-            <PerspectiveCamera makeDefault position={[0, 0, 12]} fov={50} />
-            <Suspense fallback={<LoadingOverlay />}>
-              <ComicScene panels={panels} currentPanelIndex={currentPanelIndex} />
-            </Suspense>
-            <OrbitControls 
-              enableZoom={true} 
-              enablePan={false}
-              minDistance={5}
-              maxDistance={20}
-              enableRotate={true}
-              maxPolarAngle={Math.PI * 0.75}
-              minPolarAngle={Math.PI * 0.25}
-            />
-          </Canvas>
-        )}
-      </div>
-
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2">
-        <button
-          onClick={goToFirstPanel}
-          disabled={currentPanelIndex === 0}
-          className="p-3 bg-black/60 backdrop-blur-sm text-white rounded-full hover:bg-black/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          title="Go to start"
-        >
-          <Home size={20} />
-        </button>
-        
-        <button
-          onClick={goToPrevPanel}
-          disabled={currentPanelIndex === 0}
-          className="p-3 bg-black/60 backdrop-blur-sm text-white rounded-full hover:bg-black/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          title="Previous panel"
-        >
-          <ChevronUp size={24} />
-        </button>
-        
-        <div className="px-4 py-2 bg-black/60 backdrop-blur-sm rounded-full min-w-[80px] text-center">
-          <span className="text-white font-medium">
-            {currentPanelIndex + 1} / {panels.length}
-          </span>
+            <ChevronLeft size={18} />
+            Back
+          </button>
         </div>
-        
-        <button
-          onClick={goToNextPanel}
-          disabled={currentPanelIndex === panels.length - 1}
-          className="p-3 bg-black/60 backdrop-blur-sm text-white rounded-full hover:bg-black/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          title="Next panel"
-        >
-          <ChevronDown size={24} />
-        </button>
+        <div className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-2">
+          <BookOpen size={16} className="text-cyan-300" />
+          <span className="text-sm font-bold">3D Comic</span>
+        </div>
+        <div />
       </div>
 
-      <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-10">
-        <span className="text-white/50 text-xs">
-          Swipe or use arrow keys to navigate
-        </span>
+      <PanelErrorBoundary key={page} page={page}>
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <div ref={frameRef} className="flex min-h-0 flex-1 flex-col">
+            <ComicFrame>
+              <Canvas
+                className="h-full w-full"
+                dpr={[1, 1.75]}
+                frameloop="always"
+                gl={{
+                  antialias: true,
+                  alpha: false,
+                  powerPreference: "high-performance",
+                  toneMapping: THREE.ACESFilmicToneMapping,
+                  toneMappingExposure: COMIC_VIEW_EXPOSURE,
+                }}
+                onCreated={({ gl }) => {
+                  gl.outputColorSpace = THREE.SRGBColorSpace;
+                  gl.toneMapping = THREE.ACESFilmicToneMapping;
+                  gl.toneMappingExposure = COMIC_VIEW_EXPOSURE;
+                }}
+              >
+                <color attach="background" args={["#07080f"]} />
+                <Suspense fallback={null}>
+                  <ComicPanelStage page={page} onReady={markReady} />
+                </Suspense>
+              </Canvas>
+            </ComicFrame>
+          </div>
+          {loading && <LoadingOverlay />}
+        </div>
+      </PanelErrorBoundary>
+
+      <div className="flex shrink-0 flex-col items-center gap-2 px-3 pb-4 pt-2">
+        <p className="text-xs text-white/45">Arrows, swipe, or tap the sides</p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => go(-1)}
+            disabled={page === 1}
+            data-testid="comic-prev"
+            aria-label="Previous panel"
+            className="rounded-full bg-white/10 p-3 hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <ChevronLeft size={22} />
+          </button>
+          <div
+            data-testid="comic-page"
+            className="min-w-[9.5rem] rounded-full bg-white/10 px-4 py-2 text-center"
+          >
+            <div className="text-sm font-semibold">
+              {page} / {INTRO_COMIC_PAGE_COUNT}
+            </div>
+            <div className="text-xs text-white/70">{introComicTitle(page)}</div>
+          </div>
+          <button
+            type="button"
+            onClick={() => go(1)}
+            disabled={page === INTRO_COMIC_PAGE_COUNT}
+            data-testid="comic-next"
+            aria-label="Next panel"
+            className="rounded-full bg-white/10 p-3 hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <ChevronRight size={22} />
+          </button>
+        </div>
       </div>
     </div>
   );
