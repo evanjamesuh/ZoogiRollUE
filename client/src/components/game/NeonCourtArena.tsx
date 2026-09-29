@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useThree } from "@react-three/fiber";
-import { NightCircuitCrowd } from "./NightCircuitCrowd";
+import { NightCircuitStadium } from "./NightCircuitStadium";
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { BUMPER_RADIUS } from "@/lib/arenaColliders";
@@ -510,121 +510,6 @@ function KnockoutMouths() {
   );
 }
 
-const STANDS: Array<{ pos: [number, number, number]; size: [number, number, number] }> = [
-  // Near and side lips. The far bowl is its own lit grandstand so it reads in frame.
-  { pos: [0, 0.46, 9.55], size: [15.4, 0.92, 2.15] },
-  { pos: [0, 1.02, 10.9], size: [16.2, 0.55, 1.15] },
-  { pos: [13.2, 0.4, 0], size: [1.65, 0.8, 8.4] },
-  { pos: [-13.2, 0.4, 0], size: [1.65, 0.8, 8.4] },
-  // Outer bowl, visible when the camera opens up on a spread-out rally.
-  { pos: [0, 1.55, -15.4], size: [24, 1.35, 2.6] },
-  { pos: [0, 1.55, 15.4], size: [24, 1.35, 2.6] },
-  { pos: [16.6, 1.15, 0], size: [2.2, 1.15, 16] },
-  { pos: [-16.6, 1.15, 0], size: [2.2, 1.15, 16] },
-];
-
-function FarBowl({ envMap }: { envMap: THREE.Texture | null }) {
-  const tiers = [
-    { z: -9.22, y: 0.58, h: 0.82, depth: 0.7, width: 16.6 },
-    { z: -10.02, y: 1.16, h: 0.96, depth: 0.78, width: 17.8 },
-    { z: -10.86, y: 1.74, h: 1.08, depth: 0.84, width: 18.8 },
-  ];
-  return (
-    <group>
-      {tiers.map((tier) => {
-        const frontZ = tier.z + tier.depth / 2 - 0.03;
-        const lipY = tier.y + tier.h / 2 + 0.02;
-        const half = tier.width / 2 - 0.12;
-        return (
-          <group key={tier.z}>
-            <mesh position={[0, tier.y, tier.z]} receiveShadow>
-              <boxGeometry args={[tier.width, tier.h, tier.depth]} />
-              <meshStandardMaterial
-                color="#070b16"
-                emissive="#0c1428"
-                emissiveIntensity={0.12}
-                metalness={0.84}
-                roughness={0.18}
-                envMap={envMap ?? undefined}
-                envMapIntensity={0.62}
-              />
-            </mesh>
-            <mesh position={[-half / 2, lipY, frontZ]}>
-              <boxGeometry args={[half, 0.08, 0.1]} />
-              <meshStandardMaterial color="#22e7ff" emissive="#22e7ff" emissiveIntensity={1.9} toneMapped={false} />
-            </mesh>
-            <mesh position={[half / 2, lipY, frontZ]}>
-              <boxGeometry args={[half, 0.08, 0.1]} />
-              <meshStandardMaterial color="#ff2bd6" emissive="#ff2bd6" emissiveIntensity={1.9} toneMapped={false} />
-            </mesh>
-          </group>
-        );
-      })}
-      {[-8.9, 8.9].map((x) => (
-        <group key={`mast-${x}`} position={[x, 0, -10.55]}>
-          <mesh position={[0, 1.65, 0]}>
-            <cylinderGeometry args={[0.08, 0.12, 3.3, 8]} />
-            <meshStandardMaterial color="#121826" metalness={0.82} roughness={0.22} envMap={envMap ?? undefined} envMapIntensity={0.4} />
-          </mesh>
-          <mesh position={[0, 3.2, 0]}>
-            <boxGeometry args={[0.55, 0.12, 0.28]} />
-            <meshStandardMaterial color="#161c2c" metalness={0.78} roughness={0.24} />
-          </mesh>
-          <mesh position={[0, 3.38, 0]}>
-            <sphereGeometry args={[0.16, 10, 8]} />
-            <meshStandardMaterial
-              color="#fff6ea"
-              emissive={x < 0 ? "#22e7ff" : "#ff2bd6"}
-              emissiveIntensity={2.35}
-              toneMapped={false}
-            />
-          </mesh>
-        </group>
-      ))}
-      {[-1, 1].map((sx) => (
-        <group key={`pilaster-${sx}`} position={[sx * 12.55, 0, -5.5]}>
-          <mesh position={[0, 1.2, 0]}>
-            <boxGeometry args={[0.24, 2.4, 0.28]} />
-            <meshStandardMaterial color="#121826" metalness={0.78} roughness={0.24} envMap={envMap ?? undefined} envMapIntensity={0.35} />
-          </mesh>
-          <mesh position={[sx * -0.02, 1.2, 0.16]}>
-            <boxGeometry args={[0.07, 2.1, 0.05]} />
-            <meshStandardMaterial
-              color={sx < 0 ? "#22e7ff" : "#ff2bd6"}
-              emissive={sx < 0 ? "#22e7ff" : "#ff2bd6"}
-              emissiveIntensity={1.95}
-              toneMapped={false}
-            />
-          </mesh>
-        </group>
-      ))}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-4.3, 0.05, -8.92]}>
-        <planeGeometry args={[8.4, 0.85]} />
-        <meshBasicMaterial color="#22e7ff" transparent opacity={0.28} depthWrite={false} />
-      </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[4.3, 0.05, -8.92]}>
-        <planeGeometry args={[8.4, 0.85]} />
-        <meshBasicMaterial color="#ff2bd6" transparent opacity={0.28} depthWrite={false} />
-      </mesh>
-      <LightRig z={-10.4} y={2.85} />
-      {[-6.2, -2.1, 2.1, 6.2].map((x) => (
-        <mesh key={`beam-${x}`} position={[x, 2.05, -10.15]} rotation={[0.22, 0, 0]}>
-          <coneGeometry args={[0.42, 1.35, 7, 1, true]} />
-          <meshBasicMaterial
-            color={x < 0 ? "#22e7ff" : "#ff2bd6"}
-            transparent
-            opacity={0.07}
-            depthWrite={false}
-            side={THREE.DoubleSide}
-            blending={THREE.AdditiveBlending}
-            toneMapped={false}
-          />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
 function LightRig({ z, y = 6.4 }: { z: number; y?: number }) {
   const sign = z >= 0 ? 1 : -1;
   return (
@@ -865,14 +750,7 @@ export function NeonCourtArena() {
         <meshStandardMaterial color="#1a2233" emissive="#33506a" emissiveIntensity={0.45} roughness={0.6} metalness={0.2} />
       </mesh>
 
-      {STANDS.map((stand) => (
-        <mesh key={stand.pos.join(",")} position={stand.pos} receiveShadow>
-          <boxGeometry args={stand.size} />
-          <meshStandardMaterial color="#0c1018" roughness={0.32} metalness={0.72} />
-        </mesh>
-      ))}
-      <NightCircuitCrowd />
-      <FarBowl envMap={envMap} />
+      <NightCircuitStadium envMap={envMap} />
       <ArenaRim />
       <Skyline />
       <LightRig z={12.2} y={5.2} />
