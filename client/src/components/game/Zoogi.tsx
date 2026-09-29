@@ -632,8 +632,11 @@ export function PlayerZoogi() {
       hasLaunchedRef.current = false;
       launchCooldownRef.current = false;
       setMovementStopped(true);
-      
-      if (!isFreeForAll) {
+
+      // Physics already ends the turn when the roll stops. A later frame can
+      // still see this same slowdown. Ending again would skip whoever is up now.
+      const live = useZoogiGame.getState();
+      if (!isFreeForAll && live.isPlayerTurn && live.turnHasLaunched) {
         endTurn();
         console.log("Player turn ended");
       }
@@ -1316,7 +1319,15 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
       prePowerRef.current = "pending";
       wolfTimerRef.current = null;
       setMovementStopped(true);
-      if (!isFreeForAll) {
+      // Same guard as the player marble: only end the turn if it is still ours.
+      // A late frame after physics already handed the turn back must not skip
+      // the human, and a power cast must not be what ends the turn.
+      const live = useZoogiGame.getState();
+      const stillThisTurn = !isFreeForAll
+        && !live.isPlayerTurn
+        && live.turnIndex === myIndex
+        && live.turnHasLaunched;
+      if (stillThisTurn) {
         endTurn();
         console.log(`Enemy ${enemy.zoogi.name}'s turn ended`);
       }
@@ -1596,12 +1607,18 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
     
     meshRef.current.scale.set(1, 1, 1);
     
-    if (isMyTurn && hasLaunchedRef.current && speed < 0.02 && prevSpeedRef.current >= 0.02) {
+    if (hasLaunchedRef.current && speed < 0.02 && prevSpeedRef.current >= 0.02) {
       hasLaunchedRef.current = false;
       launchCooldownRef.current = false;
       setMovementStopped(true);
-      console.log(`Local player ${playerIndex} turn ended`);
-      endTurn();
+      const live = useZoogiGame.getState();
+      const stillThisTurn = live.gameMode === "local_multiplayer"
+        && live.currentLocalPlayerIndex === playerIndex
+        && live.turnHasLaunched;
+      if (stillThisTurn) {
+        console.log(`Local player ${playerIndex} turn ended`);
+        endTurn();
+      }
     }
     prevSpeedRef.current = speed;
   });
