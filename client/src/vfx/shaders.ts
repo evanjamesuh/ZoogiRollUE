@@ -84,15 +84,15 @@ void main() {
   vec2 scroll = vec2(uTime * 0.06, uTime * 0.035) + vVariant * 2.1;
   float n = fbm(vUv * 3.2 + scroll);
   float lobes = fbm(vUv * 1.75 + n * 1.8 + scroll.yx);
-  float interior = smoothstep(0.4, 0.16, dist);
-  float lumps = smoothstep(0.3, 0.68, lobes);
+  float interior = smoothstep(0.46, 0.24, dist);
+  float lumps = smoothstep(0.28, 0.66, lobes);
   float shape = mix(lumps, 1.0, interior);
-  float alpha = min(roundMask * shape * (0.78 + 0.22 * n) * vOpacity, 0.85);
-  float lower = smoothstep(0.58, 0.14, vUv.y);
-  float lit = mix(1.15, 0.46, lower);
-  vec3 charcoal = vec3(0.12, 0.125, 0.135) * lit;
-  vec3 warm = vec3(0.52, 0.18, 0.05);
-  vec3 col = mix(charcoal, warm, lower * uWarm * 0.8);
+  float alpha = min(roundMask * shape * (0.88 + 0.12 * n) * vOpacity, 0.85);
+  float lower = smoothstep(0.62, 0.14, vUv.y);
+  float lit = mix(1.35, 0.38, lower);
+  vec3 charcoal = vec3(0.038, 0.04, 0.044) * lit;
+  vec3 warm = vec3(0.32, 0.1, 0.025);
+  vec3 col = mix(charcoal, warm, lower * uWarm * 0.9);
   gl_FragColor = vec4(col, alpha);
 }
 `.replace("void main()", `${PUFF_NOISE}\nvoid main()`);
@@ -143,18 +143,21 @@ void main() {
   float edge = smoothstep(0.5, 0.2, length(p));
   float mask;
   float hot;
+  float gain;
   if (vStretch < 1.2) {
     float d = length(p) * 2.0;
-    mask = exp(-d * d * 9.0) * edge;
-    hot = exp(-d * d * 28.0);
+    mask = exp(-d * d * 28.0) * edge;
+    hot = exp(-d * d * 70.0);
+    gain = 3.2;
   } else {
     float across = abs(p.y) * 2.0;
     float along = abs(p.x) * 2.0;
-    mask = exp(-across * across * 36.0) * exp(-along * along * 2.4) * edge;
-    hot = exp(-across * across * 90.0) * exp(-along * along * 6.0);
+    mask = exp(-across * across * 110.0) * exp(-along * along * 1.35) * edge;
+    hot = exp(-across * across * 280.0) * exp(-along * along * 7.0);
+    gain = 2.2 + hot * 3.4;
   }
-  vec3 col = mix(vColor, vec3(1.0, 0.96, 0.75), hot);
-  gl_FragColor = vec4(col * mask * vOpacity * 6.0, 1.0);
+  vec3 col = mix(vColor, vec3(1.0, 0.97, 0.82), hot);
+  gl_FragColor = vec4(col * mask * vOpacity * gain, 1.0);
 }
 `;
 
@@ -252,13 +255,13 @@ void main() {
   float nse = noiseW(vLocal.xy * 2.6 + vLocal.yz * 1.7 + vec2(uTime * 0.9, uTime * 0.45));
   float flick = 0.72 + 0.28 * sin(uTime * 17.0 + nse * 22.0);
   fres *= flick;
-  float rear = smoothstep(0.12, -0.85, vLocal.z);
-  float low = smoothstep(0.02, -0.62, vLocal.y);
-  float breakUp = clamp(rear * 0.92 + low * 0.88, 0.0, 1.0);
-  float wisp = smoothstep(0.2, 0.7, nse);
-  float mask = mix(1.0, wisp, breakUp);
-  vec3 col = vec3(0.92, 1.5, 1.82) * (1.15 + fres * 3.1);
-  float alpha = (0.5 + fres * 0.78) * uFade * mask;
+  float rear = smoothstep(0.4, -0.55, vLocal.z);
+  float low = smoothstep(0.22, -0.42, vLocal.y);
+  float breakUp = clamp(rear * 1.05 + low * 1.05, 0.0, 1.0);
+  float wisp = smoothstep(0.38, 0.78, nse);
+  float mask = mix(0.92, wisp, breakUp);
+  vec3 col = vec3(0.58, 1.02, 1.25) * (0.72 + fres * 2.5);
+  float alpha = (0.46 + fres * 0.72) * uFade * mask;
   gl_FragColor = vec4(col, alpha);
 }
 `.replace("void main()", `${WOLF_NOISE}\nvoid main()`);
