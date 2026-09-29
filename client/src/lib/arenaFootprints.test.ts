@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   ARABIAN_STAGE,
   BUMPER_RADIUS,
+  COSMOS_FLOOR_MESH,
   COSMOS_STAGE,
   GRASS_STAGE,
   MARBLE_RADIUS,
@@ -10,6 +11,8 @@ import {
   WINTER_STAGE,
   arenaVisualEdge,
   collectMatchSolids,
+  cosmosDrawnLip,
+  cosmosPlayTransform,
   embeddedObstaclePose,
   getHoodooDecor,
   getMapLayout,
@@ -146,6 +149,30 @@ test("the drawn floor edge and knockout rim match the colliders", () => {
     if (edge.shape !== "circle") continue;
     assert.equal(edge.floorRadius, layout.floorRadius, `${map} floor`);
     assert.equal(edge.knockoffRadius, layout.knockoffRadius, `${map} knockout`);
+  }
+
+  const space = getMapLayout("space");
+  assert.ok(space);
+  const lip = cosmosDrawnLip();
+  const placed = cosmosPlayTransform();
+  assert.ok(Math.abs(lip.centerX) < 1e-6, "cosmic platform is centred on x");
+  assert.ok(Math.abs(lip.centerZ) < 1e-6, "cosmic platform is centred on z");
+  assert.equal(lip.radius, space.knockoffRadius);
+  assert.ok(placed.x < -0.2, "the model shifts so the +X lip meets the collider");
+  const rawPlusX = COSMOS_FLOOR_MESH.centerX + COSMOS_FLOOR_MESH.radius;
+  const rawMinusX = COSMOS_FLOOR_MESH.radius - COSMOS_FLOOR_MESH.centerX;
+  assert.ok(rawPlusX - rawMinusX > 0.4, "the glb floor itself is shifted toward +X");
+  for (const [name, dx, dz] of [
+    ["+X", 1, 0],
+    ["-X", -1, 0],
+    ["+Z", 0, 1],
+    ["-Z", 0, -1],
+  ] as const) {
+    const reach = Math.hypot(lip.centerX + dx * lip.radius, lip.centerZ + dz * lip.radius);
+    assert.ok(
+      Math.abs(reach - space.knockoffRadius) < 1e-4,
+      `space ${name} lip is ${reach.toFixed(3)}, knockout is ${space.knockoffRadius.toFixed(3)}`,
+    );
   }
 
   const neon = arenaVisualEdge("neon");

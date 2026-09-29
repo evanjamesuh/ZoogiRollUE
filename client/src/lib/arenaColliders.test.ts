@@ -71,8 +71,8 @@ test("every map keeps goals, spawns, and orbs off the solids", () => {
       );
       assert.equal(hit, null, `${id} orb ${i} overlaps a solid`);
     }
-    if (id === "tomb") {
-      assert.equal(layout.knockoffRadius, layout.floorRadius, "tomb knockoff is the sandstone edge");
+    if (id === "tomb" || id === "space") {
+      assert.equal(layout.knockoffRadius, layout.floorRadius, `${id} knockoff is the drawn edge`);
     } else {
       assert.ok(layout.knockoffRadius > layout.floorRadius);
     }
@@ -159,8 +159,8 @@ test("fitted stages keep the knockoff on the measured floor", () => {
   assert.ok(grass);
   const spaceScale = arenaScaleFor("space");
   const grassScale = arenaScaleFor("grass");
-  assert.ok(space.floorRadius > 14 * spaceScale && space.floorRadius < space.knockoffRadius);
-  assert.ok(Math.abs(space.knockoffRadius - 15.6 * spaceScale) < 0.02, "cosmic out line is the inner face of the lip");
+  assert.equal(space.floorRadius, space.knockoffRadius, "cosmic floor lip is the knockout");
+  assert.ok(Math.abs(space.knockoffRadius - 15.6 * spaceScale) < 0.02, "cosmic lip stays on the 15.6 knockout");
   assert.deepEqual(ARABIAN_STAGE.plazaCenter, [0, 0]);
   assert.ok(Math.abs(saturn.knockoffRadius - 15.5 * arenaScaleFor("saturn")) < 0.02, "arabian plaza circle sits on the origin");
   assert.ok(saturn.knockoffRadius - saturn.floorRadius < 0.6 * arenaScaleFor("saturn"), "fallback disk ends at the out line");

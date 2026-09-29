@@ -24,7 +24,7 @@ import { EditorScoringZones } from "./EditorScoringZones";
 import { PinballBumpers } from "./PinballBumpers";
 import { NeonCourtArena } from "./NeonCourtArena";
 import { ARENA_RADIUS } from "@/lib/arenaConstants";
-import { COSMOS_STAGE, getMapLayout } from "@/lib/arenaColliders";
+import { cosmosPlayTransform, getMapLayout } from "@/lib/arenaColliders";
 import { PharaohTombArena } from "./PharaohTombArena";
 import { ArabianNightDressing, CosmicVoidDressing, VolcanicPitDressing } from "./ComicMapDressing";
 import { ArabianArena, FrozenArena, MeadowArena } from "./RoundMapArenas";
@@ -40,10 +40,11 @@ function CosmosArenaModel() {
   const editing = gameMode === "map_editor";
 
   const arenaOffset = elementTransforms.arenaModelOffset;
-  const modelX = editing ? (backgroundSettings.modelPositionX ?? 0) + arenaOffset.x : 0;
-  const modelY = editing ? (backgroundSettings.modelPositionY ?? -0.5) + arenaOffset.y : COSMOS_STAGE.modelOffsetY;
-  const modelZ = editing ? (backgroundSettings.modelPositionZ ?? 0) + arenaOffset.z : 0;
-  const scale = editing ? (backgroundSettings.modelScale ?? COSMOS_STAGE.modelScale) : COSMOS_STAGE.modelScale;
+  const placed = cosmosPlayTransform();
+  const modelX = editing ? (backgroundSettings.modelPositionX ?? 0) + arenaOffset.x : placed.x;
+  const modelY = editing ? (backgroundSettings.modelPositionY ?? -0.5) + arenaOffset.y : placed.y;
+  const modelZ = editing ? (backgroundSettings.modelPositionZ ?? 0) + arenaOffset.z : placed.z;
+  const scale = editing ? (backgroundSettings.modelScale ?? placed.scale) : placed.scale;
   const modelScale: [number, number, number] = [scale, scale, scale];
   const modelPosition: [number, number, number] = [modelX, modelY, modelZ];
   

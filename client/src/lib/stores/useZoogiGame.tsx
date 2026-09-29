@@ -30,7 +30,7 @@ import { triggerKnockoffFeel, triggerCollisionFeel, triggerCollectFeel, triggerA
 import { useAudio } from "./useAudio";
 import { triggerAbilityCameraEffect, triggerKnockoffCameraEffect, triggerCollisionCameraEffect, triggerTargetFocusCameraEffect } from "./useCameraEffects";
 import { getDeviceId } from "@/lib/deviceId";
-import { COSMOS_STAGE, GRASS_STAGE, arabianPlayTransform, collectMatchSolids, getIcePatches, getMapLayout, knockoffOffsetForMap, resolveSolidCollision } from "../arenaColliders";
+import { GRASS_STAGE, arabianPlayTransform, collectMatchSolids, cosmosPlayTransform, getIcePatches, getMapLayout, knockoffOffsetForMap, resolveSolidCollision } from "../arenaColliders";
 import { isOutsideNeonCourt, resolveNeonRails } from "../neonCourt";
 import { FALL_GRAVITY_STEP, FALL_OUT_Y, ICE_ROLLING_DRAG, LOCKON_LAUNCH_SPEED, MARBLE_RESTITUTION, MAX_PLANAR_SPEED, REST_SPEED, ROLLING_DRAG, SETTLE_DELAY_STEPS } from "../simFeel";
 import { ORB_REST_Y, ZOOGI_REST_Y } from "../restHeight";
@@ -1230,7 +1230,7 @@ function playfieldSettings(
     map === "grass"
       ? { x: 0, y: GRASS_STAGE.modelOffsetY, z: 0, scale: GRASS_STAGE.modelScale }
       : map === "space"
-        ? { x: 0, y: COSMOS_STAGE.modelOffsetY, z: 0, scale: COSMOS_STAGE.modelScale }
+        ? cosmosPlayTransform()
         : map === "saturn"
           ? arabianPlayTransform()
           : null;

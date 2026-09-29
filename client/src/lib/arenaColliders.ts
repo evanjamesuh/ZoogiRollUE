@@ -49,17 +49,46 @@ export const WINTER_STAGE = {
 };
 
 /**
- * cosmos_arena.glb. Scale 1.08. The playable floor ends at the inner face of
- * the lip wall (about 15.6). That wall is drawn only, so the knockoff line is
- * the inner face: a marble is out where the floor visibly ends, not after it
- * has rolled through the wall. Floor mesh is at local y=-0.02.
+ * cosmos_arena.glb floor disk (polygon56_Arena_Floor). It is a circle, but the
+ * file does not put that circle on the origin: the centre sits at about
+ * (+0.250, -0.024) and the radius is 15.743. Drawn at scale 1.08 with no
+ * shift, the lip sat 1.1–1.7 units outside the knockout, furthest on +X, so a
+ * marble fell before the curb and that side had no lip at the fall line.
+ * cosmosPlayTransform recentres the disk and scales it onto the knockout.
  */
+export const COSMOS_FLOOR_MESH = {
+  centerX: 0.25045,
+  centerY: -0.019,
+  centerZ: -0.02365,
+  radius: 15.743,
+};
+
 export const COSMOS_STAGE = {
-  modelScale: 1.08,
-  modelOffsetY: 0.02 * 1.08,
-  floorRadius: 15.2,
+  floorRadius: 15.6,
   knockoffRadius: 15.6,
 };
+
+/** Scale and shift that put the measured floor lip on the knockout circle. */
+export function cosmosPlayTransform(): { x: number; y: number; z: number; scale: number } {
+  const worldRadius = COSMOS_STAGE.knockoffRadius * arenaScaleFor("space");
+  const scale = worldRadius / COSMOS_FLOOR_MESH.radius;
+  return {
+    x: -scale * COSMOS_FLOOR_MESH.centerX,
+    y: -scale * COSMOS_FLOOR_MESH.centerY,
+    z: -scale * COSMOS_FLOOR_MESH.centerZ,
+    scale,
+  };
+}
+
+/** World circle of the cosmic floor lip after cosmosPlayTransform. */
+export function cosmosDrawnLip(): { centerX: number; centerZ: number; radius: number } {
+  const placed = cosmosPlayTransform();
+  return {
+    centerX: placed.x + placed.scale * COSMOS_FLOOR_MESH.centerX,
+    centerZ: placed.z + placed.scale * COSMOS_FLOOR_MESH.centerZ,
+    radius: placed.scale * COSMOS_FLOOR_MESH.radius,
+  };
+}
 
 /**
  * arabian_nights_stage.glb is authored around (-656.5, 556.6, 11). That point
