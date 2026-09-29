@@ -124,6 +124,7 @@ function useDevTools() {
 function CharacterAbilityButton({ zoogiId, entity }: {
   zoogiId: string;
   entity: {
+    id: string;
     wolfgangAbilityUnlocked: boolean;
     hotstreakAbilityUnlocked: boolean;
     boltAbilityUnlocked: boolean;
@@ -140,11 +141,11 @@ function CharacterAbilityButton({ zoogiId, entity }: {
   const lockOnEnabled = useZoogiGame((state) => state.lockOnEnabled);
 
   const spec: Record<string, { label: string; unlocked: boolean; onClick: () => void; active?: boolean }> = {
-    wolfgang: { label: "Pack", unlocked: entity.wolfgangAbilityUnlocked, onClick: activateWolfgangAbility },
-    hotstreak: { label: "Explosion", unlocked: entity.hotstreakAbilityUnlocked, onClick: activateHotstreakAbility },
-    lars: { label: "Ricochet", unlocked: entity.larsAbilityUnlocked, onClick: activateLarsAbility },
-    bolt: { label: "Shock", unlocked: entity.boltAbilityUnlocked, onClick: activateBoltAbility },
-    wraps: { label: "Bind", unlocked: entity.wrapsAbilityUnlocked, onClick: activateWrapsAbility },
+    wolfgang: { label: "Pack", unlocked: entity.wolfgangAbilityUnlocked, onClick: () => activateWolfgangAbility(entity.id) },
+    hotstreak: { label: "Explosion", unlocked: entity.hotstreakAbilityUnlocked, onClick: () => activateHotstreakAbility(entity.id) },
+    lars: { label: "Ricochet", unlocked: entity.larsAbilityUnlocked, onClick: () => activateLarsAbility(entity.id) },
+    bolt: { label: "Shock", unlocked: entity.boltAbilityUnlocked, onClick: () => activateBoltAbility(entity.id) },
+    wraps: { label: "Bind", unlocked: entity.wrapsAbilityUnlocked, onClick: () => activateWrapsAbility(entity.id) },
     pinpoint: { label: "Lock-On", unlocked: true, onClick: toggleLockOn, active: lockOnEnabled },
   };
   const ability = spec[zoogiId];
@@ -1153,6 +1154,27 @@ export function GameUI() {
         </button>
         
         <CharacterAbilityButton zoogiId={displayEntity.zoogi.id} entity={displayEntity} />
+        {devTools && (
+          <div className="flex flex-col gap-1">
+            <button
+              onClick={() => useZoogiGame.getState().debugUnlockPower(displayEntity.id)}
+              className="px-2 py-1 rounded-lg bg-amber-700/90 text-white text-[10px] font-bold"
+              title="Debug: unlock this marble's power"
+            >
+              Unlock mine
+            </button>
+            <button
+              onClick={() => {
+                const foe = useZoogiGame.getState().enemies.find((enemy) => !enemy.isKnockedOut);
+                if (foe) useZoogiGame.getState().debugUnlockPower(foe.id);
+              }}
+              className="px-2 py-1 rounded-lg bg-orange-700/90 text-white text-[10px] font-bold"
+              title="Debug: unlock the next opponent's power"
+            >
+              Unlock foe
+            </button>
+          </div>
+        )}
         
         {/* Orb Multiplier Control */}
         {gameMode === "practice" && (
