@@ -929,3 +929,32 @@ test("a tied final round is not a loss, and earlier wins stay a victory", async 
   assert.equal(split.isVictory, true, "an even round total is not a defeat");
   assert.equal(split.playerRoundWins, splitEnemyWins, "the tie screen is for an even match, not a tied last round");
 });
+
+test("a knockoff offset does not carry from one map into the next", async () => {
+  const { useZoogiGame, ZOOGI_ROSTER } = await loadGame();
+  useZoogiGame.getState().selectZoogi(ZOOGI_ROSTER[0]);
+  const dirty = {
+    ...useZoogiGame.getState().elementTransforms,
+    knockoffBoundaryOffset: { x: -9.9, y: 0, z: -4.8 },
+  };
+  useZoogiGame.setState({
+    aiPlayerCount: 0,
+    gameMode: "classic",
+    selectedMap: "saturn",
+    elementTransforms: dirty,
+  });
+  useZoogiGame.getState().startGame();
+  assert.deepEqual(useZoogiGame.getState().elementTransforms.knockoffBoundaryOffset, { x: 0, y: 0, z: 0 });
+  assert.equal(useZoogiGame.getState().wallSettings.knockoffBoundaryRadius, 15.5);
+
+  useZoogiGame.setState({
+    selectedMap: "grass",
+    elementTransforms: {
+      ...useZoogiGame.getState().elementTransforms,
+      knockoffBoundaryOffset: { x: -9.9, y: 0, z: -4.8 },
+    },
+  });
+  useZoogiGame.getState().startGame();
+  assert.deepEqual(useZoogiGame.getState().elementTransforms.knockoffBoundaryOffset, { x: 0, y: 0, z: 0 });
+  assert.equal(useZoogiGame.getState().wallSettings.knockoffBoundaryRadius, 15.5);
+});
