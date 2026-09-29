@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useState } from "react";
-import { useZoogiGame, ZOOGI_ROSTER } from "@/lib/stores/useZoogiGame";
+import { useZoogiGame, ZOOGI_ROSTER, type MapTheme } from "@/lib/stores/useZoogiGame";
 import { useAudio } from "@/lib/stores/useAudio";
 import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
@@ -75,8 +75,31 @@ function RingerTrialsLoading() {
   );
 }
 
+const PLAY_MAPS: MapTheme[] = ["grass", "ice", "lava", "space", "saturn", "tomb", "neon"];
+
+/** Opens a match directly: /?play=grass&debug=colliders&view=top */
+function usePlayShortcut() {
+  const selectMap = useZoogiGame((state) => state.selectMap);
+  const selectZoogi = useZoogiGame((state) => state.selectZoogi);
+  const startGame = useZoogiGame((state) => state.startGame);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const play = params.get("play");
+    if (!play || !PLAY_MAPS.includes(play as MapTheme)) return;
+    selectZoogi(ZOOGI_ROSTER[0]);
+    selectMap(play as MapTheme);
+    startGame();
+    if (params.get("view") === "top") {
+      window.setTimeout(() => {
+        if (!useZoogiGame.getState().birdsEyeView) useZoogiGame.getState().toggleBirdsEyeView();
+      }, 80);
+    }
+  }, [selectMap, selectZoogi, startGame]);
+}
+
 function App() {
   const powerPreview = usePowerPreview();
+  usePlayShortcut();
   const phase = useZoogiGame((state) => state.phase);
 
   useEffect(() => {
@@ -136,14 +159,14 @@ function App() {
 
   if (powerPreview) {
     return (
-      <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>
+      <div style={{ width: "100%", height: "100%", position: "relative", overflow: "hidden" }}>
         <PowerPreview />
       </div>
     );
   }
 
   return (
-    <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>
+    <div style={{ width: "100%", height: "100%", position: "relative", overflow: "hidden" }}>
       {showVantaBackground && (
         <VantaDotsBackground 
           color="#ff8820"

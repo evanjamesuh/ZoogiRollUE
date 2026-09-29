@@ -4,6 +4,7 @@ import { useFrame } from "@react-three/fiber";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { useAudio } from "@/lib/stores/useAudio";
 import { getSnowmanPositions } from "@/lib/arenaConstants";
+import { SNOWMAN_RADIUS } from "@/lib/arenaColliders";
 import { getElementOffset } from "@/lib/treeOffsets";
 
 interface Snowman {
@@ -102,8 +103,8 @@ function SnowmanMesh({ snowman }: { snowman: Snowman }) {
 
   return (
     <group ref={groupRef} position={snowman.position}>
-      <mesh position={[0, 0.5, 0]} castShadow>
-        <sphereGeometry args={[0.5, 12, 8]} />
+      <mesh position={[0, SNOWMAN_RADIUS, 0]} castShadow>
+        <sphereGeometry args={[SNOWMAN_RADIUS, 12, 8]} />
         <meshStandardMaterial color="#FFFFFF" roughness={0.8} />
       </mesh>
       
