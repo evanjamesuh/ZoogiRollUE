@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { endCardResult } from "./matchResult.ts";
 
 const memory = new Map<string, string>();
 const storage = {
@@ -1175,6 +1176,23 @@ test("a stop frame cannot end the turn twice, so the computer still gets to roll
   repeatStopFrames("enemy");
 });
 
+function cardFor(state: {
+  isVictory: boolean;
+  playerRoundWins: number;
+  enemyRoundWins: Map<string, number>;
+  enemies: { id: string; zoogi?: { name?: string } }[];
+}) {
+  return endCardResult({
+    isVictory: state.isVictory,
+    playerRoundWins: state.playerRoundWins,
+    enemyRoundWins: state.enemyRoundWins,
+    opponents: state.enemies.map((enemy) => ({
+      id: enemy.id,
+      name: enemy.zoogi?.name || "Computer",
+    })),
+  });
+}
+
 test("a tied final round is not a loss, and earlier wins stay a victory", async () => {
   await new Promise((resolve) => setTimeout(resolve, 500));
   const useZoogiGame = await playingMarble();
@@ -1204,6 +1222,11 @@ test("a tied final round is not a loss, and earlier wins stay a victory", async 
   assert.equal(allTied.phase, "game_over");
   assert.equal(allTied.isVictory, true, "a 0–0 match should not show a defeat");
   assert.equal(allTied.playerRoundWins, 1, "the tied round still goes to the player");
+  assert.equal(allTied.score, 0, "the last round can end on 0 points");
+  const firstRoundCard = cardFor(allTied);
+  assert.equal(firstRoundCard.headline, "VICTORY!");
+  assert.equal(firstRoundCard.tally, "1 to 0");
+  assert.notEqual(firstRoundCard.playerRounds, allTied.score);
 
   useZoogiGame.setState({
     phase: "playing",
@@ -1223,6 +1246,13 @@ test("a tied final round is not a loss, and earlier wins stay a victory", async 
   assert.equal(ahead.isVictory, true);
   assert.equal(ahead.playerRoundWins, 3);
   assert.ok(ahead.playerRoundWins > aheadEnemyWins, "two earlier wins plus a 0–0 last round is a victory, not a match tie");
+  assert.equal(ahead.score, 0);
+  const sweepCard = cardFor(ahead);
+  assert.equal(sweepCard.kind, "victory");
+  assert.equal(sweepCard.headline, "VICTORY!");
+  assert.equal(sweepCard.tally, "3 to 0");
+  assert.equal(sweepCard.playerRounds, 3);
+  assert.equal(sweepCard.opponentRounds, 0);
 
   useZoogiGame.setState({
     phase: "playing",
@@ -1239,6 +1269,13 @@ test("a tied final round is not a loss, and earlier wins stay a victory", async 
   const lost = useZoogiGame.getState();
   assert.equal(lost.phase, "game_over");
   assert.equal(lost.isVictory, false, "a match the opponent won on rounds should still be a loss");
+  assert.equal(lost.score, 10, "the loss card must not treat this last-round total as the match");
+  const lostCard = cardFor(lost);
+  assert.equal(lostCard.kind, "defeat");
+  assert.equal(lostCard.headline, "GAME OVER");
+  assert.equal(lostCard.tally, "0 to 1");
+  assert.notEqual(lostCard.playerRounds, lost.score);
+  assert.notEqual(lostCard.tally, String(lost.score));
 
   useZoogiGame.setState({
     phase: "playing",
@@ -1257,6 +1294,41 @@ test("a tied final round is not a loss, and earlier wins stay a victory", async 
   assert.equal(split.phase, "game_over");
   assert.equal(split.isVictory, true, "an even round total is not a defeat");
   assert.equal(split.playerRoundWins, splitEnemyWins, "the tie screen is for an even match, not a tied last round");
+  assert.equal(split.score, 0);
+  const tieCard = cardFor(split);
+  assert.equal(tieCard.kind, "tie");
+  assert.equal(tieCard.headline, "IT'S A TIE!");
+  assert.equal(tieCard.tally, "1 to 1");
+  assert.equal(tieCard.playerRounds, 1);
+  assert.equal(tieCard.opponentRounds, 1);
+
+  useZoogiGame.setState({
+    phase: "playing",
+    currentRound: 3,
+    maxRounds: 3,
+    score: 10,
+    gameTimer: 0.4,
+    isVictory: false,
+    playerRoundWins: 2,
+    enemyRoundWins: new Map<string, number>(),
+    enemies: [{ ...enemy, score: 40 }],
+  });
+  useZoogiGame.getState().tickTimers(1);
+  const splitWin = useZoogiGame.getState();
+  const splitWinEnemy = Math.max(...Array.from(splitWin.enemyRoundWins.values()), 0);
+  assert.equal(splitWin.phase, "game_over");
+  assert.equal(splitWin.isVictory, true, "losing the last round does not erase two earlier wins");
+  assert.equal(splitWin.playerRoundWins, 2);
+  assert.equal(splitWinEnemy, 1);
+  assert.equal(splitWin.score, 10, "10 is the last round, not the match");
+  const splitWinCard = cardFor(splitWin);
+  assert.equal(splitWinCard.kind, "victory");
+  assert.equal(splitWinCard.headline, "VICTORY!");
+  assert.equal(splitWinCard.tally, "2 to 1");
+  assert.equal(splitWinCard.playerRounds, 2);
+  assert.equal(splitWinCard.opponentRounds, 1);
+  assert.notEqual(splitWinCard.playerRounds, splitWin.score);
+  assert.notEqual(splitWinCard.tally, String(splitWin.score));
 });
 
 test("a knockoff offset does not carry from one map into the next", async () => {
