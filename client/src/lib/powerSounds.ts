@@ -355,6 +355,61 @@ export function playRicochetPing(kind: "arm" | "hit" = "arm"): void {
   });
 }
 
+/** Low pulse when Nightshade freezes nearby marbles. */
+export function playShadowPulse(): void {
+  void startSound((ctx, t) => {
+    const out = master(ctx, 0.4);
+    const noise = ctx.createBufferSource();
+    noise.buffer = noiseBuffer(ctx, 0.45);
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(900, t);
+    filter.frequency.exponentialRampToValueAtTime(120, t + 0.35);
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.0001, t);
+    noiseGain.gain.exponentialRampToValueAtTime(0.5, t + 0.04);
+    noiseGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(out);
+    noise.start(t);
+    noise.stop(t + 0.42);
+
+    tone(
+      ctx,
+      out,
+      "sine",
+      (osc, when) => {
+        osc.frequency.setValueAtTime(196, when);
+        osc.frequency.exponentialRampToValueAtTime(55, when + 0.38);
+      },
+      (gain, when) => {
+        gain.gain.setValueAtTime(0.0001, when);
+        gain.gain.exponentialRampToValueAtTime(0.22, when + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.0001, when + 0.42);
+      },
+      t,
+      t + 0.44
+    );
+    tone(
+      ctx,
+      out,
+      "triangle",
+      (osc, when) => {
+        osc.frequency.setValueAtTime(740, when);
+        osc.frequency.exponentialRampToValueAtTime(220, when + 0.16);
+      },
+      (gain, when) => {
+        gain.gain.setValueAtTime(0.0001, when);
+        gain.gain.exponentialRampToValueAtTime(0.08, when + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, when + 0.18);
+      },
+      t + 0.02,
+      t + 0.22
+    );
+  });
+}
+
 /** Short cloth whoosh when Wraps binds nearby marbles. */
 export function playBindWrap(): void {
   void startSound((ctx, t) => {

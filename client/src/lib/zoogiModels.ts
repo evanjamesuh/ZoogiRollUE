@@ -22,6 +22,23 @@ export interface ZoogiModelSettings {
   scale: number;
   offset: [number, number, number];
   rotation: [number, number, number];
+  /**
+   * "bounds" fits the whole mesh to the marble. "pivot" keeps the file's
+   * origin (the ball centre) and scales by marbleRadius / referenceRadius,
+   * so horns that stick out do not shrink the ball or drop it.
+   */
+  fit?: "bounds" | "pivot";
+  /** Ball radius the glb was built at. Pivot fits use this instead of the bounding box. */
+  referenceRadius?: number;
+}
+
+/** Roster marbles are about this radius in their glb. 0.5 / 0.958 is the in-match scale. */
+export const ROSTER_REFERENCE_RADIUS = 0.958;
+
+/** Uniform scale for a pivot-fit model. Bounds-fit models ignore this and measure the mesh. */
+export function marbleUniformScale(marbleRadius: number, settings: ZoogiModelSettings): number {
+  const reference = settings.referenceRadius ?? ROSTER_REFERENCE_RADIUS;
+  return (marbleRadius / reference) * settings.scale;
 }
 
 function model(url: string): ZoogiModelSettings {
@@ -40,6 +57,13 @@ export const ZOOGI_MODELS: Record<string, ZoogiModelSettings> = {
   bolt: model("/models/bolt.glb"),
   wraps: model("/models/wraps.glb"),
   lars: model("/models/lars.glb"),
+  // Horns stick up past the ball. Scale like the roster (0.5 / 0.958), no Y offset.
+  // nightshade_display.glb (tendrils + eclipse ring) is for menus only and is not loaded here.
+  nightshade: {
+    ...model("/models/nightshade.glb"),
+    fit: "pivot",
+    referenceRadius: ROSTER_REFERENCE_RADIUS,
+  },
 };
 
 /**
@@ -48,7 +72,7 @@ export const ZOOGI_MODELS: Record<string, ZoogiModelSettings> = {
  * before a match starts instead of showing the blue ball while it loads.
  */
 export function zoogiModelPreloadUrls(): string[] {
-  return ["wolfgang", "hotstreak", "pinpoint", "bolt", "wraps", "lars"].map((id) => ZOOGI_MODELS[id].url);
+  return ["wolfgang", "hotstreak", "pinpoint", "bolt", "wraps", "lars", "nightshade"].map((id) => ZOOGI_MODELS[id].url);
 }
 
 /**

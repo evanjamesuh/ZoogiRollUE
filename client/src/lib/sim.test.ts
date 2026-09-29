@@ -354,7 +354,10 @@ test("knockouts score, falling costs points, and a flick off the edge ends the t
   const cpuZoogi = ZOOGI_ROSTER.find((zoogi) => zoogi.id === "hotstreak") ?? ZOOGI_ROSTER[1];
   const lars = ZOOGI_ROSTER.find((zoogi) => zoogi.id === "lars");
   const wraps = ZOOGI_ROSTER.find((zoogi) => zoogi.id === "wraps");
-  assert.ok(lars && wraps, "Lars and Wraps should both be on the roster");
+  const nightshade = ZOOGI_ROSTER.find((zoogi) => zoogi.id === "nightshade");
+  assert.ok(lars && wraps && nightshade, "Lars, Wraps, and Nightshade should be on the roster");
+  assert.equal(nightshade.ability, "Shadow Stun");
+  assert.equal(nightshade.color, "#6B46C1");
 
   const cpu = {
     ...player,
@@ -763,6 +766,136 @@ test("a power cast by the AI stuns the human", async () => {
   assert.ok((shocked.playerEntity?.stunTimer ?? 0) > 0);
   assert.equal(shocked.enemies[0]?.boltAbilityUnlocked, false);
   assert.equal(shocked.enemies[0]?.isStunned, false, "the caster should not stun itself");
+});
+
+test("shadow stun freezes a nearby opponent and leaves a distant one rolling", async () => {
+  const { useZoogiGame, ZOOGI_ROSTER, SHADOW_STUN_RADIUS } = await loadGame();
+  const nightshade = ZOOGI_ROSTER.find((zoogi) => zoogi.id === "nightshade");
+  assert.ok(nightshade);
+  useZoogiGame.getState().selectZoogi(nightshade);
+  useZoogiGame.setState({ aiPlayerCount: 1, gameMode: "classic", zoneEditorConfigs: [], phase: "menu" });
+  useZoogiGame.getState().startGame();
+  const player = useZoogiGame.getState().playerEntity;
+  assert.ok(player);
+  useZoogiGame.setState({
+    phase: "playing",
+    orbs: [],
+    showExplosion: null,
+    playerEntity: {
+      ...player,
+      position: [0, 0.5, 0],
+      velocity: [0, 0, 0],
+      nightshadeAbilityUnlocked: true,
+      isStunned: false,
+      stunTimer: 0,
+    },
+    enemies: [
+      {
+        ...player,
+        id: "near",
+        isPlayer: false,
+        zoogi: ZOOGI_ROSTER[0],
+        position: [2, 0.5, 0],
+        velocity: [0.4, 0, 0.2],
+        isStunned: false,
+        stunTimer: 0,
+        isKnockedOut: false,
+      },
+      {
+        ...player,
+        id: "far",
+        isPlayer: false,
+        zoogi: ZOOGI_ROSTER[1],
+        position: [SHADOW_STUN_RADIUS + 3, 0.5, 0],
+        velocity: [0.3, 0, 0],
+        isStunned: false,
+        stunTimer: 0,
+        isKnockedOut: false,
+      },
+    ],
+  });
+  useZoogiGame.getState().activateNightshadeAbility("player");
+  const after = useZoogiGame.getState();
+  assert.equal(after.playerEntity?.nightshadeAbilityUnlocked, false, "Shadow Stun is one shot");
+  assert.equal(after.playerEntity?.isStunned, false, "the caster should not freeze himself");
+  const near = after.enemies.find((enemy) => enemy.id === "near");
+  const far = after.enemies.find((enemy) => enemy.id === "far");
+  assert.ok(near && far);
+  assert.equal(near.isStunned, true);
+  assert.equal(near.stunTimer, 2, "the freeze skips the next turn, same as Bolt");
+  assert.equal(near.velocity[0], 0);
+  assert.equal(near.velocity[2], 0);
+  assert.equal(far.isStunned, false);
+  assert.equal(far.velocity[0], 0.3);
+  assert.equal(after.showExplosion?.color, "shadow");
+  assert.equal(after.showExplosion?.radius, SHADOW_STUN_RADIUS);
+  assert.equal(useZoogiGame.getState().activateNightshadeAbility("player"), undefined);
+  assert.equal(useZoogiGame.getState().enemies.find((enemy) => enemy.id === "far")?.isStunned, false);
+});
+
+test("an AI Nightshade only casts Shadow Stun when an opponent is inside the pulse", async () => {
+  const { useZoogiGame, ZOOGI_ROSTER, SHADOW_STUN_RADIUS } = await loadGame();
+  const nightshade = ZOOGI_ROSTER.find((zoogi) => zoogi.id === "nightshade");
+  assert.ok(nightshade);
+  useZoogiGame.getState().selectZoogi(ZOOGI_ROSTER[0]);
+  useZoogiGame.setState({ aiPlayerCount: 1, gameMode: "classic", zoneEditorConfigs: [], phase: "menu" });
+  useZoogiGame.getState().startGame();
+  const player = useZoogiGame.getState().playerEntity;
+  assert.ok(player);
+  useZoogiGame.setState({
+    phase: "playing",
+    isPlayerTurn: false,
+    turnIndex: 0,
+    orbs: [],
+    playerEntity: {
+      ...player,
+      position: [SHADOW_STUN_RADIUS + 2, 0.5, 0],
+      velocity: [0.2, 0, 0],
+      isStunned: false,
+      stunTimer: 0,
+    },
+    enemies: [{
+      ...player,
+      id: "ai-nightshade",
+      isPlayer: false,
+      zoogi: nightshade,
+      position: [0, 0.5, 0],
+      velocity: [0, 0, 0],
+      nightshadeAbilityUnlocked: true,
+      isStunned: false,
+      isKnockedOut: false,
+    }],
+  });
+  assert.equal(useZoogiGame.getState().useAiPower("ai-nightshade"), null, "a far opponent is out of the pulse");
+  assert.equal(useZoogiGame.getState().enemies[0]?.nightshadeAbilityUnlocked, true);
+
+  useZoogiGame.setState({
+    playerEntity: {
+      ...useZoogiGame.getState().playerEntity!,
+      position: [2, 0.5, 0],
+      velocity: [0.5, 0, 0],
+      isStunned: false,
+    },
+    enemies: [{
+      ...useZoogiGame.getState().enemies[0],
+      nightshadeAbilityUnlocked: false,
+    }],
+  });
+  assert.equal(useZoogiGame.getState().useAiPower("ai-nightshade"), null, "a locked pulse should not fire");
+  assert.equal(useZoogiGame.getState().playerEntity?.isStunned, false);
+
+  useZoogiGame.setState({
+    enemies: [{
+      ...useZoogiGame.getState().enemies[0],
+      nightshadeAbilityUnlocked: true,
+    }],
+  });
+  assert.equal(useZoogiGame.getState().useAiPower("ai-nightshade"), "nightshade");
+  const frozen = useZoogiGame.getState();
+  assert.equal(frozen.playerEntity?.isStunned, true);
+  assert.equal(frozen.playerEntity?.velocity[0], 0);
+  assert.equal(frozen.enemies[0]?.nightshadeAbilityUnlocked, false);
+  assert.equal(frozen.enemies[0]?.isStunned, false);
 });
 
 test("a rolling AI blast stays centered on the caster", async () => {

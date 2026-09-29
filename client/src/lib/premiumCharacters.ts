@@ -15,6 +15,8 @@ export interface PremiumZoogi {
   price: number;
 }
 
+// Nightshade lives on the playable roster (Shadow Stun). He is not listed here,
+// so the shop and the collection do not show him twice.
 export const PREMIUM_CHARACTERS: PremiumZoogi[] = [
   {
     id: "blaze",
@@ -25,17 +27,6 @@ export const PREMIUM_CHARACTERS: PremiumZoogi[] = [
     ability: "Flame Burst",
     abilityDescription: "Leaves a trail of fire that damages enemies",
     stats: { speed: 7, power: 9, defense: 5, control: 6 },
-    price: 199
-  },
-  {
-    id: "nightshade",
-    name: "Nightshade",
-    description: "A shadowy demon with mysterious dark powers",
-    color: "#6B46C1",
-    accentColor: "#9F7AEA",
-    ability: "Shadow Stun",
-    abilityDescription: "Stuns enemies on collision for 3 seconds",
-    stats: { speed: 6, power: 7, defense: 6, control: 8 },
     price: 199
   },
   {
@@ -131,7 +122,7 @@ export const PREMIUM_CHARACTERS: PremiumZoogi[] = [
 export const CHARACTER_BUNDLE = {
   id: "monster-pack",
   name: "Monster Pack",
-  description: "All 11 premium characters - Save 50%!",
+  description: "All 9 premium characters - Save 50%!",
   price: 999,
   includes: PREMIUM_CHARACTERS.map(c => c.id)
 };
