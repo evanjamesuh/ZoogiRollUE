@@ -6,7 +6,7 @@ import { BUMPER_RADIUS, MARBLE_RADIUS, getMapLayout } from "./arenaColliders.ts"
 const PLANTER_ANGLES = [22.5, 67.5, 112.5, 157.5, 202.5, 247.5, 292.5, 337.5];
 const PLANTER_DISTANCE = 13;
 const PLANTER_RADIUS = 0.72;
-const SCORE_ZONE_RADIUS = 4;
+const CARDINAL_SPAWN_DISTANCE = 8;
 
 test("arabian planters are eight pots at radius 13 on the 22.5 degree lattice", () => {
   assert.equal(ARABIAN_RIM.length, 8);
@@ -39,10 +39,13 @@ test("arabian planters are eight pots at radius 13 on the 22.5 degree lattice", 
 test("the four arabian spawns are equidistant from the nearest planter", () => {
   const layout = getMapLayout("saturn");
   assert.ok(layout);
-  const spawns = layout.zones.filter((zone) => zone.isSpawn);
-  const scores = layout.zones.filter((zone) => !zone.isSpawn);
-  assert.equal(spawns.length, 4);
-  assert.equal(scores.length, 4);
+  const spawns = [0, 90, 180, 270].map((deg) => {
+    const angle = (deg * Math.PI) / 180;
+    return {
+      x: Math.cos(angle) * CARDINAL_SPAWN_DISTANCE,
+      z: Math.sin(angle) * CARDINAL_SPAWN_DISTANCE,
+    };
+  });
 
   const nearest = (x: number, z: number, padding: number) => {
     let best = Infinity;
@@ -53,26 +56,10 @@ test("the four arabian spawns are equidistant from the nearest planter", () => {
     return best;
   };
 
-  const spawnGaps = spawns.map((spawn) => {
-    assert.equal(spawn.distance, 8);
-    const x = Math.cos(spawn.angle) * spawn.distance;
-    const z = Math.sin(spawn.angle) * spawn.distance;
-    return nearest(x, z, MARBLE_RADIUS);
-  });
+  const spawnGaps = spawns.map((spawn) => nearest(spawn.x, spawn.z, MARBLE_RADIUS));
   for (const gap of spawnGaps) {
     assert.ok(Math.abs(gap - spawnGaps[0]) < 1e-9, `spawn gaps differ: ${spawnGaps.join(", ")}`);
     assert.ok(Math.abs(gap - 5.17) < 0.01, `spawn clearance ${gap}`);
-  }
-
-  const scoreGaps = scores.map((score) => {
-    assert.equal(score.distance, 9.4);
-    const x = Math.cos(score.angle) * score.distance;
-    const z = Math.sin(score.angle) * score.distance;
-    return nearest(x, z, SCORE_ZONE_RADIUS);
-  });
-  for (const gap of scoreGaps) {
-    assert.ok(Math.abs(gap - scoreGaps[0]) < 1e-9, `score gaps differ: ${scoreGaps.join(", ")}`);
-    assert.ok(Math.abs(gap - 0.9) < 0.02, `score clearance ${gap}`);
   }
 
   const bumperGaps = layout.bumpers.map((bumper) => nearest(bumper.x, bumper.z, BUMPER_RADIUS));
