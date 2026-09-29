@@ -74,6 +74,7 @@ export function GameCamera() {
   const arcPeakEffectActive = useZoogiGame((state) => state.arcPeakEffectActive);
   const arcPeakTargetPosition = useZoogiGame((state) => state.arcPeakTargetPosition);
   const isAiming = useZoogiGame((state) => state.isAiming);
+  const selectedMap = useZoogiGame((state) => state.selectedMap);
   const cameraPositionRef = useRef(new THREE.Vector3(0, 18, 22));
   const lookAtRef = useRef(new THREE.Vector3(0, 0, 0));
   const cinematicAngleRef = useRef(0);
@@ -442,12 +443,17 @@ export function GameCamera() {
         ...enemies.map((enemy) => ({ x: enemy.position[0], z: enemy.position[2] })),
       ];
       const aspect = size.width / Math.max(1, size.height);
-      const pad = aspect < 0.9 ? 1.3 : 2.6;
+      const neonCourt = selectedMap === "neon";
+      // Night Circuit sits a little farther back and aims slightly toward the
+      // far bowl so the stands and skyline clear the top of the frame.
+      const pad = (aspect < 0.9 ? 1.3 : 2.6) + (neonCourt ? 1.6 : 0);
       const bounds = actionBounds(points, 0);
       const lookX = ((bounds.minX + bounds.maxX) / 2) * 0.7;
-      const lookZ = ((bounds.minZ + bounds.maxZ) / 2) * 0.7;
+      const lookZ = ((bounds.minZ + bounds.maxZ) / 2) * 0.7 + (neonCourt ? -3.5 : 0);
       const distance = clampDistance(
         fitDistance(bounds, ARENA_PITCH, ARENA_FOV_DEG, aspect, pad) * zoomNudge,
+        neonCourt ? 19 : 13.5,
+        34,
       );
       const offset = cameraOffset(distance, ARENA_PITCH);
       idealCameraPos = new THREE.Vector3(lookX + offset.x, offset.y, lookZ + offset.z);

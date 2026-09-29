@@ -356,6 +356,35 @@ function Pylon({ x, z, tint }: { x: number; z: number; tint: string }) {
   );
 }
 
+function usePanelTexture(): THREE.CanvasTexture {
+  return useMemo(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 128;
+    canvas.height = 128;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.fillStyle = "#8b97ab";
+      ctx.fillRect(0, 0, 128, 128);
+      ctx.fillStyle = "#c5d0e2";
+      ctx.fillRect(6, 6, 116, 52);
+      ctx.fillStyle = "#9aa6ba";
+      ctx.fillRect(6, 66, 116, 56);
+      ctx.strokeStyle = "#3e485c";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(4, 4, 120, 120);
+      ctx.strokeRect(6, 6, 116, 56);
+      ctx.strokeStyle = "#e7eef8";
+      ctx.lineWidth = 2;
+      ctx.strokeRect(10, 10, 108, 48);
+    }
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    return texture;
+  }, []);
+}
+
 function RaisedBlock({
   minX,
   maxX,
@@ -363,6 +392,7 @@ function RaisedBlock({
   maxZ,
   tint,
   height,
+  panels,
 }: {
   minX: number;
   maxX: number;
@@ -370,20 +400,53 @@ function RaisedBlock({
   maxZ: number;
   tint: string;
   height: number;
+  panels: THREE.Texture;
 }) {
-  const width = maxX - minX;
-  const depth = maxZ - minZ;
+  const width = Math.max(0.12, maxX - minX);
+  const depth = Math.max(0.12, maxZ - minZ);
   const cx = (minX + maxX) / 2;
   const cz = (minZ + maxZ) / 2;
+  const bodyH = height * 0.7;
+  const capH = height * 0.22;
+  const inset = Math.min(0.07, width * 0.08, depth * 0.16);
+  const trim = Math.min(0.065, width * 0.2, depth * 0.22);
+  const trimY = bodyH + capH - 0.01;
+  const map = useMemo(() => {
+    const copy = panels.clone();
+    copy.repeat.set(Math.max(1, width / 1.1), Math.max(1, depth / 0.7));
+    copy.needsUpdate = true;
+    return copy;
+  }, [panels, width, depth]);
+
   return (
     <group>
-      <mesh position={[cx, height / 2, cz]} castShadow receiveShadow>
-        <boxGeometry args={[width, height, depth]} />
-        <meshStandardMaterial color="#3c4558" metalness={0.7} roughness={0.34} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[cx, 0.04, cz]}>
+        <planeGeometry args={[width + 0.7, depth + 0.55]} />
+        <meshBasicMaterial color={tint} transparent opacity={0.46} depthWrite={false} />
       </mesh>
-      <mesh position={[cx, height - 0.035, cz]}>
-        <boxGeometry args={[Math.max(0.08, width - 0.14), 0.05, Math.max(0.08, depth - 0.14)]} />
-        <meshStandardMaterial color={tint} emissive={tint} emissiveIntensity={1.65} toneMapped={false} roughness={0.28} />
+      <mesh position={[cx, bodyH / 2, cz]} castShadow receiveShadow>
+        <boxGeometry args={[width, bodyH, depth]} />
+        <meshStandardMaterial map={map} color="#f2f5fa" metalness={0.46} roughness={0.34} />
+      </mesh>
+      <mesh position={[cx, bodyH + capH / 2, cz]} castShadow receiveShadow>
+        <boxGeometry args={[Math.max(0.06, width - inset * 2), capH, Math.max(0.06, depth - inset * 2)]} />
+        <meshStandardMaterial color="#d5deec" metalness={0.58} roughness={0.28} />
+      </mesh>
+      <mesh position={[cx, trimY, cz + depth / 2 - trim / 2]}>
+        <boxGeometry args={[Math.max(0.08, width - 0.04), 0.05, trim]} />
+        <meshStandardMaterial color={tint} emissive={tint} emissiveIntensity={1.9} toneMapped={false} roughness={0.25} />
+      </mesh>
+      <mesh position={[cx, trimY, cz - depth / 2 + trim / 2]}>
+        <boxGeometry args={[Math.max(0.08, width - 0.04), 0.05, trim]} />
+        <meshStandardMaterial color={tint} emissive={tint} emissiveIntensity={1.9} toneMapped={false} roughness={0.25} />
+      </mesh>
+      <mesh position={[cx + width / 2 - trim / 2, trimY, cz]}>
+        <boxGeometry args={[trim, 0.05, Math.max(0.04, depth - trim * 2)]} />
+        <meshStandardMaterial color={tint} emissive={tint} emissiveIntensity={1.9} toneMapped={false} roughness={0.25} />
+      </mesh>
+      <mesh position={[cx - width / 2 + trim / 2, trimY, cz]}>
+        <boxGeometry args={[trim, 0.05, Math.max(0.04, depth - trim * 2)]} />
+        <meshStandardMaterial color={tint} emissive={tint} emissiveIntensity={1.9} toneMapped={false} roughness={0.25} />
       </mesh>
     </group>
   );
@@ -447,9 +510,7 @@ function KnockoutMouths() {
 }
 
 const STANDS: Array<{ pos: [number, number, number]; size: [number, number, number] }> = [
-  // Low lips just outside the rails, inside the gameplay camera. Corner mouths stay open.
-  { pos: [0, 0.46, -9.55], size: [15.4, 0.92, 2.15] },
-  { pos: [0, 1.02, -10.9], size: [16.2, 0.55, 1.15] },
+  // Near and side lips. The far bowl is its own lit grandstand so it reads in frame.
   { pos: [0, 0.46, 9.55], size: [15.4, 0.92, 2.15] },
   { pos: [0, 1.02, 10.9], size: [16.2, 0.55, 1.15] },
   { pos: [13.2, 0.4, 0], size: [1.65, 0.8, 8.4] },
@@ -470,6 +531,7 @@ function crowdSpots(): Array<[number, number, number, number]> {
     }
   };
   row(-9.35, 1.02, -6.6, 6.6, 0.72);
+  row(-10.35, 1.85, -8.2, 8.2, 0.68);
   row(-10.55, 1.38, -7.2, 7.2, 0.7);
   row(9.35, 1.02, -6.6, 6.6, 0.72);
   row(10.55, 1.38, -7.2, 7.2, 0.7);
@@ -503,6 +565,110 @@ function Crowd() {
       <boxGeometry args={[0.32, 0.62, 0.24]} />
       <meshStandardMaterial color="#10131c" roughness={1} metalness={0} />
     </instancedMesh>
+  );
+}
+
+function FarBowl() {
+  const tiers = [
+    { z: -9.22, y: 0.58, h: 0.82, depth: 0.7, width: 16.6 },
+    { z: -10.02, y: 1.16, h: 0.96, depth: 0.78, width: 17.8 },
+    { z: -10.86, y: 1.74, h: 1.08, depth: 0.84, width: 18.8 },
+  ];
+  const seats = [-6.4, -4.6, -2.8, -1.0, 1.0, 2.8, 4.6, 6.4];
+  return (
+    <group>
+      {tiers.map((tier, index) => {
+        const frontZ = tier.z + tier.depth / 2 - 0.03;
+        const lipY = tier.y + tier.h / 2 + 0.02;
+        const half = tier.width / 2 - 0.12;
+        return (
+          <group key={tier.z}>
+            <mesh position={[0, tier.y, tier.z]} receiveShadow>
+              <boxGeometry args={[tier.width, tier.h, tier.depth]} />
+              <meshStandardMaterial
+                color={index === 0 ? "#b7c4da" : "#9aabc4"}
+                emissive="#7f93b4"
+                emissiveIntensity={0.42}
+                metalness={0.22}
+                roughness={0.48}
+              />
+            </mesh>
+            {[-6.2, -3.1, 0, 3.1, 6.2].map((rib) => (
+              <mesh key={`${tier.z}-${rib}`} position={[rib, tier.y, frontZ + 0.02]}>
+                <boxGeometry args={[0.08, tier.h * 0.72, 0.06]} />
+                <meshStandardMaterial color="#d5e0f0" metalness={0.4} roughness={0.35} />
+              </mesh>
+            ))}
+            <mesh position={[-half / 2, lipY, frontZ]}>
+              <boxGeometry args={[half, 0.08, 0.1]} />
+              <meshStandardMaterial color="#22e7ff" emissive="#22e7ff" emissiveIntensity={1.9} toneMapped={false} />
+            </mesh>
+            <mesh position={[half / 2, lipY, frontZ]}>
+              <boxGeometry args={[half, 0.08, 0.1]} />
+              <meshStandardMaterial color="#ff2bd6" emissive="#ff2bd6" emissiveIntensity={1.9} toneMapped={false} />
+            </mesh>
+          </group>
+        );
+      })}
+      {seats.map((x) => (
+        <mesh key={`seat-${x}`} position={[x, 1.08, -9.0]}>
+          <boxGeometry args={[0.7, 0.07, 0.14]} />
+          <meshStandardMaterial
+            color={x < 0 ? "#bff8ff" : "#ffd0f4"}
+            emissive={x < 0 ? "#22e7ff" : "#ff2bd6"}
+            emissiveIntensity={1.65}
+            toneMapped={false}
+          />
+        </mesh>
+      ))}
+      {[-8.9, 8.9].map((x) => (
+        <group key={`mast-${x}`} position={[x, 0, -10.55]}>
+          <mesh position={[0, 1.65, 0]}>
+            <cylinderGeometry args={[0.08, 0.12, 3.3, 8]} />
+            <meshStandardMaterial color="#b7c3d6" metalness={0.72} roughness={0.28} />
+          </mesh>
+          <mesh position={[0, 3.2, 0]}>
+            <boxGeometry args={[0.55, 0.12, 0.28]} />
+            <meshStandardMaterial color="#d5deec" metalness={0.6} roughness={0.3} />
+          </mesh>
+          <mesh position={[0, 3.38, 0]}>
+            <sphereGeometry args={[0.16, 10, 8]} />
+            <meshStandardMaterial
+              color="#fff6ea"
+              emissive={x < 0 ? "#22e7ff" : "#ff2bd6"}
+              emissiveIntensity={2.35}
+              toneMapped={false}
+            />
+          </mesh>
+        </group>
+      ))}
+      {[-1, 1].map((sx) => (
+        <group key={`pilaster-${sx}`} position={[sx * 12.55, 0, -5.5]}>
+          <mesh position={[0, 1.2, 0]}>
+            <boxGeometry args={[0.24, 2.4, 0.28]} />
+            <meshStandardMaterial color="#3a4458" metalness={0.62} roughness={0.34} />
+          </mesh>
+          <mesh position={[sx * -0.02, 1.2, 0.16]}>
+            <boxGeometry args={[0.07, 2.1, 0.05]} />
+            <meshStandardMaterial
+              color={sx < 0 ? "#22e7ff" : "#ff2bd6"}
+              emissive={sx < 0 ? "#22e7ff" : "#ff2bd6"}
+              emissiveIntensity={1.95}
+              toneMapped={false}
+            />
+          </mesh>
+        </group>
+      ))}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-4.3, 0.05, -8.92]}>
+        <planeGeometry args={[8.4, 0.85]} />
+        <meshBasicMaterial color="#22e7ff" transparent opacity={0.28} depthWrite={false} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[4.3, 0.05, -8.92]}>
+        <planeGeometry args={[8.4, 0.85]} />
+        <meshBasicMaterial color="#ff2bd6" transparent opacity={0.28} depthWrite={false} />
+      </mesh>
+      <LightRig z={-10.4} y={2.85} />
+    </group>
   );
 }
 
@@ -643,13 +809,14 @@ function ArenaRim() {
 }
 
 const SKYLINE: Array<{ x: number; z: number; h: number; w: number; tint: string }> = [
-  { x: -7.4, z: -11.15, h: 2.1, w: 1.15, tint: "#22e7ff" },
-  { x: -4.8, z: -11.45, h: 3.0, w: 0.9, tint: "#7ef6ff" },
-  { x: -2.1, z: -10.85, h: 1.7, w: 1.35, tint: "#9ad8ff" },
-  { x: 0.6, z: -11.55, h: 2.5, w: 1.05, tint: "#ff2bd6" },
-  { x: 3.3, z: -10.95, h: 1.9, w: 1.25, tint: "#ff6a8a" },
-  { x: 6.0, z: -11.4, h: 3.2, w: 0.85, tint: "#ff2bd6" },
-  { x: 8.3, z: -10.75, h: 1.55, w: 1.15, tint: "#ff4a6a" },
+  { x: -8.2, z: -11.42, h: 2.45, w: 1.15, tint: "#22e7ff" },
+  { x: -5.7, z: -11.22, h: 3.05, w: 0.9, tint: "#7ef6ff" },
+  { x: -3.3, z: -11.5, h: 2.2, w: 1.3, tint: "#9ad8ff" },
+  { x: -0.9, z: -11.28, h: 2.75, w: 1.0, tint: "#e7f2ff" },
+  { x: 1.5, z: -11.48, h: 2.95, w: 0.88, tint: "#ff2bd6" },
+  { x: 3.9, z: -11.18, h: 2.25, w: 1.25, tint: "#ff6a8a" },
+  { x: 6.4, z: -11.42, h: 3.1, w: 0.9, tint: "#ff2bd6" },
+  { x: 8.7, z: -11.2, h: 2.4, w: 1.1, tint: "#ff4a6a" },
 ];
 
 function Skyline() {
@@ -662,8 +829,12 @@ function Skyline() {
             <meshStandardMaterial color="#121722" roughness={0.9} metalness={0.08} />
           </mesh>
           <mesh position={[0, tower.h * 0.55, 0.38]}>
-            <planeGeometry args={[tower.w * 0.62, tower.h * 0.45]} />
-            <meshStandardMaterial color="#0c1018" emissive={tower.tint} emissiveIntensity={1.35} toneMapped={false} />
+            <planeGeometry args={[tower.w * 0.55, tower.h * 0.38]} />
+            <meshStandardMaterial color="#0c1018" emissive={tower.tint} emissiveIntensity={2.05} toneMapped={false} />
+          </mesh>
+          <mesh position={[0, tower.h - 0.06, 0]}>
+            <boxGeometry args={[tower.w + 0.06, 0.07, 0.78]} />
+            <meshStandardMaterial color={tower.tint} emissive={tower.tint} emissiveIntensity={2.1} toneMapped={false} />
           </mesh>
         </group>
       ))}
@@ -674,14 +845,15 @@ function Skyline() {
 const BLOCK_TINT: Record<string, string> = {
   "pad-west": "#22e7ff",
   "pad-east": "#ff2bd6",
-  "pad-north": "#b026ff",
-  "pad-south": "#ff4a6a",
-  "channel-north": "#22e7ff",
-  "channel-south": "#ff2bd6",
+  "pad-north": "#22e7ff",
+  "pad-south": "#ff2bd6",
+  "channel-north": "#f4f7ff",
+  "channel-south": "#f4f7ff",
 };
 
 export function NeonCourtArena() {
   const floorTexture = useCourtTexture();
+  const panelTexture = usePanelTexture();
   const envMap = useFloorEnv();
   const rails = neonRails();
   const posts = neonBumpers();
@@ -726,7 +898,8 @@ export function NeonCourtArena() {
           key={box.id}
           {...box}
           tint={BLOCK_TINT[box.id] ?? "#22e7ff"}
-          height={box.id.startsWith("channel") ? 0.46 : 0.64}
+          height={box.id.startsWith("channel") ? 0.5 : 0.68}
+          panels={panelTexture}
         />
       ))}
 
@@ -742,13 +915,13 @@ export function NeonCourtArena() {
       {STANDS.map((stand) => (
         <mesh key={stand.pos.join(",")} position={stand.pos} receiveShadow>
           <boxGeometry args={stand.size} />
-          <meshStandardMaterial color="#161b28" roughness={0.86} metalness={0.12} />
+          <meshStandardMaterial color="#3a455c" roughness={0.62} metalness={0.28} />
         </mesh>
       ))}
       <Crowd />
+      <FarBowl />
       <ArenaRim />
       <Skyline />
-      <LightRig z={-9.2} y={2.05} />
       <LightRig z={12.2} y={5.2} />
       {/* Dim inner lip so the bowl has an edge without blooming over the court. */}
       <mesh position={[0, 0.55, -8.42]}>
