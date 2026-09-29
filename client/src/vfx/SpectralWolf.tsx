@@ -150,14 +150,14 @@ function WolfTrail({ anchor }: { anchor: RefObject<THREE.Group | null> }) {
       if (jump >= 0.32) {
         sample.lerpVectors(prevPos, worldPos, 0.55);
         const roll = nextRand(state);
-        const side = (roll - 0.5) * 0.55;
-        const back = 0.45 + nextRand(state) * 0.5;
+        const side = (roll - 0.5) * 0.16;
+        const back = 0.12 + nextRand(state) * 0.2;
         emitAt.set(
           sample.x + backX * back - backZ * side,
-          sample.y + 0.12 + nextRand(state) * 0.38,
+          sample.y + 0.22 + nextRand(state) * 0.16,
           sample.z + backZ * back + backX * side,
         );
-        emitMist(wisps, emitAt.x, emitAt.y, emitAt.z, backX * jump, backZ * jump, nextRand(state));
+        emitMist(wisps, emitAt.x, emitAt.y, emitAt.z, backX, backZ, nextRand(state));
       }
       prevPos.copy(worldPos);
       state.ember += step;

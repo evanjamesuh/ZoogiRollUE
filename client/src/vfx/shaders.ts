@@ -12,6 +12,7 @@ varying vec2 vUv;
 varying float vVariant;
 varying float vStretch;
 varying float vWorldY;
+varying float vCamDist;
 
 void main() {
   vOpacity = aOpacity;
@@ -39,6 +40,7 @@ void main() {
     : spun;
   viewCenter.xy += offset * aSize;
   vWorldY = cameraPosition.y + dot(viewMatrix[1].xyz, viewCenter.xyz);
+  vCamDist = length(viewCenter.xyz);
   gl_Position = projectionMatrix * viewCenter;
 }
 `;
@@ -79,6 +81,7 @@ varying vec3 vColor;
 varying vec2 vUv;
 varying float vVariant;
 varying float vWorldY;
+varying float vCamDist;
 
 void main() {
   vec2 uv = vUv - 0.5;
@@ -94,7 +97,7 @@ void main() {
   alpha *= smoothstep(0.0, 0.55, vWorldY + (n - 0.5) * 0.2);
   float lower = smoothstep(0.62, 0.14, vUv.y);
   float lit = mix(1.2, 0.58, lower);
-  vec3 charcoal = vec3(0.038, 0.04, 0.044) * lit;
+  vec3 charcoal = max(vColor, vec3(0.04)) * lit;
   vec3 warm = vec3(0.32, 0.1, 0.025);
   vec3 col = mix(charcoal, warm, lower * uWarm * 0.9);
   gl_FragColor = vec4(col, alpha);
@@ -108,17 +111,19 @@ varying vec3 vColor;
 varying vec2 vUv;
 varying float vVariant;
 varying float vWorldY;
+varying float vCamDist;
 
 void main() {
   vec2 uv = vUv - 0.5;
   float n = fbm(vUv * 1.6 + vec2(uTime * 0.03, vVariant));
   float n2 = fbm(vUv * 3.4 + vec2(4.2, vVariant * 2.0));
-  vec2 warped = uv + vec2(n - 0.5, n2 - 0.5) * 0.48;
+  vec2 warped = uv + vec2(n - 0.5, n2 - 0.5) * 0.42;
   float dist = length(warped);
-  float alpha = exp(-dist * dist * 1.7);
-  alpha *= smoothstep(0.55, 0.02, length(uv));
-  alpha = min(alpha * (0.35 + 0.65 * n) * vOpacity, 0.16);
+  float alpha = exp(-dist * dist * 5.2);
+  alpha *= smoothstep(0.48, 0.04, length(uv));
+  alpha = min(alpha * (0.55 + 0.45 * n) * vOpacity, 0.25);
   alpha *= smoothstep(0.0, 0.45, vWorldY + (n2 - 0.5) * 0.16);
+  alpha *= smoothstep(2.0, 3.1, vCamDist);
   vec3 col = vec3(0.32, 0.42, 0.5);
   gl_FragColor = vec4(col, alpha);
 }
@@ -131,6 +136,7 @@ varying vec3 vColor;
 varying vec2 vUv;
 varying float vVariant;
 varying float vWorldY;
+varying float vCamDist;
 
 void main() {
   float dist = length(vUv - 0.5);
@@ -278,6 +284,7 @@ varying float vOpacity;
 varying vec3 vColor;
 varying vec2 vUv;
 varying float vWorldY;
+varying float vCamDist;
 
 void main() {
   float dist = length(vUv - 0.5);
@@ -298,6 +305,7 @@ varying vec3 vColor;
 varying vec2 vUv;
 varying float vStretch;
 varying float vWorldY;
+varying float vCamDist;
 
 void main() {
   vec2 p = vUv - 0.5;

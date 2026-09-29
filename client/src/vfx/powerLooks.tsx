@@ -407,8 +407,8 @@ export function BoltDischarge({
     }
     const flash = elapsed < 0.18 ? 1 - elapsed / 0.18 : Math.max(0, 1 - (elapsed - 0.18) / 0.55);
     if (light.current) {
-      light.current.intensity = flash * 36;
-      light.current.distance = 9;
+      light.current.intensity = flash * 10.8;
+      light.current.distance = 2.2;
     }
   });
 
@@ -418,7 +418,7 @@ export function BoltDischarge({
 
   return (
     <group>
-      <pointLight ref={light} position={anchor} color="#d7ecff" intensity={0} distance={9} decay={2} />
+      <pointLight ref={light} position={anchor} color="#d7ecff" intensity={0} distance={2.2} decay={2} />
       <ArcSet pairs={pairs} />
       <group position={anchor}>
         <InstancedSprites pool={sparks} mode="ember" />
