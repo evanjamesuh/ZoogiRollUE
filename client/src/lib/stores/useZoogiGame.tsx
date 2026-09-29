@@ -4351,18 +4351,27 @@ export const useZoogiGame = create<ZoogiGameState>()(
       const REST_SPEED = 0.02;
       const LINEAR_DAMPING = 0.972;
       const ROLLING_DRAG = 0.006;
+      // A patch should coast, not motor the marble. Ground loses 2.8% plus
+      // 0.006 of drag each frame. The old 1.08 scale ran after that damping
+      // (0.972 * 1.08), so speed climbed about 5% per frame while on the disk.
+      // Ice damping stays under 1 and ice drag stays positive, so the patch
+      // only keeps more of the speed the marble already had.
+      const ICE_LINEAR_DAMPING = 0.992;
+      const ICE_ROLLING_DRAG = 0.002;
       
       let player = { ...state.playerEntity };
       let enemies = state.enemies.map(e => ({ ...e }));
       let orbs = state.orbs.map(o => ({ ...o }));
       let orbsToRemove: string[] = [];
       
-      const applyFriction = (vel: [number, number, number]): [number, number, number] => {
-        let vx = vel[0] * LINEAR_DAMPING;
-        let vz = vel[2] * LINEAR_DAMPING;
+      const applyFriction = (vel: [number, number, number], onIce = false): [number, number, number] => {
+        const damping = onIce ? ICE_LINEAR_DAMPING : LINEAR_DAMPING;
+        const drag = onIce ? ICE_ROLLING_DRAG : ROLLING_DRAG;
+        let vx = vel[0] * damping;
+        let vz = vel[2] * damping;
         const speed = Math.hypot(vx, vz);
         if (speed < REST_SPEED) return [0, 0, 0];
-        const slowed = speed - ROLLING_DRAG;
+        const slowed = speed - drag;
         if (slowed < REST_SPEED) return [0, 0, 0];
         const scale = slowed / speed;
         return [vx * scale, 0, vz * scale];
@@ -4510,18 +4519,10 @@ export const useZoogiGame = create<ZoogiGameState>()(
         return false;
       };
       
-      const ICE_BOOST = 1.08;
-      
       const prevPlayerPos: [number, number, number] = [player.position[0], player.position[1], player.position[2]];
       
       if (!player.isStunned) {
-        player.velocity = capVelocity(applyFriction(player.velocity), player.zoogi.id);
-        if (isOnIce(player.position)) {
-          const speed = Math.sqrt(player.velocity[0] ** 2 + player.velocity[2] ** 2);
-          if (speed > 0.01) {
-            player.velocity = capVelocity([player.velocity[0] * ICE_BOOST, 0, player.velocity[2] * ICE_BOOST], player.zoogi.id);
-          }
-        }
+        player.velocity = capVelocity(applyFriction(player.velocity, isOnIce(player.position)), player.zoogi.id);
         
         if (player.arcMovement && player.arcMovement.waypoints && player.arcMovement.currentWaypointIndex !== undefined) {
           const waypoints = player.arcMovement.waypoints;
@@ -4644,13 +4645,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         if (e.isStunned) {
           return { ...e, velocity: [0, 0, 0] as [number, number, number] };
         }
-        let newVel = capVelocity(applyFriction(e.velocity), e.zoogi.id);
-        if (isOnIce(e.position)) {
-          const speed = Math.sqrt(newVel[0] ** 2 + newVel[2] ** 2);
-          if (speed > 0.01) {
-            newVel = capVelocity([newVel[0] * ICE_BOOST, 0, newVel[2] * ICE_BOOST], e.zoogi.id);
-          }
-        }
+        let newVel = capVelocity(applyFriction(e.velocity, isOnIce(e.position)), e.zoogi.id);
         
         let newPos: [number, number, number];
         let newArcMovement = e.arcMovement;

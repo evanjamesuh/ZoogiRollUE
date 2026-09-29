@@ -216,7 +216,7 @@ export interface IcePatch {
   rotation: number;
 }
 
-/** Drawn ice disks and the speed boost use this one list. */
+/** Drawn ice disks and the slippery patch surface use this one list. */
 export function getIcePatches(): IcePatch[] {
   const patches: IcePatch[] = [];
   const patchCount = 4;
