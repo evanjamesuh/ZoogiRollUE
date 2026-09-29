@@ -13,9 +13,12 @@ interface LeaderboardEntry {
 }
 
 export function GameOver() {
-  const { isVictory, score, playerEntity, enemies, returnToMenu, setPhase, restartWithSameZoogi } = useZoogiGame();
-  const bestEnemyScore = Math.max(...enemies.map((enemy) => enemy.score || 0), 0);
-  const tiedForTheWin = isVictory && score === bestEnemyScore;
+  const { isVictory, score, playerEntity, enemies, playerRoundWins, enemyRoundWins, returnToMenu, setPhase, restartWithSameZoogi } = useZoogiGame();
+  const bestEnemyRoundWins = Math.max(...Array.from(enemyRoundWins.values()), 0);
+  // A tied last round used to headline "IT'S A TIE!" even after earlier rounds
+  // were already won. The match follows rounds won. The tie screen is only when
+  // those totals are equal.
+  const tiedForTheWin = isVictory && playerRoundWins === bestEnemyRoundWins;
   const [dimensions, setDimensions] = useState({ width: window.innerWidth, height: window.innerHeight });
   const [playerName, setPlayerName] = useState("");
   const [submitted, setSubmitted] = useState(false);

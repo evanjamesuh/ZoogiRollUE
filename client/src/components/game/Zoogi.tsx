@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { useRef, useState, useEffect, useMemo, Suspense, Component, type ReactNode } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { Line, Html, useGLTF } from "@react-three/drei";
-import { useZoogiGame } from "@/lib/stores/useZoogiGame";
+import { stopFrameMayEndTurn, useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { resolveZoogiModel, rollMarble, zoogiModelPreloadUrls, type ZoogiModelSettings } from "@/lib/zoogiModels";
 import { useAudio } from "@/lib/stores/useAudio";
 import { useProgression } from "@/lib/stores/useProgression";
@@ -37,6 +37,7 @@ const ZOOGI_MATERIAL_STYLES: Record<string, {
   wolfgang: { clearcoat: 1.0, clearcoatRoughness: 0.05, metalness: 0.95, roughness: 0.15, reflectivity: 1.0, sheen: 0.3, sheenRoughness: 0.2, sheenColor: "#888888" },
   hotstreak: { clearcoat: 1.0, clearcoatRoughness: 0.08, metalness: 0.85, roughness: 0.2, reflectivity: 0.9, sheen: 0.5, sheenRoughness: 0.15, sheenColor: "#FF6600" },
   lars: { clearcoat: 1.0, clearcoatRoughness: 0.03, metalness: 0.7, roughness: 0.1, reflectivity: 1.0, sheen: 0.2, sheenRoughness: 0.1, sheenColor: "#4488FF" },
+  wraps: { clearcoat: 0.35, clearcoatRoughness: 0.45, metalness: 0.05, roughness: 0.62, reflectivity: 0.3, sheen: 0.85, sheenRoughness: 0.4, sheenColor: "#D4C4B0" },
   pinpoint: { clearcoat: 1.0, clearcoatRoughness: 0.1, metalness: 0.9, roughness: 0.25, reflectivity: 0.85, sheen: 0.4, sheenRoughness: 0.2, sheenColor: "#AA66FF" },
   bolt: { clearcoat: 1.0, clearcoatRoughness: 0.02, metalness: 0.8, roughness: 0.08, reflectivity: 1.0, sheen: 0.6, sheenRoughness: 0.1, sheenColor: "#FFDD00" },
 };
@@ -635,8 +636,7 @@ export function PlayerZoogi() {
 
       // Physics already ends the turn when the roll stops. A later frame can
       // still see this same slowdown. Ending again would skip whoever is up now.
-      const live = useZoogiGame.getState();
-      if (!isFreeForAll && live.isPlayerTurn && live.turnHasLaunched) {
+      if (!isFreeForAll && stopFrameMayEndTurn(useZoogiGame.getState(), "player")) {
         endTurn();
         console.log("Player turn ended");
       }
@@ -986,22 +986,29 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
     
     meshRef.current.scale.set(1, 1, 1);
     
-    const shouldBeMyTurn = !isPlayerTurn && turnIndex === myIndex;
-    
+    const liveTurn = useZoogiGame.getState();
+    const liveOwnsTurn = !isFreeForAll && !liveTurn.isPlayerTurn && liveTurn.turnIndex === myIndex;
+    const liveIsMyTurn = liveOwnsTurn && !liveTurn.enemies[myIndex]?.isStunned;
+
     if (!isFreeForAll) {
-      if (shouldBeMyTurn && enemy.isStunned && !prevTurnRef.current) {
+      if (liveOwnsTurn && liveTurn.enemies[myIndex]?.isStunned && !prevTurnRef.current) {
         console.log(`Enemy ${enemy.zoogi.name} is stunned, auto-skipping turn`);
-        setTimeout(() => endTurn(), 300);
+        setTimeout(() => {
+          const live = useZoogiGame.getState();
+          if (!live.isPlayerTurn && live.turnIndex === myIndex && live.enemies[myIndex]?.isStunned) {
+            live.endTurn();
+          }
+        }, 300);
       }
       
-      if (isMyTurn && !prevTurnRef.current) {
+      if (liveIsMyTurn && !prevTurnRef.current) {
         hasLaunchedRef.current = false;
         aiTimerRef.current = 0;
         prePowerRef.current = "pending";
         wolfTimerRef.current = null;
         console.log(`Enemy ${enemy.zoogi.name}'s turn starting`);
       }
-      prevTurnRef.current = shouldBeMyTurn;
+      prevTurnRef.current = !liveTurn.isPlayerTurn && liveTurn.turnIndex === myIndex;
     }
 
     if (prevRoundRef.current !== currentRound) {
@@ -1012,7 +1019,7 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
     }
     
     const canLaunchFFA = isFreeForAll && speed < 0.1 && !enemy.isStunned;
-    const canLaunchTurnBased = !isFreeForAll && isMyTurn && !hasLaunchedRef.current && !enemy.isStunned;
+    const canLaunchTurnBased = liveIsMyTurn && !hasLaunchedRef.current;
     
     if (canLaunchFFA || canLaunchTurnBased) {
       aiTimerRef.current += delta;
@@ -1034,7 +1041,8 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
       if (aiTimerRef.current > launchDelay) {
         if (enemy.isStunned) {
           console.log(`Enemy ${enemy.zoogi.name} cannot launch - stunned!`);
-          if (!isFreeForAll) endTurn();
+          const live = useZoogiGame.getState();
+          if (!isFreeForAll && !live.isPlayerTurn && live.turnIndex === myIndex) live.endTurn();
           return;
         }
         
@@ -1199,7 +1207,8 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
             console.log(`Enemy ${enemy.zoogi.name} moving toward center`);
           } else {
             console.log(`Enemy ${enemy.zoogi.name} at center, looking for next opportunity`);
-            if (!isFreeForAll) endTurn();
+            const live = useZoogiGame.getState();
+            if (!isFreeForAll && !live.isPlayerTurn && live.turnIndex === myIndex) live.endTurn();
           }
           return;
         }
@@ -1319,15 +1328,9 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
       prePowerRef.current = "pending";
       wolfTimerRef.current = null;
       setMovementStopped(true);
-      // Same guard as the player marble: only end the turn if it is still ours.
       // A late frame after physics already handed the turn back must not skip
       // the human, and a power cast must not be what ends the turn.
-      const live = useZoogiGame.getState();
-      const stillThisTurn = !isFreeForAll
-        && !live.isPlayerTurn
-        && live.turnIndex === myIndex
-        && live.turnHasLaunched;
-      if (stillThisTurn) {
+      if (!isFreeForAll && stopFrameMayEndTurn(useZoogiGame.getState(), "enemy", myIndex)) {
         endTurn();
         console.log(`Enemy ${enemy.zoogi.name}'s turn ended`);
       }
@@ -1611,11 +1614,7 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
       hasLaunchedRef.current = false;
       launchCooldownRef.current = false;
       setMovementStopped(true);
-      const live = useZoogiGame.getState();
-      const stillThisTurn = live.gameMode === "local_multiplayer"
-        && live.currentLocalPlayerIndex === playerIndex
-        && live.turnHasLaunched;
-      if (stillThisTurn) {
+      if (stopFrameMayEndTurn(useZoogiGame.getState(), "local", playerIndex)) {
         console.log(`Local player ${playerIndex} turn ended`);
         endTurn();
       }

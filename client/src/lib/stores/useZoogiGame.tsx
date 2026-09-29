@@ -32,7 +32,7 @@ import { triggerKnockoffFeel, triggerCollisionFeel, triggerCollectFeel, triggerA
 import { useAudio } from "./useAudio";
 import { triggerAbilityCameraEffect, triggerKnockoffCameraEffect, triggerCollisionCameraEffect, triggerTargetFocusCameraEffect } from "./useCameraEffects";
 import { getDeviceId } from "@/lib/deviceId";
-import { ARABIAN_STAGE, COSMOS_STAGE, GRASS_STAGE, arabianPlayTransform, collectMatchSolids, getIcePatches, getMapLayout, resolveSolidCollision } from "../arenaColliders";
+import { COSMOS_STAGE, GRASS_STAGE, arabianPlayTransform, collectMatchSolids, getIcePatches, getMapLayout, knockoffOffsetForMap, resolveSolidCollision } from "../arenaColliders";
 
 export const DEFAULT_BACKGROUND_SETTINGS = {
   distance: 200,
@@ -139,7 +139,7 @@ export const DEFAULT_ELEMENT_TRANSFORMS = {
   innerWallRotation: { x: 0, y: 0, z: 0 },
   zonesOffset: { x: 0.7, y: 0, z: 0 },
   zonesRotation: { x: 0, y: 0, z: 0 },
-  knockoffBoundaryOffset: { x: 0.9, y: 0, z: 0.2 },
+  knockoffBoundaryOffset: { x: 0, y: 0, z: 0 },
   knockoffBoundaryRotation: { x: 0, y: 0, z: 0 },
 };
 
@@ -1193,6 +1193,7 @@ function playfieldSettings(
   map: string | null | undefined,
   wallSettings: ZoogiGameState["wallSettings"],
   backgroundSettings: ZoogiGameState["backgroundSettings"],
+  elementTransforms: ZoogiGameState["elementTransforms"],
 ) {
   const layout = getMapLayout(map);
   const zones = zonesFromLayout(map);
@@ -1200,6 +1201,10 @@ function playfieldSettings(
   const patch: Partial<ZoogiGameState> = {
     zoneEditorConfigs: zones,
     wallSettings: { ...wallSettings, knockoffBoundaryRadius: layout.knockoffRadius },
+    elementTransforms: {
+      ...elementTransforms,
+      knockoffBoundaryOffset: knockoffOffsetForMap(map),
+    },
   };
   const stage =
     map === "grass"
@@ -1313,6 +1318,53 @@ let lastTurnEndedAt = 0;
 let turnWatchKey = "";
 let turnReadyForLaunch = false;
 let turnSlowFrames = 0;
+
+/** Fold this round's score into the round-win counters. A tied round goes to the player. */
+function awardRoundWin(
+  score: number,
+  enemies: { id: string; score: number; zoogi?: { name?: string } }[],
+  playerRoundWins: number,
+  enemyRoundWins: Map<string, number>,
+) {
+  const maxEnemyScore = Math.max(...enemies.map((enemy) => enemy.score), 0);
+  const winningEnemy = enemies.find((enemy) => enemy.score === maxEnemyScore && maxEnemyScore > 0);
+  let nextPlayerWins = playerRoundWins;
+  const nextEnemyWins = new Map(enemyRoundWins);
+  if (score > maxEnemyScore) {
+    nextPlayerWins++;
+    console.log(`Round winner: Player! (${score} vs ${maxEnemyScore})`);
+  } else if (winningEnemy && maxEnemyScore > score) {
+    nextEnemyWins.set(winningEnemy.id, (nextEnemyWins.get(winningEnemy.id) || 0) + 1);
+    console.log(`Round winner: ${winningEnemy.zoogi?.name || "Enemy"}! (${maxEnemyScore} vs ${score})`);
+  } else {
+    nextPlayerWins++;
+    console.log(`Round tie - Player wins the round (${score} vs ${maxEnemyScore})`);
+  }
+  const bestEnemyWins = Math.max(...Array.from(nextEnemyWins.values()), 0);
+  return { nextPlayerWins, nextEnemyWins, bestEnemyWins };
+}
+
+/**
+ * A marble may end the turn only while the live store still has that marble up
+ * and the launch flag is still set. Physics clears the flag as it hands off,
+ * so a later stop-frame must not call endTurn again.
+ */
+export function stopFrameMayEndTurn(
+  state: {
+    gameMode: string;
+    isPlayerTurn: boolean;
+    turnIndex: number;
+    currentLocalPlayerIndex: number;
+    turnHasLaunched: boolean;
+  },
+  actor: "player" | "enemy" | "local",
+  index = 0,
+): boolean {
+  if (!state.turnHasLaunched || state.gameMode === "ringer_royale") return false;
+  if (actor === "player") return state.isPlayerTurn;
+  if (actor === "enemy") return !state.isPlayerTurn && state.turnIndex === index;
+  return state.gameMode === "local_multiplayer" && state.currentLocalPlayerIndex === index;
+}
 
 function actorTakingTurn(state: {
   gameMode: string;
@@ -2956,7 +3008,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         editorPlacedModels: get().editorPlacedModels.filter(m => 
           !m.modelUrl.includes('zoogi_town') && !m.modelUrl.includes('workshop')
         ),
-        ...playfieldSettings(selectedMap, get().wallSettings, get().backgroundSettings),
+        ...playfieldSettings(selectedMap, get().wallSettings, get().backgroundSettings, get().elementTransforms),
       });
       
       // Classic mode now uses same free roam mechanics as local_multiplayer
@@ -3048,7 +3100,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         developerCamera: false,
         selectedMoveElement: null,
         selectedMap: "grass",
-        ...playfieldSettings("grass", get().wallSettings, get().backgroundSettings),
+        ...playfieldSettings("grass", get().wallSettings, get().backgroundSettings, get().elementTransforms),
         orbMultiplier: 1 as 1 | 2 | 3,
         restrictionPhaseActive: false,
         restrictionPhaseStartTime: Date.now(),
@@ -3066,31 +3118,14 @@ export const useZoogiGame = create<ZoogiGameState>()(
     startNextRound: () => {
       flashedStarOrbIds.clear();
       const { currentRound, maxRounds, playerEntity, enemies, score, playerRoundWins, enemyRoundWins } = get();
-      
-      const playerScore = score;
-      const maxEnemyScore = Math.max(...enemies.map(e => e.score), 0);
-      const winningEnemy = enemies.find(e => e.score === maxEnemyScore && maxEnemyScore > 0);
-      
-      let newPlayerRoundWins = playerRoundWins;
-      const newEnemyRoundWins = new Map(enemyRoundWins);
-      
-      if (playerScore > maxEnemyScore) {
-        newPlayerRoundWins++;
-        console.log(`Round ${currentRound} winner: Player! (${playerScore} vs ${maxEnemyScore})`);
-      } else if (winningEnemy && maxEnemyScore > playerScore) {
-        const currentWins = newEnemyRoundWins.get(winningEnemy.id) || 0;
-        newEnemyRoundWins.set(winningEnemy.id, currentWins + 1);
-        console.log(`Round ${currentRound} winner: ${winningEnemy.zoogi?.name || 'Enemy'}! (${maxEnemyScore} vs ${playerScore})`);
-      } else {
-        newPlayerRoundWins++;
-        console.log(`Round ${currentRound} tie - Player wins by default`);
-      }
+      const { nextPlayerWins, nextEnemyWins, bestEnemyWins } = awardRoundWin(score, enemies, playerRoundWins, enemyRoundWins);
       
       if (currentRound >= maxRounds) {
-        const maxEnemyWins = Math.max(...Array.from(newEnemyRoundWins.values()), 0);
-        // Same tie rule as a single round: a tie goes to the player, never a defeat screen.
-        const playerWins = newPlayerRoundWins >= maxEnemyWins;
-        console.log(`Game over after ${maxRounds} rounds! Player wins: ${newPlayerRoundWins}, Best enemy: ${maxEnemyWins}`);
+        // The match follows rounds won. Equal round wins is a tie, not a defeat,
+        // and a tied last round does not erase rounds the player already won.
+        const playerWins = nextPlayerWins >= bestEnemyWins;
+        console.log(`Game over after ${maxRounds} rounds! Player wins: ${nextPlayerWins}, Best enemy: ${bestEnemyWins}`);
+        set({ playerRoundWins: nextPlayerWins, enemyRoundWins: nextEnemyWins });
         get().endGame(playerWins);
         return;
       }
@@ -3109,8 +3144,8 @@ export const useZoogiGame = create<ZoogiGameState>()(
         pinballBumpers: newPinballBumpers,
         landedRocks: [],
         currentRound: currentRound + 1,
-        playerRoundWins: newPlayerRoundWins,
-        enemyRoundWins: newEnemyRoundWins,
+        playerRoundWins: nextPlayerWins,
+        enemyRoundWins: nextEnemyWins,
         score: 0,
         gameTimer: 300,
         isPlayerTurn: true,
@@ -3118,7 +3153,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         turnIndex: 0,
         allMovementStopped: true,
         wolfClones: [],
-        ...playfieldSettings(roundMap, get().wallSettings, get().backgroundSettings),
+        ...playfieldSettings(roundMap, get().wallSettings, get().backgroundSettings, get().elementTransforms),
         playerEntity: playerEntity ? {
           ...playerEntity,
           position: getSpawnPointPosition(playerEntity.spawnPointIndex ?? 0, roundZones, roundMap ?? undefined),
@@ -3153,7 +3188,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         phase: "playing",
         selectedZoogi: zoogiToUse,
         selectedMap: selectedMap,
-        ...playfieldSettings(selectedMap, get().wallSettings, get().backgroundSettings),
+        ...playfieldSettings(selectedMap, get().wallSettings, get().backgroundSettings, get().elementTransforms),
         playerEntity: gameState.playerEntity,
         enemies: gameState.enemies,
         orbs: gameState.orbs,
@@ -3826,7 +3861,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         orbs,
         mushrooms,
         pinballBumpers: createPinballBumpers(selectedMap),
-        ...playfieldSettings(selectedMap, get().wallSettings, get().backgroundSettings),
+        ...playfieldSettings(selectedMap, get().wallSettings, get().backgroundSettings, get().elementTransforms),
         score: 0,
         isVictory: false,
         currentRound: 1,
@@ -4193,7 +4228,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         afterLoad.gameMode !== "map_editor" &&
         afterLoad.selectedMap === mapId
       ) {
-        set(playfieldSettings(mapId, afterLoad.wallSettings, afterLoad.backgroundSettings));
+        set(playfieldSettings(mapId, afterLoad.wallSettings, afterLoad.backgroundSettings, afterLoad.elementTransforms));
       }
     },
     
@@ -4251,14 +4286,17 @@ export const useZoogiGame = create<ZoogiGameState>()(
           set({ phase: "round_end" });
           return;
         }
-        // Final round complete - end game
-        const playerScore = state.score;
-        const maxEnemyScore = Math.max(...state.enemies.map(e => e.score), 0);
-        // Earlier rounds award a tie to the player (startNextRound). The clock
-        // running out on the last round used to require a strictly higher score,
-        // so a 0–0 final round showed "Better luck next time!".
-        const playerWins = playerScore >= maxEnemyScore;
-        console.log(`Final round over: player ${playerScore} vs ${maxEnemyScore}, win=${playerWins}`);
+        // Final round complete. The match is rounds won, not this round's score.
+        // A 0–0 last round still goes to the player, then the higher round total wins.
+        const { nextPlayerWins, nextEnemyWins, bestEnemyWins } = awardRoundWin(
+          state.score,
+          state.enemies,
+          state.playerRoundWins,
+          state.enemyRoundWins,
+        );
+        const playerWins = nextPlayerWins >= bestEnemyWins;
+        console.log(`Final round over: player rounds ${nextPlayerWins} vs ${bestEnemyWins}, win=${playerWins}, tied=${nextPlayerWins === bestEnemyWins}`);
+        set({ playerRoundWins: nextPlayerWins, enemyRoundWins: nextEnemyWins, gameTimer: 0 });
         get().endGame(playerWins);
         return;
       }
@@ -5820,8 +5858,14 @@ export const useZoogiGame = create<ZoogiGameState>()(
           player.isKnockedOut = false; // Clear knocked out state so turn can advance
           console.log(`Player knocked out - will respawn at spawn point on next turn`);
           
-          // Explicitly trigger turn end after updating state
-          setTimeout(() => get().endTurn(), 100);
+          // Only if this marble is still the one up. A handoff that already
+          // happened must not be ended again when the timer fires.
+          setTimeout(() => {
+            const live = get();
+            if (live.phase !== "playing" || live.gameMode === "ringer_royale") return;
+            const stillUp = live.gameMode === "local_multiplayer" ? live.currentLocalPlayerIndex === 0 : live.isPlayerTurn;
+            if (stillUp) live.endTurn();
+          }, 100);
         }
       }
       
@@ -5927,7 +5971,13 @@ export const useZoogiGame = create<ZoogiGameState>()(
             
             // For local multiplayer, trigger turn end for this player
             if (gameMode === "local_multiplayer" && currentLocalPlayerIndex === idx + 1) {
-              setTimeout(() => get().endTurn(), 100);
+              const knockedIndex = idx + 1;
+              setTimeout(() => {
+                const live = get();
+                if (live.phase === "playing" && live.gameMode === "local_multiplayer" && live.currentLocalPlayerIndex === knockedIndex) {
+                  live.endTurn();
+                }
+              }, 100);
             }
             
             return {

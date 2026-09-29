@@ -196,7 +196,7 @@ export const SPACE_MAP_DEFAULT_CONFIG: MapDefaultConfig = {
     middleWallOffset: { x: 0.8, y: 0, z: 0 },
     innerWallOffset: { x: 0.8, y: 0, z: 0 },
     zonesOffset: { x: 0.7, y: 0, z: 0 },
-    knockoffBoundaryOffset: { x: 0.9, y: 0, z: 0.2 }
+    knockoffBoundaryOffset: { x: 0, y: 0, z: 0 }
   },
   zoneSettings: {
     globalRotationOffset: 0,
