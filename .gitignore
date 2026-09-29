@@ -1,6 +1,13 @@
 node_modules
 dist
 .DS_Store
+.env.ios
+ios/App/App/public
+ios/App/Pods
+ios/App/build
+ios/DerivedData
+ios/**/xcuserdata
+*.xcuserstate
 server/public
 vite.config.ts.*
 *.tar.gz
