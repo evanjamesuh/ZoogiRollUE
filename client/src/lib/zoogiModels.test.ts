@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as THREE from "three";
-import { resolveZoogiModel, rollMarble, ZOOGI_MODELS } from "./zoogiModels.ts";
+import { resolveZoogiModel, rollMarble, ZOOGI_MODELS, zoogiModelPreloadUrls } from "./zoogiModels.ts";
 
 function fresh(): THREE.Object3D {
   return new THREE.Object3D();
@@ -53,6 +53,7 @@ test("a respawn jump stands the model back up instead of spinning", () => {
 test("roster models point at their glb, including lars", () => {
   assert.equal(resolveZoogiModel("wolfgang")?.url, "/models/wolfgang.glb");
   assert.equal(resolveZoogiModel("lars")?.url, "/models/lars.glb");
+  assert.ok(zoogiModelPreloadUrls().includes("/models/lars.glb"), "Lars should preload with the other models");
   assert.equal(ZOOGI_MODELS.lars.scale, 1);
   assert.equal(resolveZoogiModel("brand-new")?.url, "/models/brand-new.glb");
   assert.equal(resolveZoogiModel("custom_4", "https://example.com/a.glb")?.url, "https://example.com/a.glb");
