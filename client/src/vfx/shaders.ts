@@ -410,6 +410,111 @@ float noiseW(vec2 p) {
 }
 `;
 
+export const FAINT_GLINT_FRAG = /* glsl */ `
+uniform vec3 uColor;
+uniform float uTime;
+varying vec2 vUv;
+void main() {
+  float dist = length(vUv - 0.5);
+  float edge = smoothstep(0.5, 0.18, dist);
+  float core = exp(-dist * dist * 36.0);
+  float pulse = 0.7 + 0.3 * sin(uTime * 2.6);
+  vec3 col = uColor * (edge * 0.05 + core * 0.55) * pulse;
+  gl_FragColor = vec4(col, 1.0);
+}
+`;
+
+export const SHADOW_GROUND_FRAG = /* glsl */ `
+uniform float uTime;
+uniform float uFront;
+uniform float uVeil;
+uniform float uEdge;
+varying vec2 vUv;
+
+float hash21s(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+float noiseS(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = hash21s(i);
+  float b = hash21s(i + vec2(1.0, 0.0));
+  float c = hash21s(i + vec2(0.0, 1.0));
+  float d = hash21s(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+float fbmS(vec2 p) {
+  float v = 0.0;
+  float a = 0.5;
+  for (int i = 0; i < 4; i++) {
+    v += a * noiseS(p);
+    p = p * 2.07 + vec2(1.7, 9.2);
+    a *= 0.5;
+  }
+  return v;
+}
+
+void main() {
+  vec2 p = vUv * 2.0 - 1.0;
+  float r = length(p);
+  if (r > 1.005) discard;
+  float ang = atan(p.y, p.x);
+  float n = fbmS(p * 3.2);
+  float n2 = fbmS(vec2(ang * 1.35, r * 6.5) + n * 1.4);
+  float ridge = abs(n2 - 0.5);
+  float crack = smoothstep(0.055, 0.0, ridge) * smoothstep(0.38, 0.78, n);
+  float inside = 1.0 - smoothstep(uFront - 0.02, uFront + 0.005, r);
+  float strobe = fract(sin(floor(uTime * 7.0) * 17.13 + n * 48.0));
+  float flick = mix(0.45 + 0.55 * sin(uTime * 5.5 + n * 16.0), 0.25 + 0.75 * strobe, 0.5);
+  float vein = crack * inside * flick * uVeil;
+  float wob = (noiseS(vec2(ang * 1.6, 3.0)) - 0.5) * 0.05;
+  float d = r - (uFront + wob);
+  float band = exp(-(d * d) / 0.0011);
+  vec3 veinCol = vec3(0.714, 0.612, 1.0) * vein * 0.5;
+  vec3 edgeCol = vec3(0.55, 0.4, 0.92) * band * uEdge;
+  vec3 col = veinCol + edgeCol;
+  if (max(col.r, max(col.g, col.b)) < 0.012) discard;
+  gl_FragColor = vec4(col, 1.0);
+}
+`;
+
+export const SHADOW_RIBBON_FRAG = /* glsl */ `
+uniform vec3 uColor;
+uniform vec3 uGlint;
+uniform float uFade;
+uniform float uTime;
+varying float vSide;
+varying float vAlong;
+
+float hash21r(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+float noiseR(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(
+    mix(hash21r(i), hash21r(i + vec2(1.0, 0.0)), f.x),
+    mix(hash21r(i + vec2(0.0, 1.0)), hash21r(i + vec2(1.0, 1.0)), f.x),
+    f.y
+  );
+}
+
+void main() {
+  float edge = smoothstep(1.0, 0.18, abs(vSide));
+  float n = noiseR(vec2(vAlong * 6.5 + uTime * 0.3, vSide * 2.4));
+  float body = edge * (0.42 + 0.58 * n);
+  float core = exp(-vSide * vSide * 20.0);
+  float along = smoothstep(0.0, 0.07, vAlong) * smoothstep(1.0, 0.18, vAlong);
+  vec3 col = uColor * (0.7 + 0.3 * n) + uGlint * core * 0.28;
+  gl_FragColor = vec4(col, body * along * uFade);
+}
+`;
+
 export const WOLF_FRAG = /* glsl */ `
 uniform float uTime;
 uniform float uFade;
