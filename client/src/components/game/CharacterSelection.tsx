@@ -5,6 +5,8 @@ import { Wand2, ChevronLeft, ChevronRight, LogIn, Minus, Plus, Users } from "luc
 import { getDeviceId } from "@/lib/deviceId";
 import useEmblaCarousel from "embla-carousel-react";
 import { AuthModal } from "@/components/ui/AuthModal";
+import { useMenuKeys } from "@/hooks/useMenuKeys";
+import { returnToMenuScreen } from "@/lib/menuReturn";
 
 const PORTRAIT_IMAGES: Record<string, string> = {
   wolfgang: "/portraits/wolfgang.png",
@@ -121,7 +123,7 @@ function CustomZoogiSlide({ customZoogi, isSelected, onClick }: { customZoogi: C
 }
 
 export function CharacterSelection() {
-  const { selectedZoogi, selectZoogi, selectCustomZoogi, selectedCustomZoogi, setPhase, gameMode, startPracticeGame, aiPlayerCount, incrementAiPlayerCount, decrementAiPlayerCount } = useZoogiGame();
+  const { selectedZoogi, selectZoogi, selectCustomZoogi, selectedCustomZoogi, setPhase, gameMode, aiPlayerCount, incrementAiPlayerCount, decrementAiPlayerCount } = useZoogiGame();
   const [customZoogis, setCustomZoogis] = useState<CustomZoogiData[]>([]);
   const [isLoadingCustom, setIsLoadingCustom] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -184,36 +186,53 @@ export function CharacterSelection() {
   const displayZoogi = selectedZoogi || ZOOGI_ROSTER[0];
   const hasSelection = selectedZoogi || selectedCustomZoogi;
 
+  const goBack = useCallback(() => {
+    if (showAuthModal) {
+      setShowAuthModal(false);
+      return;
+    }
+    returnToMenuScreen("play");
+    setPhase("menu");
+  }, [showAuthModal, setPhase]);
+
+  const confirmSelection = useCallback(() => {
+    if (!hasSelection || showAuthModal) return;
+    setPhase("map_selection");
+  }, [hasSelection, showAuthModal, setPhase]);
+
+  useMenuKeys({ onBack: goBack, onConfirm: confirmSelection });
+
   return (
-    <div className="fixed inset-0 flex flex-col overflow-hidden">
-      <div className="absolute top-4 right-4 z-20">
+    <div className="menu-safe fixed inset-0 flex flex-col overflow-hidden" data-testid="character-selection">
+      {showAuthModal && (
+        <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
+      )}
+      
+      <div className="flex items-center justify-between gap-3 pb-2">
+        <motion.h1
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-2xl font-bold text-white md:text-4xl"
+        >
+          Choose Your Zoogi
+        </motion.h1>
         <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           onClick={() => setShowAuthModal(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm text-white font-semibold"
+          className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full bg-white/20 px-4 text-white font-semibold backdrop-blur-sm"
         >
           <LogIn size={18} />
           <span>Sign In</span>
         </motion.button>
       </div>
       
-      {showAuthModal && (
-        <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
-      )}
-      
-      <div className="flex-1 flex flex-col p-4 relative z-10 overflow-y-auto">
-        <motion.h1
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-2xl md:text-3xl font-bold text-white text-center mb-4 mt-40"
-        >
-          Choose Your Zoogi
-        </motion.h1>
-        
+      <div className="relative z-10 flex-1 overflow-y-auto">
+        <div className="mx-auto grid w-full max-w-6xl gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(280px,0.7fr)] lg:items-start">
+        <div>
         <div className="relative mb-4">
           <div className="overflow-hidden" ref={emblaRef}>
-            <div className="flex gap-2 px-4">
+            <div className="flex gap-2">
               {ZOOGI_ROSTER.map((zoogi) => (
                 <div key={zoogi.id} className="flex-shrink-0">
                   <ZoogiSlide
@@ -229,7 +248,7 @@ export function CharacterSelection() {
           {canScrollPrev && (
             <button
               onClick={scrollPrev}
-              className="absolute left-0 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/60 rounded-full flex items-center justify-center text-white z-10"
+              className="absolute left-0 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/60 text-white"
             >
               <ChevronLeft size={20} />
             </button>
@@ -237,7 +256,7 @@ export function CharacterSelection() {
           {canScrollNext && (
             <button
               onClick={scrollNext}
-              className="absolute right-0 top-1/2 -translate-y-1/2 w-8 h-8 bg-black/60 rounded-full flex items-center justify-center text-white z-10"
+              className="absolute right-0 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-black/60 text-white"
             >
               <ChevronRight size={20} />
             </button>
@@ -263,7 +282,14 @@ export function CharacterSelection() {
             </div>
           </div>
         )}
-        
+        </div>
+
+        <div>
+        {!selectedZoogi && !selectedCustomZoogi && (
+          <div className="rounded-2xl bg-black/30 p-5 text-base text-white/70">
+            Tap a Zoogi to see their power.
+          </div>
+        )}
         <AnimatePresence mode="wait">
           {selectedZoogi && (
             <motion.div
@@ -271,7 +297,7 @@ export function CharacterSelection() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="bg-black/40 backdrop-blur-sm rounded-2xl p-4 mx-auto w-full max-w-md"
+              className="w-full rounded-2xl bg-black/40 p-4 backdrop-blur-sm lg:max-w-none"
             >
               <div className="flex items-center gap-3 mb-3">
                 {PORTRAIT_IMAGES[displayZoogi.id] ? (
@@ -319,7 +345,7 @@ export function CharacterSelection() {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="bg-gradient-to-b from-violet-900/40 to-fuchsia-900/40 backdrop-blur-sm rounded-2xl p-4 mx-auto w-full max-w-md border border-violet-500/30"
+              className="w-full rounded-2xl border border-violet-500/30 bg-gradient-to-b from-violet-900/40 to-fuchsia-900/40 p-4 backdrop-blur-sm"
             >
               <div className="flex items-center gap-3 mb-3">
                 {selectedCustomZoogi.thumbnailUrl ? (
@@ -350,42 +376,46 @@ export function CharacterSelection() {
             </motion.div>
           )}
         </AnimatePresence>
+        </div>
+        </div>
       </div>
 
       {gameMode === "classic" && (
-        <div className="px-4 pb-2 relative z-10">
-          <div className="flex items-center justify-center gap-3 p-3 bg-white/10 backdrop-blur-sm rounded-xl max-w-xs mx-auto">
-            <Users className="w-5 h-5 text-white/70" />
-            <span className="text-white/80 text-sm font-medium">AI Opponents:</span>
+        <div className="relative z-10 pb-2">
+          <div className="mx-auto flex max-w-md items-center justify-center gap-3 rounded-xl bg-white/10 p-3 backdrop-blur-sm">
+            <Users className="h-5 w-5 text-white/70" />
+            <span className="text-sm font-medium text-white/80">AI Opponents:</span>
             <div className="flex items-center gap-2">
               <motion.button
                 whileTap={{ scale: 0.9 }}
                 onClick={decrementAiPlayerCount}
-                className="w-8 h-8 flex items-center justify-center bg-white/20 hover:bg-white/30 rounded-full transition-colors"
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-white/20 transition-colors hover:bg-white/30 disabled:opacity-40"
                 disabled={aiPlayerCount === 0}
+                aria-label="Fewer computer opponents"
               >
-                <Minus className="w-4 h-4 text-white" />
+                <Minus className="h-4 w-4 text-white" />
               </motion.button>
-              <span className="text-white font-bold text-lg w-6 text-center">{aiPlayerCount}</span>
+              <span className="w-6 text-center text-lg font-bold text-white">{aiPlayerCount}</span>
               <motion.button
                 whileTap={{ scale: 0.9 }}
                 onClick={incrementAiPlayerCount}
-                className="w-8 h-8 flex items-center justify-center bg-white/20 hover:bg-white/30 rounded-full transition-colors"
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-white/20 transition-colors hover:bg-white/30 disabled:opacity-40"
                 disabled={aiPlayerCount === 3}
+                aria-label="More computer opponents"
               >
-                <Plus className="w-4 h-4 text-white" />
+                <Plus className="h-4 w-4 text-white" />
               </motion.button>
             </div>
           </div>
         </div>
       )}
 
-      <div className="p-4 flex justify-between gap-4 relative z-10 bg-gradient-to-t from-black/80 to-transparent pt-6">
+      <div className="relative z-10 flex justify-between gap-4 bg-gradient-to-t from-black/80 to-transparent pt-3">
         <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
-          onClick={() => setPhase("menu")}
-          className="px-6 py-3 bg-white/10 text-white font-semibold rounded-full hover:bg-white/20 transition-colors"
+          onClick={goBack}
+          className="min-h-11 rounded-full bg-white/10 px-6 font-semibold text-white transition-colors hover:bg-white/20"
         >
           Back
         </motion.button>
@@ -393,22 +423,15 @@ export function CharacterSelection() {
         <motion.button
           whileHover={{ scale: hasSelection ? 1.05 : 1 }}
           whileTap={{ scale: hasSelection ? 0.95 : 1 }}
-          onClick={() => {
-            if (!hasSelection) return;
-            if (gameMode === "practice") {
-              startPracticeGame();
-            } else {
-              setPhase("map_selection");
-            }
-          }}
-          className={`flex-1 max-w-xs px-6 py-3 font-bold rounded-full transition-all ${
+          onClick={confirmSelection}
+          className={`min-h-11 max-w-xs flex-1 rounded-full px-6 font-bold transition-all ${
             hasSelection 
               ? "bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg shadow-green-500/50" 
-              : "bg-white/20 text-white/50 cursor-not-allowed"
+              : "cursor-not-allowed bg-white/20 text-white/50"
           }`}
           disabled={!hasSelection}
         >
-          {hasSelection ? (gameMode === "practice" ? "Start Practice →" : "Choose Arena →") : "Select a Zoogi"}
+          {hasSelection ? "Choose Arena →" : "Select a Zoogi"}
         </motion.button>
       </div>
     </div>

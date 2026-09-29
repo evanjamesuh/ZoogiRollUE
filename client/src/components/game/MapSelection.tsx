@@ -1,30 +1,24 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useZoogiGame, MAP_OPTIONS, MapTheme } from "@/lib/stores/useZoogiGame";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { Star, Sparkles, MapPin, Settings, X, Image, Video, AlertCircle } from "lucide-react";
+import { Star, Sparkles, MapPin, Settings, X, Image, Video, AlertCircle, ChevronLeft } from "lucide-react";
 import type { CustomArena } from "./ArenaEditor";
 import { getDeviceId } from "@/lib/deviceId";
+import { useMenuKeys } from "@/hooks/useMenuKeys";
+import {
+  DEFAULT_ARENA_BUTTON_SETTINGS,
+  loadArenaButtonSettings,
+  saveArenaButtonSettings,
+  type ArenaButtonSettings,
+} from "@/lib/arenaButtonSettings";
 
-const SETTINGS_STORAGE_KEY = "map_selection_dev_settings";
 const IDB_NAME = "MapSelectionAssets";
 const IDB_STORE = "assets";
-
-interface DevSettings {
-  buttonHeight: number;
-  buttonRadius: number;
-  buttonGap: number;
-}
 
 interface AssetData {
   backgrounds: Record<MapTheme, string | null>;
   previewVideos: Record<MapTheme, string | null>;
 }
-
-const DEFAULT_DEV_SETTINGS: DevSettings = {
-  buttonHeight: 80,
-  buttonRadius: 12,
-  buttonGap: 12,
-};
 
 const DEFAULT_ASSETS: AssetData = {
   backgrounds: {
@@ -92,23 +86,6 @@ async function loadAssetsFromDB(): Promise<{ assets: AssetData; available: boole
   }
 }
 
-function loadDevSettings(): DevSettings {
-  try {
-    const stored = localStorage.getItem(SETTINGS_STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      return { ...DEFAULT_DEV_SETTINGS, ...parsed };
-    }
-  } catch {}
-  return DEFAULT_DEV_SETTINGS;
-}
-
-function saveDevSettings(settings: DevSettings) {
-  try {
-    localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
-  } catch {}
-}
-
 interface MeshyArena {
   id: number;
   name: string;
@@ -135,7 +112,7 @@ export function MapSelection() {
   const [selectedMeshyArena, setSelectedMeshyArena] = useState<number | null>(null);
   
   const [showDevControls, setShowDevControls] = useState(false);
-  const [devSettings, setDevSettings] = useState<DevSettings>(loadDevSettings);
+  const [devSettings, setDevSettings] = useState<ArenaButtonSettings>(loadArenaButtonSettings);
   const [assets, setAssets] = useState<AssetData>(DEFAULT_ASSETS);
   const [assetsLoaded, setAssetsLoaded] = useState(false);
   const [storageAvailable, setStorageAvailable] = useState(true);
@@ -176,7 +153,7 @@ export function MapSelection() {
   }, [deviceId]);
 
   useEffect(() => {
-    saveDevSettings(devSettings);
+    saveArenaButtonSettings(devSettings);
   }, [devSettings]);
 
   const saveAssets = useCallback(async (newAssets: AssetData): Promise<boolean> => {
@@ -214,7 +191,8 @@ export function MapSelection() {
     setSelectedCustomArena(null);
   };
 
-  const handleStartGame = () => {
+  const handleStartGame = useCallback(() => {
+    if (!selectedMap && selectedMeshyArena === null) return;
     if (gameMode === "map_editor") {
       useZoogiGame.getState().startMapEditor();
     } else if (gameMode === "local_multiplayer") {
@@ -222,9 +200,9 @@ export function MapSelection() {
     } else {
       useZoogiGame.getState().startGame();
     }
-  };
+  }, [gameMode, selectedMap, selectedMeshyArena]);
   
-  const handleBack = () => {
+  const handleBack = useCallback(() => {
     if (gameMode === "map_editor") {
       setPhase("menu");
     } else if (gameMode === "local_multiplayer") {
@@ -232,7 +210,17 @@ export function MapSelection() {
     } else {
       setPhase("character_selection");
     }
-  };
+  }, [gameMode, setPhase]);
+
+  useMenuKeys({
+    onBack: () => {
+      if (showDevControls) setShowDevControls(false);
+      else handleBack();
+    },
+    onConfirm: () => {
+      if (selectedMap || selectedMeshyArena !== null) handleStartGame();
+    },
+  });
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -317,7 +305,7 @@ export function MapSelection() {
   };
 
   const resetToDefaults = async () => {
-    setDevSettings(DEFAULT_DEV_SETTINGS);
+    setDevSettings(DEFAULT_ARENA_BUTTON_SETTINGS);
     await saveAssets(DEFAULT_ASSETS);
   };
 
@@ -333,7 +321,7 @@ export function MapSelection() {
   }
 
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center p-6 overflow-hidden">
+    <div className="menu-safe absolute inset-0 flex flex-col overflow-hidden" data-testid="map-selection">
       <input
         ref={imageInputRef}
         type="file"
@@ -349,12 +337,17 @@ export function MapSelection() {
         onChange={handleVideoUpload}
       />
 
-      <button
+      {gameMode === "map_editor" && <button
         onClick={() => setShowDevControls(!showDevControls)}
-        className="absolute top-4 right-4 z-50 p-2 bg-black/50 rounded-full text-white/70 hover:text-white transition-colors"
+        aria-label="Arena button settings"
+        className="absolute z-50 flex h-11 w-11 items-center justify-center rounded-full bg-black/50 text-white/70 transition-colors hover:text-white"
+        style={{
+          top: "max(0.75rem, env(safe-area-inset-top, 0px))",
+          right: "max(0.75rem, env(safe-area-inset-right, 0px))",
+        }}
       >
         <Settings size={20} />
-      </button>
+      </button>}
 
       <AnimatePresence>
         {showDevControls && (
@@ -362,7 +355,11 @@ export function MapSelection() {
             initial={{ opacity: 0, x: 300 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 300 }}
-            className="absolute top-14 right-4 z-50 bg-black/90 backdrop-blur-sm rounded-xl p-4 w-72 max-h-[80vh] overflow-y-auto"
+            className="absolute z-50 max-h-[70vh] w-72 overflow-y-auto rounded-xl bg-black/90 p-4 backdrop-blur-sm"
+            style={{
+              top: "max(4rem, calc(env(safe-area-inset-top, 0px) + 3.5rem))",
+              right: "max(0.75rem, env(safe-area-inset-right, 0px))",
+            }}
           >
             <h3 className="text-white font-bold mb-4 flex items-center gap-2">
               <Settings size={16} />
@@ -494,12 +491,15 @@ export function MapSelection() {
         )}
       </AnimatePresence>
 
+      <div className="relative z-10 min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto grid w-full max-w-6xl gap-4 lg:grid-cols-[minmax(240px,320px)_1fr] lg:items-start lg:gap-8">
+      <div className="pr-14 lg:pr-0">
       <motion.h1
         initial={{ y: -50, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="text-3xl font-bold text-white mb-1 relative z-10"
+        className="relative z-10 mb-1 text-3xl font-bold text-white lg:text-5xl"
       >
-        Select Arena
+        Choose Arena
       </motion.h1>
       
       <motion.p
@@ -515,7 +515,7 @@ export function MapSelection() {
         initial={{ scale: 0.8, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ delay: 0.3 }}
-        className="w-full max-w-xs h-40 rounded-2xl overflow-hidden mb-4 bg-black/40 relative z-10"
+        className="relative z-10 mb-4 h-32 w-full overflow-hidden rounded-2xl bg-black/40 sm:h-40 lg:h-56"
         style={{
           boxShadow: selectedMapInfo ? `0 0 40px ${selectedMapInfo.color}40` : 'none'
         }}
@@ -574,8 +574,9 @@ export function MapSelection() {
         )}
       </motion.div>
 
-      <div 
-        className="flex flex-col max-w-xs w-full relative z-10 max-h-[280px] overflow-y-auto pr-1"
+      </div>
+      <div
+        className="relative z-10 grid w-full grid-cols-1 sm:grid-cols-2"
         style={{ gap: `${devSettings.buttonGap}px` }}
       >
         {MAP_OPTIONS.map((map, index) => {
@@ -650,7 +651,7 @@ export function MapSelection() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5 }}
-          className="mt-4 w-full max-w-xs relative z-10"
+          className="relative z-10 mt-4 w-full lg:col-span-2"
         >
           <p className="text-white/60 text-xs font-semibold uppercase tracking-wider mb-2 flex items-center gap-1">
             <Star size={12} className="text-yellow-400" />
@@ -664,7 +665,7 @@ export function MapSelection() {
                 <motion.button
                   key={arena.id}
                   onClick={() => handleSelectMap(arena.theme, arena.id)}
-                  className={`flex-shrink-0 px-4 py-2 rounded-lg transition-all ${
+                  className={`min-h-11 flex-shrink-0 rounded-lg px-4 py-2 transition-all ${
                     isSelected ? "ring-2 ring-yellow-400" : ""
                   }`}
                   style={{ 
@@ -683,32 +684,35 @@ export function MapSelection() {
         </motion.div>
       )}
 
+      </div>
+      </div>
+
+      <div className="relative z-10 flex gap-3 pt-3">
+      <button
+        type="button"
+        onClick={handleBack}
+        className="inline-flex min-h-11 items-center gap-1 rounded-full bg-white/10 px-5 font-semibold text-white hover:bg-white/20"
+      >
+        <ChevronLeft size={20} />
+        Back
+      </button>
       <motion.button
         initial={{ y: 50, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ delay: 0.5 }}
         onClick={handleStartGame}
         disabled={!selectedMap}
-        className={`mt-8 px-8 py-4 rounded-full text-xl font-bold transition-all duration-300 relative z-10 ${
+        className={`min-h-11 flex-1 rounded-full px-8 text-xl font-bold transition-all duration-300 ${
           selectedMap
             ? gameMode === "map_editor"
-              ? "bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:scale-105 cursor-pointer"
-              : "bg-gradient-to-r from-yellow-400 to-orange-500 text-black hover:scale-105 cursor-pointer"
-            : "bg-gray-600 text-gray-400 cursor-not-allowed"
+              ? "cursor-pointer bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:scale-[1.02]"
+              : "cursor-pointer bg-gradient-to-r from-yellow-400 to-orange-500 text-black hover:scale-[1.02]"
+            : "cursor-not-allowed bg-gray-600 text-gray-400"
         }`}
       >
         {gameMode === "map_editor" ? "Open Editor" : "Start Battle!"}
       </motion.button>
-
-      <motion.button
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.6 }}
-        onClick={handleBack}
-        className="mt-4 text-gray-400 hover:text-white transition-colors relative z-10"
-      >
-        ← Back
-      </motion.button>
+      </div>
     </div>
   );
 }

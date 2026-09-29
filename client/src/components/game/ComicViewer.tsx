@@ -257,7 +257,7 @@ export function ComicViewer({ onBack }: ComicViewerProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col bg-[#07080f] text-white select-none"
+      className="menu-safe fixed inset-0 z-50 flex flex-col select-none bg-[#07080f] text-white"
       style={{ touchAction: "none" }}
       data-testid="comic-viewer"
     >
@@ -267,7 +267,7 @@ export function ComicViewer({ onBack }: ComicViewerProps) {
             type="button"
             onClick={onBack}
             data-testid="comic-back"
-            className="flex items-center gap-1 rounded-full bg-white/10 px-3 py-2 text-sm font-medium hover:bg-white/20"
+            className="inline-flex min-h-11 items-center gap-1 rounded-full bg-white/10 px-4 text-base font-semibold hover:bg-white/20"
           >
             <ChevronLeft size={18} />
             Back
@@ -275,7 +275,7 @@ export function ComicViewer({ onBack }: ComicViewerProps) {
         </div>
         <div className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-2">
           <BookOpen size={16} className="text-cyan-300" />
-          <span className="text-sm font-bold">3D Comic</span>
+          <span className="text-sm font-bold">Story</span>
         </div>
         <div />
       </div>

@@ -146,8 +146,8 @@ export const DEFAULT_ELEMENT_TRANSFORMS = {
   knockoffBoundaryRotation: { x: 0, y: 0, z: 0 },
 };
 
-export type GamePhase = "menu" | "shop" | "zoogipedia" | "arena_editor" | "character_selection" | "local_setup" | "map_selection" | "playing" | "round_end" | "game_over" | "feature_hub" | "music_visualizer" | "ringer_creator" | "ringer_trials_loading" | "ringer_trials";
-export type GameMode = "classic" | "ringer_royale" | "local_multiplayer" | "practice" | "map_editor";
+export type GamePhase = "menu" | "shop" | "zoogipedia" | "arena_editor" | "character_selection" | "local_setup" | "map_selection" | "playing" | "round_end" | "game_over" | "feature_hub" | "music_visualizer";
+export type GameMode = "classic" | "ringer_royale" | "local_multiplayer" | "map_editor";
 export type MapTheme = "grass" | "ice" | "lava" | "space" | "saturn" | "neon";
 
 export interface ZoogiStats {
@@ -755,7 +755,6 @@ interface ZoogiGameState {
   arcType: "over" | "left" | "right" | null;
   straightMode: boolean;
   tangentOffset: "none" | "left" | "right";
-  orbMultiplier: 1 | 2 | 3;
   aiPlayerCount: 0 | 1 | 2 | 3;
   playerFacingRotation: { y: number; x: number } | null;
   cinematicArcMode: boolean;
@@ -837,9 +836,6 @@ interface ZoogiGameState {
   setArcType: (arcType: "over" | "left" | "right" | null) => void;
   toggleStraightMode: () => void;
   setTangentOffset: (offset: "none" | "left" | "right") => void;
-  setOrbMultiplier: (multiplier: 1 | 2 | 3) => void;
-  incrementOrbMultiplier: () => void;
-  decrementOrbMultiplier: () => void;
   setAiPlayerCount: (count: 0 | 1 | 2 | 3) => void;
   incrementAiPlayerCount: () => void;
   decrementAiPlayerCount: () => void;
@@ -864,7 +860,6 @@ interface ZoogiGameState {
   selectCustomZoogi: (customZoogi: CustomZoogiData | null) => void;
   selectMap: (map: MapTheme, customArenaId?: string, customDecorations?: CustomArenaDecoration[], meshyArenaId?: number, meshyArenaModelUrl?: string) => void;
   startGame: () => void;
-  startPracticeGame: () => void;
   startNextRound: () => void;
   restartWithSameZoogi: () => void;
   endGame: (victory: boolean) => void;
@@ -1085,114 +1080,6 @@ const createPinballBumpers = (map?: string | null): PinballBumper[] => {
     lastHitTime: undefined,
     pointValue: 50,
   }));
-};
-
-const createPracticeOrbs = (multiplier: 1 | 2 | 3 = 1): Orb[] => {
-  const orbs: Orb[] = [];
-  const colors = ["#FFD700", "#FF69B4", "#00CED1", "#FF6347", "#7CFC00", "#FF00FF", "#00FF00", "#FF8C00"];
-  let total = 0;
-  for (let ring = 1; ring <= multiplier; ring++) {
-    total += 4 + (ring - 1) * 4;
-  }
-  const starSlots = new Map<number, "wolfgang" | "hotstreak" | "bolt">();
-  const bag = Array.from({ length: total }, (_, index) => index);
-  for (let i = bag.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    const swap = bag[i];
-    bag[i] = bag[j];
-    bag[j] = swap;
-  }
-  const starTypes = ["wolfgang", "hotstreak", "bolt"] as const;
-  for (let slot = 0; slot < Math.min(3, total); slot++) {
-    starSlots.set(bag[slot], starTypes[slot]);
-  }
-
-  let orbIndex = 0;
-  
-  // Spawn orbs in expanding rings based on multiplier
-  for (let ring = 1; ring <= multiplier; ring++) {
-    const radius = ring * 1.8; // Stay inside the bumper ring on the scaled playfield
-    const orbsInRing = 4 + (ring - 1) * 4; // 4, 8, 12 orbs per ring
-    
-    for (let i = 0; i < orbsInRing; i++) {
-      const angle = (i / orbsInRing) * Math.PI * 2;
-      const x = Math.cos(angle) * radius;
-      const z = Math.sin(angle) * radius;
-      const starOrbType = starSlots.get(orbIndex) ?? null;
-      
-      orbs.push({
-        id: `orb-r${ring}-i${i}`,
-        position: [x, ORB_REST_Y, z],
-        velocity: [0, 0, 0],
-        color: colors[orbIndex % colors.length],
-        points: 50,
-        isActive: true,
-        lastHitBy: null,
-        lastHitByEnemyId: null,
-        lastHitByLocalPlayerIndex: null,
-        lastHitTimestamp: null,
-        isStarOrb: starOrbType !== null,
-        starOrbType
-      });
-      orbIndex++;
-    }
-  }
-  
-  return orbs;
-};
-
-const initializePracticeGame = (selectedZoogi: Zoogi, orbMultiplier: 1 | 2 | 3 = 1) => {
-  // Practice mode starts player in center (no spawn immunity)
-  const playerEntity: GameEntity = {
-    id: "player",
-    zoogi: selectedZoogi,
-    position: [0, ZOOGI_REST_Y, 0],
-    velocity: [0, 0, 0],
-    health: 100,
-    maxHealth: 100,
-    isPlayer: true,
-    hasShield: false,
-    shieldTimer: 0,
-    speedBoost: 1,
-    speedBoostTimer: 0,
-    abilityCooldown: 0,
-    lastHitByPlayer: false,
-    lastHitByEnemyId: null,
-    lastHitByLocalPlayerIndex: null,
-    isStunned: false,
-    stunTimer: 0,
-    larsRicochetBoost: 1,
-    score: 0,
-    wolfgangAbilityCooldown: 0,
-    wolfgangAbilityUsedThisTurn: false,
-    wolfgangAbilityUnlocked: false,
-    hotstreakAbilityCooldown: 0,
-    hotstreakAbilityUsedThisTurn: false,
-    hotstreakAbilityUnlocked: false,
-    hotstreakGrenadeTimer: 0,
-    hotstreakGrenadeArmed: false,
-    boltAbilityCooldown: 0,
-    boltAbilityUsedThisTurn: false,
-    boltAbilityUnlocked: false,
-    larsAbilityUnlocked: false,
-    wrapsAbilityUnlocked: false,
-    wrapsBindUntil: 0,
-    nightshadeAbilityUnlocked: false,
-    boltPhasingUntil: 0,
-    slowUntil: 0,
-    arcMovement: null,
-    invulnerableUntil: null,
-    isRespawning: false,
-    respawnAt: null,
-    respawnPadIndex: null,
-    isKnockedOut: false,
-    spawnImmunity: false,
-    spawnPointIndex: 0
-  };
-  
-  const orbs = createPracticeOrbs(orbMultiplier);
-  
-  return { playerEntity, enemies: [], orbs, mushrooms: [], pinballBumpers: createPinballBumpers("grass") };
 };
 
 function zonesFromLayout(map: string | null | undefined): ZoneEditorConfig[] | null {
@@ -1933,7 +1820,6 @@ export const useZoogiGame = create<ZoogiGameState>()(
     arcType: null,
     straightMode: false,
     tangentOffset: "none",
-    orbMultiplier: 1 as 1 | 2 | 3,
     aiPlayerCount: 3 as 0 | 1 | 2 | 3,
     playerFacingRotation: null,
     arcWaypoints: null,
@@ -2616,16 +2502,6 @@ export const useZoogiGame = create<ZoogiGameState>()(
     
     setTangentOffset: (offset) => set({ tangentOffset: offset }),
     
-    setOrbMultiplier: (multiplier) => set({ orbMultiplier: multiplier }),
-    
-    incrementOrbMultiplier: () => set((state) => ({
-      orbMultiplier: (state.orbMultiplier < 3 ? state.orbMultiplier + 1 : 3) as 1 | 2 | 3
-    })),
-    
-    decrementOrbMultiplier: () => set((state) => ({
-      orbMultiplier: (state.orbMultiplier > 1 ? state.orbMultiplier - 1 : 1) as 1 | 2 | 3
-    })),
-    
     setAiPlayerCount: (count: 0 | 1 | 2 | 3) => set({ aiPlayerCount: count }),
     
     incrementAiPlayerCount: () => set((state) => ({
@@ -3075,106 +2951,6 @@ export const useZoogiGame = create<ZoogiGameState>()(
       
       // Classic mode now uses same free roam mechanics as local_multiplayer
       // Wall ownership (Ringer Royale) is NOT auto-activated
-    },
-    
-    startPracticeGame: () => {
-      flashedStarOrbIds.clear();
-      const { selectedZoogi, selectedCustomZoogi } = get();
-      
-      let zoogiToUse: Zoogi;
-      let customModelUrl: string | undefined;
-      let customThumbnailUrl: string | undefined;
-      let isCustomZoogi = false;
-      
-      if (selectedCustomZoogi) {
-        zoogiToUse = {
-          id: `custom_${selectedCustomZoogi.id}`,
-          name: selectedCustomZoogi.name,
-          type: "Custom",
-          color: "#8B5CF6",
-          secondaryColor: "#A78BFA",
-          ability: "Custom Power",
-          abilityDescription: "A unique custom ability",
-          stats: {
-            speed: (selectedCustomZoogi.stats?.speed || 5) * 10,
-            power: (selectedCustomZoogi.stats?.power || 5) * 10,
-            defense: 50,
-            control: (selectedCustomZoogi.stats?.control || 5) * 10
-          }
-        };
-        customModelUrl = selectedCustomZoogi.modelUrl;
-        customThumbnailUrl = selectedCustomZoogi.thumbnailUrl;
-        isCustomZoogi = true;
-      } else if (selectedZoogi) {
-        zoogiToUse = selectedZoogi;
-      } else {
-        return;
-      }
-      
-      const { playerEntity, enemies, orbs, mushrooms, pinballBumpers } = initializePracticeGame(zoogiToUse, get().orbMultiplier);
-      
-      if (isCustomZoogi) {
-        playerEntity.customModelUrl = customModelUrl;
-        playerEntity.customThumbnailUrl = customThumbnailUrl;
-        playerEntity.isCustomZoogi = true;
-      }
-      
-      const sessionId = `practice_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      
-      get().initializeWalls();
-      
-      set({
-        phase: "playing",
-        gameMode: "practice",
-        playerEntity,
-        enemies,
-        orbs,
-        mushrooms,
-        pinballBumpers,
-        score: 0,
-        isVictory: false,
-        currentRound: 1,
-        playerRoundWins: 0,
-        enemyRoundWins: new Map<string, number>(),
-        isPlayerTurn: true,
-        turnHasLaunched: false,
-        turnIndex: 0,
-        allMovementStopped: true,
-        gameTimer: 9999,
-        sessionId,
-        lastCollisionTime: 0,
-        lastScoreTime: 0,
-        lastLaunchTime: 0,
-        birdsEyeView: false,
-        firstPersonView: false,
-        overShoulderView: false,
-        launchPadView: false,
-        showTutorial: false,
-        tutorialStep: 0,
-        wolfClones: [],
-        groundCracks: [],
-        landedRocks: [],
-        lastCollisionEvent: null,
-        showExplosion: null, powerUnlocks: [],
-        customArenaId: null,
-        customArenaDecorations: [],
-        developerMoveMode: false,
-        developerCamera: false,
-        selectedMoveElement: null,
-        selectedMap: "grass",
-        ...playfieldSettings("grass", get().wallSettings, get().backgroundSettings, get().elementTransforms),
-        orbMultiplier: 1 as 1 | 2 | 3,
-        restrictionPhaseActive: false,
-        restrictionPhaseStartTime: Date.now(),
-        nextRespawnPadIndex: 0,
-        firstTickProcessed: false,
-        editorPlacedModels: get().editorPlacedModels.filter(m => 
-          !m.modelUrl.includes('zoogi_town') && !m.modelUrl.includes('workshop')
-        )
-      });
-      
-      // Activate wall ownership mode immediately at game start
-      get().activateWallOwnershipMode();
     },
     
     startNextRound: () => {

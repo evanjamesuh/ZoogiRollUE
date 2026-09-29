@@ -846,7 +846,7 @@ export function Arena({ theme = "grass" }: ArenaProps) {
       <EditorWallBlocks />
       <EditorScoringZones />
       
-      {(gameMode === "classic" || gameMode === "ringer_royale" || gameMode === "local_multiplayer" || gameMode === "practice") && (
+      {(gameMode === "classic" || gameMode === "ringer_royale" || gameMode === "local_multiplayer") && (
         <ScoringZones />
       )}
       
@@ -860,7 +860,7 @@ export function Arena({ theme = "grass" }: ArenaProps) {
         />
       )}
       
-      {currentTheme !== "neon" && (gameMode === "classic" || gameMode === "ringer_royale" || gameMode === "local_multiplayer" || gameMode === "practice") && (
+      {currentTheme !== "neon" && (gameMode === "classic" || gameMode === "ringer_royale" || gameMode === "local_multiplayer") && (
         <KnockoffBoundaryRing 
           radius={wallSettings.knockoffBoundaryRadius ?? 21} 
           width={wallSettings.knockoffBoundaryWidth ?? 0.5}
