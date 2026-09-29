@@ -8,6 +8,7 @@ const PORTRAIT_IMAGES: Record<string, string> = {
   wolfgang: "/portraits/wolfgang.png",
   hotstreak: "/portraits/hotstreak.png",
   wraps: "/portraits/wraps.png",
+  nightshade: "/portraits/nightshade.png",
 };
 
 interface UserProfileProps {

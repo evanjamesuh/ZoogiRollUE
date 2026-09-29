@@ -3,7 +3,7 @@ import { useRef, useState, useEffect, useMemo, Suspense, Component, type ReactNo
 import { useFrame, useThree } from "@react-three/fiber";
 import { Line, Html, useGLTF } from "@react-three/drei";
 import { stopFrameMayEndTurn, useZoogiGame } from "@/lib/stores/useZoogiGame";
-import { resolveZoogiModel, rollMarble, zoogiModelPreloadUrls, type ZoogiModelSettings } from "@/lib/zoogiModels";
+import { marbleUniformScale, resolveZoogiModel, rollMarble, zoogiModelPreloadUrls, type ZoogiModelSettings } from "@/lib/zoogiModels";
 import { useAudio } from "@/lib/stores/useAudio";
 import { useProgression } from "@/lib/stores/useProgression";
 import { triggerLaunchFeel } from "@/lib/stores/useGameFeel";
@@ -40,6 +40,7 @@ const ZOOGI_MATERIAL_STYLES: Record<string, {
   wraps: { clearcoat: 0.35, clearcoatRoughness: 0.45, metalness: 0.05, roughness: 0.62, reflectivity: 0.3, sheen: 0.85, sheenRoughness: 0.4, sheenColor: "#D4C4B0" },
   pinpoint: { clearcoat: 1.0, clearcoatRoughness: 0.1, metalness: 0.9, roughness: 0.25, reflectivity: 0.85, sheen: 0.4, sheenRoughness: 0.2, sheenColor: "#AA66FF" },
   bolt: { clearcoat: 1.0, clearcoatRoughness: 0.02, metalness: 0.8, roughness: 0.08, reflectivity: 1.0, sheen: 0.6, sheenRoughness: 0.1, sheenColor: "#FFDD00" },
+  nightshade: { clearcoat: 1.0, clearcoatRoughness: 0.03, metalness: 0.9, roughness: 0.08, reflectivity: 1.0, sheen: 0.55, sheenRoughness: 0.12, sheenColor: "#b69cff" },
 };
 
 const DEFAULT_MATERIAL_STYLE = { clearcoat: 1.0, clearcoatRoughness: 0.1, metalness: 0.8, roughness: 0.2, reflectivity: 0.9, sheen: 0.3, sheenRoughness: 0.2 };
@@ -124,6 +125,21 @@ function FittedZoogiModel({ settings, marbleRadius }: { settings: ZoogiModelSett
   // After the fit, shift so the lowest point sits on the floor like the ball.
   const bottom = -(bounds.size.y / 2) * uniform;
   const restOnFloor = -marbleRadius - bottom;
+
+  // Horns (and anything else past the ball) must not drive the fit. The file
+  // origin is already the ball centre, so scale it like the roster and leave Y alone.
+  if (settings.fit === "pivot") {
+    const pivotScale = marbleUniformScale(marbleRadius, settings);
+    return (
+      <group
+        position={[settings.offset[0], settings.offset[1], settings.offset[2]]}
+        rotation={settings.rotation}
+        scale={pivotScale}
+      >
+        <primitive object={cloned} />
+      </group>
+    );
+  }
 
   return (
     <group
@@ -246,6 +262,7 @@ const ZOOGI_TRAJECTORY_COLORS: Record<string, string> = {
   wraps: "#D4C4B0",
   pinpoint: "#8B5CF6",   // purple
   bolt: "#FBBF24",       // yellow
+  nightshade: "#b69cff", // glowing cracks
 };
 
 function PopRing({

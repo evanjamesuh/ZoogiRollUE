@@ -11,6 +11,7 @@ const ZOOGI_COLORS: Record<string, string> = {
   lars: "#3B82F6",
   pinpoint: "#8B5CF6",
   bolt: "#FBBF24",
+  nightshade: "#9F7AEA",
 };
 
 interface TrailPoint {

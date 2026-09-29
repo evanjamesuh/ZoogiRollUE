@@ -420,6 +420,100 @@ export function StunBurst({
   );
 }
 
+const SHADOW_PULSE_DURATION = 2.6;
+
+/**
+ * Nightshade's close-range shadow pulse. A dark disc and lavender rings
+ * expand to the stun radius, then fade. No point light, so it does not hitch.
+ */
+export function ShadowPulse({
+  position,
+  startTime,
+  radius = 4.5,
+  frozenElapsed,
+}: {
+  position: Vec3;
+  startTime: number;
+  radius?: number;
+  frozenElapsed?: number;
+}) {
+  const [done, setDone] = useState(false);
+  const ended = useRef(false);
+  const ring = useRef<THREE.Mesh>(null);
+  const ringMat = useRef<THREE.MeshBasicMaterial>(null);
+  const ring2 = useRef<THREE.Mesh>(null);
+  const ring2Mat = useRef<THREE.MeshBasicMaterial>(null);
+  const washMat = useRef<THREE.MeshBasicMaterial>(null);
+  const core = useRef<THREE.Mesh>(null);
+  const coreMat = useRef<THREE.MeshBasicMaterial>(null);
+  const playedTime = usePlayedTime(frozenElapsed);
+  void startTime;
+
+  useFrame((state) => {
+    const elapsed = playedTime(state.clock.elapsedTime);
+    const expand = Math.max(0.55, smoothstep(elapsed / 0.22));
+    const fade = 1 - smoothstep((elapsed - 1.15) / 1.35);
+    const ringR = Math.max(0.35, radius * expand);
+    if (ring.current) ring.current.scale.setScalar(ringR);
+    if (ring2.current) ring2.current.scale.setScalar(ringR * 0.62);
+    if (ringMat.current) ringMat.current.opacity = 0.95 * Math.max(fade, expand < 1 ? 0.85 : 0);
+    if (ring2Mat.current) ring2Mat.current.opacity = 0.75 * fade;
+    if (washMat.current) washMat.current.opacity = 0.42 * smoothstep(elapsed / 0.12) * Math.max(fade, 0.15);
+    const coreScale = (0.45 + expand * 1.1) * Math.max(fade, 0.04);
+    if (core.current) core.current.scale.setScalar(coreScale);
+    if (coreMat.current) coreMat.current.opacity = 0.8 * fade;
+    if (frozenElapsed === undefined && !ended.current && elapsed >= SHADOW_PULSE_DURATION) {
+      ended.current = true;
+      setDone(true);
+    }
+  });
+
+  if (done) return null;
+
+  return (
+    <group position={aboveFloor(position)} renderOrder={3}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.16, 0]}>
+        <circleGeometry args={[radius, 64]} />
+        <meshBasicMaterial
+          ref={washMat}
+          color="#170a33"
+          transparent
+          opacity={0.4}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+          toneMapped={false}
+        />
+      </mesh>
+      <mesh ref={ring} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.24, 0]}>
+        <ringGeometry args={[0.92, 1, 72]} />
+        <meshBasicMaterial
+          ref={ringMat}
+          color="#b69cff"
+          transparent
+          opacity={0.95}
+          depthWrite={false}
+          side={THREE.DoubleSide}
+          toneMapped={false}
+        />
+      </mesh>
+      <mesh ref={ring2} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.3, 0]}>
+        <ringGeometry args={[0.86, 1, 64]} />
+        <meshBasicMaterial
+          ref={ring2Mat}
+          color="#9F7AEA"
+          opacity={0.8}
+          {...additive}
+          side={THREE.DoubleSide}
+        />
+      </mesh>
+      <mesh ref={core} position={[0, 0.9, 0]}>
+        <sphereGeometry args={[0.7, 20, 20]} />
+        <meshBasicMaterial ref={coreMat} color="#6B46C1" opacity={0.75} {...additive} />
+      </mesh>
+    </group>
+  );
+}
+
 /**
  * Sits on a stunned marble. `remaining` / `duration` drive the shrinking ring.
  * Between store updates the ring keeps shrinking from the last remaining value.
