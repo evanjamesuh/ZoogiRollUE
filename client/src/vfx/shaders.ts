@@ -224,10 +224,11 @@ uniform float uWave;
 varying vec2 vUv;
 void main() {
   float r = length(vUv * 2.0 - 1.0);
-  float band = exp(-pow((r - uWave) / 0.11, 2.0));
-  float edge = 1.0 - smoothstep(0.9, 1.0, r);
-  float alpha = band * edge * uOpacity;
-  gl_FragColor = vec4(uColor * 2.4, alpha);
+  float band = exp(-pow((r - uWave) / 0.2, 2.0));
+  float pool = (1.0 - smoothstep(0.05, 0.92, r)) * 0.72;
+  float edge = 1.0 - smoothstep(0.86, 1.0, r);
+  float alpha = (band * 1.25 + pool) * edge * uOpacity;
+  gl_FragColor = vec4(uColor * 3.6, alpha);
 }
 `;
 

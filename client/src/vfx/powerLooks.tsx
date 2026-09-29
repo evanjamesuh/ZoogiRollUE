@@ -526,16 +526,16 @@ export function UnlockGlow({
     }
     if (step > 0) stepRising(embers, elapsed, step);
     const flash = elapsed < 0.16 ? elapsed / 0.16 : Math.max(0, 1 - (elapsed - 0.16) / 0.7);
-    if (light.current) light.current.intensity = flash * 18;
-    ring.uniforms.uWave.value = 0.15 + Math.min(1, elapsed / 0.45) * 0.7;
-    ring.uniforms.uOpacity.value = 0.85 * flash;
+    if (light.current) light.current.intensity = flash * 64;
+    ring.uniforms.uWave.value = 0.28 + Math.min(1, elapsed / 0.4) * 0.48;
+    ring.uniforms.uOpacity.value = 0.95 * flash;
   });
 
   return (
     <group position={position}>
-      <pointLight ref={light} position={[0, 0.8, 0]} color="#ffb15a" intensity={0} distance={7} decay={2} />
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.05, 0]}>
-        <circleGeometry args={[2.4, 48]} />
+      <pointLight ref={light} position={[0, 0.9, 0]} color="#ffb15a" intensity={0} distance={11} decay={2} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.42, 0]}>
+        <circleGeometry args={[3.6, 64]} />
         <primitive object={ring} attach="material" />
       </mesh>
       <InstancedSprites pool={embers} mode="ember" />
