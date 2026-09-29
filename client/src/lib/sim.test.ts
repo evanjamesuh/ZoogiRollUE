@@ -432,13 +432,24 @@ test("knockouts score, falling costs points, and a flick off the edge ends the t
       starOrbType: "wolfgang" as const,
     }],
   });
+  const fallActiveOrbs = () => {
+    for (let step = 0; step < 240 && useZoogiGame.getState().orbs.some((orb) => orb.isActive); step++) {
+      useZoogiGame.getState().physicsTick(1 / 60);
+    }
+  };
+
   useZoogiGame.getState().physicsTick(1 / 60);
   const orbKnock = useZoogiGame.getState();
-  assert.equal(orbKnock.score, 75, "knocking an orb off should score 50");
+  assert.equal(orbKnock.score, 25, "crossing the edge does not score");
+  assert.equal(orbKnock.orbs[0]?.isActive, true, "the orb is still falling");
   assert.equal(orbKnock.orbs[0]?.isOutOfRing, true);
   assert.equal(orbKnock.playerEntity?.wolfgangAbilityUnlocked, true, "a star orb unlocks the hitter's ability");
+  fallActiveOrbs();
+  assert.equal(useZoogiGame.getState().orbs[0]?.isActive, false, "the orb leaves play after it falls");
+  assert.equal(useZoogiGame.getState().score, 75, "the point lands when the orb finishes falling");
 
   useZoogiGame.setState({
+    phase: "playing",
     orbs: [{
       ...makeStillOrb("cpu-orb", 62, 0),
       lastHitBy: "enemy" as const,
@@ -446,11 +457,16 @@ test("knockouts score, falling costs points, and a flick off the edge ends the t
     }],
   });
   useZoogiGame.getState().physicsTick(1 / 60);
+  const crossed = useZoogiGame.getState();
+  assert.equal(crossed.score, 75, "an opponent's orb should not add to the player's score");
+  assert.equal(crossed.enemies[0]?.score, 100, "crossing the edge does not score for the computer");
+  fallActiveOrbs();
   const cpuScored = useZoogiGame.getState();
   assert.equal(cpuScored.score, 75, "an opponent's orb should not add to the player's score");
-  assert.equal(cpuScored.enemies[0]?.score, 150, "the computer should score for knocking an orb off");
+  assert.equal(cpuScored.enemies[0]?.score, 150, "the computer scores when the orb finishes falling");
 
   useZoogiGame.setState({
+    phase: "playing",
     orbs: [],
     enemies: cpuScored.enemies.map((enemy) => ({
       ...enemy,

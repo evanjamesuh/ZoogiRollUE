@@ -3516,7 +3516,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
       };
       
       if (orb.lastHitBy === "player") {
-        // Note: Scoring is now handled in tick() when orb crosses knockoff boundary
+        // Points are awarded in physicsTick when the orb finishes falling.
         // Only handle ability unlocks here
         
         // Check if this is a star orb - unlock the corresponding ability!
@@ -6013,7 +6013,49 @@ export const useZoogiGame = create<ZoogiGameState>()(
       const knockoffRadius = wallSettings.knockoffBoundaryRadius ?? 21;
       const knockoffOffset = elementTransforms.knockoffBoundaryOffset ?? { x: 0, y: 0, z: 0 };
       
-      // Orb knockout check - orbs continue momentum outside boundary, disappear when stopped
+      // Leaving the floor starts the fall. The point is awarded only when the
+      // orb finishes falling, never when it crosses the edge or a painted zone.
+      const awardFallenOrb = (orb: Orb) => {
+        let attackerColor = "#FFFFFF";
+        if (orb.lastHitByLocalPlayerIndex !== null) {
+          const attackerLocalIndex = orb.lastHitByLocalPlayerIndex;
+          if (attackerLocalIndex === 0) {
+            player.score += KNOCKOUT_SCORE_ORB;
+            set((s) => ({ score: s.score + KNOCKOUT_SCORE_ORB }));
+            attackerColor = player.zoogi.color;
+            console.log(`Local player 0 scored +${KNOCKOUT_SCORE_ORB} for knocking orb out!`);
+          } else {
+            const attackerEnemyIndex = attackerLocalIndex - 1;
+            if (attackerEnemyIndex >= 0 && attackerEnemyIndex < enemies.length) {
+              attackerColor = enemies[attackerEnemyIndex].zoogi.color;
+              enemies[attackerEnemyIndex] = {
+                ...enemies[attackerEnemyIndex],
+                score: enemies[attackerEnemyIndex].score + KNOCKOUT_SCORE_ORB
+              };
+              console.log(`Local player ${attackerLocalIndex} scored +${KNOCKOUT_SCORE_ORB} for knocking orb out!`);
+            }
+          }
+        } else if (orb.lastHitBy === "player") {
+          player.score += KNOCKOUT_SCORE_ORB;
+          set((s) => ({ score: s.score + KNOCKOUT_SCORE_ORB }));
+          attackerColor = player.zoogi.color;
+          console.log(`Player scored +${KNOCKOUT_SCORE_ORB} for knocking orb out!`);
+          get().showAbilityNotice(`Orb off! +${KNOCKOUT_SCORE_ORB}`);
+        } else if (orb.lastHitBy === "enemy" && orb.lastHitByEnemyId) {
+          const attackerIndex = enemies.findIndex(e => e.id === orb.lastHitByEnemyId);
+          if (attackerIndex >= 0) {
+            attackerColor = enemies[attackerIndex].zoogi.color;
+            enemies[attackerIndex] = {
+              ...enemies[attackerIndex],
+              score: enemies[attackerIndex].score + KNOCKOUT_SCORE_ORB
+            };
+            console.log(`Enemy ${enemies[attackerIndex].zoogi.name} scored +${KNOCKOUT_SCORE_ORB} for knocking orb out!`);
+            get().showAbilityNotice(`${enemies[attackerIndex].zoogi.name} scored +${KNOCKOUT_SCORE_ORB}`);
+          }
+        }
+        get().triggerKnockoffBoundaryFlash(attackerColor, 2);
+      };
+
       orbs = orbs.map((orb) => {
         if (!orb.isActive) return orb;
         
@@ -6022,59 +6064,13 @@ export const useZoogiGame = create<ZoogiGameState>()(
         const adjustedZ = orb.position[2] - knockoffOffset.z;
         const dist = Math.sqrt(adjustedX ** 2 + adjustedZ ** 2);
 
-        // Already off the floor. Gravity finishes the fall; touching a zone does not score.
+        // Already off the floor. Gravity finishes the fall; the edge cross does not score.
         if (orb.isOutOfRing) return orb;
 
         const orbOut = state.selectedMap === "neon"
           ? isOutsideNeonCourt(adjustedX, adjustedZ)
           : dist > knockoffRadius;
-        // Check if orb just crossed the knockoff boundary
         if (orbOut) {
-          // Award points to whoever knocked the orb out
-          let attackerColor = "#FFFFFF"; // Default white
-          
-          if (orb.lastHitByLocalPlayerIndex !== null) {
-            const attackerLocalIndex = orb.lastHitByLocalPlayerIndex;
-            if (attackerLocalIndex === 0) {
-              player.score += KNOCKOUT_SCORE_ORB;
-              // Also update global score state for UI display
-              set((s) => ({ score: s.score + KNOCKOUT_SCORE_ORB }));
-              attackerColor = player.zoogi.color;
-              console.log(`Local player 0 scored +${KNOCKOUT_SCORE_ORB} for knocking orb out!`);
-            } else {
-              const attackerEnemyIndex = attackerLocalIndex - 1;
-              if (attackerEnemyIndex >= 0 && attackerEnemyIndex < enemies.length) {
-                attackerColor = enemies[attackerEnemyIndex].zoogi.color;
-                enemies[attackerEnemyIndex] = {
-                  ...enemies[attackerEnemyIndex],
-                  score: enemies[attackerEnemyIndex].score + KNOCKOUT_SCORE_ORB
-                };
-                console.log(`Local player ${attackerLocalIndex} scored +${KNOCKOUT_SCORE_ORB} for knocking orb out!`);
-              }
-            }
-          } else if (orb.lastHitBy === "player") {
-            player.score += KNOCKOUT_SCORE_ORB;
-            // Also update global score state for UI display
-            set((s) => ({ score: s.score + KNOCKOUT_SCORE_ORB }));
-            attackerColor = player.zoogi.color;
-            console.log(`Player scored +${KNOCKOUT_SCORE_ORB} for knocking orb out!`);
-            get().showAbilityNotice(`Orb off! +${KNOCKOUT_SCORE_ORB}`);
-          } else if (orb.lastHitBy === "enemy" && orb.lastHitByEnemyId) {
-            const attackerIndex = enemies.findIndex(e => e.id === orb.lastHitByEnemyId);
-            if (attackerIndex >= 0) {
-              attackerColor = enemies[attackerIndex].zoogi.color;
-              enemies[attackerIndex] = {
-                ...enemies[attackerIndex],
-                score: enemies[attackerIndex].score + KNOCKOUT_SCORE_ORB
-              };
-              console.log(`Enemy ${enemies[attackerIndex].zoogi.name} scored +${KNOCKOUT_SCORE_ORB} for knocking orb out!`);
-              get().showAbilityNotice(`${enemies[attackerIndex].zoogi.name} scored +${KNOCKOUT_SCORE_ORB}`);
-            }
-          }
-          
-          // Trigger knockoff boundary flash with player's color (2 flashes)
-          get().triggerKnockoffBoundaryFlash(attackerColor, 2);
-
           if (orb.isStarOrb && orb.starOrbType) {
             const grant = (zoogiId: string, name: string) => {
               get().showAbilityNotice(`${name} unlocked!`);
@@ -6102,13 +6098,10 @@ export const useZoogiGame = create<ZoogiGameState>()(
             if (anchorId) flashStarUnlock(set, orb, anchorId);
           }
           
-          // Mark orb as out of ring but keep momentum going
+          // Off the floor, still falling. Keep the hitter until the point is awarded.
           return {
             ...orb,
             isOutOfRing: true,
-            lastHitBy: null,
-            lastHitByEnemyId: null,
-            lastHitByLocalPlayerIndex: null
           };
         }
         return orb;
@@ -6177,11 +6170,15 @@ export const useZoogiGame = create<ZoogiGameState>()(
       orbs = orbs.map((orb) => {
         if (!orb.isActive) return orb;
         const dropped = dropOrRest(orb.position, orb.velocity, !!orb.isOutOfRing, ORB_REST_Y);
+        if (dropped.fellOut) awardFallenOrb(orb);
         return {
           ...orb,
           position: dropped.position,
           velocity: dropped.velocity,
           isActive: dropped.fellOut ? false : orb.isActive,
+          ...(dropped.fellOut
+            ? { lastHitBy: null, lastHitByEnemyId: null, lastHitByLocalPlayerIndex: null }
+            : {}),
         };
       });
 

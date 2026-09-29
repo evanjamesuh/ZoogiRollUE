@@ -385,12 +385,14 @@ test("orbs rest on the floor, stay put when touched, and score only by falling o
   });
   useZoogiGame.getState().physicsTick(1 / 60);
   const falling = useZoogiGame.getState();
-  assert.equal(falling.score, 50, "knocking an orb off scores");
+  assert.equal(falling.score, 0, "crossing the edge does not score");
+  assert.equal(falling.orbs[0]?.isOutOfRing, true);
   assert.equal(falling.orbs[0]?.isActive, true, "the orb is still falling");
   assert.ok((falling.orbs[0]?.position[1] ?? 1) < ORB_REST_Y);
   for (let step = 0; step < 120 && useZoogiGame.getState().orbs[0]?.isActive; step++) {
     useZoogiGame.getState().physicsTick(1 / 60);
   }
   assert.equal(useZoogiGame.getState().orbs[0]?.isActive, false, "the orb leaves play after it falls out");
+  assert.equal(useZoogiGame.getState().score, 50, "the point lands when the orb finishes falling");
   assert.equal(FALL_GRAVITY, 9.81);
 });
