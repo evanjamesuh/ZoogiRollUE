@@ -19,7 +19,7 @@ Until you enroll, you can still look at the Xcode project. You cannot install th
 
 - The app name on the home screen is **Zoogi Roll**.
 - The bundle id is `com.evanjames.zoogiroll`. That is a placeholder. Change it in one file, `capacitor.config.ts`, on the `appId` line. Then run `npm run cap:sync`.
-- The icon is Wolfgang, the wolf face already drawn in the game when a portrait photo is missing. The launch picture shows that same face and the name Zoogi Roll. It is not a new character.
+- The icon and the launch picture use Wolfgang's portrait from `client/public/portraits/wolfgang.png`, with the name Zoogi Roll on the launch picture.
 - The app opens in landscape and also allows portrait. It is full screen. The buttons already sit inside the phone's safe areas. The page does not rubber-band when you drag past the edge.
 - The Xcode project is the `ios/` folder. On a Mac, open `ios/App/App.xcodeproj` after the steps below. `npx cap open ios` opens it for you.
 
@@ -50,7 +50,7 @@ npm run build:ios
 npx cap open ios
 ```
 
-Run those commands before you open Xcode. They copy the game into the app and write the bundle id. `npm run build:ios` does both. `npm run cap:sync` only refreshes Xcode after you change `capacitor.config.ts` or the icon. Run `build:ios` when the game itself changed.
+Run those commands before you open Xcode. They copy the game into the app and write the bundle id. `npm run build:ios` does both. It also leaves out unused pictures listed in `script/ios-exclude.txt`, so the phone pack is smaller. The website build on your PC still keeps those files. `npm run cap:sync` only refreshes Xcode after you change `capacitor.config.ts` or the icon. Run `build:ios` when the game itself changed.
 
 In Xcode:
 
@@ -126,9 +126,10 @@ Apple also reviews the binary. Common notes for a game like this: the app must d
 | `npm run dev` | Play on this PC, same as before |
 | `npm run build` | Website bundle, same as before |
 
-Regenerate the icon and splash from Wolfgang's drawn portrait with:
+Regenerate the icon and splash from Wolfgang's portrait with:
 
 ```sh
+git lfs pull
 node script/ios-art.mjs
 ```
 
