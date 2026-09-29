@@ -29,7 +29,7 @@ import { usePlayedClock } from "./bursts";
 
 export type Vec3 = [number, number, number];
 
-const ARC_POINTS = 14;
+const ARC_POINTS = 8;
 
 function ribbonMaterial(color: THREE.Color, cloth: boolean, hot = false): THREE.ShaderMaterial {
   const mat = new THREE.ShaderMaterial({
@@ -68,6 +68,7 @@ export function JaggedArc({
   sag = 0.2,
   cloth = false,
   endFade = 0,
+  hot = true,
 }: {
   from: Vec3;
   to: Vec3;
@@ -78,9 +79,10 @@ export function JaggedArc({
   sag?: number;
   cloth?: boolean;
   endFade?: number;
+  hot?: boolean;
 }) {
   const geo = useMemo(() => createRibbonGeometry(ARC_POINTS - 1), []);
-  const material = useMemo(() => ribbonMaterial(new THREE.Color(color), cloth, !cloth), [color, cloth]);
+  const material = useMemo(() => ribbonMaterial(new THREE.Color(color), cloth, hot && !cloth), [color, cloth, hot]);
   const points = useMemo(() => Array.from({ length: ARC_POINTS }, () => new THREE.Vector3()), []);
   const fromV = useRef(new THREE.Vector3());
   const toV = useRef(new THREE.Vector3());
@@ -439,29 +441,30 @@ function ArcSet({ pairs }: { pairs: Array<[Vec3, Vec3]> }) {
   const bolts = pairs.flatMap((pair, i) => {
     const from = pair[0];
     const to = pair[1];
-    const ends: Vec3[] = [
-      to,
-      [to[0] + 0.34, to[1] + 0.32, to[2] - 0.16],
-      [to[0] - 0.28, to[1] + 0.1, to[2] + 0.32],
+    const pointAt = (t: number, lift: number): Vec3 => [
+      from[0] + (to[0] - from[0]) * t,
+      from[1] + (to[1] - from[1]) * t + lift,
+      from[2] + (to[2] - from[2]) * t,
     ];
-    return ends.flatMap((end, k) => {
-      const t = 0.4 + k * 0.14;
-      const mid: Vec3 = [
-        from[0] + (end[0] - from[0]) * t,
-        from[1] + (end[1] - from[1]) * t + 0.2,
-        from[2] + (end[2] - from[2]) * t,
-      ];
-      const side = k % 2 === 0 ? 1 : -1;
-      const fork: Vec3 = [mid[0] + side * 0.85, mid[1] + 0.55, mid[2] - side * 0.6];
-      const width = k === 0 ? 0.16 : 0.1;
-      const sag = 0.16 + k * 0.07;
-      const salt = 3 + k * 5;
-      return [
-        { key: `m${i}${k}`, from, to: end, width, color: "#d7ecff", sag, salt },
-        { key: `c${i}${k}`, from, to: end, width: width * 0.28, color: "#ffffff", sag, salt },
-        { key: `f${i}${k}`, from: mid, to: fork, width: 0.07, color: "#b9dcff", sag: 0.14, salt: salt + 9 },
-      ];
-    });
+    const forks: Array<{ key: string; from: Vec3; to: Vec3; salt: number }> = [
+      { key: `a${i}`, from: pointAt(0.34, 0.12), to: [pointAt(0.34, 0.12)[0] + 0.55, pointAt(0.34, 0.12)[1] + 0.35, pointAt(0.34, 0.12)[2] - 0.4], salt: 11 },
+      { key: `b${i}`, from: pointAt(0.58, 0.08), to: [pointAt(0.58, 0.08)[0] - 0.48, pointAt(0.58, 0.08)[1] + 0.42, pointAt(0.58, 0.08)[2] + 0.36], salt: 19 },
+      { key: `c${i}`, from: pointAt(0.46, 0.16), to: [pointAt(0.46, 0.16)[0] + 0.22, pointAt(0.46, 0.16)[1] + 0.55, pointAt(0.46, 0.16)[2] + 0.5], salt: 23 },
+    ];
+    return [
+      { key: `glow${i}`, from, to, width: 0.12, color: "#9ecfff", sag: 0.1, salt: 3, hot: false },
+      { key: `core${i}`, from, to, width: 0.032, color: "#ffffff", sag: 0.1, salt: 3, hot: true },
+      ...forks.map((fork) => ({
+        key: fork.key,
+        from: fork.from,
+        to: fork.to,
+        width: 0.045,
+        color: "#c5e6ff",
+        sag: 0.05,
+        salt: fork.salt,
+        hot: false,
+      })),
+    ];
   });
   return (
     <group>
@@ -474,6 +477,7 @@ function ArcSet({ pairs }: { pairs: Array<[Vec3, Vec3]> }) {
           width={bolt.width}
           color={bolt.color}
           sag={bolt.sag}
+          hot={bolt.hot}
         />
       ))}
     </group>
@@ -541,9 +545,9 @@ export function StunCrawlers() {
           from={pair[0]}
           to={pair[1]}
           seed={generation * 11 + i}
-          width={0.11}
-          color="#f5fbff"
-          sag={0.1}
+          width={0.08}
+          color="#f4fbff"
+          sag={0.06}
           fade={0.95}
         />
       ))}

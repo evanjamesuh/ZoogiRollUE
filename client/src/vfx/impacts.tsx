@@ -81,8 +81,9 @@ function ImpactBurst({ impact }: { impact: ImpactEvent }) {
     }
     const flash = elapsed < 0.08 ? 1 : Math.max(0, 1 - (elapsed - 0.08) / 0.18);
     if (light.current) {
-      light.current.intensity = flash * (electric ? 8 : dusty ? 3 : 9);
-      light.current.distance = electric ? 1.5 : dusty ? 1.2 : 1.15;
+      const spark = !electric && !dusty;
+      light.current.intensity = spark ? 0 : flash * (electric ? 6 : 2.5);
+      light.current.distance = spark ? 0.01 : electric ? 1.2 : 0.9;
     }
     if (elapsed > 0.85) dismissImpact(impact.id);
   });

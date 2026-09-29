@@ -113,7 +113,8 @@ export function InstancedSprites({
         opacityArray[i] = pool.opacity[i];
         sizeArray[i] = pool.size[i];
         const speed = Math.hypot(pool.vx[i], pool.vy[i], pool.vz[i]);
-        if (!streak || pool.seed[i] < 0) stretchArray[i] = 1;
+        if (mode === "mist") stretchArray[i] = Math.min(2.3, 1.45 + speed * 0.35);
+        else if (!streak || pool.seed[i] < 0) stretchArray[i] = 1;
         else if (pool.seed[i] >= 1000) stretchArray[i] = Math.min(16, 9 + speed * 0.4);
         else stretchArray[i] = Math.min(2.2, 1.2 + speed * 0.28);
       }

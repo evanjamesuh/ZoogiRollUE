@@ -157,7 +157,7 @@ function WolfTrail({ anchor }: { anchor: RefObject<THREE.Group | null> }) {
         state.ready = true;
       }
       const jump = prevPos.distanceTo(worldPos);
-      const stamps = Math.min(5, Math.max(1, Math.ceil(jump / 0.42)));
+      const stamps = jump < 0.2 ? 0 : Math.min(2, Math.ceil(jump / 0.9));
       for (let s = 1; s <= stamps; s++) {
         sample.lerpVectors(prevPos, worldPos, s / stamps);
         const slot = MIST_ANCHORS[state.anchor % MIST_ANCHORS.length];
@@ -169,7 +169,7 @@ function WolfTrail({ anchor }: { anchor: RefObject<THREE.Group | null> }) {
       }
       prevPos.copy(worldPos);
       state.ember += step;
-      if (state.ember >= 0.09) {
+      if (state.ember >= 0.22) {
         state.ember = 0;
         emitColdEmber(
           embers,

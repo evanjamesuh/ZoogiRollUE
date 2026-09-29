@@ -104,7 +104,7 @@ export function stepDustSkirt(pool: SpritePool, _elapsed: number, dt: number): v
     pool.vz[i] *= drag;
     pool.vy[i] = Math.max(-0.05, pool.vy[i] - 0.8 * dt);
     pool.px[i] += pool.vx[i] * dt;
-    pool.py[i] = Math.max(0.05, Math.min(0.28, pool.py[i] + pool.vy[i] * dt));
+    pool.py[i] = Math.max(0.12, Math.min(0.42, pool.py[i] + pool.vy[i] * dt));
     pool.pz[i] += pool.vz[i] * dt;
     const age = 1 - pool.life[i] / pool.maxLife[i];
     pool.opacity[i] = 0.55 * (1 - smoothstep((age - 0.35) / 0.65));
@@ -347,9 +347,9 @@ export function emitMist(
     vx: backX * (0.9 + rand * 1.1) + (rand - 0.5) * 0.45,
     vy: 0.15 + rand * 0.55,
     vz: backZ * (0.9 + rand * 1.1) + (rand - 0.5) * 0.45,
-    life: 0.55 + rand * 0.35,
-    size: 0.22 + rand * 0.2,
-    grow: 0.1 + rand * 0.16,
+    life: 0.95 + rand * 0.55,
+    size: 0.42 + rand * 1.25,
+    grow: 0.25 + rand * 0.45,
     spin: (rand - 0.5) * 0.6,
     r: 0.46,
     g: 0.56,
@@ -416,7 +416,7 @@ export function stepMist(pool: SpritePool, _elapsed: number, dt: number): void {
     const age = 1 - pool.life[i] / pool.maxLife[i];
     const fadeIn = age < 0.08 ? age / 0.08 : 1;
     const fadeOut = 1 - smoothstep((age - 0.28) / 0.72);
-    pool.opacity[i] = 0.55 * fadeIn * fadeOut;
+    pool.opacity[i] = 0.24 * fadeIn * fadeOut;
     pool.size[i] = pool.size0[i] + pool.grow[i] * age;
   }
 }

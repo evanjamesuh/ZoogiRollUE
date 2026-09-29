@@ -11,6 +11,7 @@ varying vec3 vColor;
 varying vec2 vUv;
 varying float vVariant;
 varying float vStretch;
+varying float vWorldY;
 
 void main() {
   vOpacity = aOpacity;
@@ -37,6 +38,10 @@ void main() {
     ? along * position.x * stretch + side * position.y
     : spun;
   viewCenter.xy += offset * aSize;
+  vWorldY = cameraPosition.y
+    + viewMatrix[0][1] * viewCenter.x
+    + viewMatrix[1][1] * viewCenter.y
+    + viewMatrix[2][1] * viewCenter.z;
   gl_Position = projectionMatrix * viewCenter;
 }
 `;
@@ -76,6 +81,7 @@ varying float vOpacity;
 varying vec3 vColor;
 varying vec2 vUv;
 varying float vVariant;
+varying float vWorldY;
 
 void main() {
   vec2 uv = vUv - 0.5;
@@ -88,6 +94,7 @@ void main() {
   float lumps = smoothstep(0.28, 0.66, lobes);
   float shape = mix(lumps, 1.0, interior);
   float alpha = min(roundMask * shape * (0.88 + 0.12 * n) * vOpacity, 0.85);
+  alpha *= smoothstep(0.0, 0.36, vWorldY + (n - 0.5) * 0.12);
   float lower = smoothstep(0.62, 0.14, vUv.y);
   float lit = mix(1.2, 0.58, lower);
   vec3 charcoal = vec3(0.038, 0.04, 0.044) * lit;
@@ -103,14 +110,18 @@ varying float vOpacity;
 varying vec3 vColor;
 varying vec2 vUv;
 varying float vVariant;
+varying float vWorldY;
 
 void main() {
   vec2 uv = vUv - 0.5;
-  float n = fbm(vUv * 2.4 + vec2(uTime * 0.04, vVariant * 1.6));
-  float dist = length(uv * (1.05 + (n - 0.5) * 0.55));
-  float alpha = exp(-dist * dist * 5.2);
-  alpha *= smoothstep(0.5, 0.16, length(uv));
-  alpha = min(alpha * (0.65 + 0.35 * n) * vOpacity, 0.4);
+  float n = fbm(vUv * 1.6 + vec2(uTime * 0.03, vVariant));
+  float n2 = fbm(vUv * 3.4 + vec2(4.2, vVariant * 2.0));
+  vec2 warped = uv + vec2(n - 0.5, n2 - 0.5) * 0.28;
+  float dist = length(warped);
+  float alpha = exp(-dist * dist * 2.6);
+  alpha *= smoothstep(0.52, 0.02, length(uv));
+  alpha = min(alpha * (0.55 + 0.45 * n) * vOpacity, 0.22);
+  alpha *= smoothstep(0.0, 0.3, vWorldY + (n2 - 0.5) * 0.1);
   vec3 col = vec3(0.32, 0.42, 0.5);
   gl_FragColor = vec4(col, alpha);
 }
@@ -122,12 +133,14 @@ varying float vOpacity;
 varying vec3 vColor;
 varying vec2 vUv;
 varying float vVariant;
+varying float vWorldY;
 
 void main() {
   float dist = length(vUv - 0.5);
-  float roundMask = smoothstep(0.5, 0.15, dist);
+  float roundMask = smoothstep(0.5, 0.02, dist);
   float n = fbm(vUv * 2.8 + vec2(uTime * 0.05, vVariant * 1.7));
   float alpha = min(roundMask * (0.42 + 0.58 * n) * vOpacity, 0.62);
+  alpha *= smoothstep(0.0, 0.3, vWorldY + (n - 0.5) * 0.14);
   vec3 col = vec3(0.62, 0.48, 0.3) * (0.72 + 0.4 * n);
   gl_FragColor = vec4(col, alpha);
 }
@@ -267,6 +280,7 @@ export const FIRE_FRAG = /* glsl */ `
 varying float vOpacity;
 varying vec3 vColor;
 varying vec2 vUv;
+varying float vWorldY;
 
 void main() {
   float dist = length(vUv - 0.5);
@@ -286,6 +300,7 @@ varying float vOpacity;
 varying vec3 vColor;
 varying vec2 vUv;
 varying float vStretch;
+varying float vWorldY;
 
 void main() {
   vec2 p = vUv - 0.5;
