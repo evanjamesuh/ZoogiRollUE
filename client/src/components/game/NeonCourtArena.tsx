@@ -1,5 +1,6 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useFrame, useThree } from "@react-three/fiber";
+import { useEffect, useMemo, useState } from "react";
+import { useThree } from "@react-three/fiber";
+import { NightCircuitCrowd } from "./NightCircuitCrowd";
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { BUMPER_RADIUS } from "@/lib/arenaColliders";
@@ -522,103 +523,6 @@ const STANDS: Array<{ pos: [number, number, number]; size: [number, number, numb
   { pos: [-16.6, 1.15, 0], size: [2.2, 1.15, 16] },
 ];
 
-type CrowdLight = { x: number; y: number; z: number; scale: number; phase: number; color: THREE.Color };
-
-function crowdLights(): CrowdLight[] {
-  const lights: CrowdLight[] = [];
-  const cyan = new THREE.Color("#7ef6ff");
-  const magenta = new THREE.Color("#ff6ad4");
-  const phone = new THREE.Color("#ffe6b0");
-  const row = (z: number, y: number, x0: number, x1: number, step: number) => {
-    let i = 0;
-    for (let x = x0; x <= x1 + 0.001; x += step) {
-      const n = Math.sin(x * 8.3 + z * 5.1);
-      const side = x + n * 0.05;
-      const warm = Math.abs(Math.sin(x * 19.4 + z * 7.2)) > 0.86;
-      const color = warm ? phone : side < 0 ? cyan : magenta;
-      lights.push({
-        x: side,
-        y: y + (Math.cos(x * 5.4 + z) * 0.5 + 0.5) * 0.1,
-        z: z + n * 0.045,
-        scale: 0.62 + (Math.sin(x * 3.1 + i) * 0.5 + 0.5) * 0.7,
-        phase: (i * 1.37 + z * 2.2) % (Math.PI * 2),
-        color,
-      });
-      i += 1;
-    }
-  };
-  // Seats on the far tiers only, above the rail so the court stays clear.
-  row(-9.22, 1.05, -7.6, 7.6, 0.32);
-  row(-9.42, 1.14, -7.3, 7.3, 0.34);
-  row(-9.95, 1.68, -8.1, 8.1, 0.3);
-  row(-10.16, 1.78, -7.8, 7.8, 0.32);
-  row(-10.7, 2.32, -8.3, 8.3, 0.3);
-  row(-10.92, 2.46, -7.6, 7.6, 0.34);
-  return lights;
-}
-
-function CrowdLights() {
-  const meshRef = useRef<THREE.InstancedMesh>(null);
-  const materialRef = useRef<THREE.ShaderMaterial>(null);
-  const spots = useMemo(() => crowdLights(), []);
-
-  useLayoutEffect(() => {
-    const mesh = meshRef.current;
-    if (!mesh) return;
-    const dummy = new THREE.Object3D();
-    const phases = new Float32Array(spots.length);
-    spots.forEach((spot, i) => {
-      dummy.position.set(spot.x, spot.y, spot.z);
-      dummy.scale.setScalar(spot.scale);
-      dummy.updateMatrix();
-      mesh.setMatrixAt(i, dummy.matrix);
-      mesh.setColorAt(i, spot.color);
-      phases[i] = spot.phase;
-    });
-    mesh.instanceMatrix.needsUpdate = true;
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-    mesh.geometry.setAttribute("phase", new THREE.InstancedBufferAttribute(phases, 1));
-  }, [spots]);
-
-  useFrame((state) => {
-    const material = materialRef.current;
-    if (material) material.uniforms.uTime.value = state.clock.elapsedTime;
-  });
-
-  return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, spots.length]} frustumCulled={false}>
-      <sphereGeometry args={[0.062, 6, 5]} />
-      <shaderMaterial
-        ref={materialRef}
-        toneMapped={false}
-        depthWrite={false}
-        blending={THREE.AdditiveBlending}
-        uniforms={{ uTime: { value: 0 } }}
-        vertexShader={`
-          attribute float phase;
-          varying vec3 vColor;
-          varying float vPhase;
-          void main() {
-            vColor = instanceColor;
-            vPhase = phase;
-            vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(position, 1.0);
-            gl_Position = projectionMatrix * mvPosition;
-          }
-        `}
-        fragmentShader={`
-          uniform float uTime;
-          varying vec3 vColor;
-          varying float vPhase;
-          void main() {
-            float twinkle = 0.72 + 0.28 * sin(uTime * 1.45 + vPhase);
-            gl_FragColor = vec4(vColor * twinkle * 2.05, 1.0);
-          }
-        `}
-      />
-    </instancedMesh>
-  );
-}
-
 function FarBowl({ envMap }: { envMap: THREE.Texture | null }) {
   const tiers = [
     { z: -9.22, y: 0.58, h: 0.82, depth: 0.7, width: 16.6 },
@@ -967,7 +871,7 @@ export function NeonCourtArena() {
           <meshStandardMaterial color="#0c1018" roughness={0.32} metalness={0.72} />
         </mesh>
       ))}
-      <CrowdLights />
+      <NightCircuitCrowd />
       <FarBowl envMap={envMap} />
       <ArenaRim />
       <Skyline />
