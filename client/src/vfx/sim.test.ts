@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createSpritePool } from "./pool.ts";
 import { mulberry32 } from "./random.ts";
-import { seedBlastEmbers, seedBlastFire, seedBlastSmoke, stepEmbers, stepFire, stepSmoke } from "./sim.ts";
+import { seedBlastEmbers, seedBlastFire, seedBlastSmoke, seedBurstSparks, seedDustPuff, stepDust, stepEmbers, stepFire, stepGlints, stepSmoke } from "./sim.ts";
 
 test("blast particles stay pooled, smoke rises, and embers cool", () => {
   const smoke = createSpritePool(28);
@@ -53,4 +53,22 @@ test("grenade-sized blasts use the same sim at a smaller radius", () => {
     const dist = Math.hypot(embers.px[i], embers.pz[i]);
     assert.ok(dist < 4 * 1.2, `ember traveled ${dist}`);
   }
+});
+
+test("impact sparks and dust stay inside their pools", () => {
+  const sparks = createSpritePool(18);
+  const dust = createSpritePool(10);
+  const rand = mulberry32(9);
+  seedBurstSparks(sparks, rand, 14, [1, 0.8, 0.4], [1, 0.2, 0]);
+  seedDustPuff(dust, rand, 8);
+  assert.ok(sparks.alive >= 10);
+  assert.ok(dust.alive >= 6);
+  assert.equal(sparks.px.length, 18);
+  const startX = sparks.px[0];
+  for (let frame = 0; frame < 8; frame++) {
+    stepGlints(sparks, frame / 60, 1 / 60);
+    stepDust(dust, frame / 60, 1 / 60);
+  }
+  assert.ok(sparks.px[0] !== startX);
+  assert.ok(dust.py[0] >= 0.04);
 });

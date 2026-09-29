@@ -371,6 +371,186 @@ export function stepWisps(pool: SpritePool, elapsed: number, dt: number): void {
   stepMist(pool, elapsed, dt);
 }
 
+/** Short electric or metallic sparks. Leaves the authored color alone. */
+export function seedBurstSparks(
+  pool: SpritePool,
+  rand: () => number,
+  count: number,
+  color: [number, number, number],
+  dir: [number, number, number] = [0, 1, 0],
+): void {
+  const len = Math.hypot(dir[0], dir[1], dir[2]) || 1;
+  const dx = dir[0] / len;
+  const dy = dir[1] / len;
+  const dz = dir[2] / len;
+  const n = Math.min(pool.capacity, count);
+  for (let i = 0; i < n; i++) {
+    const point = rand() < 0.3;
+    const spread = (rand() - 0.5) * 1.4;
+    const side = (rand() - 0.5) * 1.4;
+    spawnSprite(pool, {
+      x: (rand() - 0.5) * 0.12,
+      y: 0.15 + rand() * 0.25,
+      z: (rand() - 0.5) * 0.12,
+      vx: dx * (2.2 + rand() * 3.4) + spread,
+      vy: dy * (1.4 + rand() * 2.2) + 0.8 + rand(),
+      vz: dz * (2.2 + rand() * 3.4) + side,
+      life: 0.32 + rand() * 0.28,
+      size: (point ? 0.04 : 0.055) + rand() * 0.02,
+      grow: 0,
+      spin: 0,
+      r: color[0],
+      g: color[1],
+      b: color[2],
+      seed: point ? -(i + 1) : i + 3,
+    });
+  }
+}
+
+export function seedOzone(pool: SpritePool, rand: () => number, count: number): void {
+  const n = Math.min(pool.capacity, count);
+  for (let i = 0; i < n; i++) {
+    const ang = rand() * Math.PI * 2;
+    spawnSprite(pool, {
+      x: Math.cos(ang) * (0.2 + rand() * 0.45),
+      y: 0.25 + rand() * 0.35,
+      z: Math.sin(ang) * (0.2 + rand() * 0.45),
+      vx: Math.cos(ang) * 0.25,
+      vy: 0.25 + rand() * 0.35,
+      vz: Math.sin(ang) * 0.25,
+      life: 0.7 + rand() * 0.35,
+      size: 0.55 + rand() * 0.35,
+      grow: 0.12,
+      spin: (rand() - 0.5) * 0.4,
+      r: 0.7,
+      g: 0.8,
+      b: 0.9,
+      seed: rand() * 10 + i,
+    });
+  }
+}
+
+export function seedRisingEmbers(pool: SpritePool, rand: () => number, count: number): void {
+  const n = Math.min(pool.capacity, count);
+  for (let i = 0; i < n; i++) {
+    const ang = rand() * Math.PI * 2;
+    const point = rand() < 0.25;
+    spawnSprite(pool, {
+      x: Math.cos(ang) * rand() * 0.28,
+      y: 0.15 + rand() * 0.2,
+      z: Math.sin(ang) * rand() * 0.28,
+      vx: Math.cos(ang) * (0.15 + rand() * 0.35),
+      vy: 1.6 + rand() * 1.8,
+      vz: Math.sin(ang) * (0.15 + rand() * 0.35),
+      life: 0.55 + rand() * 0.35,
+      size: point ? 0.05 : 0.07 + rand() * 0.03,
+      grow: 0.01,
+      spin: 0,
+      r: 1,
+      g: 0.72,
+      b: 0.28,
+      seed: point ? -(i + 1) : i + 4,
+    });
+  }
+}
+
+export function stepGlints(pool: SpritePool, _elapsed: number, dt: number): void {
+  const drag = damp(2.4, dt);
+  for (let i = 0; i < pool.capacity; i++) {
+    if (pool.active[i] === 0) continue;
+    pool.life[i] -= dt;
+    if (pool.life[i] <= 0) {
+      killSprite(pool, i);
+      continue;
+    }
+    pool.vx[i] *= drag;
+    pool.vz[i] *= drag;
+    pool.vy[i] = pool.vy[i] * damp(0.5, dt) - 1.6 * dt;
+    pool.px[i] += pool.vx[i] * dt;
+    pool.py[i] += pool.vy[i] * dt;
+    pool.pz[i] += pool.vz[i] * dt;
+    const age = 1 - pool.life[i] / pool.maxLife[i];
+    pool.opacity[i] = 1 - smoothstep((age - 0.35) / 0.65);
+    pool.size[i] = pool.size0[i];
+  }
+}
+
+export function stepRising(pool: SpritePool, _elapsed: number, dt: number): void {
+  const drag = damp(0.8, dt);
+  for (let i = 0; i < pool.capacity; i++) {
+    if (pool.active[i] === 0) continue;
+    pool.life[i] -= dt;
+    if (pool.life[i] <= 0) {
+      killSprite(pool, i);
+      continue;
+    }
+    pool.vx[i] *= drag;
+    pool.vz[i] *= drag;
+    pool.vy[i] = pool.vy[i] * damp(0.35, dt) + 0.55 * dt;
+    pool.px[i] += pool.vx[i] * dt;
+    pool.py[i] += pool.vy[i] * dt;
+    pool.pz[i] += pool.vz[i] * dt;
+    const age = 1 - pool.life[i] / pool.maxLife[i];
+    const fade = 1 - smoothstep((age - 0.45) / 0.55);
+    pool.opacity[i] = fade;
+    pool.size[i] = pool.size0[i] + pool.grow[i] * age;
+  }
+}
+
+export function seedDustPuff(pool: SpritePool, rand: () => number, count: number): void {
+  const n = Math.min(pool.capacity, count);
+  for (let i = 0; i < n; i++) {
+    const ang = rand() * Math.PI * 2;
+    const speed = 0.7 + rand() * 1.3;
+    spawnSprite(pool, {
+      x: Math.cos(ang) * rand() * 0.12,
+      y: 0.06 + rand() * 0.12,
+      z: Math.sin(ang) * rand() * 0.12,
+      vx: Math.cos(ang) * speed,
+      vy: 0.35 + rand() * 0.7,
+      vz: Math.sin(ang) * speed,
+      life: 0.4 + rand() * 0.35,
+      size: 0.32 + rand() * 0.28,
+      grow: 0.22,
+      spin: (rand() - 0.5) * 0.8,
+      r: 0.62,
+      g: 0.48,
+      b: 0.28,
+      seed: rand() * 8 + i,
+    });
+  }
+}
+
+export function stepDust(pool: SpritePool, _elapsed: number, dt: number): void {
+  const drag = damp(1.6, dt);
+  for (let i = 0; i < pool.capacity; i++) {
+    if (pool.active[i] === 0) continue;
+    pool.life[i] -= dt;
+    if (pool.life[i] <= 0) {
+      killSprite(pool, i);
+      continue;
+    }
+    pool.vx[i] *= drag;
+    pool.vz[i] *= drag;
+    pool.vy[i] = Math.max(-0.15, pool.vy[i] - 1.4 * dt);
+    pool.px[i] += pool.vx[i] * dt;
+    pool.py[i] = Math.max(0.04, pool.py[i] + pool.vy[i] * dt);
+    pool.pz[i] += pool.vz[i] * dt;
+    const age = 1 - pool.life[i] / pool.maxLife[i];
+    pool.opacity[i] = 0.7 * (1 - smoothstep((age - 0.2) / 0.8));
+    pool.size[i] = pool.size0[i] + pool.grow[i] * age;
+    pool.rot[i] += pool.spin[i] * dt;
+  }
+}
+
+export function stepHaze(pool: SpritePool, elapsed: number, dt: number): void {
+  stepMist(pool, elapsed, dt);
+  for (let i = 0; i < pool.capacity; i++) {
+    if (pool.active[i] === 0) continue;
+    pool.opacity[i] *= 0.42;
+  }
+}
+
 export function stepColdEmbers(pool: SpritePool, elapsed: number, dt: number): void {
   const drag = damp(1.1, dt);
   for (let i = 0; i < pool.capacity; i++) {

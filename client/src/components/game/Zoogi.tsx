@@ -10,6 +10,7 @@ import { triggerLaunchFeel } from "@/lib/stores/useGameFeel";
 import { triggerLaunchCameraEffect, clearAimCameraEffect } from "@/lib/stores/useCameraEffects";
 import { getSkinEffect, getRainbowColor } from "@/lib/skinEffects";
 import { StunnedIndicator } from "./PowerEffects";
+import { AimBeam, AimPath, BindRibbons, Glint, RicochetShell, type Vec3 } from "@/vfx/powerLooks";
 
 // Global scale control - adjust this to resize ALL Zoogis uniformly
 let globalZoogiScale = 0.5;
@@ -265,34 +266,54 @@ const ZOOGI_TRAJECTORY_COLORS: Record<string, string> = {
   nightshade: "#b69cff", // glowing cracks
 };
 
-function PopRing({
-  args,
-  color,
-  opacity = 0.85,
-  y = 0.05,
-}: {
-  args: [number, number, number];
-  color: string;
-  opacity?: number;
-  y?: number;
-}) {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const started = useRef(Date.now());
+function boundNow(entity: { wrapsBindUntil?: number; slowUntil?: number }): boolean {
+  const now = Date.now();
+  return (entity.wrapsBindUntil || 0) > now || (entity.slowUntil || 0) > now;
+}
 
-  useFrame(() => {
-    const mesh = meshRef.current;
-    if (!mesh) return;
-    const t = Math.min(1, (Date.now() - started.current) / 240);
-    const overshoot = t < 1 ? Math.sin(t * Math.PI) * 0.28 : 0;
-    mesh.scale.setScalar(Math.max(0.05, t + overshoot));
-  });
-
+function StatusLooks({ ricochet, bound }: { ricochet: boolean; bound: boolean }) {
   return (
-    <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, y, 0]} scale={0.05}>
-      <ringGeometry args={args} />
-      <meshBasicMaterial color={color} transparent opacity={opacity} side={THREE.DoubleSide} />
-    </mesh>
+    <>
+      {ricochet && <RicochetShell />}
+      {bound && <BindRibbons />}
+    </>
   );
+}
+
+function PinpointStroke({
+  points,
+  color,
+  pinpoint,
+}: {
+  points: Vec3[];
+  color: string;
+  pinpoint: boolean;
+}) {
+  if (points.length < 2) return null;
+  if (pinpoint) return <AimPath points={points} />;
+  return <Line points={points} color={color} lineWidth={6} />;
+}
+
+function PinpointDragBeam({
+  origin,
+  dx,
+  dz,
+  multiplier,
+}: {
+  origin: Vec3;
+  dx: number;
+  dz: number;
+  multiplier: number;
+}) {
+  const span = Math.hypot(dx, dz);
+  if (span < 0.05) return null;
+  const length = Math.min(span * multiplier, 8);
+  const to: Vec3 = [
+    origin[0] + (dx / span) * length,
+    0.55,
+    origin[2] + (dz / span) * length,
+  ];
+  return <AimBeam from={[origin[0], 0.55, origin[2]]} to={to} />;
 }
 
 function TurnStunMarker({ entity }: { entity: { position: [number, number, number]; isStunned: boolean; stunTimer: number } }) {
@@ -826,17 +847,12 @@ export function PlayerZoogi() {
     <group>
       <group ref={meshRef} position={pos} visible={!firstPersonView && !playerEntity.isKnockedOut && !playerEntity.isRespawning}>
         <ZoogiModelSwitch zoogiId={playerEntity.zoogi.id} hasShield={playerEntity.hasShield} hasSpawnImmunity={playerEntity.spawnImmunity} color={playerEntity.zoogi.color} customModelUrl={playerEntity.customModelUrl} isPlayer={true} />
-        {playerEntity.larsRicochetBoost > 1 && (
-          <PopRing args={[1.1, 1.35, 24]} color="#3B82F6" />
-        )}
+        <StatusLooks ricochet={playerEntity.larsRicochetBoost > 1} bound={boundNow(playerEntity)} />
         {(playerEntity.boltPhasingUntil || 0) > Date.now() && (
           <mesh>
             <sphereGeometry args={[1.15, 16, 16]} />
             <meshBasicMaterial color="#FDE047" transparent opacity={0.35} />
           </mesh>
-        )}
-        {(playerEntity.wrapsBindUntil || 0) > Date.now() && (
-          <PopRing args={[1.2, 1.55, 24]} color="#D4C4B0" opacity={0.9} y={0.08} />
         )}
         {playerEntity.speedBoost > 1 && (
           <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
@@ -888,23 +904,25 @@ export function PlayerZoogi() {
       
       <TurnStunMarker entity={playerEntity} />
 
-      {trajectoryPoints.length > 1 && (
-        <Line
-          points={trajectoryPoints}
-          color={zoogiColor}
-          lineWidth={6}
-        />
-      )}
+      <PinpointStroke
+        points={trajectoryPoints}
+        color={zoogiColor}
+        pinpoint={playerEntity.zoogi.id === "pinpoint"}
+      />
 
       {showStraightTrajectory && straightTrajectoryEndPoint && (
-        <Line
+        <PinpointStroke
           points={[[pos[0], 0.6, pos[2]], straightTrajectoryEndPoint]}
           color={tangentOffset !== "none" ? "#F97316" : zoogiColor}
-          lineWidth={6}
+          pinpoint={playerEntity.zoogi.id === "pinpoint"}
         />
       )}
 
-      {isDragging && (
+      {isDragging && playerEntity.zoogi.id === "pinpoint" && (
+        <PinpointDragBeam origin={pos} dx={launchDx} dz={launchDz} multiplier={2} />
+      )}
+
+      {isDragging && playerEntity.zoogi.id !== "pinpoint" && (
         <>
           {/* Dynamic transparent blue arrow trajectory indicator */}
           {(() => {
@@ -980,7 +998,6 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
   const prevTurnRef = useRef(false);
   const prevRoundRef = useRef(0);
   const prevSpeedRef = useRef(0);
-  const stunRotationRef = useRef(0);
   const lastLaunchTimeRef = useRef(0);
   const ffaCooldownRef = useRef(1.5 + Math.random() * 1.5);
   const prePowerRef = useRef<"pending" | "cast" | "done">("pending");
@@ -1367,12 +1384,6 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
     prePowerRef.current = "done";
   }, 0.5);
   
-  useFrame((_, delta) => {
-    if (enemy?.isStunned) {
-      stunRotationRef.current += delta * 5;
-    }
-  });
-  
   const isLockedOn = lockOnTargetId === entityId;
   
   const handleClick = (e: any) => {
@@ -1391,12 +1402,7 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
     <group>
       <group ref={meshRef} position={enemy.position} onClick={handleClick} visible={!enemy.isKnockedOut && !enemy.isRespawning}>
         <ZoogiModelSwitch zoogiId={enemy.zoogi.id} hasShield={false} hasSpawnImmunity={enemy.spawnImmunity} color={enemy.zoogi.color} />
-        {enemy.larsRicochetBoost > 1 && (
-          <PopRing args={[1.1, 1.35, 24]} color="#3B82F6" />
-        )}
-        {(enemy.wrapsBindUntil || 0) > Date.now() && (
-          <PopRing args={[1.2, 1.55, 24]} color="#D4C4B0" opacity={0.9} y={0.08} />
-        )}
+        <StatusLooks ricochet={enemy.larsRicochetBoost > 1} bound={boundNow(enemy)} />
       </group>
 
       {/* Floating enemy icon */}
@@ -1446,20 +1452,11 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
       )}
       
       {isLockedOn && (
-        <group position={[enemy.position[0], 0.08, enemy.position[2]]} rotation={[-Math.PI / 2, 0, stunRotationRef.current]}>
-          <mesh>
-            <ringGeometry args={[0.9, 1.1, 32]} />
-            <meshBasicMaterial color="#8B5CF6" transparent opacity={0.8} />
-          </mesh>
-          <mesh>
-            <ringGeometry args={[0.5, 0.65, 32]} />
-            <meshBasicMaterial color="#8B5CF6" transparent opacity={0.6} />
-          </mesh>
-          <mesh>
-            <circleGeometry args={[0.2, 16]} />
-            <meshBasicMaterial color="#8B5CF6" transparent opacity={0.9} />
-          </mesh>
-        </group>
+        <Glint
+          position={[enemy.position[0], enemy.position[1] + 0.2, enemy.position[2]]}
+          size={0.7}
+          color="#d5e8ff"
+        />
       )}
       
       <TurnStunMarker entity={enemy} />
@@ -1805,12 +1802,7 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
     <group>
       <group ref={meshRef} position={pos} visible={!entity.isKnockedOut && !entity.isRespawning}>
         <ZoogiModelSwitch zoogiId={entity.zoogi.id} hasShield={false} color={entity.zoogi.color} />
-        {entity.larsRicochetBoost > 1 && (
-          <PopRing args={[1.1, 1.35, 24]} color="#3B82F6" />
-        )}
-        {(entity.wrapsBindUntil || 0) > Date.now() && (
-          <PopRing args={[1.2, 1.55, 24]} color="#D4C4B0" opacity={0.9} y={0.08} />
-        )}
+        <StatusLooks ricochet={entity.larsRicochetBoost > 1} bound={boundNow(entity)} />
       </group>
       
       {/* Floating local player icon */}
@@ -1859,23 +1851,23 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
       )}
 
       {/* Only show trajectory when it's this player's turn */}
-      {isMyTurn && trajectoryPoints.length > 1 && (
-        <Line
-          points={trajectoryPoints}
-          color={zoogiColor}
-          lineWidth={6}
-        />
+      {isMyTurn && (
+        <PinpointStroke points={trajectoryPoints} color={zoogiColor} pinpoint={isPinpoint} />
       )}
 
       {isMyTurn && showStraightTrajectoryLocal && straightTrajectoryEndPointLocal && (
-        <Line
+        <PinpointStroke
           points={[[pos[0], 0.6, pos[2]], straightTrajectoryEndPointLocal]}
           color={tangentOffset !== "none" ? "#F97316" : zoogiColor}
-          lineWidth={6}
+          pinpoint={isPinpoint}
         />
       )}
 
-      {isMyTurn && isDragging && (
+      {isMyTurn && isDragging && isPinpoint && (
+        <PinpointDragBeam origin={pos} dx={launchDx} dz={launchDz} multiplier={launchMultiplier} />
+      )}
+
+      {isMyTurn && isDragging && !isPinpoint && (
         <>
           {/* Dynamic transparent blue arrow */}
           {(() => {

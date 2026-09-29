@@ -2,19 +2,20 @@ import { useEffect, useMemo, useRef, type RefObject } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { SpritePool } from "./pool";
-import { EMBER_FRAG, FIRE_FRAG, MIST_FRAG, SMOKE_FRAG, SPRITE_VERT } from "./shaders";
+import { DUST_FRAG, EMBER_FRAG, FIRE_FRAG, MIST_FRAG, SMOKE_FRAG, SPRITE_VERT } from "./shaders";
 
 const scratch = new THREE.Matrix4();
 const scratchPos = new THREE.Vector3();
 const scratchQuat = new THREE.Quaternion();
 const scratchScale = new THREE.Vector3(1, 1, 1);
 
-export type SpriteMode = "smoke" | "fire" | "ember" | "mist";
+export type SpriteMode = "smoke" | "fire" | "ember" | "mist" | "dust";
 
 function fragmentFor(mode: SpriteMode): string {
   if (mode === "fire") return FIRE_FRAG;
   if (mode === "ember") return EMBER_FRAG;
   if (mode === "mist") return MIST_FRAG;
+  if (mode === "dust") return DUST_FRAG;
   return SMOKE_FRAG;
 }
 
@@ -48,7 +49,7 @@ export function InstancedSprites({
 
   const material = useMemo(() => {
     const uniforms: { [key: string]: THREE.IUniform } = {};
-    if (mode === "smoke" || mode === "mist") uniforms.uTime = { value: 0 };
+    if (mode === "smoke" || mode === "mist" || mode === "dust") uniforms.uTime = { value: 0 };
     if (mode === "smoke") uniforms.uWarm = { value: 0 };
     const mat = new THREE.ShaderMaterial({
       uniforms,

@@ -16,6 +16,7 @@ import { DeveloperMoveControls } from "./DeveloperMoveControls";
 import { Tutorial } from "./Tutorial";
 import { ArcPeakOverlay } from "./ArcPeakOverlay";
 import { HitEffects, ScreenFlash, FireBursts, WallSparks, CartoonExplosions, CartoonStarbursts, CartoonSparks } from "./GameFeelEffects";
+import { ImpactField } from "@/vfx/impacts";
 import { ArcSelector } from "./ArcSelector";
 import { EditorPlacedModels } from "./EditorPlacedModels";
 import { TransformGizmo } from "./TransformGizmo";
@@ -317,6 +318,7 @@ export function Game() {
           <CartoonExplosions />
           <CartoonStarbursts />
           <CartoonSparks />
+          <ImpactField />
           
           <ArcSelector />
           

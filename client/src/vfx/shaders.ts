@@ -114,6 +114,137 @@ void main() {
 }
 `.replace("void main()", `${PUFF_NOISE}\nvoid main()`);
 
+export const DUST_FRAG = /* glsl */ `
+uniform float uTime;
+varying float vOpacity;
+varying vec3 vColor;
+varying vec2 vUv;
+varying float vVariant;
+
+void main() {
+  float dist = length(vUv - 0.5);
+  float roundMask = smoothstep(0.5, 0.15, dist);
+  float n = fbm(vUv * 2.8 + vec2(uTime * 0.05, vVariant * 1.7));
+  float alpha = min(roundMask * (0.42 + 0.58 * n) * vOpacity, 0.62);
+  vec3 col = vec3(0.62, 0.48, 0.3) * (0.72 + 0.4 * n);
+  gl_FragColor = vec4(col, alpha);
+}
+`.replace("void main()", `${PUFF_NOISE}\nvoid main()`);
+
+export const RIBBON_VERT = /* glsl */ `
+attribute float aSide;
+attribute float aAlong;
+varying float vSide;
+varying float vAlong;
+void main() {
+  vSide = aSide;
+  vAlong = aAlong;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+
+export const RIBBON_FRAG = /* glsl */ `
+uniform vec3 uColor;
+uniform float uFade;
+uniform float uCloth;
+varying float vSide;
+varying float vAlong;
+void main() {
+  float edge = smoothstep(1.0, 0.12, abs(vSide));
+  float core = exp(-vSide * vSide * 7.0);
+  float along = smoothstep(0.0, 0.06, vAlong) * smoothstep(1.0, 0.92, vAlong);
+  vec3 col = uColor * mix(0.55, 1.0, core);
+  if (uCloth > 0.5) {
+    float weave = 0.82 + 0.18 * sin(vAlong * 48.0);
+    col *= weave;
+    gl_FragColor = vec4(col, edge * along * uFade);
+  } else {
+    col = (col + uColor * core * 1.4) * 2.4;
+    gl_FragColor = vec4(col * edge * along * uFade, 1.0);
+  }
+}
+`;
+
+export const SHELL_VERT = /* glsl */ `
+varying vec3 vNormal;
+varying vec3 vWorld;
+varying vec3 vLocal;
+void main() {
+  vLocal = position;
+  vec4 world = modelMatrix * vec4(position, 1.0);
+  vWorld = world.xyz;
+  vNormal = normalize(mat3(modelMatrix) * normal);
+  gl_Position = projectionMatrix * viewMatrix * world;
+}
+`;
+
+export const SHELL_FRAG = /* glsl */ `
+uniform float uTime;
+varying vec3 vNormal;
+varying vec3 vWorld;
+varying vec3 vLocal;
+void main() {
+  vec3 n = normalize(vNormal);
+  vec3 viewDir = normalize(cameraPosition - vWorld);
+  float fres = pow(1.0 - clamp(abs(dot(n, viewDir)), 0.0, 1.0), 1.85);
+  float band = smoothstep(0.62, 0.95, sin(vLocal.y * 8.0 + uTime * 1.3) * 0.5 + 0.5);
+  vec3 col = vec3(0.62, 0.82, 1.15) * (0.55 + fres * 2.6) + vec3(1.7, 1.85, 2.1) * band * fres;
+  float alpha = fres * (0.55 + band * 0.5);
+  gl_FragColor = vec4(col, alpha);
+}
+`;
+
+export const GLINT_VERT = /* glsl */ `
+uniform float uSize;
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  vec4 viewCenter = viewMatrix * modelMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+  viewCenter.xy += position.xy * uSize;
+  gl_Position = projectionMatrix * viewCenter;
+}
+`;
+
+export const GLINT_FRAG = /* glsl */ `
+uniform vec3 uColor;
+varying vec2 vUv;
+void main() {
+  float dist = length(vUv - 0.5);
+  float edge = smoothstep(0.5, 0.16, dist);
+  float core = exp(-dist * dist * 48.0);
+  vec3 col = uColor * (edge * 0.25 + core * 2.6);
+  gl_FragColor = vec4(col, 1.0);
+}
+`;
+
+export const GROUND_GLOW_FRAG = /* glsl */ `
+uniform vec3 uColor;
+uniform float uOpacity;
+uniform float uWave;
+varying vec2 vUv;
+void main() {
+  float r = length(vUv * 2.0 - 1.0);
+  float band = exp(-pow((r - uWave) / 0.11, 2.0));
+  float edge = 1.0 - smoothstep(0.9, 1.0, r);
+  float alpha = band * edge * uOpacity;
+  gl_FragColor = vec4(uColor * 2.4, alpha);
+}
+`;
+
+export const STUN_RIM_FRAG = /* glsl */ `
+uniform float uTime;
+varying vec3 vNormal;
+varying vec3 vWorld;
+void main() {
+  vec3 n = normalize(vNormal);
+  vec3 viewDir = normalize(cameraPosition - vWorld);
+  float fres = pow(1.0 - clamp(abs(dot(n, viewDir)), 0.0, 1.0), 2.0);
+  float flick = 0.62 + 0.38 * sin(uTime * 19.0);
+  vec3 col = vec3(0.78, 0.92, 1.35) * fres * flick * 2.8;
+  gl_FragColor = vec4(col, 1.0);
+}
+`;
+
 export const FIRE_FRAG = /* glsl */ `
 varying float vOpacity;
 varying vec3 vColor;

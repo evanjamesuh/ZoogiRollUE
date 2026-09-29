@@ -1,9 +1,10 @@
-import { useRef, useMemo } from "react";
+import { useEffect, useRef, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import * as THREE from "three";
 import { useGameFeel } from "@/lib/stores/useGameFeel";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
+import { emitImpact } from "@/vfx/impacts";
 
 export function HitEffects() {
   const hitEffects = useGameFeel((state) => state.hitEffects);
@@ -500,7 +501,57 @@ export function CartoonStarbursts() {
   );
 }
 
+const replacedStarbursts = new Set<string>();
+
+function sprayDirection(position: [number, number, number]): [number, number, number] {
+  const state = useZoogiGame.getState();
+  const entities = [state.playerEntity, ...state.enemies];
+  let velocity: [number, number, number] | null = null;
+  let best = 4;
+  for (const entity of entities) {
+    if (!entity) continue;
+    const dx = entity.position[0] - position[0];
+    const dz = entity.position[2] - position[2];
+    const dist = Math.hypot(dx, dz);
+    if (dist < best) {
+      best = dist;
+      velocity = entity.velocity;
+    }
+  }
+  if (!velocity) return [0.25, 0.45, 0.55];
+  const len = Math.hypot(velocity[0], velocity[1], velocity[2]);
+  if (len < 0.05) return [0.35, 0.4, 0.25];
+  return [velocity[0] / len, Math.max(0.2, velocity[1] / len), velocity[2] / len];
+}
+
+function larsIsArmedNear(position: [number, number, number]): boolean {
+  const state = useZoogiGame.getState();
+  const entities = [state.playerEntity, ...state.enemies];
+  return entities.some((entity) => {
+    if (!entity || entity.larsRicochetBoost <= 1) return false;
+    const dx = entity.position[0] - position[0];
+    const dz = entity.position[2] - position[2];
+    return dx * dx + dz * dz < 1.44;
+  });
+}
+
 function CartoonStarburstEffect({ starburst }: { starburst: { id: string; position: [number, number, number]; color: string; timestamp: number } }) {
+  const color = starburst.color.toLowerCase();
+  const moody = color === "#fde047" || color === "#3b82f6" || color === "#d4c4b0";
+  useEffect(() => {
+    if (!moody || replacedStarbursts.has(starburst.id)) return;
+    replacedStarbursts.add(starburst.id);
+    if (color === "#3b82f6" && !larsIsArmedNear(starburst.position)) {
+      emitImpact("spark", starburst.position, sprayDirection(starburst.position));
+    } else if (color === "#d4c4b0") {
+      emitImpact("dust", starburst.position);
+    }
+  }, [color, moody, starburst.id, starburst.position]);
+  if (moody) return null;
+  return <LegacyStarburst starburst={starburst} />;
+}
+
+function LegacyStarburst({ starburst }: { starburst: { id: string; position: [number, number, number]; color: string; timestamp: number } }) {
   const groupRef = useRef<THREE.Group>(null);
   const spikesRef = useRef<THREE.Group>(null);
   const coreRef = useRef<THREE.Mesh>(null);

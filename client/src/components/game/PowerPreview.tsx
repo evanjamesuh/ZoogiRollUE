@@ -5,6 +5,8 @@ import { useAudio } from "@/lib/stores/useAudio";
 import { useGameFeel } from "@/lib/stores/useGameFeel";
 import { MoodyBloom } from "@/vfx/MoodyBloom";
 import { SmokeBurstField } from "@/vfx/bursts";
+import { emitImpact, ImpactField } from "@/vfx/impacts";
+import { AimBeam, BindRibbons, RicochetShell } from "@/vfx/powerLooks";
 import {
   ExplosionBlast,
   PowerUnlockFlash,
@@ -25,15 +27,27 @@ const MARBLES: { position: Vec3; color: string }[] = [
 
 function PreviewCamera() {
   const camera = useThree((state) => state.camera);
-  const base = useMemo(() => {
-    const close = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("vfxClose") === "1";
-    return close ? new THREE.Vector3(0, 4.6, 6.6) : new THREE.Vector3(0, 18, 16);
-  }, []);
+  const close = useMemo(
+    () => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("vfxClose") === "1",
+    [],
+  );
+  const focus = useRef(new THREE.Vector3(0, 0.4, 0));
+  const base = useRef(new THREE.Vector3());
   useLayoutEffect(() => {
-    camera.position.copy(base);
+    camera.position.set(0, close ? 4.6 : 18, close ? 6.6 : 16);
     camera.lookAt(0, 0.4, 0);
-  }, [camera, base]);
+  }, [camera, close]);
   useFrame(() => {
+    const aimed = close && typeof window !== "undefined"
+      ? (window as Window & { __vfxFocus?: [number, number, number] }).__vfxFocus
+      : undefined;
+    if (aimed) focus.current.set(aimed[0], aimed[1], aimed[2]);
+    else focus.current.set(0, 0.4, 0);
+    base.current.set(
+      focus.current.x,
+      focus.current.y + (close ? 4.2 : 17.6),
+      focus.current.z + (close ? 6.6 : 15.6),
+    );
     const shake = useGameFeel.getState().screenShake;
     let amp = 0;
     if (shake) {
@@ -42,11 +56,11 @@ function PreviewCamera() {
       if (progress < 1) amp = shake.intensity * (1 - progress);
     }
     camera.position.set(
-      base.x + (amp ? (Math.random() - 0.5) * amp * 2.4 : 0),
-      base.y + (amp ? (Math.random() - 0.5) * amp : 0),
-      base.z,
+      base.current.x + (amp ? (Math.random() - 0.5) * amp * 2.4 : 0),
+      base.current.y + (amp ? (Math.random() - 0.5) * amp : 0),
+      base.current.z,
     );
-    camera.lookAt(0, 0.4, 0);
+    camera.lookAt(focus.current);
   });
   return null;
 }
@@ -111,9 +125,14 @@ export function PowerPreview() {
   const playStunEnd = useAudio((state) => state.playStunEnd);
   const playWolfDash = useAudio((state) => state.playWolfDash);
   const playPowerUnlock = useAudio((state) => state.playPowerUnlock);
+  const playRicochetPing = useAudio((state) => state.playRicochetPing);
+  const playBindWrap = useAudio((state) => state.playBindWrap);
   const [blasts, setBlasts] = useState<Blast[]>([]);
   const [wolfStart, setWolfStart] = useState<number | null>(null);
   const [stun, setStun] = useState<StunClock | null>(null);
+  const [shellOn, setShellOn] = useState(false);
+  const [bindOn, setBindOn] = useState(false);
+  const [aimOn, setAimOn] = useState(false);
   const idRef = useRef(1);
 
   useEffect(() => {
@@ -155,7 +174,26 @@ export function PowerPreview() {
         <hemisphereLight args={["#cfe8ff", "#2d4a32", 0.35]} />
         <Ground />
         <SmokeBurstField />
+        <ImpactField />
         <MoodyBloom />
+        {shellOn && (
+          <group position={MARBLES[0].position}>
+            <RicochetShell />
+          </group>
+        )}
+        {bindOn && (
+          <>
+            <group position={MARBLES[1].position}>
+              <BindRibbons />
+            </group>
+            <group position={MARBLES[2].position}>
+              <BindRibbons />
+            </group>
+          </>
+        )}
+        {aimOn && (
+          <AimBeam from={[0, 0.55, 0]} to={[2.6, 0.55, -1.8]} />
+        )}
         {blasts.map((blast) => {
           if (blast.kind === "explosion") {
             return (
@@ -174,6 +212,7 @@ export function PowerPreview() {
                 position={blast.position}
                 startTime={blast.startTime}
                 radius={8}
+                targets={[[2.6, 0.5, -1.8]]}
               />
             );
           }
@@ -248,6 +287,29 @@ export function PowerPreview() {
             playWolfDash();
             setWolfStart(Date.now());
           }}
+        />
+        <PreviewButton
+          label="Ricochet"
+          color="#1d4ed8"
+          onClick={() => {
+            playRicochetPing(shellOn ? "hit" : "arm");
+            setShellOn(true);
+            emitImpact("spark", [1.3, 0.45, -0.9], [0.86, 0.35, -0.55]);
+          }}
+        />
+        <PreviewButton
+          label="Bind"
+          color="#a16207"
+          onClick={() => {
+            playBindWrap();
+            setBindOn(true);
+            emitImpact("dust", [2.6, 0.4, -1.8]);
+          }}
+        />
+        <PreviewButton
+          label="Pinpoint"
+          color="#6d28d9"
+          onClick={() => setAimOn(true)}
         />
         <PreviewButton
           label="Unlock"
