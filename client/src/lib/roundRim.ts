@@ -41,8 +41,20 @@ export const GRASS_RIM: RimMark[] = [
 /** Snowmen stand on the ice just inside the snowy lip. Footprint matches the base sphere. */
 export const ICE_RIM: RimMark[] = marks("snowman", 14.15, 0.55, 1.7, [0, 0.08, -0.05, 0.04, -0.08, 0.02]);
 
-/** Low planters on the tiled plaza. The collider is the pot's base. */
-export const ARABIAN_RIM: RimMark[] = marks("planter", 13.55, 0.72, 0.95, [0, 0.06, -0.04, 0.05, -0.06, 0.03]);
+/** Low planters on the tiled plaza. The collider is the pot's base.
+ *  Eight pots at 22.5° + 45°k, pulled in to radius 13, so a marble-wide lane
+ *  stays open behind each pot and the four cardinal spawns match.
+ */
+export const ARABIAN_RIM: RimMark[] = [
+  { id: "planter-0", angleDeg: 22.5, distance: 13, radius: 0.72, height: 0.95 },
+  { id: "planter-1", angleDeg: 67.5, distance: 13, radius: 0.72, height: 0.95 },
+  { id: "planter-2", angleDeg: 112.5, distance: 13, radius: 0.72, height: 0.95 },
+  { id: "planter-3", angleDeg: 157.5, distance: 13, radius: 0.72, height: 0.95 },
+  { id: "planter-4", angleDeg: 202.5, distance: 13, radius: 0.72, height: 0.95 },
+  { id: "planter-5", angleDeg: 247.5, distance: 13, radius: 0.72, height: 0.95 },
+  { id: "planter-6", angleDeg: 292.5, distance: 13, radius: 0.72, height: 0.95 },
+  { id: "planter-7", angleDeg: 337.5, distance: 13, radius: 0.72, height: 0.95 },
+];
 
 export function rimPosition(mark: RimMark): { x: number; z: number } {
   const angle = (mark.angleDeg * Math.PI) / 180;
