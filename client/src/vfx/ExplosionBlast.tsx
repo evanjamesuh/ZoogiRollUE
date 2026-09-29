@@ -52,6 +52,7 @@ export function ExplosionBlast({
   const embers = useMemo(() => createSpritePool(EMBER_CAP), []);
   const clock = usePlayedClock(frozenElapsed);
   const blast = useRef(new THREE.Vector3());
+  const warm = useRef(1);
 
   const px = position[0];
   const py = position[1];
@@ -90,6 +91,7 @@ export function ExplosionBlast({
     if (typeof window !== "undefined") {
       (window as Window & { __vfxElapsed?: number }).__vfxElapsed = elapsed;
     }
+    warm.current = elapsed < 0.5 ? 1 - elapsed / 0.5 : 0;
     if (step > 0) {
       stepSmoke(smoke, elapsed, step);
       stepFire(fire, elapsed, step);
@@ -180,7 +182,7 @@ export function ExplosionBlast({
           toneMapped={false}
         />
       </mesh>
-      <InstancedSprites pool={smoke} mode="smoke" />
+      <InstancedSprites pool={smoke} mode="smoke" warm={warm} />
       <InstancedSprites pool={fire} mode="fire" />
       <InstancedSprites pool={embers} mode="ember" />
     </group>

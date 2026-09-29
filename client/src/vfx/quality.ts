@@ -59,9 +59,9 @@ export function subscribeVfxQuality(listener: () => void): () => void {
 
 export function particleBudget(): ParticleBudget {
   if (quality === "low") {
-    return { smoke: 14, fire: 7, embers: 20, wisps: 12 };
+    return { smoke: 6, fire: 7, embers: 20, wisps: 12 };
   }
-  return { smoke: 28, fire: 14, embers: 42, wisps: 24 };
+  return { smoke: 12, fire: 14, embers: 42, wisps: 24 };
 }
 
 export function bloomParams(level: VfxQuality = quality): BloomParams {

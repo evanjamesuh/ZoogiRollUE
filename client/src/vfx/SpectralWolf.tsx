@@ -66,16 +66,16 @@ function buildWolfGeometry(): THREE.BufferGeometry {
   const bodyPivot = new THREE.Vector3(0, 0.35, 0);
   const rump = new THREE.Vector3(0, 0.4, -0.62);
   const parts: THREE.BufferGeometry[] = [
-    tag(capsule(0.24, 0.55, 0, 0.48, -0.02, Math.PI / 2, 0, 0), 0, bodyPivot),
-    tag(place(new THREE.SphereGeometry(0.28, 14, 10), 0, 0.55, 0.28, 1, 0.92, 1.05), 0, bodyPivot),
-    tag(place(new THREE.SphereGeometry(0.18, 12, 10), 0, 0.36, 0.62, 0.82, 0.78, 1.15), 0, bodyPivot),
-    tag(place(new THREE.SphereGeometry(0.11, 10, 8), 0, 0.28, 0.92, 0.62, 0.55, 1.45), 0, bodyPivot),
-    tag(place(new THREE.ConeGeometry(0.07, 0.26, 8), -0.1, 0.72, 0.58, 1, 1, 1, 0.15, 0, -0.35), 0, bodyPivot),
-    tag(place(new THREE.ConeGeometry(0.07, 0.26, 8), 0.1, 0.72, 0.58, 1, 1, 1, 0.15, 0, 0.35), 0, bodyPivot),
-    tag(capsule(0.07, 0.48, -0.16, -0.02, 0.46, -0.7, 0, 0), 1, new THREE.Vector3(-0.16, 0.28, 0.32)),
-    tag(capsule(0.07, 0.46, 0.16, 0.02, 0.08, 0.55, 0, 0), 2, new THREE.Vector3(0.16, 0.28, 0.16)),
-    tag(capsule(0.075, 0.5, -0.15, -0.04, -0.58, 0.65, 0, 0), 3, new THREE.Vector3(-0.15, 0.24, -0.42)),
-    tag(capsule(0.075, 0.48, 0.15, 0.0, -0.22, -0.45, 0, 0), 4, new THREE.Vector3(0.15, 0.24, -0.28)),
+    tag(capsule(0.28, 0.72, 0, 0.5, -0.08, Math.PI / 2, 0, 0), 0, bodyPivot),
+    tag(place(new THREE.SphereGeometry(0.36, 14, 12), 0, 0.58, 0.28, 1.18, 1.02, 1.22), 0, bodyPivot),
+    tag(place(new THREE.SphereGeometry(0.24, 12, 10), 0, 0.66, 0.62, 1.12, 0.96, 1.28), 0, bodyPivot),
+    tag(place(new THREE.SphereGeometry(0.22, 14, 12), 0, 0.72, 1.02, 0.74, 0.66, 1.95), 0, bodyPivot),
+    tag(place(new THREE.ConeGeometry(0.045, 0.38, 5), -0.12, 1.05, 0.78, 1, 1, 1, 0.15, 0, -0.55), 0, bodyPivot),
+    tag(place(new THREE.ConeGeometry(0.045, 0.38, 5), 0.12, 1.05, 0.78, 1, 1, 1, 0.15, 0, 0.55), 0, bodyPivot),
+    tag(capsule(0.085, 0.46, -0.18, 0.06, 0.38, -0.55, 0, 0), 1, new THREE.Vector3(-0.18, 0.34, 0.28)),
+    tag(capsule(0.085, 0.44, 0.18, 0.08, 0.1, 0.5, 0, 0), 2, new THREE.Vector3(0.18, 0.34, 0.16)),
+    tag(capsule(0.09, 0.48, -0.16, 0.02, -0.52, 0.6, 0, 0), 3, new THREE.Vector3(-0.16, 0.3, -0.38)),
+    tag(capsule(0.09, 0.46, 0.16, 0.04, -0.16, -0.42, 0, 0), 4, new THREE.Vector3(0.16, 0.3, -0.24)),
     tag(capsule(0.1, 0.28, 0, 0.55, -0.78, 0.7, 0, 0), 5, rump),
     tag(capsule(0.13, 0.22, 0, 0.72, -1.02, 0.9, 0, 0), 5, rump),
     tag(place(new THREE.SphereGeometry(0.12, 10, 8), 0, 0.86, -1.16, 1, 1, 1), 5, rump),
@@ -86,7 +86,7 @@ function buildWolfGeometry(): THREE.BufferGeometry {
   merged.computeBoundingBox();
   const box = merged.boundingBox;
   const height = box ? box.max.y - box.min.y : 1;
-  const fit = 1.5 / Math.max(height, 0.001);
+  const fit = 1.7 / Math.max(height, 0.001);
   wolfFit = fit;
   merged.scale(fit, fit, fit);
   const pivots = merged.getAttribute("aPivot");
@@ -224,6 +224,7 @@ export function SpectralWolf({
     blending: THREE.AdditiveBlending,
     side: THREE.FrontSide,
     wireframe: false,
+    alphaTest: 0,
   }), []);
 
   useEffect(() => {
@@ -259,7 +260,7 @@ export function SpectralWolf({
     if (Math.hypot(vx, vz) > 0.02) root.rotation.y = Math.atan2(vx, vz);
     root.getWorldPosition(lastWorld.current);
     sawWorld.current = true;
-    const pulse = 0.78 + 0.22 * Math.sin(clock.elapsedTime * 3.4 + position[0]);
+    const pulse = 0.94 + 0.06 * Math.sin(clock.elapsedTime * 3.4 + position[0]);
     material.uniforms.uTime.value += Math.min(dt, 1 / 30);
     material.uniforms.uFade.value = pulse;
   });

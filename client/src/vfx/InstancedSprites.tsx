@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, type RefObject } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { SpritePool } from "./pool";
 import { EMBER_FRAG, FIRE_FRAG, MIST_FRAG, SMOKE_FRAG, SPRITE_VERT } from "./shaders";
-import { useVfxTextures } from "./textures";
 
 const scratch = new THREE.Matrix4();
 const scratchPos = new THREE.Vector3();
@@ -23,11 +22,17 @@ function fragmentFor(mode: SpriteMode): string {
  * One instanced draw of camera-facing quads. Offsets are applied in view
  * space so the sprites stay square to the lens, including the tilted match camera.
  */
-export function InstancedSprites({ pool, mode }: { pool: SpritePool; mode: SpriteMode }) {
-  const textures = useVfxTextures();
+export function InstancedSprites({
+  pool,
+  mode,
+  warm,
+}: {
+  pool: SpritePool;
+  mode: SpriteMode;
+  warm?: RefObject<number>;
+}) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const streak = mode === "ember";
-  const atlas = mode === "smoke" || mode === "mist";
 
   const geometry = useMemo(() => {
     const geo = new THREE.PlaneGeometry(1, 1, 1, 1);
@@ -42,12 +47,11 @@ export function InstancedSprites({ pool, mode }: { pool: SpritePool; mode: Sprit
   }, [pool]);
 
   const material = useMemo(() => {
-    const map = mode === "ember" ? textures.ember : textures.smoke;
+    const uniforms: { [key: string]: THREE.IUniform } = {};
+    if (mode === "smoke" || mode === "mist") uniforms.uTime = { value: 0 };
+    if (mode === "smoke") uniforms.uWarm = { value: 0 };
     const mat = new THREE.ShaderMaterial({
-      uniforms: {
-        uMap: { value: map },
-        uAtlas: { value: atlas ? 1 : 0 },
-      },
+      uniforms,
       vertexShader: SPRITE_VERT,
       fragmentShader: fragmentFor(mode),
       transparent: true,
@@ -56,6 +60,7 @@ export function InstancedSprites({ pool, mode }: { pool: SpritePool; mode: Sprit
       toneMapped: false,
       side: THREE.DoubleSide,
     });
+    mat.alphaTest = 0;
     if (mode === "fire" || mode === "ember") {
       mat.blending = THREE.CustomBlending;
       mat.blendSrc = THREE.OneFactor;
@@ -65,7 +70,7 @@ export function InstancedSprites({ pool, mode }: { pool: SpritePool; mode: Sprit
       mat.blending = THREE.NormalBlending;
     }
     return mat;
-  }, [mode, textures, atlas]);
+  }, [mode]);
 
   useEffect(() => {
     return () => {
@@ -74,9 +79,13 @@ export function InstancedSprites({ pool, mode }: { pool: SpritePool; mode: Sprit
     };
   }, [geometry, material]);
 
-  useFrame(() => {
+  useFrame((state) => {
     const mesh = meshRef.current;
     if (!mesh) return;
+    const uTime = material.uniforms.uTime;
+    if (uTime) uTime.value = state.clock.elapsedTime;
+    const uWarm = material.uniforms.uWarm;
+    if (uWarm) uWarm.value = warm?.current ?? 0;
     const opacity = geometry.getAttribute("aOpacity") as THREE.InstancedBufferAttribute;
     const spin = geometry.getAttribute("aSpin") as THREE.InstancedBufferAttribute;
     const size = geometry.getAttribute("aSize") as THREE.InstancedBufferAttribute;
@@ -103,7 +112,9 @@ export function InstancedSprites({ pool, mode }: { pool: SpritePool; mode: Sprit
         opacityArray[i] = pool.opacity[i];
         sizeArray[i] = pool.size[i];
         const speed = Math.hypot(pool.vx[i], pool.vy[i], pool.vz[i]);
-        stretchArray[i] = streak ? Math.min(3.4, 1.4 + speed * 0.18) : 1;
+        if (!streak || pool.seed[i] < 0) stretchArray[i] = 1;
+        else if (pool.seed[i] >= 1000) stretchArray[i] = Math.min(6.5, 3.6 + speed * 0.22);
+        else stretchArray[i] = Math.min(2.2, 1.2 + speed * 0.28);
       }
       scratchQuat.identity();
       scratch.compose(scratchPos, scratchQuat, scratchScale);

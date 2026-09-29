@@ -27,39 +27,39 @@ function radiusSpan(radius: number): number {
 }
 
 /**
- * Thick dark puffs. About 40% climb as a column; the rest billow out toward
- * the push radius. Sprite growth is included when the blast checks its edge.
+ * Fewer, larger charcoal puffs. Most climb as a column that mushrooms;
+ * the rest stay as a low base. They do not fill the blast radius.
  */
 export function seedBlastSmoke(pool: SpritePool, radius: number, rand: () => number, originY = 0.45): void {
-  const count = Math.min(pool.capacity, Math.max(8, Math.round(particleBudget().smoke * radiusSpan(radius))));
+  const count = Math.min(pool.capacity, Math.max(6, Math.round(particleBudget().smoke * radiusSpan(radius))));
+  const columnCount = Math.max(3, Math.round(count * 0.58));
+  const scale = 0.82 + 0.18 * Math.min(radius / 8, 1.25);
   for (let n = 0; n < count; n++) {
-    const column = n < Math.round(count * 0.42);
+    const column = n < columnCount;
     const ang = rand() * Math.PI * 2;
-    const reach = column ? radius * (0.05 + rand() * 0.1) : radius * (0.48 + rand() * 0.44);
+    const reach = column ? radius * (0.02 + rand() * 0.05) : radius * (0.12 + rand() * 0.18);
     const speed = reach * SMOKE_DRAG;
-    const brown = column ? 0.05 + rand() * 0.04 : 0.07 + rand() * 0.05;
-    const life = 1.65 + rand() * 0.45;
+    const life = 1.85 + rand() * 0.45;
     spawnSprite(pool, {
-      x: Math.cos(ang) * radius * (column ? 0.02 : 0.05),
-      y: originY + rand() * (column ? 0.25 : 0.15),
-      z: Math.sin(ang) * radius * (column ? 0.02 : 0.05),
+      x: Math.cos(ang) * radius * (column ? 0.015 : 0.04),
+      y: originY + rand() * (column ? 0.2 : 0.12),
+      z: Math.sin(ang) * radius * (column ? 0.015 : 0.04),
       vx: Math.cos(ang) * speed,
-      vy: column ? 4.6 + rand() * 2.2 : 1.6 + rand() * 1.8,
+      vy: column ? 5.2 + rand() * 2.4 : 1.05 + rand() * 1.3,
       vz: Math.sin(ang) * speed,
       life,
-      size: radius * (0.26 + rand() * 0.1),
-      grow: radius * (0.18 + rand() * 0.1),
-      spin: (rand() - 0.5) * 0.9,
-      r: brown,
-      g: brown * 0.72,
-      b: brown * 0.55,
+      size: (column ? 1.28 + rand() * 0.48 : 1.05 + rand() * 0.38) * scale,
+      grow: (0.2 + rand() * 0.26) * scale,
+      spin: (rand() - 0.5) * 0.35,
+      r: 0.13,
+      g: 0.135,
+      b: 0.145,
       seed: rand() * 40 + (column ? 1000 : 0),
     });
   }
 }
 
 export function stepSmoke(pool: SpritePool, elapsed: number, dt: number): void {
-  const horiz = damp(SMOKE_DRAG, dt);
   for (let i = 0; i < pool.capacity; i++) {
     if (pool.active[i] === 0) continue;
     pool.life[i] -= dt;
@@ -68,22 +68,32 @@ export function stepSmoke(pool: SpritePool, elapsed: number, dt: number): void {
       continue;
     }
     const column = pool.seed[i] >= 1000;
-    const wobble = pool.seed[i] >= 1000 ? pool.seed[i] - 1000 : pool.seed[i];
-    pool.vx[i] += Math.sin(elapsed * 1.15 + wobble) * 0.35 * dt;
-    pool.vz[i] += Math.cos(elapsed * 0.95 + wobble * 1.3) * 0.35 * dt;
+    const wobble = column ? pool.seed[i] - 1000 : pool.seed[i];
+    const age = 1 - pool.life[i] / pool.maxLife[i];
+    const mushroom = column && age > 0.32;
+    const horiz = damp(mushroom ? 0.75 : SMOKE_DRAG, dt);
+    pool.vx[i] += Math.sin(elapsed * 0.8 + wobble) * 0.2 * dt;
+    pool.vz[i] += Math.cos(elapsed * 0.7 + wobble * 1.3) * 0.2 * dt;
+    if (mushroom) {
+      const radial = Math.hypot(pool.px[i], pool.pz[i]);
+      const nx = radial > 0.08 ? pool.px[i] / radial : Math.cos(wobble);
+      const nz = radial > 0.08 ? pool.pz[i] / radial : Math.sin(wobble);
+      const push = 3.2 * Math.min(1, (age - 0.32) / 0.34);
+      pool.vx[i] += nx * push * dt;
+      pool.vz[i] += nz * push * dt;
+    }
     pool.vx[i] *= horiz;
     pool.vz[i] *= horiz;
-    const lift = column ? 1.05 : 0.22;
-    const rise = column ? 0.16 : 0.55;
+    const lift = column ? (mushroom ? 0.28 : 1.2) : 0.16;
+    const rise = column ? (mushroom ? 1.1 : 0.18) : 0.55;
     pool.vy[i] = pool.vy[i] * damp(rise, dt) + lift * dt;
     pool.px[i] += pool.vx[i] * dt;
     pool.py[i] += pool.vy[i] * dt;
     pool.pz[i] += pool.vz[i] * dt;
     pool.rot[i] += pool.spin[i] * dt;
-    const age = 1 - pool.life[i] / pool.maxLife[i];
-    const fadeIn = age < 0.22 ? age / 0.22 : 1;
-    const fadeOut = 1 - smoothstep((age - 0.42) / 0.58);
-    pool.opacity[i] = 0.84 * fadeIn * fadeOut;
+    const fadeIn = age < 0.06 ? age / 0.06 : 1;
+    const fadeOut = 1 - smoothstep((age - 0.5) / 0.5);
+    pool.opacity[i] = fadeIn * fadeOut;
     pool.size[i] = pool.size0[i] + pool.grow[i] * age;
   }
 }
@@ -151,6 +161,7 @@ export function seedBlastEmbers(pool: SpritePool, radius: number, rand: () => nu
     const reach = radius * (0.2 + rand() * 0.58);
     const speed = reach * EMBER_DRAG;
     const life = 0.62 + rand() * 0.7;
+    const point = rand() < 0.28;
     spawnSprite(pool, {
       x: Math.cos(ang) * radius * 0.03,
       y: originY + rand() * 0.2,
@@ -159,13 +170,13 @@ export function seedBlastEmbers(pool: SpritePool, radius: number, rand: () => nu
       vy: 3.4 + rand() * 6.4,
       vz: Math.sin(ang) * speed,
       life,
-      size: (0.16 + rand() * 0.22) * scale,
-      grow: 0.12 * scale,
-      spin: (rand() - 0.5) * 6,
+      size: (point ? 0.034 + rand() * 0.03 : 0.048 + rand() * 0.04) * scale,
+      grow: 0.012 * scale,
+      spin: (rand() - 0.5) * 2,
       r: 1,
       g: 0.9,
       b: 0.42,
-      seed: rand() * 50 + n,
+      seed: point ? -(rand() * 40 + n + 1) : rand() * 40 + n + 1000,
     });
   }
 }
@@ -210,7 +221,7 @@ export function stepEmbers(pool: SpritePool, elapsed: number, dt: number): void 
     const fade = 1 - smoothstep((age - 0.55) / 0.45);
     const flick = 0.55 + 0.45 * Math.abs(Math.sin(elapsed * (16 + (pool.seed[i] % 5)) + pool.seed[i]));
     pool.opacity[i] = fade * flick;
-    pool.size[i] = Math.max(0.08, pool.size0[i] + pool.grow[i] * age);
+    pool.size[i] = pool.size0[i] + pool.grow[i] * age;
   }
 }
 
@@ -230,8 +241,8 @@ export function seedColdBurst(pool: SpritePool, rand: () => number): void {
       vy: 0.35 + rand() * 0.9,
       vz: Math.sin(ang) * speed,
       life,
-      size: 0.35 + rand() * 0.4,
-      grow: 0.55 + rand() * 0.4,
+      size: 0.2 + rand() * 0.18,
+      grow: 0.14 + rand() * 0.14,
       spin: (rand() - 0.5) * 1.1,
       r: shade * 0.7,
       g: shade * 0.82,
@@ -282,13 +293,13 @@ export function emitMist(
     vx: backX * (0.9 + rand * 1.1) + (rand - 0.5) * 0.45,
     vy: 0.15 + rand * 0.55,
     vz: backZ * (0.9 + rand * 1.1) + (rand - 0.5) * 0.45,
-    life: 0.65 + rand * 0.4,
-    size: 0.55 + rand * 0.75,
-    grow: 0.45 + rand * 0.55,
-    spin: (rand - 0.5) * 1.2,
-    r: 0.42 + rand * 0.12,
-    g: 0.62 + rand * 0.08,
-    b: 0.96,
+    life: 0.55 + rand * 0.35,
+    size: 0.16 + rand * 0.18,
+    grow: 0.08 + rand * 0.12,
+    spin: (rand - 0.5) * 0.6,
+    r: 0.46,
+    g: 0.56,
+    b: 0.64,
     seed: rand * 30,
   });
 }
@@ -351,7 +362,7 @@ export function stepMist(pool: SpritePool, _elapsed: number, dt: number): void {
     const age = 1 - pool.life[i] / pool.maxLife[i];
     const fadeIn = age < 0.08 ? age / 0.08 : 1;
     const fadeOut = 1 - smoothstep((age - 0.28) / 0.72);
-    pool.opacity[i] = 0.68 * fadeIn * fadeOut;
+    pool.opacity[i] = 0.55 * fadeIn * fadeOut;
     pool.size[i] = pool.size0[i] + pool.grow[i] * age;
   }
 }

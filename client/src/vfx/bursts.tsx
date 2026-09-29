@@ -62,7 +62,7 @@ function ColdPuff({ burst }: { burst: SmokeBurst }) {
 
   return (
     <group position={[burst.x, burst.y, burst.z]}>
-      <InstancedSprites pool={pool} mode="smoke" />
+      <InstancedSprites pool={pool} mode="mist" />
     </group>
   );
 }

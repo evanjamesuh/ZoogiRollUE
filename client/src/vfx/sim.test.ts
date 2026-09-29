@@ -12,7 +12,7 @@ test("blast particles stay pooled, smoke rises, and embers cool", () => {
   seedBlastSmoke(smoke, 8, mulberry32(11), 0.5);
   seedBlastFire(fire, 8, mulberry32(17), 0.5);
   seedBlastEmbers(embers, 8, mulberry32(29), 0.5);
-  assert.ok(smoke.alive >= 20);
+  assert.ok(smoke.alive >= 8);
   assert.ok(fire.alive >= 10);
   assert.ok(embers.alive >= 30);
   const first = embers.active.findIndex((flag) => flag === 1);
