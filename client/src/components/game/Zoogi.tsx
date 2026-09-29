@@ -36,6 +36,7 @@ const ZOOGI_MATERIAL_STYLES: Record<string, {
   wolfgang: { clearcoat: 1.0, clearcoatRoughness: 0.05, metalness: 0.95, roughness: 0.15, reflectivity: 1.0, sheen: 0.3, sheenRoughness: 0.2, sheenColor: "#888888" },
   hotstreak: { clearcoat: 1.0, clearcoatRoughness: 0.08, metalness: 0.85, roughness: 0.2, reflectivity: 0.9, sheen: 0.5, sheenRoughness: 0.15, sheenColor: "#FF6600" },
   lars: { clearcoat: 1.0, clearcoatRoughness: 0.03, metalness: 0.7, roughness: 0.1, reflectivity: 1.0, sheen: 0.2, sheenRoughness: 0.1, sheenColor: "#4488FF" },
+  wraps: { clearcoat: 0.35, clearcoatRoughness: 0.45, metalness: 0.05, roughness: 0.62, reflectivity: 0.3, sheen: 0.85, sheenRoughness: 0.4, sheenColor: "#D4C4B0" },
   pinpoint: { clearcoat: 1.0, clearcoatRoughness: 0.1, metalness: 0.9, roughness: 0.25, reflectivity: 0.85, sheen: 0.4, sheenRoughness: 0.2, sheenColor: "#AA66FF" },
   bolt: { clearcoat: 1.0, clearcoatRoughness: 0.02, metalness: 0.8, roughness: 0.08, reflectivity: 1.0, sheen: 0.6, sheenRoughness: 0.1, sheenColor: "#FFDD00" },
 };
@@ -241,6 +242,7 @@ const ZOOGI_TRAJECTORY_COLORS: Record<string, string> = {
   wolfgang: "#6B7280",   // gray
   hotstreak: "#F97316",  // orange
   lars: "#3B82F6",       // blue
+  wraps: "#D4C4B0",
   pinpoint: "#8B5CF6",   // purple
   bolt: "#FBBF24",       // yellow
 };
