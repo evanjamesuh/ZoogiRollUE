@@ -809,6 +809,157 @@ test("a rolling AI blast stays centered on the caster", async () => {
   assert.ok(Math.hypot(after.enemies[0]?.velocity[0] ?? 0, after.enemies[0]?.velocity[2] ?? 0) > 0.4, "the caster keeps its roll");
 });
 
+test("an AI hotstreak blast during a roll still hands the turn back when the marble stops", async () => {
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  const { useZoogiGame, ZOOGI_ROSTER } = await loadGame();
+  const hotstreak = ZOOGI_ROSTER.find((zoogi) => zoogi.id === "hotstreak");
+  assert.ok(hotstreak);
+  useZoogiGame.getState().selectZoogi(ZOOGI_ROSTER.find((zoogi) => zoogi.id === "lars") ?? ZOOGI_ROSTER[0]);
+  useZoogiGame.setState({ aiPlayerCount: 1, gameMode: "classic", zoneEditorConfigs: [], phase: "menu" });
+  useZoogiGame.getState().startGame();
+  const player = useZoogiGame.getState().playerEntity;
+  assert.ok(player);
+  useZoogiGame.setState({
+    phase: "playing",
+    gameMode: "classic",
+    currentRound: 8,
+    isPlayerTurn: false,
+    turnIndex: 0,
+    turnHasLaunched: false,
+    gameTimer: 200,
+    orbs: [],
+    mushrooms: [],
+    pinballBumpers: [],
+    zoneEditorConfigs: [],
+    showExplosion: null,
+    wolfClones: [],
+    wallSettings: { ...useZoogiGame.getState().wallSettings, knockoffBoundaryRadius: 50 },
+    playerEntity: {
+      ...player,
+      position: [5, 0.5, 0],
+      velocity: [0, 0, 0],
+      isStunned: false,
+      isKnockedOut: false,
+      isRespawning: false,
+    },
+    enemies: [{
+      ...player,
+      id: "ai-hotstreak",
+      isPlayer: false,
+      zoogi: hotstreak,
+      position: [0, 0.5, 0],
+      velocity: [0, 0, 0],
+      hotstreakAbilityUnlocked: true,
+      isStunned: false,
+      isKnockedOut: false,
+      isRespawning: false,
+    }],
+  });
+
+  useZoogiGame.getState().physicsTick(1 / 60);
+  assert.equal(useZoogiGame.getState().isPlayerTurn, false, "a computer marble that has not rolled yet should keep the turn");
+
+  useZoogiGame.getState().updateEnemy("ai-hotstreak", { velocity: [0.28, 0, 0] });
+  assert.equal(useZoogiGame.getState().turnHasLaunched, true);
+  useZoogiGame.getState().physicsTick(1 / 60);
+
+  const cast = useZoogiGame.getState().useAiPower("ai-hotstreak");
+  assert.equal(cast, "hotstreak");
+  const blasted = useZoogiGame.getState();
+  assert.equal(blasted.isPlayerTurn, false, "the blast should not end the computer's turn by itself");
+  assert.ok(blasted.showExplosion, "the blast should be visible");
+  assert.equal(blasted.turnHasLaunched, true, "the roll that was already in motion should stay armed");
+
+  let handedBack = false;
+  for (let frame = 0; frame < 180; frame++) {
+    useZoogiGame.getState().physicsTick(1 / 60);
+    if (useZoogiGame.getState().isPlayerTurn) {
+      handedBack = true;
+      break;
+    }
+  }
+  assert.equal(handedBack, true, "the computer's turn should pass once the blasted roll stops");
+});
+
+test("an AI wolf pack mid-roll still ends the turn, and the next round clears those clones", async () => {
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  const { useZoogiGame, ZOOGI_ROSTER } = await loadGame();
+  const wolfgang = ZOOGI_ROSTER.find((zoogi) => zoogi.id === "wolfgang");
+  assert.ok(wolfgang);
+  useZoogiGame.getState().selectZoogi(ZOOGI_ROSTER.find((zoogi) => zoogi.id === "lars") ?? ZOOGI_ROSTER[0]);
+  useZoogiGame.setState({ aiPlayerCount: 1, gameMode: "classic", zoneEditorConfigs: [], phase: "menu" });
+  useZoogiGame.getState().startGame();
+  const player = useZoogiGame.getState().playerEntity;
+  assert.ok(player);
+  useZoogiGame.setState({
+    phase: "playing",
+    gameMode: "classic",
+    currentRound: 2,
+    maxRounds: 5,
+    score: 0,
+    isPlayerTurn: false,
+    turnIndex: 0,
+    turnHasLaunched: false,
+    gameTimer: 200,
+    orbs: [],
+    mushrooms: [],
+    pinballBumpers: [],
+    zoneEditorConfigs: [],
+    wolfClones: [],
+    wallSettings: { ...useZoogiGame.getState().wallSettings, knockoffBoundaryRadius: 50 },
+    playerEntity: {
+      ...player,
+      position: [0, 0.5, 6],
+      velocity: [0, 0, 0],
+      score: 0,
+      isKnockedOut: false,
+      isRespawning: false,
+    },
+    enemies: [{
+      ...player,
+      id: "ai-wolf",
+      isPlayer: false,
+      zoogi: wolfgang,
+      position: [0, 0.5, 0],
+      velocity: [0, 0, 0],
+      score: 0,
+      wolfgangAbilityUnlocked: true,
+      isKnockedOut: false,
+      isRespawning: false,
+    }],
+  });
+
+  useZoogiGame.getState().physicsTick(1 / 60);
+  assert.equal(useZoogiGame.getState().isPlayerTurn, false);
+
+  useZoogiGame.getState().updateEnemy("ai-wolf", { velocity: [0.3, 0, 0] });
+  useZoogiGame.getState().physicsTick(1 / 60);
+  const cast = useZoogiGame.getState().useAiPower("ai-wolf");
+  assert.equal(cast, "wolfgang");
+  const packed = useZoogiGame.getState();
+  assert.equal(packed.isPlayerTurn, false, "spawning the pack should not end the computer's turn");
+  assert.equal(packed.wolfClones.length, 3);
+  assert.ok(packed.wolfClones.every((clone) => clone.spawnedByPlayerId === "ai-wolf"));
+  const spawned = packed.wolfClones.map((clone) => ({ ...clone, isActive: true }));
+
+  let handedBack = false;
+  for (let frame = 0; frame < 180; frame++) {
+    useZoogiGame.getState().physicsTick(1 / 60);
+    if (useZoogiGame.getState().isPlayerTurn) {
+      handedBack = true;
+      break;
+    }
+  }
+  assert.equal(handedBack, true, "the computer's turn should pass once the pack roll stops");
+
+  useZoogiGame.setState({ wolfClones: spawned });
+  useZoogiGame.getState().startNextRound();
+  const next = useZoogiGame.getState();
+  assert.equal(next.wolfClones.length, 0, "clones an AI spawned should be gone when the next round starts");
+  assert.equal(next.currentRound, 3);
+  assert.equal(next.phase, "playing");
+});
+
 test("an off-screen star burst anchors on the unlocking marble", async () => {
   const { resolveUnlockSpot } = await loadGame();
   const exit: [number, number, number] = [0, 0.7, 24];
