@@ -1,7 +1,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { collectMatchSolids, getMapLayout, getWinterCampVersion, subscribeWinterCamp, type SolidKind } from "@/lib/arenaColliders";
-import { NEON_HALF_X, NEON_HALF_Z, neonRails } from "@/lib/neonCourt";
+import { NEON_HALF_X, NEON_HALF_Z, neonObstacles, neonRails } from "@/lib/neonCourt";
 
 const KIND_COLOR: Record<SolidKind, string> = {
   bumper: "#ff00ff",
@@ -75,6 +75,15 @@ export function ColliderDebug() {
         >
           <boxGeometry args={[Math.max(0.05, rail.maxX - rail.minX), 0.9, Math.max(0.05, rail.maxZ - rail.minZ)]} />
           <meshBasicMaterial color="#ff44aa" wireframe />
+        </mesh>
+      ))}
+      {selectedMap === "neon" && neonObstacles().map((box) => (
+        <mesh
+          key={box.id}
+          position={[(box.minX + box.maxX) / 2, 0.32, (box.minZ + box.maxZ) / 2]}
+        >
+          <boxGeometry args={[Math.max(0.05, box.maxX - box.minX), 0.5, Math.max(0.05, box.maxZ - box.minZ)]} />
+          <meshBasicMaterial color="#44ffee" wireframe />
         </mesh>
       ))}
       {selectedMap === "neon" && (

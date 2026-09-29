@@ -7,6 +7,7 @@ import {
   isOutsideNeonCourt,
   neonBumpers,
   neonCourtLayout,
+  neonObstacles,
   neonRails,
   resolveNeonRails,
 } from "./neonCourt.ts";
@@ -75,4 +76,51 @@ test("a corner mouth is a real knockout, not a hidden wall", () => {
 
 test("layout helper matches getMapLayout", () => {
   assert.deepEqual(getMapLayout("neon"), neonCourtLayout());
+});
+
+test("raised pads and the center channel bounce, and the corner mouths stay open", () => {
+  const gapX = NEON_HALF_X - 3.15;
+  const gapZ = NEON_HALF_Z - 3.15;
+  const boxes = neonObstacles();
+  assert.ok(boxes.length >= 4);
+
+  const mouths = [
+    [gapX, NEON_HALF_X, gapZ, NEON_HALF_Z],
+    [-NEON_HALF_X, -gapX, gapZ, NEON_HALF_Z],
+    [gapX, NEON_HALF_X, -NEON_HALF_Z, -gapZ],
+    [-NEON_HALF_X, -gapX, -NEON_HALF_Z, -gapZ],
+  ];
+  for (const box of boxes) {
+    assert.ok(box.maxX < NEON_HALF_X && box.minX > -NEON_HALF_X, box.id);
+    assert.ok(box.maxZ < NEON_HALF_Z && box.minZ > -NEON_HALF_Z, box.id);
+    for (const [x0, x1, z0, z1] of mouths) {
+      const overlaps = box.minX < x1 && box.maxX > x0 && box.minZ < z1 && box.maxZ > z0;
+      assert.equal(overlaps, false, `${box.id} blocks a knockout mouth`);
+    }
+  }
+
+  const spawns = neonCourtLayout().zones.filter((zone) => zone.isSpawn);
+  for (const spawn of spawns) {
+    const x = Math.cos(spawn.angle) * spawn.distance;
+    const z = Math.sin(spawn.angle) * spawn.distance;
+    for (const box of boxes) {
+      const nearestX = Math.min(box.maxX, Math.max(box.minX, x));
+      const nearestZ = Math.min(box.maxZ, Math.max(box.minZ, z));
+      const gap = Math.hypot(x - nearestX, z - nearestZ);
+      assert.ok(gap > MARBLE_RADIUS + 0.35, `${spawn.id} overlaps ${box.id}`);
+    }
+  }
+
+  let pos: [number, number, number] = [0, 0.5, 2.2];
+  let vel: [number, number, number] = [0, 0, -0.9];
+  let bounced = false;
+  for (let frame = 0; frame < 8; frame++) {
+    const prev = pos;
+    const next: [number, number, number] = [pos[0] + vel[0], pos[1], pos[2] + vel[2]];
+    const resolved = resolveNeonRails(prev, next, vel, MARBLE_RADIUS);
+    if (resolved.hits.some((hit) => hit.id === "channel-north") && resolved.vel[2] > 0) bounced = true;
+    pos = resolved.pos;
+    vel = resolved.vel;
+  }
+  assert.equal(bounced, true);
 });

@@ -71,12 +71,41 @@ export interface NeonBumper {
   z: number;
 }
 
-/** Three posts, off the center and off the spawn lanes. */
+/**
+ * Posts and taller pylons. All of them use the shared bumper circle,
+ * so a marble bounces at BUMPER_RADIUS. They stay off the corner mouths.
+ */
 export function neonBumpers(): NeonBumper[] {
   return [
     { id: "neon-post-a", x: -5.1, z: 2.7 },
     { id: "neon-post-b", x: 4.2, z: 3.4 },
     { id: "neon-post-c", x: -3.4, z: -4.6 },
+    { id: "neon-pylon-west", x: -6.6, z: 5.6 },
+    { id: "neon-pylon-east", x: 5.8, z: -2.6 },
+  ];
+}
+
+export interface NeonBox {
+  id: string;
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+}
+
+/**
+ * Raised pads near the ends and a broken center channel.
+ * Axis-aligned, so they bounce with the same rail sweep. The corner
+ * mouths and the south-center lane stay clear.
+ */
+export function neonObstacles(): NeonBox[] {
+  return [
+    { id: "pad-west", minX: -9.15, maxX: -7.45, minZ: -1.55, maxZ: 1.55 },
+    { id: "pad-east", minX: 7.7, maxX: 9.2, minZ: -1.55, maxZ: 1.55 },
+    { id: "pad-north", minX: -2.4, maxX: 0.4, minZ: 5.55, maxZ: 6.7 },
+    { id: "pad-south", minX: 1.6, maxX: 3.8, minZ: -6.7, maxZ: -5.55 },
+    { id: "channel-north", minX: -2.35, maxX: 2.35, minZ: 0.72, maxZ: 1.08 },
+    { id: "channel-south", minX: -2.35, maxX: 2.35, minZ: -1.08, maxZ: -0.72 },
   ];
 }
 
@@ -223,11 +252,11 @@ export function resolveNeonRails(
   let vx = vel[0];
   let vz = vel[2];
   const hits: RailHit[] = [];
-  const rails = neonRails();
+  const boxes = [...neonRails(), ...neonObstacles()];
 
   for (let pass = 0; pass < 3; pass++) {
     let hitThisPass = false;
-    for (const rail of rails) {
+    for (const rail of boxes) {
       const hit = segmentHitsAabb(
         prev[0],
         prev[2],

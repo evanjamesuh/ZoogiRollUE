@@ -8,6 +8,7 @@ import {
   NEON_HALF_X,
   NEON_HALF_Z,
   neonBumpers,
+  neonObstacles,
   neonRails,
 } from "@/lib/neonCourt";
 
@@ -52,6 +53,32 @@ function paintHazard(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: 
     ctx.stroke();
   }
   ctx.restore();
+}
+
+function paintEndZone(
+  ctx: CanvasRenderingContext2D,
+  x0: number,
+  z0: number,
+  x1: number,
+  z1: number,
+  color: string,
+) {
+  const [ax, ay] = worldToCanvas(Math.min(x0, x1), Math.min(z0, z1));
+  const [bx, by] = worldToCanvas(Math.max(x0, x1), Math.max(z0, z1));
+  ctx.fillStyle = color;
+  ctx.fillRect(ax, ay, bx - ax, by - ay);
+}
+
+function paintChevron(ctx: CanvasRenderingContext2D, x: number, z: number, dir: number, color: string) {
+  const [px, py] = worldToCanvas(x, z);
+  const s = 0.32 * PX;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(px - dir * s, py - s);
+  ctx.lineTo(px + dir * s * 0.15, py);
+  ctx.lineTo(px - dir * s, py + s);
+  ctx.stroke();
 }
 
 function paintCourt(ctx: CanvasRenderingContext2D) {
@@ -115,6 +142,40 @@ function paintCourt(ctx: CanvasRenderingContext2D) {
   ctx.beginPath();
   ctx.arc(cx, cy, 5.6 * PX, Math.PI - 0.55, Math.PI + 0.55);
   ctx.stroke();
+
+  paintEndZone(ctx, -11.3, -3.6, -6.35, 3.6, "rgba(18, 120, 150, 0.34)");
+  paintEndZone(ctx, 6.35, -3.6, 11.3, 3.6, "rgba(150, 28, 90, 0.34)");
+
+  ctx.strokeStyle = "#d5deee";
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - 6.4 * PX);
+  ctx.lineTo(cx, cy - 2.5 * PX);
+  ctx.moveTo(cx, cy + 2.5 * PX);
+  ctx.lineTo(cx, cy + 6.4 * PX);
+  ctx.stroke();
+  ctx.lineWidth = 3;
+  for (let z = -5.2; z <= 5.2; z += 1.3) {
+    if (Math.abs(z) < 2.2) continue;
+    const [hx, hy] = worldToCanvas(0, z);
+    ctx.beginPath();
+    ctx.moveTo(hx - 10, hy);
+    ctx.lineTo(hx + 10, hy);
+    ctx.stroke();
+  }
+
+  for (const x of [-9.4, -8.5, -7.6]) paintChevron(ctx, x, 2.35, 1, "#7ee7ff");
+  for (const x of [7.6, 8.5, 9.4]) paintChevron(ctx, x, -2.35, -1, "#ff7ad4");
+
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = "700 72px sans-serif";
+  ctx.fillStyle = "rgba(150, 230, 245, 0.72)";
+  const [n1x, n1y] = worldToCanvas(-8.3, 2.55);
+  ctx.fillText("1", n1x, n1y);
+  ctx.fillStyle = "rgba(255, 150, 200, 0.72)";
+  const [n2x, n2y] = worldToCanvas(8.45, -2.55);
+  ctx.fillText("2", n2x, n2y);
 
   // Original center mark: a marble, a roll crescent, and the letters ZR.
   ctx.fillStyle = "#243044";
@@ -261,6 +322,68 @@ function Rail({
       <mesh position={trim.face}>
         <boxGeometry args={trim.faceArgs} />
         <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.7} toneMapped={false} roughness={0.3} />
+      </mesh>
+    </group>
+  );
+}
+
+function Pylon({ x, z, tint }: { x: number; z: number; tint: string }) {
+  return (
+    <group position={[x, 0, z]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.028, 0]}>
+        <circleGeometry args={[BUMPER_RADIUS + 0.18, 24]} />
+        <meshBasicMaterial color="#05060c" transparent opacity={0.55} depthWrite={false} />
+      </mesh>
+      <mesh position={[0, 0.1, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[BUMPER_RADIUS, BUMPER_RADIUS * 1.05, 0.2, 20]} />
+        <meshStandardMaterial color="#6a7588" metalness={0.84} roughness={0.28} />
+      </mesh>
+      <mesh position={[0, 1.15, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.34, 0.42, 1.9, 16]} />
+        <meshStandardMaterial color="#4e586c" metalness={0.8} roughness={0.32} />
+      </mesh>
+      {[0.55, 1.05, 1.55].map((y) => (
+        <mesh key={y} position={[0, y, 0]} rotation={[Math.PI / 2, 0, 0]}>
+          <torusGeometry args={[0.48, 0.045, 8, 24]} />
+          <meshStandardMaterial color={tint} emissive={tint} emissiveIntensity={1.85} toneMapped={false} roughness={0.22} />
+        </mesh>
+      ))}
+      <mesh position={[0, 2.18, 0]}>
+        <sphereGeometry args={[0.2, 14, 12]} />
+        <meshStandardMaterial color="#fff6ea" emissive={tint} emissiveIntensity={2.3} toneMapped={false} roughness={0.2} />
+      </mesh>
+    </group>
+  );
+}
+
+function RaisedBlock({
+  minX,
+  maxX,
+  minZ,
+  maxZ,
+  tint,
+  height,
+}: {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+  tint: string;
+  height: number;
+}) {
+  const width = maxX - minX;
+  const depth = maxZ - minZ;
+  const cx = (minX + maxX) / 2;
+  const cz = (minZ + maxZ) / 2;
+  return (
+    <group>
+      <mesh position={[cx, height / 2, cz]} castShadow receiveShadow>
+        <boxGeometry args={[width, height, depth]} />
+        <meshStandardMaterial color="#3c4558" metalness={0.7} roughness={0.34} />
+      </mesh>
+      <mesh position={[cx, height - 0.035, cz]}>
+        <boxGeometry args={[Math.max(0.08, width - 0.14), 0.05, Math.max(0.08, depth - 0.14)]} />
+        <meshStandardMaterial color={tint} emissive={tint} emissiveIntensity={1.65} toneMapped={false} roughness={0.28} />
       </mesh>
     </group>
   );
@@ -469,6 +592,94 @@ const BLOCKS: Array<{ position: [number, number, number]; size: [number, number,
   { position: [-14, 0, 34], size: [4, 16, 4], windows: "#c084fc" },
 ];
 
+function ArenaRim() {
+  const lip = (x: number, z: number, sx: number, sz: number, color: string, key: string) => (
+    <mesh key={key} position={[x, 1.05, z]}>
+      <boxGeometry args={[sx, 0.07, sz]} />
+      <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.7} toneMapped={false} roughness={0.3} />
+    </mesh>
+  );
+  return (
+    <group>
+      <mesh position={[-12.28, 0.62, 0]} castShadow>
+        <boxGeometry args={[0.28, 1.24, 7.2]} />
+        <meshStandardMaterial color="#1a2436" metalness={0.55} roughness={0.45} />
+      </mesh>
+      <mesh position={[12.28, 0.62, 0]} castShadow>
+        <boxGeometry args={[0.28, 1.24, 7.2]} />
+        <meshStandardMaterial color="#2a1828" metalness={0.55} roughness={0.45} />
+      </mesh>
+      <mesh position={[-3.6, 0.58, -8.72]}>
+        <boxGeometry args={[7.2, 1.16, 0.4]} />
+        <meshStandardMaterial color="#1a2436" metalness={0.5} roughness={0.48} />
+      </mesh>
+      <mesh position={[3.6, 0.58, -8.72]}>
+        <boxGeometry args={[7.2, 1.16, 0.4]} />
+        <meshStandardMaterial color="#2a1828" metalness={0.5} roughness={0.48} />
+      </mesh>
+      {lip(-12.28, 0, 0.08, 7.0, "#22e7ff", "west")}
+      {lip(12.28, 0, 0.08, 7.0, "#ff2bd6", "east")}
+      {lip(-3.6, -8.72, 7.0, 0.1, "#22e7ff", "far-cyan")}
+      {lip(3.6, -8.72, 7.0, 0.1, "#ff2bd6", "far-magenta")}
+      {[
+        [-12.28, -3.7, "#22e7ff"],
+        [-12.28, 3.7, "#22e7ff"],
+        [12.28, -3.7, "#ff2bd6"],
+        [12.28, 3.7, "#ff2bd6"],
+      ].map(([x, z, color]) => (
+        <group key={`${x}-${z}`} position={[Number(x), 0, Number(z)]}>
+          <mesh position={[0, 0.7, 0]}>
+            <cylinderGeometry args={[0.28, 0.34, 1.4, 16]} />
+            <meshStandardMaterial color="#2a3144" metalness={0.7} roughness={0.35} />
+          </mesh>
+          <mesh position={[0, 1.35, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.36, 0.05, 8, 20]} />
+            <meshStandardMaterial color={color as string} emissive={color as string} emissiveIntensity={1.9} toneMapped={false} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+const SKYLINE: Array<{ x: number; z: number; h: number; w: number; tint: string }> = [
+  { x: -7.4, z: -11.15, h: 2.1, w: 1.15, tint: "#22e7ff" },
+  { x: -4.8, z: -11.45, h: 3.0, w: 0.9, tint: "#7ef6ff" },
+  { x: -2.1, z: -10.85, h: 1.7, w: 1.35, tint: "#9ad8ff" },
+  { x: 0.6, z: -11.55, h: 2.5, w: 1.05, tint: "#ff2bd6" },
+  { x: 3.3, z: -10.95, h: 1.9, w: 1.25, tint: "#ff6a8a" },
+  { x: 6.0, z: -11.4, h: 3.2, w: 0.85, tint: "#ff2bd6" },
+  { x: 8.3, z: -10.75, h: 1.55, w: 1.15, tint: "#ff4a6a" },
+];
+
+function Skyline() {
+  return (
+    <group>
+      {SKYLINE.map((tower) => (
+        <group key={`${tower.x}-${tower.z}`} position={[tower.x, 0, tower.z]}>
+          <mesh position={[0, tower.h / 2, 0]}>
+            <boxGeometry args={[tower.w, tower.h, 0.7]} />
+            <meshStandardMaterial color="#121722" roughness={0.9} metalness={0.08} />
+          </mesh>
+          <mesh position={[0, tower.h * 0.55, 0.38]}>
+            <planeGeometry args={[tower.w * 0.62, tower.h * 0.45]} />
+            <meshStandardMaterial color="#0c1018" emissive={tower.tint} emissiveIntensity={1.35} toneMapped={false} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+const BLOCK_TINT: Record<string, string> = {
+  "pad-west": "#22e7ff",
+  "pad-east": "#ff2bd6",
+  "pad-north": "#b026ff",
+  "pad-south": "#ff4a6a",
+  "channel-north": "#22e7ff",
+  "channel-south": "#ff2bd6",
+};
+
 export function NeonCourtArena() {
   const floorTexture = useCourtTexture();
   const envMap = useFloorEnv();
@@ -505,7 +716,18 @@ export function NeonCourtArena() {
       ))}
 
       {posts.map((post, index) => (
-        <BumperPost key={post.id} x={post.x} z={post.z} tint={tints[index % tints.length]} />
+        post.id.includes("pylon")
+          ? <Pylon key={post.id} x={post.x} z={post.z} tint={post.x < 0 ? "#22e7ff" : "#ff2bd6"} />
+          : <BumperPost key={post.id} x={post.x} z={post.z} tint={tints[index % tints.length]} />
+      ))}
+
+      {neonObstacles().map((box) => (
+        <RaisedBlock
+          key={box.id}
+          {...box}
+          tint={BLOCK_TINT[box.id] ?? "#22e7ff"}
+          height={box.id.startsWith("channel") ? 0.46 : 0.64}
+        />
       ))}
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.16, 0]}>
@@ -524,6 +746,8 @@ export function NeonCourtArena() {
         </mesh>
       ))}
       <Crowd />
+      <ArenaRim />
+      <Skyline />
       <LightRig z={-9.2} y={2.05} />
       <LightRig z={12.2} y={5.2} />
       {/* Dim inner lip so the bowl has an edge without blooming over the court. */}
