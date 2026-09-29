@@ -4,41 +4,54 @@ import { useFrame } from "@react-three/fiber";
 import { getSnowmanPositions } from "@/lib/arenaConstants";
 import { BUMPER_RADIUS, getIcePatches, getMapLayout } from "@/lib/arenaColliders";
 import { RING_VISUAL_LIMIT } from "@/lib/ringPlacement";
-import { ROUND_FLOOR_RADIUS, ROUND_KNOCKOFF_RADIUS } from "@/lib/roundRim";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 
 /**
  * Painted Frozen Ring cues. The knockout is the outer edge of the amber band
- * at ROUND_KNOCKOFF_RADIUS. Paint inside that radius is still in. Paint
- * outside it is the drop, so the line you see is the line that counts.
+ * at the ice map's knockoff radius. Paint inside that radius is still in.
+ * Paint outside it is the drop, so the line you see is the line that counts.
  *
- * Horizontal sizes are shares of the live rink, patch, snowman, and bumper
- * values. A later uniform scale of those sources moves this paint with them.
+ * The rink radii come from getMapLayout("ice"). Patch, snowman, and bumper
+ * marks come from their getters. Shares below keep today's look on the
+ * current rink and follow those getters when they change.
  */
 
-const KNOCK = ROUND_KNOCKOFF_RADIUS;
-const FLOOR = ROUND_FLOOR_RADIUS;
-/** Floor radius to knockout. Amber fills this gap exactly. */
-const LIP = KNOCK - FLOOR;
-
-/** Navy starts where the shared snow band starts (14.7 on today's rink). */
-const NAVY_INNER = FLOOR - LIP * (5 / 3);
-/** Cyan is the inner part of that same lip gap. */
-const CYAN_INNER = FLOOR - LIP * 0.6;
-/** Dark drop past the line. 4% of the knockout radius (0.62 on today's rink). */
-const INK_OUTER = KNOCK * 1.04;
-
-/**
- * Even cosmetic berm. 1.1× the knockout is the middle of the old 16.7–17.4
- * mounds. Mound and tube sizes are shares of that distance.
- */
+/** Even cosmetic berm. 1.1× the knockout is the middle of the old 16.7–17.4 mounds. */
 const SNOW_LIP_SHARE = 1.1;
 /** Mound radius and torus tube as shares of the 17.05 berm. */
 const SNOW_MOUND_SHARE = 0.9 / 17.05;
 const SNOW_TUBE_SHARE = 0.42 / 17.05;
-const SNOW_LIP_DIST = Math.max(KNOCK * SNOW_LIP_SHARE, RING_VISUAL_LIMIT + KNOCK * SNOW_LIP_SHARE * SNOW_MOUND_SHARE);
-const SNOW_MOUND = SNOW_LIP_DIST * SNOW_MOUND_SHARE;
-const SNOW_TUBE = SNOW_LIP_DIST * SNOW_TUBE_SHARE;
+
+interface RinkFrame {
+  navyInner: number;
+  cyanInner: number;
+  floor: number;
+  knock: number;
+  inkOuter: number;
+  snowDist: number;
+  snowMound: number;
+  snowTube: number;
+}
+
+/** Ice layout radii. Null only if the ice map layout is missing. */
+function iceRinkFrame(): RinkFrame | null {
+  const layout = getMapLayout("ice");
+  if (!layout) return null;
+  const knock = layout.knockoffRadius;
+  const floor = layout.floorRadius;
+  const lip = knock - floor;
+  const snowDist = Math.max(knock * SNOW_LIP_SHARE, RING_VISUAL_LIMIT + knock * SNOW_LIP_SHARE * SNOW_MOUND_SHARE);
+  return {
+    navyInner: floor - lip * (5 / 3),
+    cyanInner: floor - lip * 0.6,
+    floor,
+    knock,
+    inkOuter: knock * 1.04,
+    snowDist,
+    snowMound: snowDist * SNOW_MOUND_SHARE,
+    snowTube: snowDist * SNOW_TUBE_SHARE,
+  };
+}
 
 /** Patch coast, as shares of each patch radius (0.72 and 0.28 on a radius-3 patch). */
 const COAST_NAVY_SHARE = 0.72 / 3;
@@ -135,11 +148,11 @@ function FootDiscs({
 }
 
 /** Even snow berm outside the knockout. Cosmetic only: no collider, identical mounds. */
-function SymmetricSnowLip() {
+function SymmetricSnowLip({ frame }: { frame: RinkFrame }) {
   const ref = useRef<THREE.InstancedMesh>(null);
   const count = 48;
-  const dist = SNOW_LIP_DIST;
-  const scale = SNOW_MOUND;
+  const dist = frame.snowDist;
+  const scale = frame.snowMound;
   const snow = useMemo(() => new THREE.MeshStandardMaterial({ color: SNOW, roughness: 0.95, metalness: 0 }), []);
 
   useLayoutEffect(() => {
@@ -153,12 +166,12 @@ function SymmetricSnowLip() {
       ref.current?.setMatrixAt(i, dummy.matrix);
     }
     if (ref.current) ref.current.instanceMatrix.needsUpdate = true;
-  }, [scale]);
+  }, [dist, scale]);
 
   return (
     <group>
       <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.18, 0]} material={snow}>
-        <torusGeometry args={[dist, SNOW_TUBE, 8, 72]} />
+        <torusGeometry args={[dist, frame.snowTube, 8, 72]} />
       </mesh>
       <instancedMesh ref={ref} args={[undefined, undefined, count]} material={snow} frustumCulled={false}>
         <sphereGeometry args={[1, 10, 8]} />
@@ -167,7 +180,7 @@ function SymmetricSnowLip() {
   );
 }
 
-function KnockoutEdge() {
+function KnockoutEdge({ frame }: { frame: RinkFrame }) {
   const amber = useMemo(() => paintMaterial(AMBER, 0), []);
   const navy = useMemo(() => paintMaterial(NAVY, 0), []);
   const cyan = useMemo(() => paintMaterial(CYAN, 0), []);
@@ -179,12 +192,12 @@ function KnockoutEdge() {
 
   const bands = useMemo(
     () => ({
-      navy: ringGeometry([{ x: 0, z: 0, inner: NAVY_INNER, outer: CYAN_INNER }], 160),
-      cyan: ringGeometry([{ x: 0, z: 0, inner: CYAN_INNER, outer: FLOOR }], 160),
-      amber: ringGeometry([{ x: 0, z: 0, inner: FLOOR, outer: KNOCK }], 160),
-      ink: ringGeometry([{ x: 0, z: 0, inner: KNOCK, outer: INK_OUTER }], 128),
+      navy: ringGeometry([{ x: 0, z: 0, inner: frame.navyInner, outer: frame.cyanInner }], 160),
+      cyan: ringGeometry([{ x: 0, z: 0, inner: frame.cyanInner, outer: frame.floor }], 160),
+      amber: ringGeometry([{ x: 0, z: 0, inner: frame.floor, outer: frame.knock }], 160),
+      ink: ringGeometry([{ x: 0, z: 0, inner: frame.knock, outer: frame.inkOuter }], 128),
     }),
-    [],
+    [frame],
   );
 
   useFrame(() => {
@@ -243,6 +256,7 @@ export function FrozenRinkMarkings() {
     [],
   );
   const patches = useMemo(() => getIcePatches(), []);
+  const frame = useMemo(() => iceRinkFrame(), []);
 
   const rings = useMemo(() => {
     const obstacle = [
@@ -275,8 +289,8 @@ export function FrozenRinkMarkings() {
       <FlatPaint geometry={rings.obstacle} material={amber} y={MARK_Y + 0.008} />
       <FlatPaint geometry={rings.coastNavy} material={navy} y={MARK_Y + 0.012} />
       <FlatPaint geometry={rings.coastCyan} material={cyan} y={MARK_Y + 0.018} />
-      <KnockoutEdge />
-      <SymmetricSnowLip />
+      {frame && <KnockoutEdge frame={frame} />}
+      {frame && <SymmetricSnowLip frame={frame} />}
     </group>
   );
 }
