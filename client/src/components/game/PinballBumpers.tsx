@@ -4,7 +4,7 @@ import { useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { useAudio } from "@/lib/stores/useAudio";
-import { BUMPER_MODEL_URL } from "@/lib/arenaColliders";
+import { BUMPER_MODEL_URL, BUMPER_RADIUS } from "@/lib/arenaColliders";
 
 class BumperModelErrorBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { hasError: boolean }> {
   state = { hasError: false };
@@ -19,7 +19,7 @@ class BumperModelErrorBoundary extends Component<{ children: ReactNode; fallback
 function BumperStandIn() {
   return (
     <mesh position={[0, 0.55, 0]} castShadow>
-      <cylinderGeometry args={[0.9, 1.05, 1.1, 20]} />
+      <cylinderGeometry args={[BUMPER_RADIUS, BUMPER_RADIUS, 1.1, 20]} />
       <meshStandardMaterial color="#F59E0B" emissive="#F59E0B" emissiveIntensity={0.35} />
     </mesh>
   );

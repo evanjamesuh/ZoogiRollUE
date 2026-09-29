@@ -12,6 +12,7 @@ import {
   countClearLanes,
   getIcePatches,
   getMapLayout,
+  listRimGapAdjustments,
   getWinterCampVersion,
   knockoffOffsetForMap,
   laneIsClear,
@@ -197,8 +198,10 @@ test("frozen ring camp walls match the drawn props and stay off until the model 
     assert.ok(actual !== undefined && Math.abs(actual - expected) < 1e-6, `${label} ${actual} vs ${expected}`);
   };
   const iceScale = arenaScaleFor("ice");
+  const wallNudge = listRimGapAdjustments().find((row) => row.mapId === "ice" && row.meshKey === "wall-16");
   near(byId.get("wall-16a")?.radius, 1.15, "wall-16a");
-  near(byId.get("wall-16a")?.x, 10.94 * iceScale, "wall-16a x");
+  near(byId.get("wall-16a")?.x, 10.94 * iceScale + (wallNudge?.dx ?? 0), "wall-16a x");
+  near(byId.get("wall-16a")?.z, 11.5 * iceScale + (wallNudge?.dz ?? 0), "wall-16a z");
   near(byId.get("wall-16b")?.radius, 1.15, "wall-16b");
   near(byId.get("wall-16c")?.radius, 1.15, "wall-16c");
   assert.equal(byId.get("wall-16"), undefined);

@@ -3,8 +3,7 @@ import { useRef, useMemo, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { useAudio } from "@/lib/stores/useAudio";
-import { getSnowmanPositions } from "@/lib/arenaConstants";
-import { arenaScaleFor } from "@/lib/mapDefaultConfigs";
+import { SNOWMAN_RADIUS, getMapLayout } from "@/lib/arenaColliders";
 import { getElementOffset } from "@/lib/treeOffsets";
 
 interface Snowman {
@@ -18,11 +17,10 @@ export function Snowmen() {
   const selectedMap = useZoogiGame((state) => state.selectedMap) || "ice";
   
   const snowmenData = useMemo<Snowman[]>(() => {
-    const sharedPositions = getSnowmanPositions();
-    const scale = arenaScaleFor("ice");
-    return sharedPositions.map((pos, i) => ({
-      id: `snowman-${i}`,
-      position: [pos.position[0] * scale, pos.position[1], pos.position[2] * scale] as [number, number, number],
+    const scenery = getMapLayout("ice")?.scenery.filter((solid) => solid.kind === "snowman") ?? [];
+    return scenery.map((solid, i) => ({
+      id: solid.id,
+      position: [solid.x, 0, solid.z] as [number, number, number],
       originalIndex: i
     }));
   }, []);
@@ -104,8 +102,8 @@ function SnowmanMesh({ snowman }: { snowman: Snowman }) {
 
   return (
     <group ref={groupRef} position={snowman.position}>
-      <mesh position={[0, 0.5, 0]} castShadow>
-        <sphereGeometry args={[0.5, 12, 8]} />
+      <mesh position={[0, SNOWMAN_RADIUS, 0]} castShadow>
+        <sphereGeometry args={[SNOWMAN_RADIUS, 12, 8]} />
         <meshStandardMaterial color="#FFFFFF" roughness={0.8} />
       </mesh>
       

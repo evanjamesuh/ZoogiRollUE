@@ -8,6 +8,7 @@
 
 import type { MapLayout, ZonePlacement } from "./arenaColliders";
 import { arenaScaleFor } from "./arenaScale";
+import { MARBLE_WIDTH, repairRectRimGaps, snapRimGap, type RimGapAdjustment } from "./obstaclePlacement";
 import { MAX_PLANAR_SPEED, RAIL_RESTITUTION } from "./simFeel";
 
 /** Authored court, in today's units. Readers multiply by the neon arenaScale. */
@@ -40,12 +41,18 @@ export interface NeonRail {
   color: string;
 }
 
+/** Corner-mouth width in world units, snapped out of the awkward rim-gap band. */
+export function neonMouthWidth(): number {
+  return snapRimGap(NEON_CORNER_GAP * courtScale(), MARBLE_WIDTH);
+}
+
 export function neonRails(): NeonRail[] {
   const scale = courtScale();
   const halfX = NEON_HALF_X * scale;
   const halfZ = NEON_HALF_Z * scale;
-  const gapX = halfX - NEON_CORNER_GAP * scale;
-  const gapZ = halfZ - NEON_CORNER_GAP * scale;
+  const mouth = neonMouthWidth();
+  const gapX = halfX - mouth;
+  const gapZ = halfZ - mouth;
   const depth = NEON_RAIL_DEPTH;
   return [
     {
@@ -133,8 +140,7 @@ function neonObstacleUnits(): NeonBox[] {
   ];
 }
 
-/** Pad centers move out with the court. The boxes themselves stay the same size. */
-export function neonObstacles(): NeonBox[] {
+function scaledObstacleBoxes(): NeonBox[] {
   const scale = courtScale();
   return neonObstacleUnits().map((box) => {
     const cx = ((box.minX + box.maxX) / 2) * scale;
@@ -143,6 +149,30 @@ export function neonObstacles(): NeonBox[] {
     const hz = (box.maxZ - box.minZ) / 2;
     return { ...box, minX: cx - hx, maxX: cx + hx, minZ: cz - hz, maxZ: cz + hz };
   });
+}
+
+/** Pad centers move out with the court. The boxes themselves stay the same size. */
+export function neonObstacles(): NeonBox[] {
+  return repairRectRimGaps(scaledObstacleBoxes(), neonPlayHalfX(), neonPlayHalfZ(), MARBLE_WIDTH).boxes;
+}
+
+export function neonRimGapAdjustments(): RimGapAdjustment[] {
+  const adjustments = repairRectRimGaps(scaledObstacleBoxes(), neonPlayHalfX(), neonPlayHalfZ(), MARBLE_WIDTH).adjustments;
+  const authoredMouth = NEON_CORNER_GAP * courtScale();
+  const mouth = neonMouthWidth();
+  if (Math.abs(mouth - authoredMouth) > 1e-6) {
+    adjustments.push({
+      meshKey: "corner-mouth",
+      ids: ["corner-mouth"],
+      kind: "mouth",
+      direction: mouth > authoredMouth ? "opened" : "closed",
+      dx: 0,
+      dz: 0,
+      distance: Math.abs(mouth - authoredMouth),
+      clearances: [{ id: "corner-mouth", before: authoredMouth / MARBLE_WIDTH, after: mouth / MARBLE_WIDTH }],
+    });
+  }
+  return adjustments;
 }
 
 function zoneAt(id: string, x: number, z: number, isSpawn: boolean): ZonePlacement {

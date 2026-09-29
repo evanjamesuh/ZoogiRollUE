@@ -1,6 +1,7 @@
 import { getSnowmanPositions } from "./arenaConstants";
 import { arenaScaleFor } from "./arenaScale";
-import { neonCourtLayout } from "./neonCourt";
+import { neonCourtLayout, neonPlayHalfX, neonPlayHalfZ, neonRimGapAdjustments } from "./neonCourt";
+import { MARBLE_WIDTH, obstacleMeshKey, placeScaledObstacles, type RimGapAdjustment } from "./obstaclePlacement";
 import { BUMPER_RESTITUTION, ROCK_RESTITUTION } from "./simFeel";
 
 /**
@@ -213,11 +214,15 @@ function hoodooUnits(): HoodooDecor[] {
 
 /** Hoodoo stones keep their size. Only the ring they stand on grows. */
 export function getHoodooDecor(): HoodooDecor[] {
-  const scale = arenaScaleFor("lava");
-  return hoodooUnits().map((hoodoo) => ({
-    ...hoodoo,
-    position: [hoodoo.position[0] * scale, hoodoo.position[1], hoodoo.position[2] * scale],
-  }));
+  const placed = new Map((getMapLayout("lava")?.scenery ?? []).map((solid) => [solid.id, solid]));
+  return hoodooUnits().map((hoodoo) => {
+    const solid = placed.get(hoodoo.id);
+    return {
+      ...hoodoo,
+      position: [solid?.x ?? hoodoo.position[0], hoodoo.position[1], solid?.z ?? hoodoo.position[2]] as [number, number, number],
+      radius: solid?.radius ?? hoodoo.radius,
+    };
+  });
 }
 
 export interface IcePatch {
@@ -401,18 +406,75 @@ const LAYOUTS: Record<string, MapLayout> = {
 /**
  * Spread a layout written in today's units. Obstacle and bumper radii stay
  * put so the larger floor has more open space. Positions, the floor, the
- * knockoff line, spawns, and score zones all grow.
+ * knockoff line, spawns, and score zones all grow. Circles that belong to
+ * one mesh keep their offsets, and a rim slot a marble almost fits through
+ * is nudged shut or open.
  */
 export function scaleLayout(layout: MapLayout, scale: number): MapLayout {
-  if (scale === 1) return layout;
+  const knockoffRadius = layout.knockoffRadius * scale;
+  const scenery = placeScaledObstacles(layout.scenery, scale, knockoffRadius, MARBLE_RADIUS * 2).circles;
   return {
     ...layout,
     floorRadius: layout.floorRadius * scale,
-    knockoffRadius: layout.knockoffRadius * scale,
+    knockoffRadius,
     orbRingRadius: layout.orbRingRadius * scale,
     zones: layout.zones.map((zone) => ({ ...zone, distance: zone.distance * scale })),
-    scenery: layout.scenery.map((solid) => ({ ...solid, x: solid.x * scale, z: solid.z * scale })),
+    scenery,
     bumpers: layout.bumpers.map((bumper) => ({ ...bumper, x: bumper.x * scale, z: bumper.z * scale })),
+  };
+}
+
+export type { RimGapAdjustment };
+
+/** Every read-time rim nudge, including camp props that appear with the winter mesh. */
+export function listRimGapAdjustments(): Array<RimGapAdjustment & { mapId: string }> {
+  const rows: Array<RimGapAdjustment & { mapId: string }> = [];
+  const marble = MARBLE_RADIUS * 2;
+  if (Math.abs(marble - MARBLE_WIDTH) > 1e-9) {
+    throw new Error(`marble width ${marble} drifted from obstacle placement ${MARBLE_WIDTH}`);
+  }
+  for (const mapId of Object.keys(LAYOUTS)) {
+    const layout = LAYOUTS[mapId];
+    const scale = arenaScaleFor(mapId);
+    const placed = placeScaledObstacles(layout.scenery, scale, layout.knockoffRadius * scale, marble);
+    for (const adjustment of placed.adjustments) rows.push({ mapId, ...adjustment });
+    if (mapId === "ice") {
+      const camp = placeScaledObstacles(ICE_CAMP, scale, layout.knockoffRadius * scale, marble);
+      for (const adjustment of camp.adjustments) rows.push({ mapId, ...adjustment });
+    }
+  }
+  for (const adjustment of neonRimGapAdjustments()) rows.push({ mapId: "neon", ...adjustment });
+  return rows;
+}
+
+/** Collider meshes inside this map's dress group, and the world nudge applied to each. */
+export function embeddedObstaclePose(mapId: string): { meshKeys: string[]; nudges: { meshKey: string; dx: number; dz: number }[] } {
+  const meshKeys = new Set<string>();
+  const nudges: { meshKey: string; dx: number; dz: number }[] = [];
+  if (mapId === "grass") {
+    for (const solid of LAYOUTS.grass.scenery) meshKeys.add(obstacleMeshKey(solid.id));
+  }
+  if (mapId === "ice") {
+    for (const solid of ICE_CAMP) meshKeys.add(obstacleMeshKey(solid.id));
+  }
+  for (const adjustment of listRimGapAdjustments()) {
+    if (adjustment.mapId !== mapId || adjustment.kind !== "edge") continue;
+    if (!meshKeys.has(adjustment.meshKey)) continue;
+    nudges.push({ meshKey: adjustment.meshKey, dx: adjustment.dx, dz: adjustment.dz });
+  }
+  return { meshKeys: [...meshKeys], nudges };
+}
+
+/** Floor disk and knockout ring the arena draws. Both match the colliders. */
+export function arenaVisualEdge(mapId: string):
+  | { shape: "circle"; floorRadius: number; knockoffRadius: number }
+  | { shape: "rect"; halfX: number; halfZ: number } {
+  if (mapId === "neon") return { shape: "rect", halfX: neonPlayHalfX(), halfZ: neonPlayHalfZ() };
+  const layout = getMapLayout(mapId);
+  return {
+    shape: "circle",
+    floorRadius: layout?.floorRadius ?? 0,
+    knockoffRadius: layout?.knockoffRadius ?? 0,
   };
 }
 
@@ -463,8 +525,9 @@ export function collectMatchSolids(input: {
 }): SolidCircle[] {
   const layout = getMapLayout(input.map);
   const campScale = arenaScaleFor("ice");
+  const campKnockoff = layout?.knockoffRadius ?? WINTER_STAGE.knockoffRadius * campScale;
   const camp = input.map === "ice" && winterCampActive
-    ? ICE_CAMP.map((solid) => ({ ...solid, x: solid.x * campScale, z: solid.z * campScale }))
+    ? placeScaledObstacles(ICE_CAMP, campScale, campKnockoff, MARBLE_RADIUS * 2).circles
     : [];
   const scenery = [...(layout?.scenery ?? []), ...camp];
   const bumpers: SolidCircle[] = input.bumpers.map((bumper) => ({

@@ -26,8 +26,9 @@ import { ScoringZones } from "./ScoringZones";
 import { PinballBumpers } from "./PinballBumpers";
 import { NeonCourtArena } from "./NeonCourtArena";
 import { ARENA_RADIUS } from "@/lib/arenaConstants";
-import { ARABIAN_STAGE, COSMOS_STAGE, GRASS_STAGE, WINTER_STAGE, arabianPlayTransform, getMapLayout, setWinterCampActive } from "@/lib/arenaColliders";
+import { ARABIAN_STAGE, COSMOS_STAGE, GRASS_STAGE, WINTER_STAGE, arabianPlayTransform, arenaVisualEdge, embeddedObstaclePose, getMapLayout, setWinterCampActive } from "@/lib/arenaColliders";
 import { arenaScaleFor } from "@/lib/mapDefaultConfigs";
+import { applyEmbeddedObstaclePose } from "@/lib/obstaclePlacement";
 
 export { ARENA_RADIUS };
 
@@ -69,6 +70,11 @@ function FloatingIslandScene() {
       }
     });
   }, [scene]);
+
+  useLayoutEffect(() => {
+    const pose = embeddedObstaclePose("grass");
+    return applyEmbeddedObstaclePose(scene, arenaScaleFor("grass"), modelScale, pose.meshKeys, pose.nudges);
+  }, [scene, modelScale]);
   
   return (
     <group scale={arenaScaleFor("grass")}>
@@ -116,6 +122,11 @@ function ArabianNightsScene() {
       }
     });
   }, [scene]);
+
+  useLayoutEffect(() => {
+    const pose = embeddedObstaclePose("saturn");
+    return applyEmbeddedObstaclePose(scene, arenaScaleFor("saturn"), modelScale, pose.meshKeys, pose.nudges);
+  }, [scene, modelScale]);
   
   return (
     <group scale={arenaScaleFor("saturn")}>
@@ -348,10 +359,16 @@ function WinterLocationScene() {
   const winterScale = WINTER_STAGE.modelScale;
 
   // Camp solids match this mesh. If the file fails to load, this never runs.
+  // Obstacle nodes are counter-scaled so the dress group moves them without growing them.
   useLayoutEffect(() => {
+    const pose = embeddedObstaclePose("ice");
+    const restore = applyEmbeddedObstaclePose(scene, arenaScaleFor("ice"), winterScale, pose.meshKeys, pose.nudges);
     setWinterCampActive(true);
-    return () => setWinterCampActive(false);
-  }, []);
+    return () => {
+      restore();
+      setWinterCampActive(false);
+    };
+  }, [scene, winterScale]);
 
   return (
     <group scale={arenaScaleFor("ice")}>
@@ -394,6 +411,11 @@ function CosmosArenaModel() {
       }
     });
   }, [scene]);
+
+  useLayoutEffect(() => {
+    const pose = embeddedObstaclePose("space");
+    return applyEmbeddedObstaclePose(scene, arenaScaleFor("space"), scale, pose.meshKeys, pose.nudges);
+  }, [scene, scale]);
   
   const arenaRotation = elementTransforms.arenaModelRotation;
   const modelRotation: [number, number, number] = editing
@@ -764,20 +786,19 @@ export function Arena({ theme = "grass" }: ArenaProps) {
 
   const isIceTheme = currentTheme === "ice";
   const layout = getMapLayout(currentTheme);
-  const floorRadius = layout?.floorRadius ?? ARENA_RADIUS;
-  // The stand-in disk matches the knockout line, so rolling off what you
-  // see is the same as crossing the scoring ring.
-  const standInRadius = layout?.knockoffRadius ?? floorRadius;
-  const stageFallback = <PlayfieldDisk radius={standInRadius} color={colors.platform} />;
+  const visualEdge = arenaVisualEdge(currentTheme);
+  // The disk is the floor collider. The knockout ring, drawn from wallSettings, is the out line.
+  const floorRadius = visualEdge.shape === "circle" ? visualEdge.floorRadius : (layout?.floorRadius ?? ARENA_RADIUS);
+  const stageFallback = <PlayfieldDisk radius={floorRadius} color={colors.platform} />;
   
   return (
     <group>
-      {/* Lava has no stage model. The disk is the playfield, the same size as the knockoff ring. */}
+      {/* Lava has no stage model. The disk is the floor collider; the knockout ring is the out line. */}
       {currentTheme === "lava" && (
         <>
-          <PlayfieldDisk radius={standInRadius} color={colors.platform} />
-          <EdgeRing radius={standInRadius} color={colors.edge} />
-          <DangerZone radius={standInRadius} color={colors.edge} />
+          <PlayfieldDisk radius={floorRadius} color={colors.platform} />
+          <EdgeRing radius={floorRadius} color={colors.edge} />
+          <DangerZone radius={floorRadius} color={colors.edge} />
         </>
       )}
       

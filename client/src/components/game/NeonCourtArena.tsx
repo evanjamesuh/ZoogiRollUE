@@ -203,14 +203,16 @@ function paintCourt(ctx: CanvasRenderingContext2D) {
   ctx.textBaseline = "middle";
   ctx.fillText("ZR", cx + 2, cy + 28);
 
+  // The floor texture is scaled with the court. Shrink the mark so its world size stays put.
+  const mark = 1 / arenaScaleFor("neon");
   for (const post of neonBumperMarks()) {
     const [px, py] = worldToCanvas(post.x, post.z);
-    const g = ctx.createRadialGradient(px, py, 8, px, py, 1.35 * PX);
+    const g = ctx.createRadialGradient(px, py, 8, px, py, 1.35 * mark * PX);
     g.addColorStop(0, "rgba(0,0,0,0.5)");
     g.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.ellipse(px, py, 1.45 * PX, 1.15 * PX, 0, 0, Math.PI * 2);
+    ctx.ellipse(px, py, 1.45 * mark * PX, 1.15 * mark * PX, 0, 0, Math.PI * 2);
     ctx.fill();
   }
 
