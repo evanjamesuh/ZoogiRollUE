@@ -21,6 +21,9 @@ import {
   setWinterCampActive,
   subscribeWinterCamp,
 } from "./arenaColliders.ts";
+import { ARENA_FOV_DEG, ARENA_PITCH_DEG } from "./cameraRig.ts";
+import { foliageBlocksRingView, gameplayCameras, ringPieceAction, shouldHideRingPiece, translationToClear, type Aabb } from "./ringPlacement.ts";
+import { MEADOW_BACKDROP_RADIUS, forestTopY, meadowForestPieces } from "./meadowDressing.ts";
 
 const MAPS = ["grass", "ice", "lava", "space", "saturn", "tomb"] as const;
 const SCORE_ZONE_RADIUS = 4;
@@ -103,7 +106,7 @@ test("ice speed patches are the four disks that are drawn", () => {
 test("a marble launched down a clear grass lane does not hit", () => {
   const layout = getMapLayout("grass");
   assert.ok(layout);
-  const angle = (20 * Math.PI) / 180;
+  const angle = 0;
   assert.equal(laneIsClear(layout, angle), true);
   const solids = [...layout.scenery, ...bumperSolids(layout.bumpers)];
   let pos: [number, number, number] = [0, 0.5, 0];
@@ -124,22 +127,24 @@ test("a marble launched down a clear grass lane does not hit", () => {
 test("a marble aimed at a visible grass rock bounces off it", () => {
   const layout = getMapLayout("grass");
   assert.ok(layout);
-  const rock = layout.scenery.find((solid) => solid.id.startsWith("S_8"));
+  const rock = layout.scenery.find((solid) => solid.kind === "rock");
   assert.ok(rock);
-  const startX = rock.x - rock.radius - MARBLE_RADIUS - 0.3;
-  let pos: [number, number, number] = [startX, 0.5, rock.z];
-  let vel: [number, number, number] = [0.4, 0, 0];
+  const angle = Math.atan2(rock.z, rock.x);
+  const startDist = Math.hypot(rock.x, rock.z) - rock.radius - MARBLE_RADIUS - 0.3;
+  let pos: [number, number, number] = [Math.cos(angle) * startDist, 0.5, Math.sin(angle) * startDist];
+  let vel: [number, number, number] = [Math.cos(angle) * 0.4, 0, Math.sin(angle) * 0.4];
   let bounced = false;
-  for (let frame = 0; frame < 20; frame++) {
+  for (let frame = 0; frame < 30; frame++) {
     const prev = pos;
     const next: [number, number, number] = [pos[0] + vel[0], 0.5, pos[2] + vel[2]];
     const resolved = resolveSolidCollision(prev, next, vel, MARBLE_RADIUS, [rock]);
-    if (resolved.hits.includes(rock.id) && resolved.vel[0] <= 0) bounced = true;
+    const radial = resolved.vel[0] * Math.cos(angle) + resolved.vel[2] * Math.sin(angle);
+    if (resolved.hits.includes(rock.id) && radial <= 0) bounced = true;
     pos = resolved.pos;
     vel = resolved.vel;
   }
   assert.equal(bounced, true);
-  assert.ok(pos[0] < rock.x - rock.radius, "the marble should stay outside the rock");
+  assert.ok(Math.hypot(pos[0] - rock.x, pos[2] - rock.z) >= rock.radius, "the marble should stay outside the rock");
 });
 
 test("fitted stages keep the knockoff on the measured floor", () => {
@@ -157,27 +162,22 @@ test("fitted stages keep the knockoff on the measured floor", () => {
   assert.ok(Math.abs(saturn.knockoffRadius - 15.5) < 0.02, "arabian plaza circle sits on the origin");
   assert.ok(saturn.knockoffRadius - saturn.floorRadius < 0.6, "fallback disk ends at the out line");
   const placed = arabianPlayTransform();
-  assert.ok(Math.abs(placed.x - 256.72) < 0.05, "stage shift +4 x");
-  assert.ok(Math.abs(placed.z - 10.72) < 0.05, "stage shift +16 z");
+  assert.ok(Math.abs(placed.x - 315.12) < 0.05, "courtyard centred on x");
+  assert.ok(Math.abs(placed.y + 267.168) < 0.05, "floor sits on y=0");
+  assert.ok(Math.abs(placed.z + 5.28) < 0.05, "courtyard centred on z");
   assert.equal(lava.scenery.length, 6, "south outer hoodoo is present");
   for (const hoodoo of lava.scenery) {
     assert.ok(hoodoo.radius <= 0.25 * 2.8 + 1e-6, `${hoodoo.id} is trimmed to the stone`);
     assert.ok(hoodoo.radius >= 0.25 * 2 - 1e-6, `${hoodoo.id} radius`);
   }
+  assert.equal(grass.floorRadius, 15.2);
   assert.equal(grass.knockoffRadius, 15.5);
-  const tree = grass.scenery.find((solid) => solid.id.startsWith("Tree1"));
-  assert.ok(tree && tree.radius < 0.5, "Tree1 collider is the trunk");
-  for (const rock of grass.scenery.filter((solid) => solid.kind === "rock")) {
-    assert.ok(rock.radius <= 3, `${rock.id} still uses the old oversized disk`);
+  assert.equal(grass.scenery.length, 6);
+  for (const rock of grass.scenery) {
+    assert.equal(rock.kind, "rock");
+    assert.ok(rock.radius >= 1 && rock.radius <= 1.25, `${rock.id} matches the drawn boulder or stump`);
+    assert.ok(Math.hypot(rock.x, rock.z) - rock.radius >= 11, `${rock.id} sits in the middle`);
   }
-  for (const score of grass.zones.filter((zone) => !zone.isSpawn)) {
-    assert.ok(score.distance + SCORE_ZONE_RADIUS <= 13.5, "score zone hangs off the grass");
-  }
-  const spawns = grass.zones.filter((zone) => zone.isSpawn);
-  const south = spawns[1];
-  assert.ok(south);
-  const southZ = Math.sin(south.angle) * south.distance;
-  assert.ok(southZ < 7.5, "south spawn is under the big tree canopy");
 });
 
 test("knockoff centre stays on the origin for every map", () => {
@@ -186,24 +186,21 @@ test("knockoff centre stays on the origin for every map", () => {
   }
 });
 
-test("frozen ring camp walls match the drawn props and stay off until the model loads", () => {
+test("frozen ring camp props stay scenery even after the winter mesh mounts", () => {
   setWinterCampActive(false);
   const idle = collectMatchSolids({ map: "ice", bumpers: [], landedRocks: [], editorModels: [] });
   assert.equal(idle.some((solid) => solid.kind === "prop"), false);
 
   setWinterCampActive(true);
   const live = collectMatchSolids({ map: "ice", bumpers: [], landedRocks: [], editorModels: [] });
-  const byId = new Map(live.map((solid) => [solid.id, solid]));
-  assert.equal(byId.get("wall-16a")?.radius, 1.15);
-  assert.equal(byId.get("wall-16b")?.radius, 1.15);
-  assert.equal(byId.get("wall-16c")?.radius, 1.15);
-  assert.equal(byId.get("wall-16"), undefined);
-  assert.equal(byId.get("tower-17a")?.radius, 2.05);
-  assert.equal(byId.get("tower-17b")?.radius, 2.05);
-  assert.equal(byId.get("tower-19")?.radius, 2.05);
-  assert.equal(byId.get("box-13")?.radius, 1.05);
-  assert.equal(byId.get("barrel-15")?.radius, 0.67);
-  assert.equal(byId.get("rail-12")?.radius, 1.19);
+  assert.equal(live.some((solid) => solid.kind === "prop"), false);
+  assert.equal(live.some((solid) => solid.id.startsWith("tower-")), false);
+  assert.equal(live.some((solid) => solid.id.startsWith("wall-")), false);
+  assert.equal(live.some((solid) => solid.id.startsWith("box-")), false);
+  for (const solid of live) {
+    const inner = Math.hypot(solid.x, solid.z) - solid.radius;
+    assert.ok(inner >= 11, `${solid.id} sits in the central play area`);
+  }
   setWinterCampActive(false);
 });
 
@@ -247,34 +244,6 @@ test("an editor-placed bumper collides at the bumper radius", () => {
 });
 
 const PR9_LAYOUTS: Record<string, { knockoffRadius: number; scenery: number; zones: { id: string; angle: number; distance: number; isSpawn: boolean }[] }> = {
-  grass: {
-    knockoffRadius: 15.5,
-    scenery: 18,
-    zones: [
-      { id: "spawn-0", angle: (350 * Math.PI) / 180, distance: 8, isSpawn: true },
-      { id: "spawn-1", angle: (105 * Math.PI) / 180, distance: 7, isSpawn: true },
-      { id: "spawn-2", angle: (190 * Math.PI) / 180, distance: 8, isSpawn: true },
-      { id: "spawn-3", angle: (270 * Math.PI) / 180, distance: 8.2, isSpawn: true },
-      { id: "score-0", angle: (45 * Math.PI) / 180, distance: 9.4, isSpawn: false },
-      { id: "score-1", angle: (150 * Math.PI) / 180, distance: 9.4, isSpawn: false },
-      { id: "score-2", angle: (230 * Math.PI) / 180, distance: 9.4, isSpawn: false },
-      { id: "score-3", angle: (315 * Math.PI) / 180, distance: 9.4, isSpawn: false },
-    ],
-  },
-  ice: {
-    knockoffRadius: 18.4,
-    scenery: 8,
-    zones: [
-      { id: "spawn-0", angle: 0, distance: 7.6, isSpawn: true },
-      { id: "spawn-1", angle: Math.PI / 2, distance: 7.6, isSpawn: true },
-      { id: "spawn-2", angle: Math.PI, distance: 7.6, isSpawn: true },
-      { id: "spawn-3", angle: Math.PI * 1.5, distance: 7.6, isSpawn: true },
-      { id: "score-0", angle: 0.35, distance: 11.2, isSpawn: false },
-      { id: "score-1", angle: 1.9, distance: 11.2, isSpawn: false },
-      { id: "score-2", angle: 3.5, distance: 11.2, isSpawn: false },
-      { id: "score-3", angle: 5.1, distance: 11.2, isSpawn: false },
-    ],
-  },
   lava: {
     knockoffRadius: 18.6,
     scenery: 6,
@@ -291,20 +260,6 @@ const PR9_LAYOUTS: Record<string, { knockoffRadius: number; scenery: number; zon
   },
   space: {
     knockoffRadius: 15.6,
-    scenery: 0,
-    zones: [
-      { id: "spawn-0", angle: 0, distance: 7.6, isSpawn: true },
-      { id: "spawn-1", angle: Math.PI / 2, distance: 7.6, isSpawn: true },
-      { id: "spawn-2", angle: Math.PI, distance: 7.6, isSpawn: true },
-      { id: "spawn-3", angle: Math.PI * 1.5, distance: 7.6, isSpawn: true },
-      { id: "score-0", angle: 0.35, distance: 11.2, isSpawn: false },
-      { id: "score-1", angle: 1.9, distance: 11.2, isSpawn: false },
-      { id: "score-2", angle: 3.5, distance: 11.2, isSpawn: false },
-      { id: "score-3", angle: 5.1, distance: 11.2, isSpawn: false },
-    ],
-  },
-  saturn: {
-    knockoffRadius: 15.5,
     scenery: 0,
     zones: [
       { id: "spawn-0", angle: 0, distance: 7.6, isSpawn: true },
@@ -368,4 +323,106 @@ test("pharaoh's tomb is a centred sandstone ring with matching rim blocks", () =
     assert.equal(laneIsClear(layout, spawn.angle), true, `${spawn.id} lane is blocked`);
   }
   assert.ok(countClearLanes(layout, 36) >= 6, "tomb should keep open lanes to the drop");
+});
+
+const ROUND_MAPS = ["grass", "ice", "saturn"] as const;
+
+test("meadow, frozen ring, and arabian nights are centred round arenas", () => {
+  for (const id of ROUND_MAPS) {
+    const layout = getMapLayout(id);
+    assert.ok(layout, id);
+    assert.equal(layout.floorRadius, 15.2, id);
+    assert.equal(layout.knockoffRadius, 15.5, id);
+    assert.deepEqual(knockoffOffsetForMap(id), { x: 0, y: 0, z: 0 });
+    const spawns = layout.zones.filter((zone) => zone.isSpawn);
+    const scores = layout.zones.filter((zone) => !zone.isSpawn);
+    assert.equal(spawns.length, 4, id);
+    assert.equal(scores.length, 4, id);
+    const spawnAngles = spawns.map((zone) => zone.angle).sort((a, b) => a - b);
+    for (let i = 0; i < spawnAngles.length; i++) {
+      const next = i === spawnAngles.length - 1 ? spawnAngles[0] + Math.PI * 2 : spawnAngles[i + 1];
+      assert.ok(Math.abs(next - spawnAngles[i] - Math.PI / 2) < 0.02, `${id} spawns are evenly spaced`);
+    }
+    for (const spawn of spawns) {
+      assert.equal(spawn.distance, 8, id);
+      assert.ok(spawn.distance + MARBLE_RADIUS < layout.floorRadius, `${id} ${spawn.id} leaves the floor`);
+      assert.equal(laneIsClear(layout, spawn.angle), true, `${id} ${spawn.id} lane is blocked`);
+    }
+    for (const score of scores) {
+      assert.equal(score.distance, 9.4, id);
+      assert.ok(score.distance + SCORE_ZONE_RADIUS <= layout.floorRadius, `${id} ${score.id} leaves the floor`);
+    }
+    for (const bumper of layout.bumpers) {
+      assert.ok(Math.hypot(bumper.x, bumper.z) + BUMPER_RADIUS < layout.floorRadius, `${id} ${bumper.id} leaves the floor`);
+    }
+    assert.ok(layout.scenery.length > 0, `${id} has rim obstacles`);
+    for (const solid of layout.scenery) {
+      const inner = Math.hypot(solid.x, solid.z) - solid.radius;
+      const outer = Math.hypot(solid.x, solid.z) + solid.radius;
+      assert.ok(inner >= 11, `${id} ${solid.id} sits in the central play area (${inner.toFixed(2)})`);
+      assert.ok(outer <= layout.knockoffRadius + 1e-6, `${id} ${solid.id} crosses the knockoff`);
+    }
+    assert.ok(countClearLanes(layout, 36) >= 6, `${id} should keep open lanes to the drop`);
+  }
+});
+
+function box(minX: number, minY: number, minZ: number, maxX: number, maxY: number, maxZ: number): Aabb {
+  return { minX, minY, minZ, maxX, maxY, maxZ };
+}
+
+test("ring placement hides the playfield slab and pushes props outside", () => {
+  const floor = box(-16, 0, -16, 16, 0.4, 16);
+  assert.equal(shouldHideRingPiece("PlazaFloor", floor), true);
+  assert.equal(shouldHideRingPiece("FrontSide_5", box(-80, 0, -80, 80, 40, 80)), true);
+  assert.equal(shouldHideRingPiece("BackSide_2", box(-800, -50, -800, 800, 400, 800)), true);
+  assert.equal(shouldHideRingPiece("FrontSide_20", box(0, 0, 0, 1, 1, 1)), true);
+  const pool = box(2, 0, 4, 7, 0.3, 9);
+  assert.equal(shouldHideRingPiece("Pool", pool), false);
+  assert.equal(ringPieceAction("box", box(10, 0, -1, 14, 2, 1), 10), "push");
+  assert.equal(ringPieceAction("ground", box(-30, 0, -30, 30, 4, 30), 0), "clip");
+  assert.equal(ringPieceAction("fir", box(20, 0, -2, 26, 8, 4), 20), "keep");
+  const pushed = translationToClear(pool, 16.35, 32);
+  const moved = {
+    minX: pool.minX + pushed.dx,
+    maxX: pool.maxX + pushed.dx,
+    minY: pool.minY,
+    maxY: pool.maxY,
+    minZ: pool.minZ + pushed.dz,
+    maxZ: pool.maxZ + pushed.dz,
+  };
+  const dx = moved.minX > 0 ? moved.minX : moved.maxX < 0 ? -moved.maxX : 0;
+  const dz = moved.minZ > 0 ? moved.minZ : moved.maxZ < 0 ? -moved.maxZ : 0;
+  assert.ok(Math.hypot(dx, dz) >= 16.35 - 1e-4, "pool stays inside the ring");
+  const outside = box(20, 0, -1, 24, 3, 1);
+  const stay = translationToClear(outside, 16.35, 32);
+  assert.deepEqual(stay, { dx: 0, dz: 0 });
+});
+
+test("meadow forest stays outside the knockoff and under the camera", () => {
+  const pieces = meadowForestPieces();
+  assert.ok(pieces.filter((piece) => piece.kind === "tree").length >= 10);
+  assert.ok(pieces.some((piece) => piece.kind === "bush"));
+  const near = pieces.filter((piece) => Math.hypot(piece.x, piece.z) < 40).length;
+  const far = pieces.filter((piece) => Math.hypot(piece.x, piece.z) >= 40).length;
+  assert.ok(far > near, "the forest thickens toward the horizon");
+  for (const piece of pieces) {
+    const dist = Math.hypot(piece.x, piece.z);
+    const reach = piece.canopy;
+    assert.ok(dist - reach > 15.5, `${piece.id} crosses the knockoff`);
+    assert.ok(dist + reach < MEADOW_BACKDROP_RADIUS - 1, `${piece.id} pokes through the backdrop`);
+    const top = forestTopY(piece);
+    assert.equal(foliageBlocksRingView(piece.x, top, piece.z), false, `${piece.id} covers the grass`);
+  }
+});
+
+test("meadow canopies must stay under the gameplay camera", () => {
+  const cam = gameplayCameras()[0];
+  const elevation = Math.atan2(cam.y - 0.35, Math.hypot(cam.x - cam.px, cam.z - cam.pz)) * (180 / Math.PI);
+  assert.ok(Math.abs(elevation - ARENA_PITCH_DEG) < 1.5, `camera sits at ${elevation.toFixed(1)} degrees`);
+  assert.equal(ARENA_PITCH_DEG, 53);
+  assert.equal(ARENA_FOV_DEG, 44);
+  assert.ok(cam.z > 0, "the match camera stays on the +Z side");
+  assert.equal(foliageBlocksRingView(0, 14, 17), true, "a tall crown just outside the ring covers the grass");
+  assert.equal(foliageBlocksRingView(0, 0.8, 18), false, "a low shrub stays under the sightline");
+  assert.equal(foliageBlocksRingView(0, 6, 42), false, "a crown well past the camera frames the far side");
 });

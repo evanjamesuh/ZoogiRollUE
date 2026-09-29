@@ -300,7 +300,7 @@ function ArabianLamps() {
   return (
     <group>
       {LAMP_ANGLES.map((angle, i) => {
-        const distance = 20.5;
+        const distance = 17.4;
         const x = Math.cos(angle) * distance;
         const z = Math.sin(angle) * distance;
         return (

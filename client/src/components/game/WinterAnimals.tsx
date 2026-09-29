@@ -17,13 +17,19 @@ interface AnimalData {
 
 const ICE_SKATE_RADIUS = ARENA_RADIUS - 2;
 
+function outsideRing(angleDeg: number, distance: number, y = 0): [number, number, number] {
+  const angle = (angleDeg * Math.PI) / 180;
+  return [Math.cos(angle) * distance, y, Math.sin(angle) * distance];
+}
+
+/** Camp animals stand outside the 15.5 knockoff, around the snowy rim. */
 const ANIMAL_PLACEMENTS: AnimalData[] = [
-  { id: "fox-0", type: "fox", modelPath: "/models/winter/fox.glb", position: [-(ARENA_RADIUS + 6), 0, 5], scale: 1.5, rotationY: Math.PI / 6 },
-  { id: "polar-bear-0", type: "polar_bear", modelPath: "/models/winter/polar_bear.glb", position: [0, 0, ARENA_RADIUS + 6], scale: 1.8, rotationY: Math.PI },
-  { id: "walrus-0", type: "walrus", modelPath: "/models/winter/walrus.glb", position: [ARENA_RADIUS + 5, 0, 8], scale: 1.4, rotationY: -Math.PI / 2 },
-  { id: "fish-0", type: "fish", modelPath: "/models/winter/fish_1.glb", position: [-(ARENA_RADIUS + 3), 0.3, -7], scale: 0.8, rotationY: Math.PI / 3 },
-  { id: "fish-1", type: "fish", modelPath: "/models/winter/fish_2.glb", position: [ARENA_RADIUS + 6, 0.3, -3], scale: 0.7, rotationY: -Math.PI / 4 },
-  { id: "fish-2", type: "fish", modelPath: "/models/winter/fish_1.glb", position: [3, 0.3, -(ARENA_RADIUS + 5)], scale: 0.9, rotationY: Math.PI / 2 },
+  { id: "fox-0", type: "fox", modelPath: "/models/winter/fox.glb", position: outsideRing(210, 21.5), scale: 1.5, rotationY: Math.PI / 6 },
+  { id: "polar-bear-0", type: "polar_bear", modelPath: "/models/winter/polar_bear.glb", position: outsideRing(80, 22.5), scale: 1.8, rotationY: Math.PI },
+  { id: "walrus-0", type: "walrus", modelPath: "/models/winter/walrus.glb", position: outsideRing(10, 21), scale: 1.4, rotationY: -Math.PI / 2 },
+  { id: "fish-0", type: "fish", modelPath: "/models/winter/fish_1.glb", position: outsideRing(140, 20.2, 0.3), scale: 0.8, rotationY: Math.PI / 3 },
+  { id: "fish-1", type: "fish", modelPath: "/models/winter/fish_2.glb", position: outsideRing(300, 20.5, 0.3), scale: 0.7, rotationY: -Math.PI / 4 },
+  { id: "fish-2", type: "fish", modelPath: "/models/winter/fish_1.glb", position: outsideRing(250, 19.8, 0.3), scale: 0.9, rotationY: Math.PI / 2 },
 ];
 
 function getRandomIceTarget(): [number, number] {

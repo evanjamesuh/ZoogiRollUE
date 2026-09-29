@@ -225,6 +225,7 @@ export function Game() {
   const comicMap = selectedMap === "lava" || selectedMap === "space" || selectedMap === "saturn" || selectedMap === "tomb";
   const background =
     selectedMap === "neon" ? "#070814" :
+    selectedMap === "grass" ? "#7ecbf5" :
     selectedMap === "ice" ? "#87CEEB" :
     selectedMap === "lava" ? "#1a0c18" :
     selectedMap === "space" ? "#070414" :
@@ -254,13 +255,14 @@ export function Game() {
         <color attach="background" args={[background]} />
         
         {selectedMap === "ice" && <fog attach="fog" args={['#c8e6f8', 60, 150]} />}
+        {selectedMap === "grass" && <fog attach="fog" args={['#d7ebf8', 58, 390]} />}
         
         <OptionalSceneBoundary>
           <Suspense fallback={null}>
             {selectedMap === "ice" && <GradientSky />}
             {comicMap && <MapAtmosphere map={selectedMap} />}
-            {!comicMap && selectedMap !== "ice" && selectedMap !== "neon" && <Sky sunPosition={meadowSun} />}
-            {!comicMap && selectedMap !== "ice" && selectedMap !== "neon" && <Environment preset="sunset" background={false} />}
+            {!comicMap && selectedMap !== "ice" && selectedMap !== "grass" && selectedMap !== "neon" && <Sky sunPosition={meadowSun} />}
+            {!comicMap && selectedMap !== "ice" && selectedMap !== "grass" && selectedMap !== "neon" && <Environment preset="sunset" background={false} />}
           </Suspense>
         </OptionalSceneBoundary>
 
