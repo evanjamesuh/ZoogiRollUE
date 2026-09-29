@@ -760,13 +760,6 @@ function collectUnits(root: THREE.Object3D): THREE.Object3D[] {
   return units;
 }
 
-/**
- * Palace shells that still cover the outer plaza after the ring clip.
- * FrontSide_13 keeps an inner radius of about 15.56 and a top near y=2.23,
- * which blocks southwest floor points such as (-14.5, 0) from the 53° camera.
- */
-const ARABIAN_FLOOR_OCCLUDERS = new Set(["FrontSide_13"]);
-
 function arrangeRing(root: THREE.Object3D, map: "grass" | "ice" | "saturn"): { hid: number; pushed: number; clipped: number; kept: number } | null {
   if (root.userData.ringArranged) return null;
   root.userData.ringArranged = true;
@@ -782,11 +775,6 @@ function arrangeRing(root: THREE.Object3D, map: "grass" | "ice" | "saturn"): { h
   });
 
   for (const unit of collectUnits(root)) {
-    if (map === "saturn" && ARABIAN_FLOOR_OCCLUDERS.has(unit.name)) {
-      unit.visible = false;
-      hid += 1;
-      continue;
-    }
     if (ancestorHidden(unit, root)) continue;
     const measured = measureUnit(unit);
     if (!measured) continue;
