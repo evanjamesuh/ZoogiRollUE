@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useFrame, useThree } from "@react-three/fiber";
+import { useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { BUMPER_RADIUS } from "@/lib/arenaColliders";
@@ -524,42 +524,98 @@ const STANDS: Array<{ pos: [number, number, number]; size: [number, number, numb
 
 type CrowdLight = { x: number; y: number; z: number; scale: number; phase: number; color: THREE.Color };
 
+function crowdHash(n: number): number {
+  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+/**
+ * Points of light in the seats. They stay outside the floor and do not
+ * light the stand surfaces. Left is cyan, right is magenta, with a few
+ * warm phone lights mixed in.
+ */
 function crowdLights(): CrowdLight[] {
   const lights: CrowdLight[] = [];
   const cyan = new THREE.Color("#7ef6ff");
   const magenta = new THREE.Color("#ff6ad4");
-  const phone = new THREE.Color("#ffe6b0");
-  const row = (z: number, y: number, x0: number, x1: number, step: number) => {
-    let i = 0;
-    for (let x = x0; x <= x1 + 0.001; x += step) {
-      const n = Math.sin(x * 8.3 + z * 5.1);
-      const side = x + n * 0.05;
-      const warm = Math.abs(Math.sin(x * 19.4 + z * 7.2)) > 0.86;
-      const color = warm ? phone : side < 0 ? cyan : magenta;
-      lights.push({
-        x: side,
-        y: y + (Math.cos(x * 5.4 + z) * 0.5 + 0.5) * 0.1,
-        z: z + n * 0.045,
-        scale: 0.62 + (Math.sin(x * 3.1 + i) * 0.5 + 0.5) * 0.7,
-        phase: (i * 1.37 + z * 2.2) % (Math.PI * 2),
-        color,
-      });
-      i += 1;
+  const phone = new THREE.Color("#ffd7a1");
+  const push = (x: number, y: number, z: number) => {
+    const salt = lights.length * 1.17 + x * 3.1 + y * 5.7 + z * 8.3;
+    const jitter = crowdHash(salt + 2);
+    lights.push({
+      x: x + (jitter - 0.5) * 0.05,
+      y: y + (crowdHash(salt + 4) - 0.5) * 0.03,
+      z: z + (crowdHash(salt + 6) - 0.5) * 0.04,
+      scale: 0.8 + crowdHash(salt + 8) * 0.28,
+      phase: crowdHash(salt + 11) * Math.PI * 2,
+      color: crowdHash(salt + 15) < 0.08 ? phone : x < 0 ? cyan : magenta,
+    });
+  };
+  const gridXZ = (y: number, x0: number, x1: number, z0: number, z1: number, step: number) => {
+    for (let z = Math.min(z0, z1); z <= Math.max(z0, z1) + 0.001; z += step) {
+      for (let x = x0; x <= x1 + 0.001; x += step) {
+        if (Math.abs(x) < 0.18) continue;
+        push(x, y, z);
+      }
     }
   };
-  // Seats on the far tiers only, above the rail so the court stays clear.
-  row(-9.22, 1.05, -7.6, 7.6, 0.32);
-  row(-9.42, 1.14, -7.3, 7.3, 0.34);
-  row(-9.95, 1.68, -8.1, 8.1, 0.3);
-  row(-10.16, 1.78, -7.8, 7.8, 0.32);
-  row(-10.7, 2.32, -8.3, 8.3, 0.3);
-  row(-10.92, 2.46, -7.6, 7.6, 0.34);
+  const gridXY = (z: number, x0: number, x1: number, y0: number, y1: number, step: number) => {
+    for (let y = y0; y <= y1 + 0.001; y += step) {
+      for (let x = x0; x <= x1 + 0.001; x += step) {
+        if (Math.abs(x) < 0.18) continue;
+        push(x, y, z);
+      }
+    }
+  };
+  const gridYZ = (x: number, y0: number, y1: number, z0: number, z1: number, step: number) => {
+    for (let z = Math.min(z0, z1); z <= Math.max(z0, z1) + 0.001; z += step) {
+      for (let y = y0; y <= y1 + 0.001; y += step) {
+        push(x, y, z);
+      }
+    }
+  };
+
+  const farStep = 0.26;
+  const standStep = 0.32;
+  // Sit just proud of the surface so the point reads in the seat and the
+  // glossy stand underneath stays dark.
+  const clear = 0.08;
+  const farTiers = [
+    { z: -9.22, y: 0.58, h: 0.82, depth: 0.7, width: 16.6 },
+    { z: -10.02, y: 1.16, h: 0.96, depth: 0.78, width: 17.8 },
+    { z: -10.86, y: 1.74, h: 1.08, depth: 0.84, width: 18.8 },
+  ];
+  for (const tier of farTiers) {
+    const half = tier.width / 2 - 0.35;
+    const top = tier.y + tier.h / 2 + clear;
+    const front = tier.z + tier.depth / 2;
+    const back = tier.z - tier.depth / 2;
+    gridXZ(top, -half, half, back + 0.1, front - 0.06, farStep);
+    gridXY(front + clear, -half, half, tier.y - tier.h / 2 + 0.12, tier.y + tier.h / 2 - 0.04, farStep);
+  }
+
+  for (const stand of STANDS) {
+    const [cx, cy, cz] = stand.pos;
+    const [sx, sy, sz] = stand.size;
+    const top = cy + sy / 2 + clear;
+    gridXZ(top, cx - sx / 2 + 0.12, cx + sx / 2 - 0.12, cz - sz / 2 + 0.1, cz + sz / 2 - 0.1, standStep);
+    if (Math.abs(cx) >= Math.abs(cz)) {
+      const faceX = cx - Math.sign(cx) * (sx / 2 + clear);
+      if (Math.abs(faceX) < 12.25) continue;
+      gridYZ(faceX, cy - sy / 2 + 0.1, cy + sy / 2 - 0.04, cz - sz / 2 + 0.12, cz + sz / 2 - 0.12, standStep);
+    } else {
+      const faceZ = cz - Math.sign(cz) * (sz / 2 + clear);
+      if (Math.abs(faceZ) < 8.25) continue;
+      gridXY(faceZ, cx - sx / 2 + 0.12, cx + sx / 2 - 0.12, cy - sy / 2 + 0.1, cy + sy / 2 - 0.04, standStep);
+    }
+  }
+
   return lights;
 }
 
 function CrowdLights() {
   const meshRef = useRef<THREE.InstancedMesh>(null);
-  const materialRef = useRef<THREE.ShaderMaterial>(null);
+  const uniforms = useMemo(() => ({ uTime: { value: 0 } }), []);
   const spots = useMemo(() => crowdLights(), []);
 
   useLayoutEffect(() => {
@@ -570,6 +626,7 @@ function CrowdLights() {
     spots.forEach((spot, i) => {
       dummy.position.set(spot.x, spot.y, spot.z);
       dummy.scale.setScalar(spot.scale);
+      dummy.rotation.set(0, 0, 0);
       dummy.updateMatrix();
       mesh.setMatrixAt(i, dummy.matrix);
       mesh.setColorAt(i, spot.color);
@@ -578,22 +635,28 @@ function CrowdLights() {
     mesh.instanceMatrix.needsUpdate = true;
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     mesh.geometry.setAttribute("phase", new THREE.InstancedBufferAttribute(phases, 1));
+    mesh.raycast = () => {};
+    mesh.count = spots.length;
   }, [spots]);
 
-  useFrame((state) => {
-    const material = materialRef.current;
-    if (material) material.uniforms.uTime.value = state.clock.elapsedTime;
-  });
-
   return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, spots.length]} frustumCulled={false}>
-      <sphereGeometry args={[0.062, 6, 5]} />
+    <instancedMesh
+      ref={meshRef}
+      args={[undefined, undefined, spots.length]}
+      frustumCulled={false}
+      renderOrder={2}
+      onBeforeRender={(_renderer, _scene, _camera, _geometry, material) => {
+        const mat = material as THREE.ShaderMaterial;
+        if (mat?.uniforms?.uTime) mat.uniforms.uTime.value = performance.now() * 0.001;
+      }}
+    >
+      <sphereGeometry args={[0.075, 6, 5]} />
       <shaderMaterial
-        ref={materialRef}
         toneMapped={false}
+        transparent
         depthWrite={false}
         blending={THREE.AdditiveBlending}
-        uniforms={{ uTime: { value: 0 } }}
+        uniforms={uniforms}
         vertexShader={`
           attribute float phase;
           varying vec3 vColor;
@@ -610,8 +673,9 @@ function CrowdLights() {
           varying vec3 vColor;
           varying float vPhase;
           void main() {
-            float twinkle = 0.72 + 0.28 * sin(uTime * 1.45 + vPhase);
-            gl_FragColor = vec4(vColor * twinkle * 2.05, 1.0);
+            float pulse = 0.5 + 0.5 * sin(uTime * 1.35 + vPhase);
+            float twinkle = 0.62 + 0.38 * pulse;
+            gl_FragColor = vec4(vColor * twinkle * 1.85, 1.0);
           }
         `}
       />
