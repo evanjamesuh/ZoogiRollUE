@@ -3,16 +3,46 @@ import { useLayoutEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { getSnowmanPositions } from "@/lib/arenaConstants";
 import { BUMPER_RADIUS, getIcePatches, getMapLayout } from "@/lib/arenaColliders";
-import { ROUND_KNOCKOFF_RADIUS } from "@/lib/roundRim";
+import { RING_VISUAL_LIMIT } from "@/lib/ringPlacement";
+import { ROUND_FLOOR_RADIUS, ROUND_KNOCKOFF_RADIUS } from "@/lib/roundRim";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 
 /**
  * Painted Frozen Ring cues. The knockout is the outer edge of the amber band
- * at ROUND_KNOCKOFF_RADIUS (15.5). Paint inside that radius is still in.
- * Paint outside it is the drop, so the line you see is the line that counts.
+ * at ROUND_KNOCKOFF_RADIUS. Paint inside that radius is still in. Paint
+ * outside it is the drop, so the line you see is the line that counts.
+ *
+ * Horizontal sizes are shares of the live rink, patch, snowman, and bumper
+ * values. A later uniform scale of those sources moves this paint with them.
  */
 
 const KNOCK = ROUND_KNOCKOFF_RADIUS;
+const FLOOR = ROUND_FLOOR_RADIUS;
+/** Floor radius to knockout. Amber fills this gap exactly. */
+const LIP = KNOCK - FLOOR;
+
+/** Navy starts where the shared snow band starts (14.7 on today's rink). */
+const NAVY_INNER = FLOOR - LIP * (5 / 3);
+/** Cyan is the inner part of that same lip gap. */
+const CYAN_INNER = FLOOR - LIP * 0.6;
+/** Dark drop past the line. 4% of the knockout radius (0.62 on today's rink). */
+const INK_OUTER = KNOCK * 1.04;
+
+/**
+ * Even cosmetic berm. 1.1× the knockout is the middle of the old 16.7–17.4
+ * mounds. Mound and tube sizes are shares of that distance.
+ */
+const SNOW_LIP_SHARE = 1.1;
+/** Mound radius and torus tube as shares of the 17.05 berm. */
+const SNOW_MOUND_SHARE = 0.9 / 17.05;
+const SNOW_TUBE_SHARE = 0.42 / 17.05;
+const SNOW_LIP_DIST = Math.max(KNOCK * SNOW_LIP_SHARE, RING_VISUAL_LIMIT + KNOCK * SNOW_LIP_SHARE * SNOW_MOUND_SHARE);
+const SNOW_MOUND = SNOW_LIP_DIST * SNOW_MOUND_SHARE;
+const SNOW_TUBE = SNOW_LIP_DIST * SNOW_TUBE_SHARE;
+
+/** Patch coast, as shares of each patch radius (0.72 and 0.28 on a radius-3 patch). */
+const COAST_NAVY_SHARE = 0.72 / 3;
+const COAST_CYAN_SHARE = 0.28 / 3;
 
 const NAVY = "#08325c";
 const CYAN = "#00e4ff";
@@ -108,8 +138,8 @@ function FootDiscs({
 function SymmetricSnowLip() {
   const ref = useRef<THREE.InstancedMesh>(null);
   const count = 48;
-  const dist = 17.05;
-  const scale = 0.9;
+  const dist = SNOW_LIP_DIST;
+  const scale = SNOW_MOUND;
   const snow = useMemo(() => new THREE.MeshStandardMaterial({ color: SNOW, roughness: 0.95, metalness: 0 }), []);
 
   useLayoutEffect(() => {
@@ -128,7 +158,7 @@ function SymmetricSnowLip() {
   return (
     <group>
       <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.18, 0]} material={snow}>
-        <torusGeometry args={[dist, 0.42, 8, 72]} />
+        <torusGeometry args={[dist, SNOW_TUBE, 8, 72]} />
       </mesh>
       <instancedMesh ref={ref} args={[undefined, undefined, count]} material={snow} frustumCulled={false}>
         <sphereGeometry args={[1, 10, 8]} />
@@ -149,10 +179,10 @@ function KnockoutEdge() {
 
   const bands = useMemo(
     () => ({
-      navy: ringGeometry([{ x: 0, z: 0, inner: 14.7, outer: 15.02 }], 160),
-      cyan: ringGeometry([{ x: 0, z: 0, inner: 15.02, outer: 15.2 }], 160),
-      amber: ringGeometry([{ x: 0, z: 0, inner: 15.2, outer: KNOCK }], 160),
-      ink: ringGeometry([{ x: 0, z: 0, inner: KNOCK, outer: KNOCK + 0.62 }], 128),
+      navy: ringGeometry([{ x: 0, z: 0, inner: NAVY_INNER, outer: CYAN_INNER }], 160),
+      cyan: ringGeometry([{ x: 0, z: 0, inner: CYAN_INNER, outer: FLOOR }], 160),
+      amber: ringGeometry([{ x: 0, z: 0, inner: FLOOR, outer: KNOCK }], 160),
+      ink: ringGeometry([{ x: 0, z: 0, inner: KNOCK, outer: INK_OUTER }], 128),
     }),
     [],
   );
@@ -222,13 +252,13 @@ export function FrozenRinkMarkings() {
     const coastNavy = patches.map((patch) => ({
       x: patch.x,
       z: patch.z,
-      inner: Math.max(0.2, patch.radius - 0.72),
-      outer: patch.radius - 0.28,
+      inner: patch.radius * (1 - COAST_NAVY_SHARE),
+      outer: patch.radius * (1 - COAST_CYAN_SHARE),
     }));
     const coastCyan = patches.map((patch) => ({
       x: patch.x,
       z: patch.z,
-      inner: patch.radius - 0.28,
+      inner: patch.radius * (1 - COAST_CYAN_SHARE),
       outer: patch.radius,
     }));
     return {
