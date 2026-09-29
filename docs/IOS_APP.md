@@ -27,9 +27,24 @@ Until you enroll, you can still look at the Xcode project. You cannot install th
 
 You need a Mac with Xcode from the Mac App Store. The free Xcode is enough. The $99 is the Apple Developer Program, not Xcode.
 
+The character models, portraits, and stage pictures are stored with Git LFS. On the Mac, or on a cloud Mac, pull those files before you pack the app:
+
+```sh
+git lfs pull
+```
+
+If you skip that, the app still builds, but it ships without the models. A match would show plain marbles instead of the Zoogi.
+
+A check that does not need the art, such as `npm run check` or `npm test`, can skip the download:
+
+```sh
+GIT_LFS_SKIP_SMUDGE=1 git pull
+```
+
 On that Mac, from this project folder:
 
 ```sh
+git lfs pull
 npm install
 npm run build:ios
 npx cap open ios
@@ -104,6 +119,8 @@ Apple also reviews the binary. Common notes for a game like this: the app must d
 
 | Command | What it does |
 | --- | --- |
+| `git lfs pull` | Download the models and portraits before an iPhone build |
+| `GIT_LFS_SKIP_SMUDGE=1` | Skip that download for a check that does not need the art |
 | `npm run build:ios` | Pack the game for the phone and copy it into Xcode |
 | `npm run cap:sync` | Refresh Xcode after a bundle id or icon change |
 | `npm run dev` | Play on this PC, same as before |
