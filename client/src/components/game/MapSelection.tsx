@@ -34,6 +34,7 @@ const DEFAULT_ASSETS: AssetData = {
     space: null,
     saturn: null,
     tomb: null,
+    neon: null,
   },
   previewVideos: {
     grass: "/videos/meadow_preview.mp4",
@@ -42,6 +43,7 @@ const DEFAULT_ASSETS: AssetData = {
     space: null,
     saturn: null,
     tomb: null,
+    neon: null,
   },
 };
 

@@ -4,6 +4,18 @@ import { OrbitControls } from "@react-three/drei";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { useGameFeel } from "@/lib/stores/useGameFeel";
 import { useCameraEffects } from "@/lib/stores/useCameraEffects";
+import {
+  ARENA_FOV_DEG,
+  ARENA_PITCH,
+  actionBounds,
+  cameraOffset,
+  clampDistance,
+  damp,
+  decayTrauma,
+  fitDistance,
+  getTrauma,
+  smoothShake,
+} from "@/lib/cameraRig";
 import * as THREE from "three";
 
 export function DeveloperCamera() {
@@ -42,7 +54,7 @@ export function DeveloperCamera() {
 }
 
 export function GameCamera() {
-  const { camera, gl } = useThree();
+  const { camera, gl, size } = useThree();
   const playerEntity = useZoogiGame((state) => state.playerEntity);
   const enemies = useZoogiGame((state) => state.enemies);
   const birdsEyeView = useZoogiGame((state) => state.birdsEyeView);
@@ -58,18 +70,17 @@ export function GameCamera() {
   const currentLocalPlayerIndex = useZoogiGame((state) => state.currentLocalPlayerIndex);
   const isPlayerTurn = useZoogiGame((state) => state.isPlayerTurn);
   const turnIndex = useZoogiGame((state) => state.turnIndex);
-  const lastLaunchTime = useZoogiGame((state) => state.lastLaunchTime);
   const cinematicArcMode = useZoogiGame((state) => state.cinematicArcMode);
   const arcPeakEffectActive = useZoogiGame((state) => state.arcPeakEffectActive);
   const arcPeakTargetPosition = useZoogiGame((state) => state.arcPeakTargetPosition);
   const isAiming = useZoogiGame((state) => state.isAiming);
+  const selectedMap = useZoogiGame((state) => state.selectedMap);
   const cameraPositionRef = useRef(new THREE.Vector3(0, 18, 22));
   const lookAtRef = useRef(new THREE.Vector3(0, 0, 0));
   const cinematicAngleRef = useRef(0);
   
-  const shakeRef = useRef({ intensity: 0, decay: 0.9 });
-  const prevSpeedsRef = useRef<Map<string, number>>(new Map());
-  const zoomRef = useRef(1);
+  const arenaSnapRef = useRef(false);
+  const arenaViewRef = useRef(true);
   
   const [orbitAngle, setOrbitAngle] = useState(0);
   const BIRDS_EYE_INITIAL_ZOOM = 70;
@@ -95,6 +106,8 @@ export function GameCamera() {
     };
   }, [orbitAngle]);
 
+  arenaViewRef.current = !birdsEyeView && !firstPersonView && !overShoulderView && !launchPadView && !developerCamera;
+
   useEffect(() => {
     const canvas = gl.domElement;
     
@@ -117,6 +130,7 @@ export function GameCamera() {
     const handlePointerMove = (e: PointerEvent) => {
       if (!isDraggingRef.current || !dragStartedOnCanvasRef.current) return;
       
+      if (arenaViewRef.current) return;
       const deltaX = e.clientX - lastXRef.current;
       lastXRef.current = e.clientX;
       
@@ -155,6 +169,7 @@ export function GameCamera() {
       if (!isDraggingRef.current || !dragStartedOnCanvasRef.current) return;
       
       if (e.touches.length === 1) {
+        if (arenaViewRef.current) return;
         const deltaX = e.touches[0].clientX - lastXRef.current;
         lastXRef.current = e.touches[0].clientX;
         
@@ -196,7 +211,7 @@ export function GameCamera() {
     };
   }, [gl, birdsEyeView, birdsEyeZoom]);
 
-  useFrame((_state, delta) => {
+  useFrame((state, delta) => {
     if (developerCamera) return;
     
     // Handle map editor mode with no player - use static camera based on view mode
@@ -249,32 +264,7 @@ export function GameCamera() {
 
     const playerPos = targetEntity.position;
     const playerVelocity = targetEntity.velocity;
-    const playerSpeed = Math.sqrt(playerVelocity[0] ** 2 + playerVelocity[2] ** 2);
-    
-    const allEntities = [
-      { id: "player", speed: playerSpeed },
-      ...enemies.map(e => ({ 
-        id: e.id, 
-        speed: Math.sqrt(e.velocity[0] ** 2 + e.velocity[2] ** 2) 
-      }))
-    ];
-    
-    let maxSpeed = playerSpeed;
-    allEntities.forEach(({ id, speed }) => {
-      if (speed > maxSpeed) maxSpeed = speed;
-      const prevSpeed = prevSpeedsRef.current.get(id) || 0;
-      const speedDrop = prevSpeed - speed;
-      const timeSinceLaunch = Date.now() - lastLaunchTime;
-      const LAUNCH_GRACE_PERIOD = 500;
-      if (speedDrop > 0.15 && prevSpeed > 0.25 && isPlayerTurn && timeSinceLaunch > LAUNCH_GRACE_PERIOD) {
-        const impactForce = speedDrop;
-        shakeRef.current.intensity = Math.max(shakeRef.current.intensity, Math.min(0.6, impactForce * 0.8));
-      }
-      prevSpeedsRef.current.set(id, speed);
-    });
-    
-    shakeRef.current.intensity *= shakeRef.current.decay;
-    if (shakeRef.current.intensity < 0.01) shakeRef.current.intensity = 0;
+    decayTrauma(Math.min(delta, 0.05));
     
     const gameFeel = useGameFeel.getState();
     gameFeel.update();
@@ -295,12 +285,20 @@ export function GameCamera() {
     }
     
     const abilityShake = cameraEffects.computedShake;
-    const totalShakeIntensity = Math.max(shakeRef.current.intensity, gameFeelShake, abilityShake);
+    // Small bumps stay still. Only a real hit, or an ability that asks for it, shakes.
+    const punch = Math.max(getTrauma(), gameFeelShake > 0.35 ? gameFeelShake : 0, abilityShake > 0.35 ? abilityShake : 0);
     
     const abilityZoom = cameraEffects.computedZoom;
-    const targetZoom = maxSpeed > 0.3 ? 0.92 + abilityZoom * 0.02 : 1 + abilityZoom * 0.02;
-    zoomRef.current += (targetZoom - zoomRef.current) * 0.05;
+    const zoomNudge = 1 + Math.max(-0.12, Math.min(0.18, abilityZoom * 0.01));
     
+    if (!arenaViewRef.current) {
+      const persp = camera as THREE.PerspectiveCamera;
+      if (persp.isPerspectiveCamera && Math.abs(persp.fov - 50) > 0.1) {
+        persp.fov = 50;
+        persp.updateProjectionMatrix();
+      }
+    }
+
     let idealCameraPos: THREE.Vector3;
     let idealLookAt: THREE.Vector3;
     
@@ -435,20 +433,31 @@ export function GameCamera() {
         );
       }
     } else {
-      const baseDistance = 16;
-      const distance = baseDistance * zoomRef.current;
-      const height = 18 * zoomRef.current;
-      
-      idealCameraPos = new THREE.Vector3(
-        playerPos[0] + Math.sin(orbitAngle) * distance,
-        height,
-        playerPos[2] + Math.cos(orbitAngle) * distance
+      const persp = camera as THREE.PerspectiveCamera;
+      if (persp.isPerspectiveCamera && Math.abs(persp.fov - ARENA_FOV_DEG) > 0.1) {
+        persp.fov = ARENA_FOV_DEG;
+        persp.updateProjectionMatrix();
+      }
+      const points = [
+        { x: playerEntity.position[0], z: playerEntity.position[2] },
+        ...enemies.map((enemy) => ({ x: enemy.position[0], z: enemy.position[2] })),
+      ];
+      const aspect = size.width / Math.max(1, size.height);
+      const neonCourt = selectedMap === "neon";
+      // Night Circuit sits a little farther back and aims slightly toward the
+      // far bowl so the stands and skyline clear the top of the frame.
+      const pad = (aspect < 0.9 ? 1.3 : 2.6) + (neonCourt ? 1.6 : 0);
+      const bounds = actionBounds(points, 0);
+      const lookX = ((bounds.minX + bounds.maxX) / 2) * 0.7;
+      const lookZ = ((bounds.minZ + bounds.maxZ) / 2) * 0.7 + (neonCourt ? -3.5 : 0);
+      const distance = clampDistance(
+        fitDistance(bounds, ARENA_PITCH, ARENA_FOV_DEG, aspect, pad) * zoomNudge,
+        neonCourt ? 19 : 13.5,
+        34,
       );
-      idealLookAt = new THREE.Vector3(
-        playerPos[0],
-        0,
-        playerPos[2]
-      );
+      const offset = cameraOffset(distance, ARENA_PITCH);
+      idealCameraPos = new THREE.Vector3(lookX + offset.x, offset.y, lookZ + offset.z);
+      idealLookAt = new THREE.Vector3(lookX, 0.35, lookZ);
     }
 
     // Skip all camera effects in birds eye view - pure observation mode
@@ -481,22 +490,31 @@ export function GameCamera() {
       camera.position.copy(idealCameraPos);
       camera.lookAt(idealLookAt);
     } else {
-      // Use faster lerp for arc peak effect (mid-high speed), normal speed otherwise
-      const lerpSpeed = arcPeakEffectActive ? 0.18 : 0.08;
-      cameraPositionRef.current.lerp(idealCameraPos, lerpSpeed);
-      lookAtRef.current.lerp(idealLookAt, lerpSpeed);
+      const dt = Math.min(Math.max(delta, 0), 0.05);
+      const arenaView = arenaViewRef.current;
+      if (arenaView && !arenaSnapRef.current) {
+        cameraPositionRef.current.copy(idealCameraPos);
+        lookAtRef.current.copy(idealLookAt);
+        arenaSnapRef.current = true;
+      } else {
+        const lambda = arcPeakEffectActive ? 8 : arenaView ? 3.4 : 5;
+        cameraPositionRef.current.set(
+          damp(cameraPositionRef.current.x, idealCameraPos.x, lambda, dt),
+          damp(cameraPositionRef.current.y, idealCameraPos.y, lambda, dt),
+          damp(cameraPositionRef.current.z, idealCameraPos.z, lambda, dt),
+        );
+        lookAtRef.current.set(
+          damp(lookAtRef.current.x, idealLookAt.x, lambda, dt),
+          damp(lookAtRef.current.y, idealLookAt.y, lambda, dt),
+          damp(lookAtRef.current.z, idealLookAt.z, lambda, dt),
+        );
+      }
 
-      const shakeMultiplier = 2.5;
-      const shakeOffset = new THREE.Vector3(
-        (Math.random() - 0.5) * totalShakeIntensity * shakeMultiplier,
-        (Math.random() - 0.5) * totalShakeIntensity * shakeMultiplier * 0.5,
-        (Math.random() - 0.5) * totalShakeIntensity * shakeMultiplier
-      );
-
-      camera.position.copy(cameraPositionRef.current).add(shakeOffset);
+      const shake = smoothShake(Math.min(1, punch), state.clock.elapsedTime);
+      camera.position.copy(cameraPositionRef.current).add(new THREE.Vector3(shake.x, shake.y, shake.z));
       camera.lookAt(lookAtRef.current);
-      
-      const abilityTilt = cameraEffects.computedTilt;
+
+      const abilityTilt = arenaView ? 0 : cameraEffects.computedTilt;
       if (abilityTilt !== 0) {
         camera.rotateZ(abilityTilt * Math.PI / 180 * 0.3);
       }

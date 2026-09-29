@@ -32,7 +32,8 @@ function BumperModel() {
 }
 
 export function PinballBumpers() {
-  const { pinballBumpers } = useZoogiGame();
+  const { pinballBumpers, selectedMap } = useZoogiGame();
+  if (selectedMap === "neon") return null;
 
   return (
     <group>

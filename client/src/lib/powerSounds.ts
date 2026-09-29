@@ -311,6 +311,145 @@ export function playStunZap(): void {
   });
 }
 
+/** Metallic ping when Lars arms Ricochet, and a brighter double ping on the bounce. */
+export function playRicochetPing(kind: "arm" | "hit" = "arm"): void {
+  void startSound((ctx, t) => {
+    const out = master(ctx, 0.38);
+    const base = kind === "hit" ? 1320 : 880;
+    const strikes = kind === "hit" ? [0, 0.07] : [0];
+    strikes.forEach((offset, index) => {
+      const start = t + offset;
+      const freq = base * (index === 0 ? 1 : 0.84);
+      tone(
+        ctx,
+        out,
+        "sine",
+        (osc, when) => {
+          osc.frequency.setValueAtTime(freq, when);
+          osc.frequency.exponentialRampToValueAtTime(freq * 0.72, when + 0.09);
+        },
+        (gain, when) => {
+          gain.gain.setValueAtTime(0.0001, when);
+          gain.gain.exponentialRampToValueAtTime(0.32, when + 0.008);
+          gain.gain.exponentialRampToValueAtTime(0.0001, when + 0.11);
+        },
+        start,
+        start + 0.12
+      );
+      tone(
+        ctx,
+        out,
+        "triangle",
+        (osc, when) => {
+          osc.frequency.setValueAtTime(freq * 2.63, when);
+        },
+        (gain, when) => {
+          gain.gain.setValueAtTime(0.0001, when);
+          gain.gain.exponentialRampToValueAtTime(0.14, when + 0.006);
+          gain.gain.exponentialRampToValueAtTime(0.0001, when + 0.07);
+        },
+        start,
+        start + 0.08
+      );
+    });
+  });
+}
+
+/** Low pulse when Nightshade freezes nearby marbles. */
+export function playShadowPulse(): void {
+  void startSound((ctx, t) => {
+    const out = master(ctx, 0.4);
+    const noise = ctx.createBufferSource();
+    noise.buffer = noiseBuffer(ctx, 0.45);
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(900, t);
+    filter.frequency.exponentialRampToValueAtTime(120, t + 0.35);
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.0001, t);
+    noiseGain.gain.exponentialRampToValueAtTime(0.5, t + 0.04);
+    noiseGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(out);
+    noise.start(t);
+    noise.stop(t + 0.42);
+
+    tone(
+      ctx,
+      out,
+      "sine",
+      (osc, when) => {
+        osc.frequency.setValueAtTime(196, when);
+        osc.frequency.exponentialRampToValueAtTime(55, when + 0.38);
+      },
+      (gain, when) => {
+        gain.gain.setValueAtTime(0.0001, when);
+        gain.gain.exponentialRampToValueAtTime(0.22, when + 0.05);
+        gain.gain.exponentialRampToValueAtTime(0.0001, when + 0.42);
+      },
+      t,
+      t + 0.44
+    );
+    tone(
+      ctx,
+      out,
+      "triangle",
+      (osc, when) => {
+        osc.frequency.setValueAtTime(740, when);
+        osc.frequency.exponentialRampToValueAtTime(220, when + 0.16);
+      },
+      (gain, when) => {
+        gain.gain.setValueAtTime(0.0001, when);
+        gain.gain.exponentialRampToValueAtTime(0.08, when + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, when + 0.18);
+      },
+      t + 0.02,
+      t + 0.22
+    );
+  });
+}
+
+/** Short cloth whoosh when Wraps binds nearby marbles. */
+export function playBindWrap(): void {
+  void startSound((ctx, t) => {
+    const out = master(ctx, 0.42);
+    const noise = ctx.createBufferSource();
+    noise.buffer = noiseBuffer(ctx, 0.4);
+    const filter = ctx.createBiquadFilter();
+    filter.type = "bandpass";
+    filter.Q.value = 0.85;
+    filter.frequency.setValueAtTime(1400, t);
+    filter.frequency.exponentialRampToValueAtTime(280, t + 0.28);
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.0001, t);
+    noiseGain.gain.exponentialRampToValueAtTime(0.55, t + 0.03);
+    noiseGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.32);
+    noise.connect(filter);
+    filter.connect(noiseGain);
+    noiseGain.connect(out);
+    noise.start(t);
+    noise.stop(t + 0.34);
+
+    tone(
+      ctx,
+      out,
+      "sine",
+      (osc, when) => {
+        osc.frequency.setValueAtTime(220, when);
+        osc.frequency.exponentialRampToValueAtTime(90, when + 0.26);
+      },
+      (gain, when) => {
+        gain.gain.setValueAtTime(0.0001, when);
+        gain.gain.exponentialRampToValueAtTime(0.12, when + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.0001, when + 0.28);
+      },
+      t,
+      t + 0.3
+    );
+  });
+}
+
 /** Small shake-off blip when a stun timer finishes. */
 export function playStunEnd(): void {
   void startSound((ctx, t) => {

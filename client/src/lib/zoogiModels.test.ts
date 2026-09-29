@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as THREE from "three";
-import { resolveZoogiModel, rollMarble, ZOOGI_MODELS } from "./zoogiModels.ts";
+import { marbleUniformScale, resolveZoogiModel, rollMarble, ZOOGI_MODELS, zoogiModelPreloadUrls } from "./zoogiModels.ts";
 
 function fresh(): THREE.Object3D {
   return new THREE.Object3D();
@@ -53,7 +53,17 @@ test("a respawn jump stands the model back up instead of spinning", () => {
 test("roster models point at their glb, including lars", () => {
   assert.equal(resolveZoogiModel("wolfgang")?.url, "/models/wolfgang.glb");
   assert.equal(resolveZoogiModel("lars")?.url, "/models/lars.glb");
+  assert.ok(zoogiModelPreloadUrls().includes("/models/lars.glb"), "Lars should preload with the other models");
   assert.equal(ZOOGI_MODELS.lars.scale, 1);
+  assert.equal(resolveZoogiModel("nightshade")?.url, "/models/nightshade.glb");
+  assert.ok(zoogiModelPreloadUrls().includes("/models/nightshade.glb"), "Nightshade should preload with the other models");
+  assert.equal(ZOOGI_MODELS.nightshade.fit, "pivot");
+  assert.equal(ZOOGI_MODELS.nightshade.referenceRadius, 0.958);
+  assert.equal(ZOOGI_MODELS.nightshade.offset[1], 0);
+  assert.ok(
+    Math.abs(marbleUniformScale(0.5, ZOOGI_MODELS.nightshade) - 0.5 / 0.958) < 1e-9,
+    "Nightshade should use the roster scale, not a bounding-box fit",
+  );
   assert.equal(resolveZoogiModel("brand-new")?.url, "/models/brand-new.glb");
   assert.equal(resolveZoogiModel("custom_4", "https://example.com/a.glb")?.url, "https://example.com/a.glb");
   assert.equal(resolveZoogiModel("custom_4"), null);

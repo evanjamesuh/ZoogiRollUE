@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { useRef, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
+import { visualPosition } from "@/lib/renderInterp";
 
 function FloatingStar({ position, color = "#FFD700" }: { position: [number, number, number]; color?: string }) {
   const starRef = useRef<THREE.Group>(null);
@@ -102,11 +103,8 @@ export function Orb({ orbId }: OrbProps) {
   useFrame((state, delta) => {
     if (!groupRef.current || !orb || !orb.isActive) return;
     
-    groupRef.current.position.set(
-      orb.position[0],
-      orb.position[1],
-      orb.position[2]
-    );
+    const vis = visualPosition(orb.id, orb.position);
+    groupRef.current.position.set(vis[0], vis[1], vis[2]);
     
     if (coinRef.current) {
       bobPhase.current += delta * 2.0;
