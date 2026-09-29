@@ -18,6 +18,11 @@ let quality: VfxQuality = "high";
 let locked = false;
 const listeners = new Set<() => void>();
 
+function publish(): void {
+  if (typeof window === "undefined") return;
+  (window as Window & { __vfxQuality?: VfxQuality }).__vfxQuality = quality;
+}
+
 function detectInitial(): { quality: VfxQuality; locked: boolean } {
   if (typeof window === "undefined") return { quality: "high", locked: false };
   const query = new URLSearchParams(window.location.search).get("vfx");
@@ -29,6 +34,7 @@ function detectInitial(): { quality: VfxQuality; locked: boolean } {
 const initial = detectInitial();
 quality = initial.quality;
 locked = initial.locked;
+publish();
 
 export function getVfxQuality(): VfxQuality {
   return quality;
@@ -42,6 +48,7 @@ export function isVfxQualityLocked(): boolean {
 export function setVfxQuality(next: VfxQuality): void {
   if (locked || quality === next) return;
   quality = next;
+  publish();
   listeners.forEach((listener) => listener());
 }
 

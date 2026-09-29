@@ -126,7 +126,7 @@ export function PowerPreview() {
     const id = idRef.current++;
     const startTime = Date.now();
     setBlasts((prev) => [...prev, { id, kind, position, startTime }]);
-    const life = kind === "explosion" ? 4600 : 1200;
+    const life = kind === "explosion" ? 16000 : 1200;
     window.setTimeout(() => {
       setBlasts((prev) => prev.filter((blast) => blast.id !== id));
     }, life);

@@ -71,10 +71,9 @@ function paintSmoke(data: Uint8ClampedArray, size: number): void {
       const u = (x + 0.5) / size - 0.5;
       const v = (y + 0.5) / size - 0.5;
       const d = Math.hypot(u, v) * 2;
-      const radial = Math.exp(-d * d * 2.15);
+      const radial = d >= 1 ? 0 : Math.pow(Math.max(0, 1 - d * d), 0.45);
       const n = fbm(u * 5.5 + 3.2, v * 5.5 + 1.4);
-      const edge = d > 1 ? 0 : 1 - Math.max(0, d - 0.72) / 0.28;
-      const alpha = radial * (0.28 + 0.72 * n) * edge;
+      const alpha = radial * (0.62 + 0.38 * n);
       const tone = 175 + n * 70;
       const i = (y * size + x) * 4;
       data[i] = tone;
