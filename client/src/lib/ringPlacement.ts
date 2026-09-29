@@ -119,3 +119,92 @@ export function translationToClear(box: Aabb, limit: number, maxCenter = 32): { 
   }
   return { dx: dirX * hi, dz: dirZ * hi };
 }
+
+/** Gameplay camera: 16 out and 18 up from a marble, about 48 degrees. */
+export const GAMEPLAY_CAM_DISTANCE = 16;
+export const GAMEPLAY_CAM_HEIGHT = 18;
+const GAMEPLAY_SPAWN_DISTANCE = 8;
+const GAMEPLAY_V_HALF = (25 * Math.PI) / 180;
+const GAMEPLAY_H_HALF = Math.atan(Math.tan(GAMEPLAY_V_HALF) * (16 / 9));
+
+export interface SightCamera {
+  x: number;
+  y: number;
+  z: number;
+  px: number;
+  pz: number;
+}
+
+/** Every spawn, and the orbit angles the follow camera can sit at. */
+export function gameplayCameras(): SightCamera[] {
+  const cameras: SightCamera[] = [];
+  for (let spawnIndex = 0; spawnIndex < 4; spawnIndex += 1) {
+    const spawn = (spawnIndex * Math.PI) / 2;
+    const px = Math.cos(spawn) * GAMEPLAY_SPAWN_DISTANCE;
+    const pz = Math.sin(spawn) * GAMEPLAY_SPAWN_DISTANCE;
+    for (let step = 0; step < 12; step += 1) {
+      const orbit = (step / 12) * Math.PI * 2;
+      cameras.push({
+        x: px + Math.sin(orbit) * GAMEPLAY_CAM_DISTANCE,
+        y: GAMEPLAY_CAM_HEIGHT,
+        z: pz + Math.cos(orbit) * GAMEPLAY_CAM_DISTANCE,
+        px,
+        pz,
+      });
+    }
+  }
+  return cameras;
+}
+
+const SIGHT_CAMERAS = gameplayCameras();
+
+function grassPointInFrame(cam: SightCamera, gx: number, gz: number): boolean {
+  const lx = cam.px - cam.x;
+  const ly = -cam.y;
+  const lz = cam.pz - cam.z;
+  const llen = Math.hypot(lx, ly, lz);
+  const vx = gx - cam.x;
+  const vy = -cam.y;
+  const vz = gz - cam.z;
+  const vlen = Math.hypot(vx, vy, vz);
+  if (llen < 1e-4 || vlen < 1e-4) return false;
+  const fx = lx / llen;
+  const fy = ly / llen;
+  const fz = lz / llen;
+  const rx = -fz;
+  const rz = fx;
+  const rlen = Math.hypot(rx, rz);
+  if (rlen < 1e-4) return true;
+  const rnx = rx / rlen;
+  const rnz = rz / rlen;
+  const ux = -rnz * fy;
+  const uy = rnz * fx - rnx * fz;
+  const uz = rnx * fy;
+  const ulen = Math.hypot(ux, uy, uz) || 1;
+  const dx = vx / vlen;
+  const dy = vy / vlen;
+  const dz = vz / vlen;
+  const forward = dx * fx + dy * fy + dz * fz;
+  if (forward <= 0.05) return false;
+  const horiz = Math.atan2(dx * rnx + dz * rnz, forward);
+  const vert = Math.atan2((dx * ux + dy * uy + dz * uz) / ulen, forward);
+  return Math.abs(horiz) <= GAMEPLAY_H_HALF + 0.03 && Math.abs(vert) <= GAMEPLAY_V_HALF + 0.03;
+}
+
+/**
+ * A foliage point blocks the view when it sits on a gameplay-camera ray
+ * that lands inside the grass circle.
+ */
+export function foliageBlocksRingView(x: number, y: number, z: number, ringRadius = 15.6): boolean {
+  if (y < 1.15) return false;
+  for (const cam of SIGHT_CAMERAS) {
+    if (y >= cam.y - 0.4) continue;
+    const t = (0 - cam.y) / (y - cam.y);
+    if (t <= 1.04) continue;
+    const gx = cam.x + t * (x - cam.x);
+    const gz = cam.z + t * (z - cam.z);
+    if (Math.hypot(gx, gz) > ringRadius) continue;
+    if (grassPointInFrame(cam, gx, gz)) return true;
+  }
+  return false;
+}

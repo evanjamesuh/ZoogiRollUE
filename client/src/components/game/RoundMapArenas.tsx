@@ -12,7 +12,7 @@ import {
   type SolidCircle,
 } from "@/lib/arenaColliders";
 import { GRASS_RIM, ROUND_KNOCKOFF_RADIUS, rimPosition, type RimMark } from "@/lib/roundRim";
-import { RING_VISUAL_LIMIT, ringPieceAction, type Aabb } from "@/lib/ringPlacement";
+import { RING_VISUAL_LIMIT, foliageBlocksRingView, ringPieceAction, type Aabb } from "@/lib/ringPlacement";
 
 const EDGE = ROUND_KNOCKOFF_RADIUS;
 const RIM_INNER = 14.7;
@@ -553,6 +553,97 @@ function collectUnits(root: THREE.Object3D): THREE.Object3D[] {
   return units;
 }
 
+function scaleAboutWorld(object: THREE.Object3D, pivot: THREE.Vector3, factor: number) {
+  const parent = object.parent;
+  if (!parent) return;
+  parent.updateWorldMatrix(true, false);
+  const inverse = new THREE.Matrix4().copy(parent.matrixWorld).invert();
+  const localPivot = pivot.clone().applyMatrix4(inverse);
+  object.position.sub(localPivot).multiplyScalar(factor).add(localPivot);
+  object.scale.multiplyScalar(factor);
+  object.updateWorldMatrix(true, true);
+}
+
+function trunkPivot(tree: THREE.Object3D): THREE.Vector3 {
+  let trunk: THREE.Mesh | null = null;
+  tree.traverse((obj) => {
+    const mesh = obj as THREE.Mesh;
+    if (mesh.isMesh && /Trank/i.test(mesh.name)) trunk = mesh;
+  });
+  const source = trunk ?? tree;
+  source.updateWorldMatrix(true, true);
+  const box = new THREE.Box3().setFromObject(source);
+  const center = box.getCenter(new THREE.Vector3());
+  return new THREE.Vector3(center.x, box.min.y, center.z);
+}
+
+function treeBlocksView(tree: THREE.Object3D): boolean {
+  tree.updateWorldMatrix(true, true);
+  const v = new THREE.Vector3();
+  let blocked = false;
+  tree.traverse((obj) => {
+    if (blocked) return;
+    const mesh = obj as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.visible) return;
+    const pos = mesh.geometry?.getAttribute("position") as THREE.BufferAttribute | undefined;
+    if (!pos) return;
+    const stride = 1;
+    for (let i = 0; i < pos.count; i += stride) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld);
+      if (foliageBlocksRingView(v.x, v.y, v.z)) {
+        blocked = true;
+        return;
+      }
+    }
+  });
+  return blocked;
+}
+
+/**
+ * Palm crowns on the island are tall enough to hang in front of the
+ * gameplay camera. Shorten a tree toward its base, then walk it outward,
+ * until its leaves frame the ring instead of covering the grass.
+ */
+function settleMeadowCanopies(root: THREE.Object3D) {
+  let shortened = 0;
+  let moved = 0;
+  let hid = 0;
+  const trees: THREE.Object3D[] = [];
+  root.traverse((obj) => {
+    if (/^Tree\d+$/.test(obj.name)) trees.push(obj);
+  });
+  for (const tree of trees) {
+    if (!tree.visible) continue;
+    const pivot = trunkPivot(tree);
+    let didShorten = false;
+    for (let step = 0; step < 5 && treeBlocksView(tree); step += 1) {
+      scaleAboutWorld(tree, pivot, 0.68);
+      didShorten = true;
+    }
+    if (didShorten) shortened += 1;
+    pushUnit(tree, RING_VISUAL_LIMIT);
+    let didMove = false;
+    for (let step = 0; step < 10 && treeBlocksView(tree); step += 1) {
+      const measured = measureUnit(tree);
+      if (!measured) break;
+      const len = Math.hypot(measured.cx, measured.cz) || 1;
+      applyWorldDelta(tree, (measured.cx / len) * 2.4, 0, (measured.cz / len) * 2.4);
+      tree.updateWorldMatrix(true, true);
+      didMove = true;
+    }
+    if (didMove) moved += 1;
+    if (treeBlocksView(tree)) {
+      tree.traverse((obj) => {
+        if (/Leav/i.test(obj.name)) obj.visible = false;
+      });
+      hid += 1;
+    }
+  }
+  if (shortened || moved || hid) {
+    console.info(`[ring] meadow canopies shortened ${shortened}, moved ${moved}, hid ${hid}`);
+  }
+}
+
 function arrangeRing(root: THREE.Object3D, map: "grass" | "ice" | "saturn"): { hid: number; pushed: number; clipped: number; kept: number } | null {
   if (root.userData.ringArranged) return null;
   root.userData.ringArranged = true;
@@ -601,6 +692,7 @@ function arrangeRing(root: THREE.Object3D, map: "grass" | "ice" | "saturn"): { h
     }
     kept += 1;
   }
+  if (map === "grass") settleMeadowCanopies(root);
   return { hid, pushed, clipped, kept };
 }
 

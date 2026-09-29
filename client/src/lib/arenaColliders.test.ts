@@ -21,7 +21,7 @@ import {
   setWinterCampActive,
   subscribeWinterCamp,
 } from "./arenaColliders.ts";
-import { ringPieceAction, shouldHideRingPiece, translationToClear, type Aabb } from "./ringPlacement.ts";
+import { foliageBlocksRingView, GAMEPLAY_CAM_DISTANCE, GAMEPLAY_CAM_HEIGHT, ringPieceAction, shouldHideRingPiece, translationToClear, type Aabb } from "./ringPlacement.ts";
 
 const MAPS = ["grass", "ice", "lava", "space", "saturn", "tomb"] as const;
 const SCORE_ZONE_RADIUS = 4;
@@ -394,4 +394,12 @@ test("ring placement hides the playfield slab and pushes props outside", () => {
   const outside = box(20, 0, -1, 24, 3, 1);
   const stay = translationToClear(outside, 16.35, 32);
   assert.deepEqual(stay, { dx: 0, dz: 0 });
+});
+
+test("meadow canopies must stay under the gameplay camera", () => {
+  const elevation = Math.atan2(GAMEPLAY_CAM_HEIGHT, GAMEPLAY_CAM_DISTANCE) * (180 / Math.PI);
+  assert.ok(elevation > 45 && elevation < 60, `camera sits at ${elevation.toFixed(1)} degrees`);
+  assert.equal(foliageBlocksRingView(0, 12, 18), true, "a tall crown just outside the ring covers the grass");
+  assert.equal(foliageBlocksRingView(0, 0.8, 18), false, "a low shrub stays under the sightline");
+  assert.equal(foliageBlocksRingView(0, 6, 42), false, "a crown well past the camera frames the far side");
 });
