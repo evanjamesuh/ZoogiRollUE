@@ -374,6 +374,17 @@ function LaunchPadHeightControl() {
 
 export function GameUI() {
   const { playerEntity, enemies, score, orbs, currentRound, maxRounds, playerRoundWins, isPlayerTurn, birdsEyeView, toggleBirdsEyeView, firstPersonView, toggleFirstPersonView, overShoulderView, toggleOverShoulderView, launchPadView, toggleLaunchPadView, setPhase, gameTimer, openTutorial, gameMode, localPlayers, currentLocalPlayerIndex, activateWolfgangAbility, canUseWolfgangAbility, activateHotstreakAbility, canUseHotstreakAbility, activateBoltAbility, canUseBoltAbility, lockOnEnabled, toggleLockOn, sessionId, arcType, setArcType, straightMode, toggleStraightMode, tangentOffset, setTangentOffset, lockOnTargetId, triggerArcLaunch, orbMultiplier, incrementOrbMultiplier, decrementOrbMultiplier, restrictionPhaseActive, restrictionPhaseStartTime } = useZoogiGame();
+  const [matchClock, setMatchClock] = useState(gameTimer);
+  useEffect(() => {
+    setMatchClock(gameTimer);
+  }, [gameTimer]);
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const next = useZoogiGame.getState().gameTimer;
+      setMatchClock((prev) => (Math.abs(prev - next) < 0.2 ? prev : next));
+    }, 250);
+    return () => window.clearInterval(id);
+  }, []);
   const selectedMap = useZoogiGame((state) => state.selectedMap);
   const showCollisionTuningPanel = useZoogiGame((state) => state.showCollisionTuningPanel);
   const setShowCollisionTuningPanel = useZoogiGame((state) => state.setShowCollisionTuningPanel);
@@ -773,10 +784,10 @@ export function GameUI() {
 
   const activeOrbs = orbs.filter(o => o.isActive).length;
   
-  const minutes = Math.floor(gameTimer / 60);
-  const seconds = Math.floor(gameTimer % 60);
+  const minutes = Math.floor(matchClock / 60);
+  const seconds = Math.floor(matchClock % 60);
   const timerDisplay = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-  const timerColor = gameTimer <= 60 ? "text-red-400" : gameTimer <= 180 ? "text-yellow-400" : "text-white";
+  const timerColor = matchClock <= 60 ? "text-red-400" : matchClock <= 180 ? "text-yellow-400" : "text-white";
   
   const wallOwnershipMode = useZoogiGame(state => state.wallOwnershipMode);
   const ownershipScores = useZoogiGame(state => state.ownershipScores);

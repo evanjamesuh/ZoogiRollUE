@@ -35,6 +35,7 @@ import { resolveNeonRails } from "../neonCourt";
 import { FALL_GRAVITY_STEP, FALL_OUT_Y, ICE_ROLLING_DRAG, LOCKON_LAUNCH_SPEED, MARBLE_RESTITUTION, MAX_PLANAR_SPEED, ORB_MASS, REST_SPEED, ROLLING_DRAG, SETTLE_DELAY_STEPS, ZOOGI_MASS } from "../simFeel";
 import { circleTimeOfImpact } from "../sweptHit";
 import { ORB_REST_Y, ZOOGI_REST_Y } from "../restHeight";
+import { motionOnly, overlayList, overlayRecord } from "../simPublish";
 
 export const DEFAULT_BACKGROUND_SETTINGS = {
   distance: 200,
@@ -3759,10 +3760,19 @@ export const useZoogiGame = create<ZoogiGameState>()(
       get().resetTurnState();
     },
     
-    setMovementStopped: (stopped) => set({ 
-      allMovementStopped: stopped,
-      ...(stopped ? { cinematicArcMode: false, slowMotionFactor: 1 } : {})
-    }),
+    setMovementStopped: (stopped) => {
+      const current = get();
+      if (
+        current.allMovementStopped === stopped
+        && (!stopped || (!current.cinematicArcMode && current.slowMotionFactor === 1))
+      ) {
+        return;
+      }
+      set({
+        allMovementStopped: stopped,
+        ...(stopped ? { cinematicArcMode: false, slowMotionFactor: 1 } : {})
+      });
+    },
     
     resetTurnState: () => {
       set({
@@ -4339,6 +4349,9 @@ export const useZoogiGame = create<ZoogiGameState>()(
       }
       
       const player = state.playerEntity;
+      const shieldWas = player.hasShield;
+      const boostWas = player.speedBoost;
+      const stunWas = player.isStunned;
       let hasShield = player.hasShield;
       let shieldTimer = player.shieldTimer - delta;
       let speedBoost = player.speedBoost;
@@ -4358,22 +4371,30 @@ export const useZoogiGame = create<ZoogiGameState>()(
       }
       
       let wolfgangAbilityCooldown = Math.max(0, player.wolfgangAbilityCooldown - delta);
-      
-      const updatedEnemies = state.enemies.map(e => {
-        let updated = { ...e };
-        if (e.wolfgangAbilityCooldown > 0) {
-          updated = { ...updated, wolfgangAbilityCooldown: Math.max(0, e.wolfgangAbilityCooldown - delta) };
+
+      // Timers live on the existing entities. Publishing them every frame
+      // re-rendered the whole match, which is what made a roll stutter.
+      player.hasShield = hasShield;
+      player.shieldTimer = shieldTimer;
+      player.speedBoost = speedBoost;
+      player.speedBoostTimer = speedBoostTimer;
+      player.abilityCooldown = abilityCooldown;
+      player.isStunned = isStunned;
+      player.stunTimer = stunTimer;
+      player.wolfgangAbilityCooldown = wolfgangAbilityCooldown;
+      state.gameTimer = newTimer;
+      for (const enemy of state.enemies) {
+        if (enemy.wolfgangAbilityCooldown > 0) {
+          enemy.wolfgangAbilityCooldown = Math.max(0, enemy.wolfgangAbilityCooldown - delta);
         }
-        return updated;
-      });
-      
-      let updatedGrenades = state.pendingGrenades.map(g => ({
-        ...g,
-        timer: g.timer - delta
-      }));
-      
-      const explodingGrenades = updatedGrenades.filter(g => g.timer <= 0);
-      updatedGrenades = updatedGrenades.filter(g => g.timer > 0);
+      }
+
+      const explodingGrenades: typeof grenades = [];
+      const grenades = state.pendingGrenades;
+      for (let i = grenades.length - 1; i >= 0; i--) {
+        grenades[i].timer -= delta;
+        if (grenades[i].timer <= 0) explodingGrenades.push(grenades.splice(i, 1)[0]);
+      }
       
       for (const grenade of explodingGrenades) {
         console.log("Grenade exploding at", grenade.position);
@@ -4440,27 +4461,24 @@ export const useZoogiGame = create<ZoogiGameState>()(
         });
       }
       
-      set({
-        gameTimer: newTimer,
-        playerEntity: {
-          ...player,
-          hasShield,
-          shieldTimer,
-          speedBoost,
-          speedBoostTimer,
-          abilityCooldown,
-          isStunned,
-          stunTimer,
-          wolfgangAbilityCooldown
-        },
-        enemies: updatedEnemies,
-        pendingGrenades: updatedGrenades
-      });
+      if (shieldWas !== hasShield || boostWas !== speedBoost || stunWas !== isStunned) {
+        set({ gameTimer: newTimer });
+      }
     },
     
     physicsTick: (_delta) => {
       const state = get();
       if (!state.playerEntity || state.phase !== "playing") return;
+      const baseline = {
+        phase: state.phase,
+        showExplosion: state.showExplosion,
+        player: state.playerEntity,
+        enemies: state.enemies,
+        orbs: state.orbs,
+        wolfClones: state.wolfClones,
+        fallingEntities: state.fallingEntities,
+        pinballBumpers: state.pinballBumpers,
+      };
       
       const { gameMode, currentLocalPlayerIndex } = state;
       
@@ -6244,8 +6262,38 @@ export const useZoogiGame = create<ZoogiGameState>()(
       if (hadActiveOrbs && !stillActiveOrbs) {
         stateUpdates.phase = "round_end";
       }
-      
-      set(stateUpdates as ZoogiGameState);
+
+      const nextBumpers = (stateUpdates.pinballBumpers ?? state.pinballBumpers) as typeof state.pinballBumpers;
+      const quiet = motionOnly(baseline, {
+        phase: stateUpdates.phase,
+        showExplosion: newExplosion ?? null,
+        player,
+        enemies,
+        orbs,
+        wolfClones: wolfClonesUpdated,
+        fallingEntities: newFallingEntities,
+        pinballBumpers: nextBumpers,
+      });
+      const current = get();
+      const intact = current.playerEntity === baseline.player
+        && current.enemies === baseline.enemies
+        && current.orbs === baseline.orbs
+        && current.wolfClones === baseline.wolfClones
+        && current.fallingEntities === baseline.fallingEntities;
+      if (quiet && intact && current.playerEntity) {
+        overlayRecord(current.playerEntity as unknown as Record<string, unknown>, player as unknown as Record<string, unknown>);
+        overlayList(current.enemies as unknown as Record<string, unknown>[], enemies as unknown as Record<string, unknown>[]);
+        overlayList(current.orbs as unknown as Record<string, unknown>[], orbs as unknown as Record<string, unknown>[]);
+        overlayList(current.wolfClones as unknown as Record<string, unknown>[], wolfClonesUpdated as unknown as Record<string, unknown>[]);
+        overlayList(current.fallingEntities as unknown as Record<string, unknown>[], newFallingEntities as unknown as Record<string, unknown>[]);
+        if (hadCollision) {
+          current.lastCollisionTime = Date.now();
+          current.lastCollisionEvent = stateUpdates.lastCollisionEvent ?? null;
+        }
+        current.nextRespawnPadIndex = currentRespawnPadIndex;
+      } else {
+        set(stateUpdates as ZoogiGameState);
+      }
       
       orbsToRemove.forEach(id => get().removeOrb(id));
       if (endTurnAfterTick) get().endTurn();

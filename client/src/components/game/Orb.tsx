@@ -32,72 +32,91 @@ interface OrbProps {
 
 export function Orb({ orbId }: OrbProps) {
   const groupRef = useRef<THREE.Group>(null);
+  const bullseyeRef = useRef<THREE.Group>(null);
   const bullseyeRotationRef = useRef(0);
+  const visRef = useRef<[number, number, number]>([0, 0, 0]);
 
-  const { orbs, lockOnEnabled, lockOnTargetId, setLockOnTarget } = useZoogiGame();
-  const orb = orbs.find(o => o.id === orbId);
-
-  const isLockedOn = lockOnTargetId === orbId;
+  const appearance = useZoogiGame((state) => {
+    const orb = state.orbs.find((entry) => entry.id === orbId);
+    if (!orb?.isActive) return "";
+    return orb.isStarOrb ? (orb.starOrbType ?? "star") : "orb";
+  });
+  const lockOnEnabled = useZoogiGame((state) => state.lockOnEnabled);
+  const isLockedOn = useZoogiGame((state) => state.lockOnTargetId === orbId);
+  const setLockOnTarget = useZoogiGame((state) => state.setLockOnTarget);
 
   useFrame((_, delta) => {
-    if (!groupRef.current || !orb || !orb.isActive) return;
-
-    const vis = visualPosition(orb.id, orb.position);
-    groupRef.current.position.set(vis[0], ORB_REST_Y, vis[2]);
-    bullseyeRotationRef.current += delta * 1.5;
+    const group = groupRef.current;
+    if (!group) return;
+    const orb = useZoogiGame.getState().orbs.find((entry) => entry.id === orbId);
+    if (!orb || !orb.isActive) {
+      group.visible = false;
+      return;
+    }
+    group.visible = true;
+    const vis = visualPosition(orb.id, orb.position, visRef.current);
+    const falling = orb.isOutOfRing || orb.position[1] < ORB_REST_Y - 0.05;
+    group.position.set(vis[0], falling ? vis[1] : ORB_REST_Y, vis[2]);
+    if (bullseyeRef.current) {
+      bullseyeRotationRef.current += delta * 1.5;
+      bullseyeRef.current.rotation.z = bullseyeRotationRef.current;
+      bullseyeRef.current.position.set(vis[0], 0.04, vis[2]);
+    }
   });
 
   const handleClick = (e: { stopPropagation?: () => void }) => {
     if (e.stopPropagation) e.stopPropagation();
-    if (lockOnEnabled && orb) {
+    if (lockOnEnabled && appearance) {
       setLockOnTarget(orbId, "orb");
       console.log("Locked onto orb:", orbId);
     }
   };
 
-  if (!orb || !orb.isActive) return null;
+  if (!appearance) return null;
 
   const radius = ORB_DRAW_RADIUS * getGlobalOrbScale();
-  const starColor = getStarColor(orb.starOrbType);
+  const starColor = getStarColor(appearance === "orb" ? null : appearance as "wolfgang" | "hotstreak" | "bolt");
 
   return (
     <group>
-      <group ref={groupRef} position={[orb.position[0], ORB_REST_Y, orb.position[2]]}>
-        <mesh
-          castShadow
-          receiveShadow
-          onClick={handleClick}
-          onPointerDown={handleClick}
-        >
-          <sphereGeometry args={[radius, 32, 24]} />
+      <group ref={groupRef}>
+        <mesh onClick={handleClick} onPointerDown={handleClick}>
+          <sphereGeometry args={[radius, 40, 32]} />
           <meshPhysicalMaterial
             color={ORB_BODY_COLOR}
             emissive={ORB_GLOW_COLOR}
-            emissiveIntensity={0.85}
-            roughness={0.06}
-            metalness={0.2}
+            emissiveIntensity={0.95}
+            roughness={0.04}
+            metalness={0.18}
             clearcoat={1}
-            clearcoatRoughness={0.04}
+            clearcoatRoughness={0.03}
           />
         </mesh>
-        <mesh>
-          <sphereGeometry args={[radius * 1.08, 24, 16]} />
-          <meshBasicMaterial color="#7ec8ff" transparent opacity={0.18} depthWrite={false} />
+        <mesh position={[radius * 0.22, radius * 0.48, radius * 0.28]} scale={[0.28, 0.16, 0.22]}>
+          <sphereGeometry args={[radius, 12, 10]} />
+          <meshBasicMaterial color="#f4fbff" />
         </mesh>
-        {orb.isStarOrb && (
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -radius + 0.03, 0]}>
-            <ringGeometry args={[radius * 1.2, radius * 1.7, 40]} />
-            <meshBasicMaterial color={starColor} transparent opacity={0.9} side={THREE.DoubleSide} />
+        <mesh>
+          <sphereGeometry args={[radius * 1.1, 20, 14]} />
+          <meshBasicMaterial color="#7ec8ff" transparent opacity={0.16} depthWrite={false} />
+        </mesh>
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -radius + 0.025, 0]}>
+          <circleGeometry args={[radius * 0.62, 24]} />
+          <meshBasicMaterial color="#021433" transparent opacity={0.4} depthWrite={false} />
+        </mesh>
+        {appearance !== "orb" && (
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -radius + 0.04, 0]}>
+            <ringGeometry args={[radius * 1.25, radius * 1.55, 40]} />
+            <meshBasicMaterial color={starColor} transparent opacity={0.85} side={THREE.DoubleSide} />
           </mesh>
         )}
-        <pointLight color="#6eb6ff" intensity={0.7} distance={4.5} position={[0, radius * 0.4, 0]} />
         {isLockedOn && (
           <Glint position={[0, radius * 0.85, 0]} size={0.62} color="#d5e8ff" />
         )}
       </group>
 
       {isLockedOn && (
-        <group position={[orb.position[0], 0.04, orb.position[2]]} rotation={[-Math.PI / 2, 0, bullseyeRotationRef.current]}>
+        <group ref={bullseyeRef} rotation={[-Math.PI / 2, 0, 0]}>
           <mesh>
             <ringGeometry args={[radius * 1.3, radius * 1.6, 32]} />
             <meshBasicMaterial color="#8B5CF6" transparent opacity={0.8} />
@@ -117,12 +136,13 @@ export function Orb({ orbId }: OrbProps) {
 }
 
 export function OrbManager() {
-  const { orbs } = useZoogiGame();
+  const activeIds = useZoogiGame((state) => state.orbs.filter((orb) => orb.isActive).map((orb) => orb.id).join("|"));
+  const ids = activeIds ? activeIds.split("|") : [];
 
   return (
     <>
-      {orbs.filter(orb => orb.isActive).map(orb => (
-        <Orb key={orb.id} orbId={orb.id} />
+      {ids.map((id) => (
+        <Orb key={id} orbId={id} />
       ))}
     </>
   );

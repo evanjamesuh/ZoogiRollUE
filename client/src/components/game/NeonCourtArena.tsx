@@ -685,8 +685,8 @@ export function NeonCourtLights() {
         intensity={0.82}
         color="#e7eefc"
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
         shadow-bias={-0.00035}
         shadow-camera-far={64}
         shadow-camera-left={-20}

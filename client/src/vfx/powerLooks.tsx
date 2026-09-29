@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { InstancedSprites } from "./InstancedSprites";
@@ -69,6 +69,7 @@ export function JaggedArc({
   cloth = false,
   endFade = 0,
   hot = true,
+  flicker = 0,
 }: {
   from: Vec3;
   to: Vec3;
@@ -80,26 +81,43 @@ export function JaggedArc({
   cloth?: boolean;
   endFade?: number;
   hot?: boolean;
+  flicker?: number;
 }) {
   const geo = useMemo(() => createRibbonGeometry(ARC_POINTS - 1), []);
   const material = useMemo(() => ribbonMaterial(new THREE.Color(color), cloth, hot && !cloth), [color, cloth, hot]);
   const points = useMemo(() => Array.from({ length: ARC_POINTS }, () => new THREE.Vector3()), []);
   const fromV = useRef(new THREE.Vector3());
   const toV = useRef(new THREE.Vector3());
-  const jitters = useMemo(() => {
-    const rand = mulberry32(seed || 1);
-    return Array.from({ length: ARC_POINTS - 2 }, () => [(rand() - 0.5) * 2, (rand() - 0.5) * 2] as [number, number]);
-  }, [seed]);
+  const jitterSeed = useRef(seed || 1);
+  const flickerClock = useRef(0);
+  const jitters = useRef<[number, number][]>([]);
+  if (jitters.current.length === 0) {
+    const rand = mulberry32(jitterSeed.current);
+    jitters.current = Array.from({ length: ARC_POINTS - 2 }, () => [(rand() - 0.5) * 2, (rand() - 0.5) * 2]);
+  }
 
   useEffect(() => () => {
     geo.dispose();
     material.dispose();
   }, [geo, material]);
 
-  useFrame((state) => {
+  useFrame((state, dt) => {
+    if (flicker > 0) {
+      flickerClock.current += Math.min(dt, 1 / 30);
+      if (flickerClock.current > flicker) {
+        flickerClock.current = 0;
+        jitterSeed.current = (jitterSeed.current + 17) % 9973;
+        const rand = mulberry32(jitterSeed.current || 1);
+        const next = jitters.current;
+        for (let i = 0; i < next.length; i++) {
+          next[i][0] = (rand() - 0.5) * 2;
+          next[i][1] = (rand() - 0.5) * 2;
+        }
+      }
+    }
     fromV.current.set(from[0], from[1], from[2]);
     toV.current.set(to[0], to[1], to[2]);
-    layJagged(fromV.current, toV.current, jitters, points, sag);
+    layJagged(fromV.current, toV.current, jitters.current, points, sag);
     writeRibbon(geo, points, width, state.camera.position);
     material.uniforms.uFade.value = fade;
     material.uniforms.uEndFade.value = endFade;
@@ -429,15 +447,6 @@ export function BoltDischarge({
 }
 
 function ArcSet({ pairs }: { pairs: Array<[Vec3, Vec3]> }) {
-  const tick = useRef(0);
-  const [generation, setGeneration] = useState(1);
-  useFrame((_, dt) => {
-    tick.current += Math.min(dt, 1 / 30);
-    if (tick.current > 0.09) {
-      tick.current = 0;
-      setGeneration((value) => (value + 1) % 997);
-    }
-  });
   const bolts = pairs.flatMap((pair, i) => {
     const from = pair[0];
     const to = pair[1];
@@ -473,7 +482,8 @@ function ArcSet({ pairs }: { pairs: Array<[Vec3, Vec3]> }) {
           key={bolt.key}
           from={bolt.from}
           to={bolt.to}
-          seed={generation * 17 + bolt.salt}
+          seed={17 + bolt.salt}
+          flicker={0.09}
           width={bolt.width}
           color={bolt.color}
           sag={bolt.sag}
@@ -487,10 +497,10 @@ function ArcSet({ pairs }: { pairs: Array<[Vec3, Vec3]> }) {
 export function StunCrawlers() {
   const tick = useRef(0);
   const seed = useRef(2);
-  const [generation, setGeneration] = useState(2);
-  const [ends, setEnds] = useState<[Vec3, Vec3][]>([
+  const ends = useRef<[Vec3, Vec3][]>([
     [[0.2, 0.15, 0.35], [-0.35, 0.7, -0.1]],
     [[-0.3, 0.2, -0.25], [0.25, 0.75, 0.3]],
+    [[0.05, 0.18, 0.1], [0.15, 0.62, -0.35]],
   ]);
   const rim = useMemo(() => {
     const mat = new THREE.ShaderMaterial({
@@ -518,19 +528,19 @@ export function StunCrawlers() {
     if (tick.current > 0.14) {
       tick.current = 0;
       seed.current += 1;
-      const next = seed.current;
-      const rand = mulberry32(next * 19 + 5);
-      setGeneration(next);
-      setEnds([0, 1, 2].map(() => {
+      const rand = mulberry32(seed.current * 19 + 5);
+      for (const pair of ends.current) {
         const a = rand() * Math.PI * 2;
         const b = a + 1.2 + rand();
         const ya = 0.05 + rand() * 0.35;
         const yb = 0.35 + rand() * 0.55;
-        return [
-          [Math.cos(a) * 0.48, ya, Math.sin(a) * 0.48],
-          [Math.cos(b) * 0.5, yb, Math.sin(b) * 0.5],
-        ] as [Vec3, Vec3];
-      }));
+        pair[0][0] = Math.cos(a) * 0.48;
+        pair[0][1] = ya;
+        pair[0][2] = Math.sin(a) * 0.48;
+        pair[1][0] = Math.cos(b) * 0.5;
+        pair[1][1] = yb;
+        pair[1][2] = Math.sin(b) * 0.5;
+      }
     }
   });
 
@@ -539,12 +549,13 @@ export function StunCrawlers() {
       <mesh material={rim} frustumCulled={false}>
         <sphereGeometry args={[0.56, 24, 18]} />
       </mesh>
-      {ends.map((pair, i) => (
+      {ends.current.map((pair, i) => (
         <JaggedArc
           key={i}
           from={pair[0]}
           to={pair[1]}
-          seed={generation * 11 + i}
+          seed={11 + i}
+          flicker={0.14}
           width={0.08}
           color="#f4fbff"
           sag={0.06}

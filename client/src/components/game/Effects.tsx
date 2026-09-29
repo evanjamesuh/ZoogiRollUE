@@ -25,41 +25,43 @@ function MotionTrail({ position, velocity, color }: {
   velocity: [number, number, number];
   color: string;
 }) {
-  const trailRef = useRef<TrailPoint[]>([]);
-  const meshRefs = useRef<(THREE.Mesh | null)[]>([]);
   const TRAIL_LENGTH = 12;
   const TRAIL_LIFETIME = 300;
+  const trailRef = useRef<TrailPoint[]>(
+    Array.from({ length: TRAIL_LENGTH }, () => ({ position: [0, 0, 0], timestamp: 0 })),
+  );
+  const trailCursor = useRef(0);
+  const meshRefs = useRef<(THREE.Mesh | null)[]>([]);
   
   useFrame(() => {
     const speed = Math.sqrt(velocity[0] ** 2 + velocity[2] ** 2);
     const now = Date.now();
+    const slots = trailRef.current;
     
     if (speed > 0.05) {
-      trailRef.current.push({ position: [...position], timestamp: now });
+      const slot = slots[trailCursor.current];
+      slot.position[0] = position[0];
+      slot.position[1] = position[1];
+      slot.position[2] = position[2];
+      slot.timestamp = now;
+      trailCursor.current = (trailCursor.current + 1) % TRAIL_LENGTH;
     }
     
-    trailRef.current = trailRef.current.filter(p => now - p.timestamp < TRAIL_LIFETIME);
-    
-    if (trailRef.current.length > TRAIL_LENGTH) {
-      trailRef.current = trailRef.current.slice(-TRAIL_LENGTH);
-    }
-    
-    meshRefs.current.forEach((mesh, i) => {
-      if (mesh) {
-        if (i < trailRef.current.length) {
-          const point = trailRef.current[i];
-          const age = (now - point.timestamp) / TRAIL_LIFETIME;
-          const scale = Math.max(0.1, (1 - age) * 0.4);
-          
-          mesh.visible = true;
-          mesh.position.set(point.position[0], point.position[1], point.position[2]);
-          mesh.scale.setScalar(scale);
-          (mesh.material as THREE.MeshBasicMaterial).opacity = (1 - age) * 0.6;
-        } else {
-          mesh.visible = false;
-        }
+    for (let i = 0; i < TRAIL_LENGTH; i++) {
+      const mesh = meshRefs.current[i];
+      const point = slots[i];
+      if (!mesh) continue;
+      const age = point.timestamp > 0 ? (now - point.timestamp) / TRAIL_LIFETIME : 1;
+      if (age >= 0 && age < 1) {
+        const scale = Math.max(0.1, (1 - age) * 0.4);
+        mesh.visible = true;
+        mesh.position.set(point.position[0], point.position[1], point.position[2]);
+        mesh.scale.setScalar(scale);
+        (mesh.material as THREE.MeshBasicMaterial).opacity = (1 - age) * 0.6;
+      } else {
+        mesh.visible = false;
       }
-    });
+    }
   });
   
   return (

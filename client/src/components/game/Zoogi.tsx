@@ -334,6 +334,7 @@ function TurnStunMarker({ entity }: { entity: { position: [number, number, numbe
 
 export function PlayerZoogi() {
   const meshRef = useRef<THREE.Group>(null);
+  const visRef = useRef<[number, number, number]>([0, 0, 0]);
   const { 
     playerEntity, 
     updatePlayerVelocity,
@@ -658,7 +659,7 @@ export function PlayerZoogi() {
   useFrame(() => {
     if (!meshRef.current || !playerEntity) return;
     
-    const playerVis = visualPosition(playerEntity.id, playerEntity.position);
+    const playerVis = visualPosition(playerEntity.id, playerEntity.position, visRef.current);
     meshRef.current.position.set(playerVis[0], playerVis[1], playerVis[2]);
     
     const speed = Math.sqrt(playerEntity.velocity[0] ** 2 + playerEntity.velocity[2] ** 2);
@@ -982,18 +983,13 @@ export function PlayerZoogi() {
         </mesh>
       )}
 
-      <pointLight
-        position={[pos[0], pos[1] + 1, pos[2]]}
-        color={playerEntity.zoogi.color}
-        intensity={0.5}
-        distance={5}
-      />
     </group>
   );
 }
 
 export function EnemyZoogi({ entityId }: { entityId: string }) {
   const meshRef = useRef<THREE.Group>(null);
+  const visRef = useRef<[number, number, number]>([0, 0, 0]);
   const aiTimerRef = useRef(0);
   const hasLaunchedRef = useRef(false);
   const prevTurnRef = useRef(false);
@@ -1014,7 +1010,7 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
   useFrame((_, delta) => {
     if (!meshRef.current || !enemy || !playerEntity) return;
     
-    const enemyVis = visualPosition(enemy.id, enemy.position);
+    const enemyVis = visualPosition(enemy.id, enemy.position, visRef.current);
     meshRef.current.position.set(enemyVis[0], enemyVis[1], enemyVis[2]);
     
     const speed = Math.sqrt(enemy.velocity[0] ** 2 + enemy.velocity[2] ** 2);
@@ -1410,53 +1406,47 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
       <group ref={meshRef} position={enemy.position} onClick={handleClick} visible={marbleIsShown(enemy)}>
         <ZoogiModelSwitch zoogiId={enemy.zoogi.id} hasShield={false} hasSpawnImmunity={enemy.spawnImmunity} color={enemy.zoogi.color} />
         <StatusLooks ricochet={enemy.larsRicochetBoost > 1} bound={boundNow(enemy)} />
+        {!enemy.isKnockedOut && !enemy.isRespawning && (
+        <Html position={[0, 3.2, 0]} center style={{ pointerEvents: "none" }}>
+          <div
+            style={{
+              width: "28px",
+              height: "28px",
+              borderRadius: "50%",
+              backgroundColor: enemy.zoogi.color || "#ef4444",
+              border: "2px solid #fca5a5",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.4)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "white",
+              fontWeight: "bold",
+              fontSize: "12px",
+              textShadow: "0 1px 2px rgba(0,0,0,0.5)",
+            }}
+          >
+            {enemy.zoogi.name?.charAt(0)?.toUpperCase() || "E"}
+          </div>
+          {(enemy.slowUntil || 0) > Date.now() && (
+            <div style={{ marginTop: 4, background: "#D4C4B0", color: "#3f2e22", fontWeight: 700, fontSize: 11, padding: "2px 6px", borderRadius: 6 }}>
+              Slowed
+            </div>
+          )}
+          {enemy.isStunned && (
+            <div style={{ marginTop: 4, background: "#FDE047", color: "#3f2e22", fontWeight: 700, fontSize: 11, padding: "2px 6px", borderRadius: 6 }}>
+              Stunned
+            </div>
+          )}
+        </Html>
+        )}
+        {isMyTurn && !isFreeForAll && (
+          <mesh position={[0, 0.05 - enemy.position[1], 0]} rotation={[-Math.PI / 2, 0, 0]}>
+            <ringGeometry args={[0.7, 0.9, 32]} />
+            <meshBasicMaterial color="#FF6600" transparent opacity={0.5} />
+          </mesh>
+        )}
       </group>
 
-      {/* Floating enemy icon */}
-      {!enemy.isKnockedOut && !enemy.isRespawning && (
-      <Html
-        position={[enemy.position[0], enemy.position[1] + 3.2, enemy.position[2]]}
-        center
-        style={{ pointerEvents: 'none' }}
-      >
-        <div
-          style={{
-            width: '28px',
-            height: '28px',
-            borderRadius: '50%',
-            backgroundColor: enemy.zoogi.color || '#ef4444',
-            border: '2px solid #fca5a5',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'white',
-            fontWeight: 'bold',
-            fontSize: '12px',
-            textShadow: '0 1px 2px rgba(0,0,0,0.5)',
-          }}
-        >
-          {enemy.zoogi.name?.charAt(0)?.toUpperCase() || 'E'}
-        </div>
-        {(enemy.slowUntil || 0) > Date.now() && (
-          <div style={{ marginTop: 4, background: "#D4C4B0", color: "#3f2e22", fontWeight: 700, fontSize: 11, padding: "2px 6px", borderRadius: 6 }}>
-            Slowed
-          </div>
-        )}
-        {enemy.isStunned && (
-          <div style={{ marginTop: 4, background: "#FDE047", color: "#3f2e22", fontWeight: 700, fontSize: 11, padding: "2px 6px", borderRadius: 6 }}>
-            Stunned
-          </div>
-        )}
-      </Html>
-      )}
-
-      {isMyTurn && !isFreeForAll && (
-        <mesh position={[enemy.position[0], 0.05, enemy.position[2]]} rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[0.7, 0.9, 32]} />
-          <meshBasicMaterial color="#FF6600" transparent opacity={0.5} />
-        </mesh>
-      )}
       
       {isLockedOn && (
         <Glint
@@ -1467,19 +1457,13 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
       )}
       
       <TurnStunMarker entity={enemy} />
-
-      <pointLight
-        position={[enemy.position[0], enemy.position[1] + 0.5, enemy.position[2]]}
-        color={enemy.zoogi.color}
-        intensity={0.3}
-        distance={3}
-      />
     </group>
   );
 }
 
 export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) {
   const meshRef = useRef<THREE.Group>(null);
+  const visRef = useRef<[number, number, number]>([0, 0, 0]);
   const { 
     playerEntity, 
     enemies,
@@ -1620,7 +1604,7 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
   useFrame(() => {
     if (!meshRef.current || !entity) return;
     
-    const localVis = visualPosition(entity.id, entity.position);
+    const localVis = visualPosition(entity.id, entity.position, visRef.current);
     meshRef.current.position.set(localVis[0], localVis[1], localVis[2]);
     
     const speed = Math.sqrt(entity.velocity[0] ** 2 + entity.velocity[2] ** 2);
@@ -1801,34 +1785,28 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
       <group ref={meshRef} position={pos} visible={marbleIsShown(entity)}>
         <ZoogiModelSwitch zoogiId={entity.zoogi.id} hasShield={false} color={entity.zoogi.color} />
         <StatusLooks ricochet={entity.larsRicochetBoost > 1} bound={boundNow(entity)} />
+        <Html position={[0, 1.8, 0]} center style={{ pointerEvents: "none" }}>
+          <div
+            style={{
+              width: "30px",
+              height: "30px",
+              borderRadius: "50%",
+              backgroundColor: playerColors[playerIndex] || "#6366f1",
+              border: isMyTurn ? "3px solid #fbbf24" : "2px solid white",
+              boxShadow: isMyTurn ? "0 0 12px rgba(251, 191, 36, 0.6)" : "0 2px 8px rgba(0,0,0,0.4)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: "white",
+              fontWeight: "bold",
+              fontSize: "13px",
+              textShadow: "0 1px 2px rgba(0,0,0,0.5)",
+            }}
+          >
+            P{playerIndex + 1}
+          </div>
+        </Html>
       </group>
-      
-      {/* Floating local player icon */}
-      <Html
-        position={[pos[0], pos[1] + 1.8, pos[2]]}
-        center
-        style={{ pointerEvents: 'none' }}
-      >
-        <div
-          style={{
-            width: '30px',
-            height: '30px',
-            borderRadius: '50%',
-            backgroundColor: playerColors[playerIndex] || '#6366f1',
-            border: isMyTurn ? '3px solid #fbbf24' : '2px solid white',
-            boxShadow: isMyTurn ? '0 0 12px rgba(251, 191, 36, 0.6)' : '0 2px 8px rgba(0,0,0,0.4)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'white',
-            fontWeight: 'bold',
-            fontSize: '13px',
-            textShadow: '0 1px 2px rgba(0,0,0,0.5)',
-          }}
-        >
-          P{playerIndex + 1}
-        </div>
-      </Html>
       
       {/* Invisible hitbox for drag interaction - disabled in first person, over shoulder, and birds eye views */}
       {isMyTurn && !launchCooldownRef.current && !firstPersonView && !overShoulderView && !birdsEyeView && (
@@ -1896,13 +1874,6 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
       )}
 
       <TurnStunMarker entity={entity} />
-
-      <pointLight
-        position={[pos[0], pos[1] + 0.5, pos[2]]}
-        color={playerColors[playerIndex]}
-        intensity={isMyTurn ? 0.6 : 0.3}
-        distance={3}
-      />
     </group>
   );
 }

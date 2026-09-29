@@ -480,7 +480,7 @@ function MeadowForest() {
           leaf={band.leaf}
           shade={band.shade}
           bark={band.bark}
-          shadow={band.max <= 42}
+          shadow={false}
         />
       ))}
     </group>
@@ -882,7 +882,7 @@ function RingStage({
       if (idle === "winter") idleRef.current = collectWinterIdle(clone);
       clone.traverse((obj) => {
         if (obj instanceof THREE.Mesh) {
-          obj.castShadow = true;
+          obj.castShadow = false;
           obj.receiveShadow = true;
         }
       });

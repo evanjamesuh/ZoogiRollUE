@@ -75,8 +75,8 @@ function crowdLights(): CrowdLight[] {
     }
   };
 
-  const farStep = 0.26;
-  const standStep = 0.32;
+  const farStep = 0.52;
+  const standStep = 0.58;
   const clear = 0.08;
   for (const tier of FAR_TIERS) {
     const half = tier.width / 2 - 0.35;
