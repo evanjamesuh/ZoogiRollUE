@@ -6,6 +6,7 @@ attribute float aStretch;
 attribute float aVariant;
 attribute vec3 aColor;
 attribute vec3 aVelocity;
+uniform float uFlat;
 varying float vOpacity;
 varying vec3 vColor;
 varying vec2 vUv;
@@ -28,6 +29,17 @@ void main() {
   float c = cos(aSpin);
   float s = sin(aSpin);
   vec2 spun = vec2(c * position.x - s * position.y, s * position.x + c * position.y);
+  if (uFlat > 0.5) {
+    vec3 local = center;
+    local.x += spun.x * aSize;
+    local.z += spun.y * aSize;
+    vec4 worldPos = modelMatrix * vec4(local, 1.0);
+    vWorldY = worldPos.y;
+    vec4 flatView = viewMatrix * worldPos;
+    vCamDist = length(flatView.xyz);
+    gl_Position = projectionMatrix * flatView;
+    return;
+  }
   vec4 viewCenter = viewMatrix * modelMatrix * vec4(center, 1.0);
   vec3 viewVel = mat3(viewMatrix) * mat3(modelMatrix) * aVelocity;
   vec2 dir = viewVel.xy;
@@ -76,6 +88,9 @@ float fbm(vec2 p) {
 export const SMOKE_FRAG = /* glsl */ `
 uniform float uTime;
 uniform float uWarm;
+uniform float uCrest;
+uniform float uInk;
+uniform float uFlat;
 varying float vOpacity;
 varying vec3 vColor;
 varying vec2 vUv;
@@ -90,16 +105,21 @@ void main() {
   float dist = length(uv * (0.82 + n * 0.36));
   float roundMask = smoothstep(0.5, 0.0, length(uv));
   float lobes = fbm(vUv * 1.75 + n * 1.8 + scroll.yx);
-  float interior = smoothstep(0.5, 0.18, dist);
+  float interior = smoothstep(uInk > 0.5 ? 0.74 : 0.5, 0.12, dist);
   float lumps = smoothstep(0.28, 0.66, lobes);
   float shape = mix(lumps, 1.0, interior);
-  float alpha = min(roundMask * shape * (0.88 + 0.12 * n) * vOpacity, 0.85);
-  alpha *= smoothstep(0.0, 0.55, vWorldY + (n - 0.5) * 0.2);
+  float alpha = min(roundMask * shape * (0.88 + 0.12 * n) * vOpacity, uInk > 0.5 ? 0.96 : 0.85);
+  float fadeH = uFlat > 0.5 ? 0.14 : 0.55;
+  alpha *= smoothstep(0.0, fadeH, vWorldY + (n - 0.5) * 0.2);
   float lower = smoothstep(0.62, 0.14, vUv.y);
-  float lit = mix(1.2, 0.58, lower);
-  vec3 charcoal = max(vColor, vec3(0.04)) * lit;
+  float lit = uInk > 0.5 ? mix(0.72, 0.38, lower) : mix(1.2, 0.58, lower);
+  vec3 baseCol = uInk > 0.5 ? vColor : max(vColor, vec3(0.04));
+  vec3 charcoal = baseCol * lit;
   vec3 warm = vec3(0.32, 0.1, 0.025);
   vec3 col = mix(charcoal, warm, lower * uWarm * 0.9);
+  float fringe = smoothstep(0.08, 0.62, 1.0 - interior);
+  float top = smoothstep(0.55, 0.96, vUv.y);
+  col = mix(col, vec3(0.714, 0.612, 1.0), fringe * top * uCrest);
   gl_FragColor = vec4(col, alpha);
 }
 `.replace("void main()", `${PUFF_NOISE}\nvoid main()`);
@@ -424,6 +444,57 @@ void main() {
 }
 `;
 
+export const SHADOW_POOL_FRAG = /* glsl */ `
+uniform float uTime;
+uniform float uFront;
+uniform float uDensity;
+varying vec2 vUv;
+
+float hash21p(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+float noiseP(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = hash21p(i);
+  float b = hash21p(i + vec2(1.0, 0.0));
+  float c = hash21p(i + vec2(0.0, 1.0));
+  float d = hash21p(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+float fbmP(vec2 p) {
+  float v = 0.0;
+  float a = 0.5;
+  for (int i = 0; i < 4; i++) {
+    v += a * noiseP(p);
+    p = p * 2.07 + vec2(1.7, 9.2);
+    a *= 0.5;
+  }
+  return v;
+}
+
+void main() {
+  vec2 p = vUv * 2.0 - 1.0;
+  float r = length(p);
+  float ang = atan(p.y, p.x);
+  float n = fbmP(p * 2.6 + vec2(uTime * 0.04, 1.3));
+  float wob = (fbmP(vec2(ang * 1.7, 2.2)) - 0.5) * 0.18;
+  float front = clamp(uFront + wob, 0.0, 1.0);
+  float reach = smoothstep(front + 0.04, front - 0.16, r);
+  if (reach < 0.02) discard;
+  float core = smoothstep(0.045, 0.18, r);
+  float chips = smoothstep(0.12, 0.7, fbmP(p * 3.6 + vec2(ang * 0.35, n)));
+  float broken = smoothstep(0.08, 0.55, noiseP(vec2(ang * 5.2, r * 3.1 + uTime * 0.05)));
+  float cover = reach * core * mix(0.9, 1.0, chips) * mix(0.82, 1.0, broken) * uDensity;
+  if (cover < 0.04) discard;
+  vec3 tint = vec3(0.02, 0.004, 0.07);
+  gl_FragColor = vec4(mix(vec3(1.0), tint, cover), 1.0);
+}
+`;
+
 export const SHADOW_GROUND_FRAG = /* glsl */ `
 uniform float uTime;
 uniform float uFront;
@@ -470,11 +541,13 @@ void main() {
   float strobe = fract(sin(floor(uTime * 7.0) * 17.13 + n * 48.0));
   float flick = mix(0.45 + 0.55 * sin(uTime * 5.5 + n * 16.0), 0.25 + 0.75 * strobe, 0.5);
   float vein = crack * inside * flick * uVeil;
-  float wob = (noiseS(vec2(ang * 1.6, 3.0)) - 0.5) * 0.05;
+  float wob = (fbmS(vec2(ang * 1.15, r * 2.4)) - 0.5) * 0.14;
   float d = r - (uFront + wob);
-  float band = exp(-(d * d) / 0.0011);
-  vec3 veinCol = vec3(0.714, 0.612, 1.0) * vein * 0.5;
-  vec3 edgeCol = vec3(0.55, 0.4, 0.92) * band * uEdge;
+  float band = exp(-(d * d) / 0.0036);
+  float chips = smoothstep(0.3, 0.62, noiseS(vec2(ang * 6.5, 2.4) + uTime * 0.12));
+  band *= chips;
+  vec3 veinCol = vec3(0.714, 0.612, 1.0) * vein * 0.72;
+  vec3 edgeCol = vec3(0.714, 0.612, 1.0) * band * uEdge;
   vec3 col = veinCol + edgeCol;
   if (max(col.r, max(col.g, col.b)) < 0.012) discard;
   gl_FragColor = vec4(col, 1.0);
@@ -505,13 +578,14 @@ float noiseR(vec2 p) {
 }
 
 void main() {
-  float edge = smoothstep(1.0, 0.18, abs(vSide));
-  float n = noiseR(vec2(vAlong * 6.5 + uTime * 0.3, vSide * 2.4));
-  float body = edge * (0.42 + 0.58 * n);
-  float core = exp(-vSide * vSide * 20.0);
-  float along = smoothstep(0.0, 0.07, vAlong) * smoothstep(1.0, 0.18, vAlong);
-  vec3 col = uColor * (0.7 + 0.3 * n) + uGlint * core * 0.28;
-  gl_FragColor = vec4(col, body * along * uFade);
+  float n = noiseR(vec2(vAlong * 8.0 + uTime * 0.22, vSide * 3.2));
+  float gap = smoothstep(0.42, 0.78, n);
+  float thread = exp(-vSide * vSide * 11.0);
+  float along = smoothstep(0.0, 0.1, vAlong) * smoothstep(1.0, 0.16, vAlong);
+  along *= smoothstep(0.16, 0.48, noiseR(vec2(vAlong * 3.4 + uTime * 0.15, 1.7)));
+  float core = exp(-vSide * vSide * 36.0);
+  vec3 col = uColor * (0.62 + 0.38 * n) + uGlint * core * 0.16;
+  gl_FragColor = vec4(col, thread * along * gap * uFade);
 }
 `;
 

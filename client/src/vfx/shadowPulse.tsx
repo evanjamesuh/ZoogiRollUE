@@ -12,13 +12,15 @@ import {
   RIBBON_VERT,
   RING_VERT,
   SHADOW_GROUND_FRAG,
+  SHADOW_POOL_FRAG,
   SHADOW_RIBBON_FRAG,
 } from "./shaders";
 import { seedShadowSuck, seedShadowWave, stepShadowSuck, stepShadowWave } from "./sim";
 import { usePlayedClock } from "./bursts";
 
 const SUCK_CAP = 18;
-const WAVE_CAP = 36;
+const WAVE_CAP = 48;
+const PLUME_CAP = 12;
 const WRAP_CAP = 10;
 const SUCK_POINTS = 16;
 const TENDRIL_POINTS = 22;
@@ -27,9 +29,11 @@ function shadowBudget() {
   const low = getVfxQuality() === "low";
   return {
     suck: low ? 8 : 16,
-    wave: low ? 14 : 32,
-    wrap: low ? 6 : 10,
+    wave: low ? 20 : 44,
+    plume: low ? 6 : 12,
+    wrap: low ? 6 : 9,
     suckRibbons: low ? 2 : 4,
+    tendrils: low ? 2 : 3,
     sizeScale: low ? 1.45 : 1,
   };
 }
@@ -118,6 +122,7 @@ export function ShadowPulseLook({
   const budget = useMemo(() => shadowBudget(), []);
   const suck = useMemo(() => createSpritePool(SUCK_CAP), []);
   const wave = useMemo(() => createSpritePool(WAVE_CAP), []);
+  const plume = useMemo(() => createSpritePool(PLUME_CAP), []);
   const elapsedRef = useRef(0);
   const finished = useRef(false);
   const finish = useRef(onFinished);
@@ -125,6 +130,8 @@ export function ShadowPulseLook({
   const light = useRef<THREE.PointLight>(null);
   const clock = usePlayedClock(frozenElapsed);
   const warm = useRef(0);
+  const crest = useRef(0.15);
+  const plumeCrest = useRef(0.85);
 
   const ground = useMemo(() => {
     const mat = new THREE.ShaderMaterial({
@@ -152,19 +159,65 @@ export function ShadowPulseLook({
     return mat;
   }, []);
 
+  const pool = useMemo(() => {
+    const mat = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uFront: { value: 0.08 },
+        uDensity: { value: 0 },
+      },
+      vertexShader: RING_VERT,
+      fragmentShader: SHADOW_POOL_FRAG,
+      transparent: true,
+      depthWrite: false,
+      depthTest: true,
+      toneMapped: false,
+      side: THREE.DoubleSide,
+      blending: THREE.CustomBlending,
+      blendSrc: THREE.DstColorFactor,
+      blendDst: THREE.ZeroFactor,
+    });
+    mat.alphaTest = 0;
+    mat.polygonOffset = true;
+    mat.polygonOffsetFactor = -1;
+    mat.polygonOffsetUnits = -1;
+    return mat;
+  }, []);
+
   useLayoutEffect(() => {
     clearSpritePool(suck);
     clearSpritePool(wave);
     const rand = mulberry32(hashSeed(radius, startTime, 0, 1, 77));
     seedShadowSuck(suck, rand, budget.suck);
     seedShadowWave(wave, radius, rand, budget.wave, budget.sizeScale);
-  }, [suck, wave, radius, startTime, budget]);
+    clearSpritePool(plume);
+    for (let i = 0; i < budget.plume; i++) {
+      spawnSprite(plume, {
+        x: 0,
+        y: 0.7,
+        z: 0,
+        vx: 0,
+        vy: 0,
+        vz: 0,
+        life: 4,
+        size: 0.7,
+        grow: 0,
+        spin: (rand() - 0.5) * 0.4,
+        r: 0.04,
+        g: 0.012,
+        b: 0.075,
+        seed: rand() * 6 + i,
+      });
+    }
+  }, [suck, wave, plume, radius, startTime, budget]);
 
   useEffect(() => () => {
     ground.dispose();
+    pool.dispose();
     clearSpritePool(suck);
     clearSpritePool(wave);
-  }, [ground, suck, wave]);
+    clearSpritePool(plume);
+  }, [ground, pool, suck, wave, plume]);
 
   useFrame((state, dt) => {
     const { elapsed, dt: step } = clock(state.clock.elapsedTime, dt);
@@ -186,15 +239,37 @@ export function ShadowPulseLook({
     const waveIn = smoothstep((elapsed - 0.18) / 0.14);
     const edgeFade = waveIn * (1 - smoothstep((elapsed - 1.05) / 0.7));
     const veil = waveIn * (1 - smoothstep((elapsed - 1.28) / 1.15));
+    const body = waveIn * (1 - smoothstep((elapsed - 1.25) / 1.2));
     ground.uniforms.uTime.value = state.clock.elapsedTime;
-    ground.uniforms.uFront.value = Math.min(1, front / radius);
-    ground.uniforms.uEdge.value = edgeFade * 0.32;
-    ground.uniforms.uVeil.value = veil * 0.55;
+    const frontFrac = Math.min(1, front / radius);
+    ground.uniforms.uFront.value = frontFrac;
+    ground.uniforms.uEdge.value = edgeFade * 0.34;
+    ground.uniforms.uVeil.value = veil * 0.95;
+    pool.uniforms.uTime.value = state.clock.elapsedTime;
+    pool.uniforms.uFront.value = frontFrac;
+    pool.uniforms.uDensity.value = body;
+    let placed = 0;
+    for (let i = 0; i < wave.capacity && placed < plume.capacity; i++) {
+      if (wave.active[i] === 0 || wave.grow[i] < 0.55) continue;
+      if ((i + placed) % 2 === 1) continue;
+      plume.active[placed] = 1;
+      plume.px[placed] = wave.px[i];
+      plume.pz[placed] = wave.pz[i];
+      plume.py[placed] = 0.58 + (placed % 4) * 0.16;
+      plume.size[placed] = Math.min(1.15, wave.size[i] * 0.46);
+      plume.opacity[placed] = body * 0.72;
+      plume.rot[placed] = wave.rot[i];
+      placed += 1;
+    }
+    for (let i = placed; i < plume.capacity; i++) plume.active[i] = 0;
+    if (typeof window !== "undefined") {
+      (window as Window & { __vfxFront?: number }).__vfxFront = frontFrac;
+    }
 
     let intensity = 0;
-    if (elapsed < 0.26) intensity = (elapsed / 0.26) * 5.2;
-    else if (elapsed < 0.48) intensity = 5.2;
-    else if (elapsed < 1.15) intensity = 5.2 * (1 - (elapsed - 0.48) / 0.67);
+    if (elapsed < 0.26) intensity = (elapsed / 0.26) * 1.6;
+    else if (elapsed < 0.48) intensity = 1.6;
+    else if (elapsed < 1.15) intensity = 1.6 * (1 - (elapsed - 0.48) / 0.67);
     if (light.current) {
       light.current.intensity = intensity;
       light.current.distance = 2.45;
@@ -209,15 +284,20 @@ export function ShadowPulseLook({
   return (
     <group>
       <pointLight ref={light} position={[0, 0.65, 0]} color="#6B46C1" intensity={0} distance={2.45} decay={2} />
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.08, 0]} frustumCulled={false}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.04, 0]} frustumCulled={false} renderOrder={1}>
+        <circleGeometry args={[radius, 72]} />
+        <primitive object={pool} attach="material" />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.09, 0]} frustumCulled={false} renderOrder={3}>
         <circleGeometry args={[radius, 72]} />
         <primitive object={ground} attach="material" />
       </mesh>
       {Array.from({ length: budget.suckRibbons }, (_, index) => (
         <SuckRibbon key={index} index={index} count={budget.suckRibbons} elapsed={elapsedRef} />
       ))}
-      <InstancedSprites pool={suck} mode="smoke" warm={warm} />
-      <InstancedSprites pool={wave} mode="smoke" warm={warm} />
+      <InstancedSprites pool={suck} mode="smoke" warm={warm} ink />
+      <InstancedSprites pool={wave} mode="smoke" warm={warm} crest={crest} flat ink />
+      <InstancedSprites pool={plume} mode="smoke" warm={warm} crest={plumeCrest} ink />
     </group>
   );
 }
@@ -236,13 +316,13 @@ function ShadowTendril({ phase }: { phase: number }) {
     const time = state.clock.elapsedTime;
     for (let i = 0; i < TENDRIL_POINTS; i++) {
       const u = i / (TENDRIL_POINTS - 1);
-      const ang = phase + time * 0.65 + u * 4.6;
-      const y = -0.28 + u * 0.92 + Math.sin(time * 1.3 + u * 7 + phase) * 0.045;
-      const rad = 0.56 + Math.sin(u * Math.PI) * 0.16;
+      const ang = phase + time * 0.55 + u * 8.2;
+      const y = -0.42 + u * 1.55 + Math.sin(time * 0.9 + phase + u * 5.0) * 0.05;
+      const rad = 0.5 + Math.sin(u * 10.0 + phase) * 0.07 + Math.sin(time * 0.8 + u * 6.0) * 0.03;
       points[i].set(Math.cos(ang) * rad, y, Math.sin(ang) * rad);
     }
-    writeRibbon(geo, points, 0.22, state.camera.position);
-    material.uniforms.uFade.value = 0.92;
+    writeRibbon(geo, points, 0.042, state.camera.position);
+    material.uniforms.uFade.value = 0.82;
     material.uniforms.uTime.value = time;
   });
 
@@ -295,14 +375,15 @@ export function ShadowWrap() {
   const budget = useMemo(() => shadowBudget(), []);
   const smoke = useMemo(() => createSpritePool(WRAP_CAP), []);
   const warm = useRef(0);
+  const crestWrap = useRef(0.4);
 
   useLayoutEffect(() => {
     clearSpritePool(smoke);
     const rand = mulberry32(hashSeed(budget.wrap, 3, 1, 9, 4));
     const inks: Array<[number, number, number]> = [
-      [0.06, 0.03, 0.1],
-      [0.12, 0.05, 0.18],
-      [0.08, 0.035, 0.13],
+      [0.02, 0.006, 0.04],
+      [0.04, 0.012, 0.07],
+      [0.07, 0.024, 0.12],
     ];
     for (let i = 0; i < budget.wrap; i++) {
       const ink = inks[i % inks.length];
@@ -314,15 +395,15 @@ export function ShadowWrap() {
         vy: 0,
         vz: 0,
         life: 60,
-        size: 0.62 + (i % 3) * 0.16,
+        size: 0.28 + (i % 3) * 0.1,
         grow: 0,
-        spin: (rand() - 0.5) * 0.4,
+        spin: (rand() - 0.5) * 0.6,
         r: ink[0],
         g: ink[1],
         b: ink[2],
         seed: rand() * 8 + i,
       });
-      smoke.opacity[i] = 0.72;
+      smoke.opacity[i] = 0.7;
       smoke.active[i] = 1;
     }
   }, [smoke, budget.wrap]);
@@ -334,13 +415,16 @@ export function ShadowWrap() {
     const count = budget.wrap;
     const step = Math.min(dt, 0.05);
     for (let i = 0; i < count; i++) {
-      const ang = time * 0.85 + (i / count) * Math.PI * 2;
-      const y = -0.22 + (i % 3) * 0.16 + Math.sin(time * 1.4 + i) * 0.03;
-      const rad = 0.46 + (i % 2) * 0.14;
+      const tendril = i % budget.tendrils;
+      const phase = tendril * ((Math.PI * 2) / budget.tendrils) + 0.35;
+      const u = ((Math.floor(i / budget.tendrils) / 3) + time * 0.18) % 1;
+      const ang = phase + time * 0.55 + u * 8.2 + 0.35;
+      const y = -0.15 + u * 1.35 + Math.sin(time * 1.2 + i) * 0.05;
+      const rad = 0.62 + u * 0.28;
       smoke.px[i] = Math.cos(ang) * rad;
       smoke.py[i] = y;
       smoke.pz[i] = Math.sin(ang) * rad;
-      smoke.opacity[i] = 0.62 + (i % 3) * 0.06;
+      smoke.opacity[i] = 0.62 + (i % 3) * 0.08;
       smoke.size[i] = smoke.size0[i];
       smoke.rot[i] += smoke.spin[i] * step;
       smoke.active[i] = 1;
@@ -349,9 +433,10 @@ export function ShadowWrap() {
 
   return (
     <group>
-      <ShadowTendril phase={0.2} />
-      <ShadowTendril phase={2.6} />
-      <InstancedSprites pool={smoke} mode="smoke" warm={warm} />
+      {Array.from({ length: budget.tendrils }, (_, index) => (
+        <ShadowTendril key={index} phase={index * ((Math.PI * 2) / budget.tendrils) + 0.35} />
+      ))}
+      <InstancedSprites pool={smoke} mode="smoke" warm={warm} crest={crestWrap} ink />
       <FaintGlint />
     </group>
   );

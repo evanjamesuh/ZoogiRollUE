@@ -641,9 +641,9 @@ export function stepColdEmbers(pool: SpritePool, elapsed: number, dt: number): v
 
 function shadowInk(rand: () => number): [number, number, number] {
   const roll = rand();
-  if (roll < 0.4) return [0.055, 0.026, 0.09];
-  if (roll < 0.75) return [0.11, 0.045, 0.16];
-  return [0.17, 0.07, 0.26];
+  if (roll < 0.7) return [0.01, 0.002, 0.024];
+  if (roll < 0.9) return [0.022, 0.006, 0.048];
+  return [0.05, 0.014, 0.09];
 }
 
 /** Dark wisps that collapse toward the caster before the wave leaves. */
@@ -753,7 +753,7 @@ export function stepShadowWave(pool: SpritePool, radius: number, elapsed: number
     const targetFrac = pool.grow[i];
     const delay = (1 - targetFrac) * 0.14;
     const local = smoothstep((elapsed - SHADOW_WAVE_START - delay) / SHADOW_WAVE_DUR);
-    const size = pool.size0[i] * (0.58 + 0.48 * local);
+    const size = pool.size0[i] * (0.78 + 0.4 * local);
     const half = size * 0.5;
     const limit = Math.max(0.2, radius - half);
     const end = Math.min(radius * targetFrac, limit);
@@ -770,11 +770,11 @@ export function stepShadowWave(pool: SpritePool, radius: number, elapsed: number
     }
     pool.px[i] = x;
     pool.pz[i] = z;
-    const crest = targetFrac > 0.9 ? Math.sin(Math.min(1, local) * Math.PI) * 0.22 : 0.05;
+    const rise = targetFrac > 0.9 ? Math.sin(Math.min(1, local) * Math.PI) * 0.1 : 0.02;
     const bob = Math.sin(elapsed * 2.2 + ang * 3) * 0.025;
-    pool.py[i] = 0.15 + crest + bob + pool.vy[i];
+    pool.py[i] = 0.32 + rise + bob;
     pool.size[i] = size;
     pool.rot[i] += pool.spin[i] * dt;
-    pool.opacity[i] = fadeIn * fadeOut * (0.84 + targetFrac * 0.14);
+    pool.opacity[i] = fadeIn * fadeOut * (0.96 + targetFrac * 0.04);
   }
 }
