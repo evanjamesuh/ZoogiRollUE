@@ -124,23 +124,13 @@ const worldPos = new THREE.Vector3();
 const prevPos = new THREE.Vector3();
 const sample = new THREE.Vector3();
 const forward = new THREE.Vector3();
-const local = new THREE.Vector3();
 const emitAt = new THREE.Vector3();
-
-const MIST_ANCHORS: Array<[number, number, number]> = [
-  [0, 0.55, 0.25],
-  [0, 0.42, -0.35],
-  [0, 0.36, 0.75],
-  [0, 0.7, -0.95],
-  [0.22, 0.48, 0.05],
-  [-0.22, 0.48, 0.05],
-];
 
 function WolfTrail({ anchor }: { anchor: RefObject<THREE.Group | null> }) {
   const scene = useThree((state) => state.scene);
   const wisps = useMemo(() => createSpritePool(WISP_CAP), []);
   const embers = useMemo(() => createSpritePool(COLD_EMBER_CAP), []);
-  const acc = useRef({ ember: 0, n: 1, elapsed: 0, anchor: 0, ready: false });
+  const acc = useRef({ ember: 0, n: 1, elapsed: 0, ready: false });
 
   useFrame((_, dt) => {
     const step = Math.min(dt, 1 / 30);
@@ -157,15 +147,17 @@ function WolfTrail({ anchor }: { anchor: RefObject<THREE.Group | null> }) {
         state.ready = true;
       }
       const jump = prevPos.distanceTo(worldPos);
-      const stamps = jump < 0.2 ? 0 : Math.min(2, Math.ceil(jump / 0.9));
-      for (let s = 1; s <= stamps; s++) {
-        sample.lerpVectors(prevPos, worldPos, s / stamps);
-        const slot = MIST_ANCHORS[state.anchor % MIST_ANCHORS.length];
-        state.anchor += 1;
-        local.set(slot[0] * wolfFit, slot[1] * wolfFit + wolfDrop, slot[2] * wolfFit);
-        local.applyQuaternion(group.quaternion).multiplyScalar(group.scale.x);
-        emitAt.copy(sample).add(local);
-        emitMist(wisps, emitAt.x, emitAt.y, emitAt.z, backX, backZ, nextRand(state));
+      if (jump >= 0.32) {
+        sample.lerpVectors(prevPos, worldPos, 0.55);
+        const roll = nextRand(state);
+        const side = (roll - 0.5) * 0.55;
+        const back = 0.45 + nextRand(state) * 0.5;
+        emitAt.set(
+          sample.x + backX * back - backZ * side,
+          sample.y + 0.12 + nextRand(state) * 0.38,
+          sample.z + backZ * back + backX * side,
+        );
+        emitMist(wisps, emitAt.x, emitAt.y, emitAt.z, backX * jump, backZ * jump, nextRand(state));
       }
       prevPos.copy(worldPos);
       state.ember += step;

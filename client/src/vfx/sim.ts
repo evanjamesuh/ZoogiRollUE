@@ -347,9 +347,9 @@ export function emitMist(
     vx: backX * (0.9 + rand * 1.1) + (rand - 0.5) * 0.45,
     vy: 0.15 + rand * 0.55,
     vz: backZ * (0.9 + rand * 1.1) + (rand - 0.5) * 0.45,
-    life: 0.95 + rand * 0.55,
-    size: 0.42 + rand * 1.25,
-    grow: 0.25 + rand * 0.45,
+    life: 1.25 + rand * 0.7,
+    size: 1.15 + rand * 2.6,
+    grow: 0.45 + rand * 0.9,
     spin: (rand - 0.5) * 0.6,
     r: 0.46,
     g: 0.56,
@@ -398,7 +398,7 @@ export function emitColdEmber(
 }
 
 export function stepMist(pool: SpritePool, _elapsed: number, dt: number): void {
-  const drag = damp(0.9, dt);
+    const drag = damp(0.35, dt);
   for (let i = 0; i < pool.capacity; i++) {
     if (pool.active[i] === 0) continue;
     pool.life[i] -= dt;
@@ -416,7 +416,7 @@ export function stepMist(pool: SpritePool, _elapsed: number, dt: number): void {
     const age = 1 - pool.life[i] / pool.maxLife[i];
     const fadeIn = age < 0.08 ? age / 0.08 : 1;
     const fadeOut = 1 - smoothstep((age - 0.28) / 0.72);
-    pool.opacity[i] = 0.24 * fadeIn * fadeOut;
+    pool.opacity[i] = 0.15 * fadeIn * fadeOut;
     pool.size[i] = pool.size0[i] + pool.grow[i] * age;
   }
 }
