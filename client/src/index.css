@@ -73,6 +73,131 @@
   padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
 }
 
+/* Phone safe areas. env() is 0 in desktop device-mode, so the minimums
+   match a Dynamic Island, the home indicator, and a landscape notch. */
+.phone-safe-top {
+  padding-top: max(3.75rem, env(safe-area-inset-top));
+}
+
+.phone-safe-bottom {
+  padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+}
+
+.phone-safe-x {
+  padding-left: max(0.75rem, env(safe-area-inset-left));
+  padding-right: max(0.75rem, env(safe-area-inset-right));
+}
+
+.phone-safe-top-offset {
+  top: max(0.6rem, env(safe-area-inset-top));
+}
+
+.neon-scoreboard {
+  top: max(0.35rem, env(safe-area-inset-top));
+}
+
+.hud-controls-landscape {
+  position: absolute;
+  z-index: 20;
+  top: max(0.35rem, env(safe-area-inset-top));
+  bottom: max(1.15rem, env(safe-area-inset-bottom));
+  right: max(0.4rem, env(safe-area-inset-right));
+  display: grid;
+  grid-template-columns: 44px 44px;
+  grid-auto-rows: minmax(44px, auto);
+  gap: 6px;
+  align-content: center;
+  justify-content: end;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+.hud-controls-landscape > button,
+.hud-controls-portrait > button {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.hud-controls-portrait {
+  position: absolute;
+  z-index: 20;
+  left: max(0.5rem, env(safe-area-inset-left));
+  right: max(0.5rem, env(safe-area-inset-right));
+  bottom: max(1.35rem, env(safe-area-inset-bottom));
+  height: 52px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior: contain;
+  touch-action: pan-x;
+  padding: 4px 8px;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.hud-bottom-raised {
+  bottom: calc(max(1.35rem, env(safe-area-inset-bottom)) + 3.6rem);
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .phone-safe-top {
+    padding-top: max(0.45rem, env(safe-area-inset-top));
+  }
+
+  .phone-safe-bottom {
+    padding-bottom: max(1.15rem, env(safe-area-inset-bottom));
+  }
+
+  .phone-safe-x {
+    padding-left: max(3rem, env(safe-area-inset-left));
+    padding-right: max(3rem, env(safe-area-inset-right));
+  }
+
+  .phone-safe-top-offset {
+    top: max(0.4rem, env(safe-area-inset-top));
+  }
+
+  .hud-controls-landscape {
+    top: max(0.3rem, env(safe-area-inset-top));
+    bottom: max(1.15rem, env(safe-area-inset-bottom));
+    right: max(3rem, env(safe-area-inset-right));
+  }
+
+  .hud-landscape-inset {
+    left: max(3rem, env(safe-area-inset-left)) !important;
+    right: max(7.5rem, calc(env(safe-area-inset-right) + 6.5rem)) !important;
+  }
+
+  .neon-scoreboard {
+    width: min(100% - 8rem, 460px);
+  }
+}
+
+@media (orientation: portrait) and (max-width: 500px) {
+  .neon-scoreboard {
+    top: max(3.75rem, env(safe-area-inset-top));
+  }
+
+  .hud-portrait-top {
+    top: max(3.75rem, calc(env(safe-area-inset-top) + 0.35rem)) !important;
+  }
+
+  .hud-top-neon.hud-portrait-top {
+    top: max(7.4rem, calc(env(safe-area-inset-top) + 3.7rem)) !important;
+  }
+}
+
 #root {
   width: 100%;
   height: 100%;

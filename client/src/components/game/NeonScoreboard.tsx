@@ -28,8 +28,7 @@ export function NeonScoreboard({
   return (
     <div
       id="neon-scoreboard"
-      className="pointer-events-none absolute left-1/2 z-30 w-[min(100%-0.75rem,520px)] -translate-x-1/2"
-      style={{ top: "max(0.35rem, env(safe-area-inset-top))" }}
+      className="neon-scoreboard pointer-events-none absolute left-1/2 z-30 w-[min(100%-0.75rem,520px)] -translate-x-1/2"
     >
       <div className="flex items-stretch" style={digit}>
         <div

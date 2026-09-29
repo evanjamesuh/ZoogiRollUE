@@ -6,6 +6,7 @@ import fs from "fs";
 import path from "path";
 import { nanoid } from "nanoid";
 import { viteMiddlewareOptions } from "./devServer";
+import { shouldServeIndexHtml } from "./static";
 
 const viteLogger = createLogger();
 
@@ -33,9 +34,11 @@ export async function setupVite(server: Server, app: Express, port: number) {
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
     const pathname = url.split("?")[0];
-    const isAssetRequest = MISSING_ASSET_PREFIXES.some(
-      (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
-    );
+    const isAssetRequest =
+      !shouldServeIndexHtml(pathname) ||
+      MISSING_ASSET_PREFIXES.some(
+        (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+      );
     if (isAssetRequest) {
       res.status(404).type("text/plain").send("Not found");
       return;
