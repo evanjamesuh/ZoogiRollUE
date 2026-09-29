@@ -3,6 +3,7 @@ import { useRef, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { visualPosition } from "@/lib/renderInterp";
+import { Glint } from "@/vfx/powerLooks";
 
 function FloatingStar({ position, color = "#FFD700" }: { position: [number, number, number]; color?: string }) {
   const starRef = useRef<THREE.Group>(null);
@@ -92,7 +93,6 @@ interface OrbProps {
 export function Orb({ orbId }: OrbProps) {
   const groupRef = useRef<THREE.Group>(null);
   const coinRef = useRef<THREE.Group>(null);
-  const bullseyeRotationRef = useRef(0);
   const bobPhase = useRef(Math.random() * Math.PI * 2);
   
   const { orbs, lockOnEnabled, lockOnTargetId, setLockOnTarget } = useZoogiGame();
@@ -111,8 +111,6 @@ export function Orb({ orbId }: OrbProps) {
       coinRef.current.position.y = Math.sin(bobPhase.current) * 0.2;
       coinRef.current.rotation.y += delta * 3.0;
     }
-    
-    bullseyeRotationRef.current += delta * 1.5;
   });
   
   const handleClick = (e: any) => {
@@ -155,24 +153,10 @@ export function Orb({ orbId }: OrbProps) {
             <meshBasicMaterial transparent opacity={0} />
           </mesh>
         </group>
+        {isLockedOn && (
+          <Glint position={[0, 0.15, 0]} size={0.62} color="#d5e8ff" />
+        )}
       </group>
-      
-      {isLockedOn && (
-        <group position={[orb.position[0], 0.08, orb.position[2]]} rotation={[-Math.PI / 2, 0, bullseyeRotationRef.current]}>
-          <mesh>
-            <ringGeometry args={[0.8, 1.0, 32]} />
-            <meshBasicMaterial color="#8B5CF6" transparent opacity={0.8} />
-          </mesh>
-          <mesh>
-            <ringGeometry args={[0.4, 0.55, 32]} />
-            <meshBasicMaterial color="#8B5CF6" transparent opacity={0.6} />
-          </mesh>
-          <mesh>
-            <circleGeometry args={[0.15, 16]} />
-            <meshBasicMaterial color="#8B5CF6" transparent opacity={0.9} />
-          </mesh>
-        </group>
-      )}
       
       <pointLight
         position={[orb.position[0], orb.position[1] + 0.5, orb.position[2]]}

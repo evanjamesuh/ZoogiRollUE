@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
-import { EffectComposer, Bloom, ToneMapping, Vignette } from "@react-three/postprocessing";
-import { ToneMappingMode } from "postprocessing";
+import { Bloom, EffectComposer } from "@react-three/postprocessing";
 import {
   bloomParams,
   getVfxQuality,
@@ -9,15 +8,14 @@ import {
   setVfxQuality,
   subscribeVfxQuality,
   type VfxQuality,
-} from "@/vfx/quality";
+} from "./quality";
 
 /**
- * One composer for the match. Bloom follows `?vfx=high|low`, and a run of
- * slow frames drops that cost when the query does not lock it. The threshold
- * stays high enough that the court and grass stay matte. Tone mapping runs
- * after bloom so the glow is not crushed first.
+ * Soft bloom for HDR sparks, the fireball, and wolf rim light.
+ * `?vfx=high` or `?vfx=low` locks the cost. Otherwise a run of slow frames
+ * drops the bloom resolution so the blast does not stall the match.
  */
-export function PostFX() {
+export function MoodyBloom() {
   const [quality, setQuality] = useState<VfxQuality>(getVfxQuality);
   const watch = useRef({ warm: 0, slow: 0, dropped: false });
 
@@ -40,18 +38,16 @@ export function PostFX() {
   const bloom = bloomParams(quality);
 
   return (
-    <EffectComposer enableNormalPass={false} multisampling={quality === "low" ? 0 : 4}>
+    <EffectComposer multisampling={0} enableNormalPass={false}>
       <Bloom
         intensity={bloom.intensity}
-        luminanceThreshold={1.12}
-        luminanceSmoothing={0.2}
+        luminanceThreshold={1.05}
+        luminanceSmoothing={0.22}
         mipmapBlur
         radius={bloom.radius}
         levels={bloom.levels}
         resolutionScale={bloom.resolutionScale}
       />
-      <Vignette eskil={false} offset={0.18} darkness={0.62} />
-      <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
     </EffectComposer>
   );
 }
