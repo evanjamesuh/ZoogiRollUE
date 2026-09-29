@@ -8,7 +8,7 @@
 
 import type { MapLayout, ZonePlacement } from "./arenaColliders";
 import { arenaScaleFor } from "./arenaScale";
-import { MARBLE_WIDTH, RIM_GAP_OPEN, repairRectRimGaps, snapRimGap, type RimGapAdjustment } from "./obstaclePlacement";
+import { MARBLE_WIDTH, RIM_GAP_LANE, rimGapInBand, rimGapWidths, snapRimGap, type RimGapAdjustment } from "./obstaclePlacement";
 import { MAX_PLANAR_SPEED, RAIL_RESTITUTION } from "./simFeel";
 
 /** Authored court, in today's units. Readers multiply by the neon arenaScale. */
@@ -151,51 +151,116 @@ function scaledObstacleBoxes(): NeonBox[] {
   });
 }
 
+function railInnerHalf(): { x: number; z: number } {
+  return {
+    x: neonPlayHalfX() - NEON_RAIL_DEPTH,
+    z: neonPlayHalfZ() - NEON_RAIL_DEPTH,
+  };
+}
+
+/** Gap from a box to the rail's inner face. That face is the edge a marble hits. */
+export function neonRailFaceGap(box: NeonBox): number {
+  const inner = railInnerHalf();
+  return Math.min(
+    box.minX + inner.x,
+    inner.x - box.maxX,
+    box.minZ + inner.z,
+    inner.z - box.maxZ,
+  );
+}
+
+function nearestRailFace(box: NeonBox): { gap: number; dx: number; dz: number } {
+  const inner = railInnerHalf();
+  const faces = [
+    { gap: box.minX + inner.x, dx: -1, dz: 0 },
+    { gap: inner.x - box.maxX, dx: 1, dz: 0 },
+    { gap: box.minZ + inner.z, dx: 0, dz: -1 },
+    { gap: inner.z - box.maxZ, dx: 0, dz: 1 },
+  ];
+  faces.sort((a, b) => a.gap - b.gap);
+  return faces[0];
+}
+
 /**
- * The knockout line is the outer face of the rail. A slot that looks open
- * against that line can still trap a marble once the rail thickness is
- * subtracted, so pads are pulled in until a marble fits between them and
- * the rail without sitting on a spawn.
+ * A lane of 1.8 from the rail can land on a spawn. Slide along the rail,
+ * the smaller way, until the marble has room.
+ */
+function clearNeonSpawns(box: NeonBox): number {
+  const need = MARBLE_WIDTH / 2 + 0.35 + 0.02;
+  let dx = 0;
+  const spawns = neonCourtLayout().zones.filter((zone) => zone.isSpawn);
+  for (let pass = 0; pass < 4; pass++) {
+    for (const spawn of spawns) {
+      const x = Math.cos(spawn.angle) * spawn.distance;
+      const z = Math.sin(spawn.angle) * spawn.distance;
+      const nearestX = Math.min(box.maxX, Math.max(box.minX, x));
+      const nearestZ = Math.min(box.maxZ, Math.max(box.minZ, z));
+      const gz = z - nearestZ;
+      const gap = Math.hypot(x - nearestX, gz);
+      if (gap >= need - 1e-4) continue;
+      const zAbs = Math.abs(gz);
+      const xNeed = zAbs >= need ? 0 : Math.sqrt(Math.max(0, need * need - zAbs * zAbs));
+      const moveRight = x + xNeed - box.minX;
+      const moveLeft = x - xNeed - box.maxX;
+      const rightOk = moveRight > 1e-6;
+      const leftOk = moveLeft < -1e-6;
+      let shift = 0;
+      if (rightOk && leftOk) shift = Math.abs(moveRight) <= Math.abs(moveLeft) ? moveRight : moveLeft;
+      else if (rightOk) shift = moveRight;
+      else if (leftOk) shift = moveLeft;
+      else continue;
+      box.minX += shift;
+      box.maxX += shift;
+      dx += shift;
+    }
+  }
+  return dx;
+}
+
+/**
+ * Pads are measured against the rail's inner face, not the knockout line
+ * outside the rail. A slot in the awkward band opens into a 1.8 lane.
+ * Flushing onto the rail would leave a marble overlapping both solids.
  */
 function placeNeonObstacles(): { boxes: NeonBox[]; adjustments: RimGapAdjustment[] } {
-  const halfX = neonPlayHalfX();
-  const halfZ = neonPlayHalfZ();
-  const placed = repairRectRimGaps(scaledObstacleBoxes(), halfX, halfZ, MARBLE_WIDTH);
-  // The knockout-line nudge can stop at 1.7 widths while the rail still
-  // fills 0.7 of that slot. Leave a full marble, plus a little skin, so a
-  // ball parked on the rail is not also inside the pad.
-  const knockoutOpen = (RIM_GAP_OPEN + 0.002) * MARBLE_WIDTH;
-  const railClear = Math.max(knockoutOpen - NEON_RAIL_DEPTH, MARBLE_WIDTH + 0.06);
-  const innerX = halfX - NEON_RAIL_DEPTH;
-  const innerZ = halfZ - NEON_RAIL_DEPTH;
-  for (const box of placed.boxes) {
-    const faces = [
-      { gap: box.minX + innerX, dx: 1, dz: 0 },
-      { gap: innerX - box.maxX, dx: -1, dz: 0 },
-      { gap: box.minZ + innerZ, dx: 0, dz: 1 },
-      { gap: innerZ - box.maxZ, dx: 0, dz: -1 },
-    ];
-    faces.sort((a, b) => a.gap - b.gap);
-    const nearest = faces[0];
-    if (nearest.gap >= railClear) continue;
-    const shift = railClear - nearest.gap;
+  const boxes = scaledObstacleBoxes();
+  const adjustments: RimGapAdjustment[] = [];
+  const lane = RIM_GAP_LANE * MARBLE_WIDTH;
+  for (const box of boxes) {
+    const nearest = nearestRailFace(box);
+    if (!rimGapInBand(nearest.gap, MARBLE_WIDTH)) continue;
     const before = nearest.gap;
+    const shift = nearest.gap - lane;
     box.minX += nearest.dx * shift;
     box.maxX += nearest.dx * shift;
     box.minZ += nearest.dz * shift;
     box.maxZ += nearest.dz * shift;
-    placed.adjustments.push({
+    const after = nearestRailFace(box).gap;
+    adjustments.push({
       meshKey: box.id,
       ids: [box.id],
       kind: "edge",
-      direction: "inward",
+      direction: shift > 0 ? "outward" : "inward",
       dx: nearest.dx * shift,
       dz: nearest.dz * shift,
-      distance: shift,
-      clearances: [{ id: `${box.id}-rail`, before: before / MARBLE_WIDTH, after: railClear / MARBLE_WIDTH }],
+      distance: Math.abs(shift),
+      clearances: [{ id: `${box.id}-rail`, before: rimGapWidths(before), after: rimGapWidths(after) }],
     });
+    const slide = clearNeonSpawns(box);
+    if (Math.abs(slide) > 1e-6) {
+      adjustments.push({
+        meshKey: box.id,
+        ids: [box.id],
+        kind: "edge",
+        direction: slide > 0 ? "outward" : "inward",
+        dx: slide,
+        dz: 0,
+        distance: Math.abs(slide),
+        clearances: [{ id: `${box.id}-spawn`, before: rimGapWidths(after), after: rimGapWidths(neonRailFaceGap(box)) }],
+      });
+    }
   }
-  return placed;
+  return { boxes, adjustments };
 }
 
 /** Pad centers move out with the court. The boxes themselves stay the same size. */

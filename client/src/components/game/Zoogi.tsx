@@ -3,7 +3,7 @@ import { useRef, useState, useEffect, useMemo, Suspense, Component, type ReactNo
 import { useFrame, useThree } from "@react-three/fiber";
 import { Line, Html, useGLTF } from "@react-three/drei";
 import { stopFrameMayEndTurn, useZoogiGame } from "@/lib/stores/useZoogiGame";
-import { marbleUniformScale, resolveZoogiModel, rollMarble, zoogiModelPreloadUrls, type ZoogiModelSettings } from "@/lib/zoogiModels";
+import { fittedUniformScale, resolveZoogiModel, rollMarble, zoogiModelPreloadUrls, type ZoogiModelSettings } from "@/lib/zoogiModels";
 import { useAudio } from "@/lib/stores/useAudio";
 import { useProgression } from "@/lib/stores/useProgression";
 import { triggerLaunchFeel } from "@/lib/stores/useGameFeel";
@@ -127,8 +127,7 @@ function FittedZoogiModel({ settings, marbleRadius }: { settings: ZoogiModelSett
     return { size, center };
   }, [cloned]);
 
-  const maxDimension = Math.max(bounds.size.x, bounds.size.y, bounds.size.z, 1e-4);
-  const uniform = ((marbleRadius * 2) / maxDimension) * settings.scale;
+  const uniform = fittedUniformScale(settings, marbleRadius, bounds.size);
   // After the fit, shift so the lowest point sits on the floor like the ball.
   const bottom = -(bounds.size.y / 2) * uniform;
   const restOnFloor = -marbleRadius - bottom;
@@ -136,7 +135,7 @@ function FittedZoogiModel({ settings, marbleRadius }: { settings: ZoogiModelSett
   // Horns (and anything else past the ball) must not drive the fit. The file
   // origin is already the ball centre, so scale it like the roster and leave Y alone.
   if (settings.fit === "pivot") {
-    const pivotScale = marbleUniformScale(marbleRadius, settings);
+    const pivotScale = fittedUniformScale(settings, marbleRadius, bounds.size);
     return (
       <group
         position={[settings.offset[0], settings.offset[1], settings.offset[2]]}

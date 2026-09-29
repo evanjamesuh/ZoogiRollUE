@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { useRef, useMemo, Suspense, Component, ReactNode } from "react";
+import { useRef, useMemo, useLayoutEffect, Suspense, Component, ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGLTF, Center } from "@react-three/drei";
 import { useZoogiGame, CustomArenaDecoration, type MapTheme } from "@/lib/stores/useZoogiGame";
@@ -24,16 +24,83 @@ import { EditorScoringZones } from "./EditorScoringZones";
 import { PinballBumpers } from "./PinballBumpers";
 import { NeonCourtArena } from "./NeonCourtArena";
 import { ARENA_RADIUS } from "@/lib/arenaConstants";
-import { cosmosPlayTransform, getMapLayout } from "@/lib/arenaColliders";
+import { COSMOS_FLOOR_MESH, cosmosPlayTransform, cosmosRingPush, cosmosRingRole, getMapLayout } from "@/lib/arenaColliders";
 import { PharaohTombArena } from "./PharaohTombArena";
 import { ArabianNightDressing, CosmicVoidDressing, VolcanicPitDressing } from "./ComicMapDressing";
 import { ArabianArena, FrozenArena, MeadowArena } from "./RoundMapArenas";
 
 export { ARENA_RADIUS };
 
+/** Scale the curb and wall out from the floor centre so a marble clears them before it falls. */
+function pushCosmosRings(scene: THREE.Object3D) {
+  const placed = cosmosPlayTransform();
+  scene.updateWorldMatrix(true, true);
+  const sceneToParent = scene.matrixWorld.clone().invert();
+  const center = new THREE.Vector3(COSMOS_FLOOR_MESH.centerX, COSMOS_FLOOR_MESH.centerY, COSMOS_FLOOR_MESH.centerZ);
+  scene.traverse((obj) => {
+    if (!(obj instanceof THREE.Mesh) || !cosmosRingRole(obj.name) || obj.userData.cosmosRingPushed) return;
+    const geometry = obj.geometry.clone();
+    obj.geometry = geometry;
+    const position = geometry.getAttribute("position");
+    const toScene = obj.matrixWorld.clone().premultiply(sceneToParent);
+    const toMesh = toScene.clone().invert();
+    const scenePoints: THREE.Vector3[] = [];
+    const vertex = new THREE.Vector3();
+    for (let i = 0; i < position.count; i++) {
+      scenePoints.push(vertex.fromBufferAttribute(position, i).applyMatrix4(toScene).clone());
+    }
+    let inner = Infinity;
+    const consider = (ax: number, az: number, bx: number, bz: number) => {
+      const abx = bx - ax;
+      const abz = bz - az;
+      const len2 = abx * abx + abz * abz;
+      let u = 0;
+      if (len2 > 1e-12) {
+        u = ((center.x - ax) * abx + (center.z - az) * abz) / len2;
+        if (u < 0) u = 0;
+        else if (u > 1) u = 1;
+      }
+      const radius = Math.hypot(ax + abx * u - center.x, az + abz * u - center.z);
+      if (radius < inner) inner = radius;
+    };
+    const index = geometry.getIndex();
+    if (index) {
+      for (let i = 0; i + 2 < index.count; i += 3) {
+        const a = scenePoints[index.getX(i)];
+        const b = scenePoints[index.getX(i + 1)];
+        const c = scenePoints[index.getX(i + 2)];
+        consider(a.x, a.z, b.x, b.z);
+        consider(b.x, b.z, c.x, c.z);
+        consider(c.x, c.z, a.x, a.z);
+      }
+    } else {
+      for (const point of scenePoints) {
+        const radius = Math.hypot(point.x - center.x, point.z - center.z);
+        if (radius < inner) inner = radius;
+      }
+    }
+    const push = cosmosRingPush(inner * placed.scale);
+    obj.userData.cosmosRingPushed = true;
+    if (push === 1) return;
+    for (let i = 0; i < scenePoints.length; i++) {
+      const point = scenePoints[i];
+      point.x = center.x + (point.x - center.x) * push;
+      point.z = center.z + (point.z - center.z) * push;
+      point.applyMatrix4(toMesh);
+      position.setXYZ(i, point.x, point.y, point.z);
+    }
+    position.needsUpdate = true;
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
+  });
+}
+
 function CosmosArenaModel() {
   const groupRef = useRef<THREE.Group>(null);
   const { scene } = useGLTF("/models/cosmos_arena.glb");
+  useLayoutEffect(() => {
+    pushCosmosRings(scene);
+  }, [scene]);
   const backgroundSettings = useZoogiGame((state) => state.backgroundSettings);
   const elementTransforms = useZoogiGame((state) => state.elementTransforms);
   const gameMode = useZoogiGame((state) => state.gameMode);

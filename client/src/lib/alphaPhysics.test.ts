@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { getMapLayout, resolveSolidCollision, MARBLE_RADIUS, ORB_RADIUS, BUMPER_RADIUS, centerPastOpenEdge, collectMatchSolids } from "./arenaColliders.ts";
+import { rimGapAllowed } from "./obstaclePlacement.ts";
 import { ARENA_SCALE_BY_MAP, arenaScaleFor } from "./arenaScale.ts";
 import { leftNeonOpenEdge, neonPlayHalfX, neonPlayHalfZ, neonRails } from "./neonCourt.ts";
 import { circleTimeOfImpact } from "./sweptHit.ts";
@@ -17,6 +18,9 @@ import {
   ZOOGI_MASS,
   NORMAL_LAUNCH_SPEED,
   ROCK_RESTITUTION,
+  ICE_LINEAR_DAMPING,
+  ICE_ROLLING_DECEL,
+  LINEAR_DAMPING,
   ROLLING_DECEL,
   SETTLE_DELAY_SECONDS,
   SETTLE_DELAY_STEPS,
@@ -529,25 +533,27 @@ test("a crossing that endpoints miss still registers, including a full-power sho
   console.log(`MEASURE fullPowerHit target=${targetSpeed.toFixed(3)} shooter=${shooterSpeed.toFixed(3)} cap=${MAX_PLANAR_SPEED.toFixed(3)}`);
 });
 
-test("knockout waits for the open edge, not a meadow rock or a night-circuit rail", async () => {
+test("knockout waits for the open edge, and every rim gap is a seal or a lane", async () => {
   const grass = getMapLayout("grass");
   assert.ok(grass);
   const solids = collectMatchSolids({ map: "grass", bumpers: [], landedRocks: [], editorModels: [] });
-  const rock = grass.scenery.find((solid) => {
-    const rockDist = Math.hypot(solid.x, solid.z);
-    return rockDist + solid.radius + MARBLE_RADIUS > grass.knockoffRadius;
-  });
-  assert.ok(rock, "a meadow rim rock reaches the knockout line");
-  const rockDist = Math.hypot(rock.x, rock.z);
-  const ux = rock.x / rockDist;
-  const uz = rock.z / rockDist;
-  const against = rockDist + rock.radius + MARBLE_RADIUS * 0.9;
-  assert.ok(against > grass.knockoffRadius, "the sample center is past the circle");
-  assert.ok(against < rockDist + rock.radius + MARBLE_RADIUS, "the sample still overlaps the rock");
-  assert.equal(
-    centerPastOpenEdge("grass", ux * against, uz * against, grass.knockoffRadius, MARBLE_RADIUS, solids),
-    false,
-  );
+  for (const map of ["grass", "ice", "lava", "saturn", "tomb"] as const) {
+    const layout = getMapLayout(map);
+    assert.ok(layout);
+    for (const solid of layout.scenery) {
+      const gap = layout.knockoffRadius - Math.hypot(solid.x, solid.z) - solid.radius;
+      assert.equal(rimGapAllowed(gap), true, `${map} ${solid.id} gap ${(gap / (MARBLE_RADIUS * 2)).toFixed(3)}`);
+    }
+  }
+  const against = grass.knockoffRadius + MARBLE_RADIUS * 0.4;
+  const rim = {
+    id: "rim-touch",
+    position: [grass.knockoffRadius, 0, 0] as [number, number, number],
+    radius: 1.2,
+    repelForce: 0,
+  };
+  const rimSolids = collectMatchSolids({ map: "grass", bumpers: [], landedRocks: [rim], editorModels: [] });
+  assert.equal(centerPastOpenEdge("grass", against, 0, grass.knockoffRadius, MARBLE_RADIUS, rimSolids), false);
   assert.equal(
     centerPastOpenEdge("grass", grass.knockoffRadius + 0.35, 0, grass.knockoffRadius, MARBLE_RADIUS, solids),
     true,
@@ -568,9 +574,10 @@ test("knockout waits for the open edge, not a meadow rock or a night-circuit rai
     mushrooms: [],
     pinballBumpers: [],
     wolfClones: [],
+    landedRocks: [rim],
     playerEntity: {
       ...grassPlayer,
-      position: [ux * against, ZOOGI_REST_Y, uz * against],
+      position: [against, ZOOGI_REST_Y, 0],
       velocity: [0, 0, 0],
       offTheFloor: false,
       isKnockedOut: false,
@@ -589,4 +596,16 @@ test("knockout waits for the open edge, not a meadow rock or a night-circuit rai
   const railCenterZ = (north.minZ + north.maxZ) / 2;
   assert.equal(leftNeonOpenEdge(0, halfZ + MARBLE_RADIUS * 0.25, MARBLE_RADIUS), false);
   assert.ok(railCenterZ < halfZ);
+});
+
+test("frozen ring ice decelerates slower than open ground", () => {
+  assert.equal(LINEAR_DAMPING, 1);
+  assert.equal(ICE_LINEAR_DAMPING, 1);
+  assert.equal(ICE_ROLLING_DECEL, 1.15);
+  assert.ok(ICE_ROLLING_DECEL < ROLLING_DECEL / 2, "ice loses speed much slower than the rink");
+  const speed = 13.5;
+  const grassStop = (speed * speed) / (2 * ROLLING_DECEL);
+  const iceStop = (speed * speed) / (2 * ICE_ROLLING_DECEL);
+  assert.ok(iceStop > grassStop * 3, `ice coasts ${iceStop.toFixed(1)}, grass ${grassStop.toFixed(1)}`);
+  console.log(`MEASURE iceDecel=${ICE_ROLLING_DECEL} grassDecel=${ROLLING_DECEL} iceStop=${iceStop.toFixed(2)} grassStop=${grassStop.toFixed(2)}`);
 });

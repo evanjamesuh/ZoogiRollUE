@@ -51,12 +51,17 @@ export const WINTER_STAGE = {
 };
 
 /**
- * cosmos_arena.glb floor disk (polygon56_Arena_Floor). It is a circle, but the
- * file does not put that circle on the origin: the centre sits at about
- * (+0.250, -0.024) and the radius is 15.743. Drawn at scale 1.08 with no
- * shift, the lip sat 1.1–1.7 units outside the knockout, furthest on +X, so a
- * marble fell before the curb and that side had no lip at the fall line.
- * cosmosPlayTransform recentres the disk and scales it onto the knockout.
+ * cosmos_arena.glb floor (polygon56_Arena_Floor). It is an 18-gon, not a
+ * circle: corners every 20°, with a corner on +X, at radius 15.743 around
+ * a centre near (+0.250, -0.024). The flats sit at 15.743 * cos(10°), about
+ * 15.504. cosmosPlayTransform recentres that polygon and keeps the corners
+ * on the 15.6 knockout. The fall check uses the same 18-gon, so a marble
+ * leaves at the lip on the flats as well as the corners.
+ *
+ * polygon30 (Arena Wall Barrier, the curb) and polygon67 (Arena Wall) are
+ * pushed out until their inner faces clear the farthest fall line by one
+ * marble radius. The numbers below are those inner faces after the play
+ * transform and before that push, at arena scale 1.
  */
 export const COSMOS_FLOOR_MESH = {
   centerX: 0.25045,
@@ -65,12 +70,28 @@ export const COSMOS_FLOOR_MESH = {
   radius: 15.743,
 };
 
+export const COSMOS_LIP_SIDES = 18;
+/** Inner-face radius of the curb (Arena Wall Barrier) before it is pushed out. */
+export const COSMOS_CURB_INNER = 14.544;
+/** Inner-face radius of the arena wall before it is pushed out. */
+export const COSMOS_WALL_INNER = 14.834;
+
 export const COSMOS_STAGE = {
   floorRadius: 15.6,
   knockoffRadius: 15.6,
 };
 
-/** Scale and shift that put the measured floor lip on the knockout circle. */
+/** Radius of a regular polygon at `angle`, with a vertex on +X. */
+export function regularPolygonRadius(cornerRadius: number, sides: number, angle: number): number {
+  const sector = (Math.PI * 2) / sides;
+  const half = sector / 2;
+  let wrapped = angle % sector;
+  if (wrapped < 0) wrapped += sector;
+  const fromVertex = Math.min(wrapped, sector - wrapped);
+  return (cornerRadius * Math.cos(half)) / Math.cos(half - fromVertex);
+}
+
+/** Scale and shift that put the floor's corners on the knockout and the centre on the origin. */
 export function cosmosPlayTransform(): { x: number; y: number; z: number; scale: number } {
   const worldRadius = COSMOS_STAGE.knockoffRadius * arenaScaleFor("space");
   const scale = worldRadius / COSMOS_FLOOR_MESH.radius;
@@ -82,14 +103,45 @@ export function cosmosPlayTransform(): { x: number; y: number; z: number; scale:
   };
 }
 
-/** World circle of the cosmic floor lip after cosmosPlayTransform. */
-export function cosmosDrawnLip(): { centerX: number; centerZ: number; radius: number } {
+/** World lip of the cosmic floor after cosmosPlayTransform. `radius` is a corner; flats are closer. */
+export function cosmosDrawnLip(): {
+  centerX: number;
+  centerZ: number;
+  radius: number;
+  radiusAt: (angle: number) => number;
+} {
   const placed = cosmosPlayTransform();
+  const radiusAt = (angle: number) =>
+    placed.scale * regularPolygonRadius(COSMOS_FLOOR_MESH.radius, COSMOS_LIP_SIDES, angle);
   return {
     centerX: placed.x + placed.scale * COSMOS_FLOOR_MESH.centerX,
     centerZ: placed.z + placed.scale * COSMOS_FLOOR_MESH.centerZ,
-    radius: placed.scale * COSMOS_FLOOR_MESH.radius,
+    radius: radiusAt(0),
+    radiusAt,
   };
+}
+
+/** Fall line for Cosmic Platform: the same 18-gon the floor lip draws. */
+export function cosmosLipRadius(angle: number): number {
+  return cosmosDrawnLip().radiusAt(angle);
+}
+
+/** "curb" is Arena Wall Barrier. "wall" is Arena Wall, not the barrier. */
+export function cosmosRingRole(name: string): "curb" | "wall" | null {
+  const normalized = name.toLowerCase().replace(/[_]+/g, " ");
+  if (normalized.includes("arena wall barrier")) return "curb";
+  if (normalized.includes("arena wall")) return "wall";
+  return null;
+}
+
+/**
+ * Radial scale that puts an inner face on the farthest fall line plus one
+ * marble radius. 1 means the ring is already clear.
+ */
+export function cosmosRingPush(innerWorld: number): number {
+  const limit = cosmosLipRadius(0) + MARBLE_RADIUS;
+  if (!(innerWorld > 0) || innerWorld >= limit) return 1;
+  return limit / innerWorld;
 }
 
 /**
@@ -734,12 +786,17 @@ export function centerPastOpenEdge(
   solids: SolidCircle[],
 ): boolean {
   if (mapId === "neon") return leftNeonOpenEdge(x, z, bodyRadius);
-  if (Math.hypot(x, z) <= knockoffRadius) return false;
+  const angle = Math.atan2(z, x);
+  const lipCorner = mapId === "space" ? cosmosLipRadius(0) : 0;
+  const fallRadius = mapId === "space" && lipCorner > 0
+    ? cosmosLipRadius(angle) * (knockoffRadius / lipCorner)
+    : knockoffRadius;
+  // A hair of float must not drop a marble that is sitting on the lip.
+  if (Math.hypot(x, z) <= fallRadius + 1e-6) return false;
   const walls = solids.filter((solid) => solid.kind !== "bumper");
   if (pointInsideSolid(x, z, walls, bodyRadius)) return false;
-  const angle = Math.atan2(z, x);
-  const rimX = Math.cos(angle) * knockoffRadius;
-  const rimZ = Math.sin(angle) * knockoffRadius;
+  const rimX = Math.cos(angle) * fallRadius;
+  const rimZ = Math.sin(angle) * fallRadius;
   for (const solid of walls) {
     const rimClearance = Math.hypot(rimX - solid.x, rimZ - solid.z) - solid.radius;
     if (rimClearance >= bodyRadius) continue;

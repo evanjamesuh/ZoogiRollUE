@@ -16,8 +16,13 @@ import { ZOOGI_DIAMETER } from "./restHeight";
 
 /** Collision diameter. Rim gaps are measured in these widths. */
 export const MARBLE_WIDTH = ZOOGI_DIAMETER;
+/** A gap in [SEALED, OPEN) is nudged. The nudge lands on FLUSH or LANE, inside the rule by a margin. */
 export const RIM_GAP_SEALED = 0.4;
 export const RIM_GAP_OPEN = 1.7;
+export const RIM_GAP_FLUSH = 0.3;
+export const RIM_GAP_LANE = 1.8;
+/** Float slack for the seal/lane test. Targets sit well inside this. */
+export const RIM_GAP_TOLERANCE = 0.02;
 
 export interface PlacementCircle {
   id: string;
@@ -76,14 +81,26 @@ export function rimGapInBand(worldGap: number, marbleWidth = MARBLE_WIDTH): bool
   return widths >= RIM_GAP_SEALED && widths < RIM_GAP_OPEN;
 }
 
-/** Snap a world-unit opening onto the sealed side or the open side of the band. */
+/**
+ * True when a gap is under 0.4 or at least 1.7 marble widths.
+ * `tolerance` keeps a value that lands on the boundary from failing the test.
+ */
+export function rimGapAllowed(worldGap: number, marbleWidth = MARBLE_WIDTH, tolerance = RIM_GAP_TOLERANCE): boolean {
+  const widths = rimGapWidths(worldGap, marbleWidth);
+  return widths < RIM_GAP_SEALED + tolerance || widths >= RIM_GAP_OPEN - tolerance;
+}
+
+/**
+ * Snap a world-unit opening to a flush joint (0.3) or a lane (1.8).
+ * The midpoint of the band opens the lane, and a hair of float around that
+ * midpoint stays on the same side.
+ */
 export function snapRimGap(worldGap: number, marbleWidth = MARBLE_WIDTH): number {
   if (!rimGapInBand(worldGap, marbleWidth)) return worldGap;
-  const seal = (RIM_GAP_SEALED - 0.001) * marbleWidth;
-  // Sit just outside the band so a float rounding of 1.7 does not fall back in.
-  const open = (RIM_GAP_OPEN + 0.002) * marbleWidth;
-  const mid = ((RIM_GAP_SEALED + RIM_GAP_OPEN) / 2) * marbleWidth;
-  return worldGap < mid ? seal : open;
+  const widths = rimGapWidths(worldGap, marbleWidth);
+  const mid = (RIM_GAP_SEALED + RIM_GAP_OPEN) / 2;
+  const flush = widths < mid - 1e-4;
+  return (flush ? RIM_GAP_FLUSH : RIM_GAP_LANE) * marbleWidth;
 }
 
 function radialClearance(x: number, z: number, radius: number, knockoffRadius: number): number {
@@ -146,51 +163,45 @@ function copyShift<T extends PlacementCircle>(group: T[], dx: number, dz: number
   return group.map((circle) => ({ ...circle, x: circle.x + dx, z: circle.z + dz }));
 }
 
-/**
- * Smallest radial translation that puts every circle in the mesh outside
- * the awkward band. Positive delta moves the mesh toward the rim.
- */
-function clearanceDelta(group: PlacementCircle[], knockoffRadius: number, marbleWidth: number): number | null {
-  if (groupIsClear(group, knockoffRadius, marbleWidth)) return 0;
-  let best: number | null = null;
-  for (const sign of [1, -1]) {
-    for (let step = 1; step <= 500; step++) {
-      const delta = sign * step * 0.01;
-      const shift = outwardShift(group, delta);
-      const moved = copyShift(group, shift.dx, shift.dz);
-      if (groupIsClear(moved, knockoffRadius, marbleWidth)) {
-        if (best === null || Math.abs(delta) < Math.abs(best) - 1e-9) best = delta;
-        break;
-      }
-    }
-  }
-  return best;
-}
-
 function repairEdgeGaps<T extends PlacementCircle>(
   circles: T[],
   knockoffRadius: number,
   marbleWidth: number,
   adjustments: RimGapAdjustment[],
 ) {
+  const mid = ((RIM_GAP_SEALED + RIM_GAP_OPEN) / 2) * marbleWidth;
   for (const [meshKey, group] of groupByKey(circles)) {
     const before = group.map((circle) => ({
       id: circle.id,
       gap: radialClearance(circle.x, circle.z, circle.radius, knockoffRadius),
     }));
     if (before.every((entry) => !rimGapInBand(entry.gap, marbleWidth))) continue;
-    const delta = clearanceDelta(group, knockoffRadius, marbleWidth);
-    if (delta === null || Math.abs(delta) < 1e-6) continue;
-    const shift = outwardShift(group, delta);
-    translateGroup(group, shift.dx, shift.dz);
-    const distance = Math.hypot(shift.dx, shift.dz);
+    let totalDx = 0;
+    let totalDz = 0;
+    for (let pass = 0; pass < 8; pass++) {
+      let driver: number | null = null;
+      for (const circle of group) {
+        const gap = radialClearance(circle.x, circle.z, circle.radius, knockoffRadius);
+        if (!rimGapInBand(gap, marbleWidth)) continue;
+        if (driver === null || Math.abs(gap - mid) < Math.abs(driver - mid)) driver = gap;
+      }
+      if (driver === null) break;
+      const delta = driver - snapRimGap(driver, marbleWidth);
+      if (Math.abs(delta) < 1e-6) break;
+      const shift = outwardShift(group, delta);
+      translateGroup(group, shift.dx, shift.dz);
+      totalDx += shift.dx;
+      totalDz += shift.dz;
+    }
+    const distance = Math.hypot(totalDx, totalDz);
+    if (distance < 1e-6) continue;
     adjustments.push({
       meshKey,
       ids: group.map((circle) => circle.id),
       kind: "edge",
-      direction: delta > 0 ? "outward" : "inward",
-      dx: shift.dx,
-      dz: shift.dz,
+      direction: totalDx * (group[0]?.x ?? 0) + totalDz * (group[0]?.z ?? 0) > 0 ? "outward" : "inward",
+      dx: totalDx,
+      dz: totalDz,
       distance,
       clearances: before.map((entry) => {
         const circle = group.find((item) => item.id === entry.id)!;
@@ -237,7 +248,7 @@ function repairMouthGaps<T extends PlacementCircle>(
         return groupIsClear(nextA, knockoffRadius, marbleWidth) && groupIsClear(nextB, knockoffRadius, marbleWidth);
       };
       const closing = shift;
-      const opening = (gap - RIM_GAP_OPEN * marbleWidth) / 2;
+      const opening = (gap - RIM_GAP_LANE * marbleWidth) / 2;
       const amount = tryShift(closing) ? closing : tryShift(opening) ? opening : null;
       if (amount === null || Math.abs(amount) < 1e-6) continue;
       translateGroup(groupA, unitX * amount, unitZ * amount);
