@@ -1,0 +1,656 @@
+import * as THREE from "three";
+import { Component, ReactNode, Suspense, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useFrame } from "@react-three/fiber";
+import { useAnimations, useGLTF } from "@react-three/drei";
+import { useZoogiGame } from "@/lib/stores/useZoogiGame";
+import {
+  ARABIAN_STAGE,
+  GRASS_STAGE,
+  WINTER_STAGE,
+  arabianPlayTransform,
+  getMapLayout,
+  type SolidCircle,
+} from "@/lib/arenaColliders";
+import { ROUND_KNOCKOFF_RADIUS } from "@/lib/roundRim";
+import {
+  boxSize,
+  closestDistanceXZ,
+  shouldHideRingPiece,
+  translationToClear,
+  type Aabb,
+} from "@/lib/ringPlacement";
+
+const EDGE = ROUND_KNOCKOFF_RADIUS;
+const RIM_INNER = 14.7;
+const SCENERY_LIMIT = EDGE + 0.85;
+
+class ModelErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  render() {
+    return this.state.hasError ? null : this.props.children;
+  }
+}
+
+function seeded(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function paintedTexture(
+  draw: (ctx: CanvasRenderingContext2D, w: number, h: number) => void,
+  repeatX: number,
+  repeatY: number,
+  size = 512,
+): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (ctx) draw(ctx, size, size);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(repeatX, repeatY);
+  tex.anisotropy = 8;
+  return tex;
+}
+
+function grassDraw(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const rand = seeded(3);
+  ctx.fillStyle = "#3e9d48";
+  ctx.fillRect(0, 0, w, h);
+  for (let i = 0; i < 2200; i++) {
+    const x = rand() * w;
+    const y = rand() * h;
+    const g = 100 + Math.floor(rand() * 120);
+    ctx.fillStyle = `rgba(${50 + rand() * 40}, ${g}, ${40 + rand() * 40}, 0.45)`;
+    ctx.fillRect(x, y, 2 + rand() * 7, 4 + rand() * 10);
+  }
+}
+
+function soilDraw(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const rand = seeded(8);
+  ctx.fillStyle = "#6d5138";
+  ctx.fillRect(0, 0, w, h);
+  for (let i = 0; i < 900; i++) {
+    ctx.fillStyle = `rgba(${80 + rand() * 60}, ${50 + rand() * 30}, ${24 + rand() * 20}, 0.45)`;
+    ctx.fillRect(rand() * w, rand() * h, 2 + rand() * 8, 2 + rand() * 4);
+  }
+}
+
+function rockDraw(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const rand = seeded(12);
+  ctx.fillStyle = "#7a6756";
+  ctx.fillRect(0, 0, w, h);
+  for (let i = 0; i < 1400; i++) {
+    const shade = 70 + Math.floor(rand() * 90);
+    ctx.fillStyle = `rgba(${shade}, ${shade - 12}, ${shade - 24}, 0.55)`;
+    ctx.beginPath();
+    ctx.arc(rand() * w, rand() * h, 1 + rand() * 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function iceDraw(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const rand = seeded(21);
+  ctx.fillStyle = "#c5ecff";
+  ctx.fillRect(0, 0, w, h);
+  for (let i = 0; i < 40; i++) {
+    ctx.strokeStyle = `rgba(255, 255, 255, ${0.25 + rand() * 0.4})`;
+    ctx.lineWidth = 2 + rand() * 4;
+    ctx.beginPath();
+    ctx.moveTo(rand() * w, rand() * h);
+    ctx.bezierCurveTo(rand() * w, rand() * h, rand() * w, rand() * h, rand() * w, rand() * h);
+    ctx.stroke();
+  }
+  for (let i = 0; i < 18; i++) {
+    ctx.strokeStyle = `rgba(90, 150, 190, ${0.25 + rand() * 0.3})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    const x = rand() * w;
+    const y = rand() * h;
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + rand() * 80 - 40, y + rand() * 30 - 15);
+    ctx.stroke();
+  }
+}
+
+function snowDraw(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const rand = seeded(27);
+  ctx.fillStyle = "#f7fbff";
+  ctx.fillRect(0, 0, w, h);
+  for (let i = 0; i < 700; i++) {
+    ctx.fillStyle = `rgba(${180 + rand() * 60}, ${200 + rand() * 55}, 230, 0.35)`;
+    ctx.beginPath();
+    ctx.arc(rand() * w, rand() * h, 2 + rand() * 10, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function tileDraw(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  ctx.fillStyle = "#e4c48e";
+  ctx.fillRect(0, 0, w, h);
+  const cell = 128;
+  for (let y = 0; y < h; y += cell) {
+    for (let x = 0; x < w; x += cell) {
+      ctx.fillStyle = "#c99558";
+      ctx.beginPath();
+      ctx.moveTo(x + cell / 2, y + 16);
+      ctx.lineTo(x + cell - 16, y + cell / 2);
+      ctx.lineTo(x + cell / 2, y + cell - 16);
+      ctx.lineTo(x + 16, y + cell / 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = "#6d4528";
+      ctx.lineWidth = 5;
+      ctx.stroke();
+      ctx.strokeStyle = "#8d6440";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x + 8, y + 8, cell - 16, cell - 16);
+      ctx.fillStyle = "#1a6d72";
+      ctx.beginPath();
+      ctx.arc(x + cell / 2, y + cell / 2, 9, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+function useFloorTextures(kind: "grass" | "ice" | "saturn") {
+  return useMemo(() => {
+    if (kind === "grass") {
+      return {
+        top: paintedTexture(grassDraw, 5, 5),
+        side: paintedTexture(rockDraw, 10, 2),
+        rim: paintedTexture(soilDraw, 8, 1),
+      };
+    }
+    if (kind === "ice") {
+      return {
+        top: paintedTexture(iceDraw, 4, 4),
+        side: paintedTexture(snowDraw, 8, 2),
+        rim: paintedTexture(snowDraw, 6, 1),
+      };
+    }
+    return {
+      top: paintedTexture(tileDraw, 4, 4),
+      side: paintedTexture(soilDraw, 8, 2),
+      rim: paintedTexture(tileDraw, 6, 1),
+    };
+  }, [kind]);
+}
+
+function RoundIsland({
+  kind,
+  lip,
+  lipEmissive,
+  underside,
+  sideColor,
+}: {
+  kind: "grass" | "ice" | "saturn";
+  lip: string;
+  lipEmissive?: string;
+  underside: string;
+  sideColor: string;
+}) {
+  const maps = useFloorTextures(kind);
+  return (
+    <group>
+      <mesh position={[0, -1.35, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[EDGE, EDGE + 1.2, 2.7, 80, 1, true]} />
+        <meshStandardMaterial map={maps.side} color={sideColor} roughness={0.95} side={THREE.DoubleSide} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} receiveShadow>
+        <circleGeometry args={[EDGE, 80]} />
+        <meshStandardMaterial
+          map={maps.top}
+          color={kind === "saturn" ? "#ffe7c4" : "#ffffff"}
+          emissive={kind === "saturn" ? "#3a2410" : "#000000"}
+          emissiveIntensity={kind === "saturn" ? 0.2 : 0}
+          roughness={kind === "ice" ? 0.35 : 0.86}
+          metalness={kind === "ice" ? 0.08 : 0}
+        />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.045, 0]}>
+        <ringGeometry args={[RIM_INNER, EDGE - 0.06, 80]} />
+        <meshStandardMaterial map={maps.rim} color={kind === "ice" ? "#ffffff" : "#ffffff"} roughness={0.9} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.06, 0]}>
+        <ringGeometry args={[EDGE - 0.32, EDGE - 0.02, 96]} />
+        <meshStandardMaterial
+          color={lip}
+          emissive={lipEmissive ?? "#000000"}
+          emissiveIntensity={lipEmissive ? 0.85 : 0}
+          roughness={0.55}
+          metalness={lipEmissive ? 0.25 : 0}
+        />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -2.7, 0]}>
+        <circleGeometry args={[EDGE + 1.2, 40]} />
+        <meshStandardMaterial color={underside} roughness={1} />
+      </mesh>
+    </group>
+  );
+}
+
+function sceneryOf(mapId: string): SolidCircle[] {
+  return getMapLayout(mapId)?.scenery ?? [];
+}
+
+function MeadowFlowers() {
+  const flowers = useMemo(() => {
+    const rand = seeded(41);
+    const colors = ["#ff5fa2", "#ffd24a", "#fff4ea", "#7ec8ff", "#ff7a3c"];
+    return Array.from({ length: 26 }, (_, i) => {
+      const angle = rand() * Math.PI * 2;
+      const dist = 17.4 + rand() * 5.5;
+      return {
+        id: `flower-${i}`,
+        x: Math.cos(angle) * dist,
+        z: Math.sin(angle) * dist,
+        color: colors[i % colors.length],
+        scale: 0.65 + rand() * 0.55,
+        rot: rand() * Math.PI,
+      };
+    });
+  }, []);
+
+  return (
+    <group>
+      {flowers.map((flower) => (
+        <group key={flower.id} position={[flower.x, 0, flower.z]} rotation={[0, flower.rot, 0]} scale={flower.scale}>
+          <mesh position={[0, 0.16, 0]}>
+            <cylinderGeometry args={[0.03, 0.03, 0.32, 5]} />
+            <meshStandardMaterial color="#2f6a32" />
+          </mesh>
+          <mesh position={[0, 0.34, 0]}>
+            <sphereGeometry args={[0.1, 8, 8]} />
+            <meshStandardMaterial color={flower.color} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+function MeadowRocks() {
+  const rockMap = useMemo(() => paintedTexture(rockDraw, 1, 1, 256), []);
+  const rocks = useMemo(() => sceneryOf("grass").filter((solid) => solid.kind === "rock"), []);
+  return (
+    <group>
+      {rocks.map((rock) => (
+        <mesh
+          key={rock.id}
+          position={[rock.x, rock.radius * 0.42, rock.z]}
+          scale={[rock.radius, rock.radius * 0.62, rock.radius * 0.92]}
+          castShadow
+          receiveShadow
+        >
+          <icosahedronGeometry args={[1, 1]} />
+          <meshStandardMaterial map={rockMap} color="#c4b4a4" roughness={0.92} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function SnowLip() {
+  const snow = useMemo(() => paintedTexture(snowDraw, 2, 1), []);
+  const banks = useMemo(() => {
+    const rand = seeded(15);
+    return Array.from({ length: 18 }, (_, i) => {
+      const angle = (i / 18) * Math.PI * 2 + 0.15;
+      const dist = 16.7 + (i % 3) * 0.35;
+      return {
+        id: `snowbank-${i}`,
+        x: Math.cos(angle) * dist,
+        z: Math.sin(angle) * dist,
+        s: 0.7 + rand() * 0.45,
+      };
+    });
+  }, []);
+  return (
+    <group>
+      {banks.map((bank) => (
+        <mesh key={bank.id} position={[bank.x, bank.s * 0.35, bank.z]} scale={[bank.s, bank.s * 0.55, bank.s]} castShadow receiveShadow>
+          <sphereGeometry args={[1, 16, 12]} />
+          <meshStandardMaterial map={snow} color="#ffffff" roughness={0.95} />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function ArabianPlanters() {
+  const pots = useMemo(() => sceneryOf("saturn").filter((solid) => solid.kind === "prop"), []);
+  return (
+    <group>
+      {pots.map((pot) => (
+        <group key={pot.id} position={[pot.x, 0, pot.z]}>
+          <mesh position={[0, 0.42, 0]} castShadow receiveShadow>
+            <cylinderGeometry args={[pot.radius * 0.82, pot.radius, 0.84, 12]} />
+            <meshStandardMaterial color="#7c3b2c" roughness={0.82} />
+          </mesh>
+          <mesh position={[0, 0.88, 0]} castShadow>
+            <cylinderGeometry args={[pot.radius * 0.96, pot.radius * 0.78, 0.14, 12]} />
+            <meshStandardMaterial color="#e6c27a" emissive="#ffb15a" emissiveIntensity={0.35} roughness={0.5} metalness={0.2} />
+          </mesh>
+          <mesh position={[0, 1.08, 0]} castShadow>
+            <sphereGeometry args={[pot.radius * 0.38, 10, 8]} />
+            <meshStandardMaterial color="#1f7a4a" roughness={0.7} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+function toAabb(box: THREE.Box3): Aabb {
+  return {
+    minX: box.min.x,
+    minY: box.min.y,
+    minZ: box.min.z,
+    maxX: box.max.x,
+    maxY: box.max.y,
+    maxZ: box.max.z,
+  };
+}
+
+function findContentRoot(scene: THREE.Object3D): THREE.Object3D {
+  let node = scene;
+  for (let i = 0; i < 8; i++) {
+    const kids = node.children.filter((child) => child.type !== "Bone" && !child.type.includes("Camera") && !child.type.includes("Light"));
+    if (kids.length !== 1) break;
+    if ((kids[0] as THREE.Mesh).isMesh) break;
+    node = kids[0];
+  }
+  return node;
+}
+
+function applyWorldXZ(object: THREE.Object3D, dx: number, dz: number) {
+  const parent = object.parent;
+  if (!parent) {
+    object.position.x += dx;
+    object.position.z += dz;
+    return;
+  }
+  parent.updateWorldMatrix(true, false);
+  const inverse = new THREE.Matrix4().copy(parent.matrixWorld).invert();
+  const origin = new THREE.Vector3(0, 0, 0).applyMatrix4(inverse);
+  const moved = new THREE.Vector3(dx, 0, dz).applyMatrix4(inverse);
+  object.position.x += moved.x - origin.x;
+  object.position.z += moved.z - origin.z;
+}
+
+function collectPieces(node: THREE.Object3D): THREE.Object3D[] {
+  const pieces: THREE.Object3D[] = [];
+  for (const child of node.children) {
+    if (!child.visible || child.type === "Bone" || child.type.includes("Light") || child.type.includes("Camera")) continue;
+    child.updateWorldMatrix(true, true);
+    const box = new THREE.Box3().setFromObject(child);
+    if (box.isEmpty()) continue;
+    const aabb = toAabb(box);
+    const size = boxSize(aabb);
+    const coversPlay = closestDistanceXZ(aabb) < EDGE && Math.max(size.x, size.z) > 8;
+    const mesh = (child as THREE.Mesh).isMesh;
+    if (coversPlay && !mesh && child.children.length > 0) {
+      pieces.push(...collectPieces(child));
+    } else {
+      pieces.push(child);
+    }
+  }
+  return pieces;
+}
+
+function placeAroundRing(root: THREE.Object3D): { hid: number; moved: number; kept: number } | null {
+  if (root.userData.ringArranged) return null;
+  root.userData.ringArranged = true;
+  const content = findContentRoot(root);
+  let hid = 0;
+  let moved = 0;
+  let kept = 0;
+  const plans: { child: THREE.Object3D; hide: boolean; dx: number; dz: number }[] = [];
+
+  for (const child of collectPieces(content)) {
+    child.updateWorldMatrix(true, true);
+    let box = new THREE.Box3().setFromObject(child);
+    if (box.isEmpty()) continue;
+    let aabb = toAabb(box);
+    if (shouldHideRingPiece(child.name, aabb)) {
+      plans.push({ child, hide: true, dx: 0, dz: 0 });
+      continue;
+    }
+    const xz = Math.max(boxSize(aabb).x, boxSize(aabb).z);
+    if (xz > 26) {
+      child.scale.multiplyScalar(16 / xz);
+      child.updateWorldMatrix(true, true);
+      box = new THREE.Box3().setFromObject(child);
+      aabb = toAabb(box);
+    }
+    const shift = translationToClear(aabb, SCENERY_LIMIT, 32);
+    plans.push({ child, hide: false, dx: shift.dx, dz: shift.dz });
+  }
+
+  for (const plan of plans) {
+    if (plan.hide) {
+      plan.child.visible = false;
+      hid += 1;
+      continue;
+    }
+    if (Math.hypot(plan.dx, plan.dz) > 0.02) {
+      applyWorldXZ(plan.child, plan.dx, plan.dz);
+      moved += 1;
+    } else {
+      kept += 1;
+    }
+  }
+  return { hid, moved, kept };
+}
+
+interface IdleNode {
+  obj: THREE.Object3D;
+  baseY: number;
+  phase: number;
+  spin: boolean;
+}
+
+function collectWinterIdle(root: THREE.Object3D): IdleNode[] {
+  const found: IdleNode[] = [];
+  root.traverse((obj) => {
+    const spin = /^coin_|^ring_001/i.test(obj.name);
+    const sway = /^snowman_|^characters$/i.test(obj.name);
+    if (!spin && !sway) return;
+    found.push({ obj, baseY: obj.position.y, phase: Math.random() * Math.PI * 2, spin });
+  });
+  return found;
+}
+
+function RingStage({
+  url,
+  position,
+  rotation,
+  scale,
+  arrange,
+  idle,
+}: {
+  url: string;
+  position: [number, number, number];
+  rotation: [number, number, number];
+  scale: number;
+  arrange: boolean;
+  idle: "none" | "winter";
+}) {
+  const { scene, animations } = useGLTF(url);
+  const clone = useMemo(() => scene.clone(true), [scene]);
+  const groupRef = useRef<THREE.Group>(null);
+  const { actions } = useAnimations(animations, groupRef);
+  const idleRef = useRef<IdleNode[]>([]);
+
+  useEffect(() => {
+    Object.values(actions).forEach((action) => action?.play());
+  }, [actions]);
+
+  useLayoutEffect(() => {
+    let cancelled = false;
+    let tries = 0;
+    const run = () => {
+      if (cancelled) return;
+      const group = groupRef.current;
+      if (!group || !clone.parent) {
+        tries += 1;
+        if (tries < 30) requestAnimationFrame(run);
+        return;
+      }
+      group.updateMatrixWorld(true);
+      if (arrange) {
+        const stats = placeAroundRing(clone);
+        if (stats) console.info(`[ring] ${url} hid ${stats.hid}, moved ${stats.moved}, kept ${stats.kept}`);
+      }
+      if (idle === "winter") idleRef.current = collectWinterIdle(clone);
+      clone.traverse((obj) => {
+        if (obj instanceof THREE.Mesh) {
+          obj.castShadow = true;
+          obj.receiveShadow = true;
+        }
+      });
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [clone, arrange, idle, url]);
+
+  useFrame((state) => {
+    const t = state.clock.elapsedTime;
+    for (const item of idleRef.current) {
+      if (item.spin) item.obj.rotation.y += 0.03;
+      const bob = item.spin ? 0.3 : 0.12;
+      const speed = item.spin ? 2 : 1.2;
+      item.obj.position.y = item.baseY + Math.sin(t * speed + item.phase) * bob;
+    }
+  });
+
+  return (
+    <group ref={groupRef} position={position} rotation={rotation} scale={scale}>
+      <primitive object={clone} />
+    </group>
+  );
+}
+
+function StageBoundary({ children }: { children: ReactNode }) {
+  return (
+    <ModelErrorBoundary>
+      <Suspense fallback={null}>{children}</Suspense>
+    </ModelErrorBoundary>
+  );
+}
+
+export function MeadowArena() {
+  const gameMode = useZoogiGame((state) => state.gameMode);
+  const background = useZoogiGame((state) => state.backgroundSettings);
+  const arenaRotation = useZoogiGame((state) => state.elementTransforms.arenaModelRotation);
+  const editing = gameMode === "map_editor";
+  const position: [number, number, number] = editing
+    ? [background.modelPositionX ?? 0, background.modelPositionY ?? -0.5, background.modelPositionZ ?? 0]
+    : [0, GRASS_STAGE.modelOffsetY, 0];
+  const scale = editing ? (background.modelScale ?? 3) : GRASS_STAGE.modelScale;
+  const rotation: [number, number, number] = editing
+    ? [arenaRotation?.x ?? 0, arenaRotation?.y ?? 0, arenaRotation?.z ?? 0]
+    : [0, 0, 0];
+
+  return (
+    <group>
+      <RoundIsland kind="grass" lip="#efe6d4" underside="#241c16" sideColor="#b7a394" />
+      <MeadowRocks />
+      <MeadowFlowers />
+      <StageBoundary>
+        <RingStage
+          url="/models/floating_island_stage.glb"
+          position={position}
+          rotation={rotation}
+          scale={scale}
+          arrange={!editing}
+          idle="none"
+        />
+      </StageBoundary>
+    </group>
+  );
+}
+
+export function FrozenArena() {
+  const gameMode = useZoogiGame((state) => state.gameMode);
+  const background = useZoogiGame((state) => state.backgroundSettings);
+  const arenaRotation = useZoogiGame((state) => state.elementTransforms.arenaModelRotation);
+  const editing = gameMode === "map_editor";
+  const position: [number, number, number] = editing
+    ? [background.modelPositionX ?? 0, background.modelPositionY ?? WINTER_STAGE.modelOffsetY, background.modelPositionZ ?? 0]
+    : [0, WINTER_STAGE.modelOffsetY, 0];
+  const scale = editing ? (background.modelScale ?? WINTER_STAGE.modelScale) : WINTER_STAGE.modelScale;
+  const rotation: [number, number, number] = editing
+    ? [arenaRotation?.x ?? 0, arenaRotation?.y ?? 0, arenaRotation?.z ?? 0]
+    : [0, 0, 0];
+
+  return (
+    <group>
+      <RoundIsland kind="ice" lip="#f4fbff" underside="#16324a" sideColor="#eef7ff" />
+      <SnowLip />
+      <StageBoundary>
+        <RingStage
+          url="/models/winter_location.glb"
+          position={position}
+          rotation={rotation}
+          scale={scale}
+          arrange={!editing}
+          idle="winter"
+        />
+      </StageBoundary>
+    </group>
+  );
+}
+
+export function ArabianArena() {
+  const gameMode = useZoogiGame((state) => state.gameMode);
+  const background = useZoogiGame((state) => state.backgroundSettings);
+  const arenaRotation = useZoogiGame((state) => state.elementTransforms.arenaModelRotation);
+  const editing = gameMode === "map_editor";
+  const placed = arabianPlayTransform();
+  const position: [number, number, number] = editing
+    ? [background.modelPositionX ?? placed.x, background.modelPositionY ?? placed.y, background.modelPositionZ ?? placed.z]
+    : [placed.x, placed.y, placed.z];
+  const scale = editing ? (background.modelScale ?? placed.scale) : placed.scale;
+  const rotation: [number, number, number] = editing
+    ? [arenaRotation?.x ?? 0, arenaRotation?.y ?? 0, arenaRotation?.z ?? 0]
+    : [0, 0, 0];
+
+  return (
+    <group>
+      <RoundIsland kind="saturn" lip="#ffd78a" lipEmissive="#ffb03a" underside="#1a120c" sideColor="#c4a074" />
+      <ArabianPlanters />
+      <StageBoundary>
+        <RingStage
+          url="/models/arabian_nights_stage.glb"
+          position={position}
+          rotation={rotation}
+          scale={scale}
+          arrange={!editing}
+          idle="none"
+        />
+      </StageBoundary>
+    </group>
+  );
+}
+
+useGLTF.preload("/models/floating_island_stage.glb");
+useGLTF.preload("/models/winter_location.glb");
+useGLTF.preload("/models/arabian_nights_stage.glb");
