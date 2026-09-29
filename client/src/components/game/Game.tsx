@@ -9,7 +9,7 @@ import { GameUI } from "./GameUI";
 import { Lights } from "./Lights";
 import { GameCamera } from "./GameCamera";
 import { WolfClones, MotionTrails, LaunchBurst, WindParticles, ImpactSparks, CollisionBurstEffects } from "./Effects";
-import { ExplosionBlast, PowerUnlockFlash, StunBurst } from "./PowerEffects";
+import { ExplosionBlast, PowerUnlockFlash, ShadowPulse, StunBurst } from "./PowerEffects";
 import { OrbCaptureEffects } from "./OrbCaptureEffect";
 import { FallingEntities } from "./FallingEntities";
 import { DeveloperMoveControls } from "./DeveloperMoveControls";
@@ -173,6 +173,14 @@ function MatchPowerVisuals() {
 
   return (
     <>
+      {showExplosion && showExplosion.color === "shadow" && (
+        <ShadowPulse
+          key={showExplosion.timestamp}
+          position={showExplosion.position}
+          startTime={showExplosion.timestamp}
+          radius={showExplosion.radius ?? 4.5}
+        />
+      )}
       {showExplosion && showExplosion.color === "yellow" && (
         <StunBurst
           key={showExplosion.timestamp}
@@ -181,7 +189,7 @@ function MatchPowerVisuals() {
           radius={showExplosion.radius ?? 8}
         />
       )}
-      {showExplosion && showExplosion.color !== "yellow" && (
+      {showExplosion && showExplosion.color !== "yellow" && showExplosion.color !== "shadow" && (
         <ExplosionBlast
           key={showExplosion.timestamp}
           position={showExplosion.position}

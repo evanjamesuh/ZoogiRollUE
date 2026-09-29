@@ -4,6 +4,7 @@ import {
   bindPowerAudioMute,
   playBindWrap,
   playExplosion,
+  playShadowPulse,
   playPowerUnlock,
   playRicochetPing,
   playStunEnd,
@@ -22,5 +23,6 @@ test("power sounds stay silent and do not throw while muted", () => {
     playRicochetPing("arm");
     playRicochetPing("hit");
     playBindWrap();
+    playShadowPulse();
   });
 });

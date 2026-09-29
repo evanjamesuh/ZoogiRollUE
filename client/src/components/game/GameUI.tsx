@@ -96,6 +96,7 @@ const getAbilityTriggerText = (zoogiId: string): string => {
     case "pinpoint": return "Tap Lock-On, then tap an orb or opponent";
     case "bolt": return "Tap Shock to phase through enemies and stun them";
     case "wraps": return "Tap Bind to slow enemies you touch";
+    case "nightshade": return "Tap Shadow to freeze nearby opponents";
     default: return "";
   }
 };
@@ -131,6 +132,7 @@ function CharacterAbilityButton({ zoogiId, entity }: {
     boltAbilityUnlocked: boolean;
     larsAbilityUnlocked: boolean;
     wrapsAbilityUnlocked: boolean;
+    nightshadeAbilityUnlocked: boolean;
   };
 }) {
   const activateWolfgangAbility = useZoogiGame((state) => state.activateWolfgangAbility);
@@ -138,6 +140,7 @@ function CharacterAbilityButton({ zoogiId, entity }: {
   const activateLarsAbility = useZoogiGame((state) => state.activateLarsAbility);
   const activateBoltAbility = useZoogiGame((state) => state.activateBoltAbility);
   const activateWrapsAbility = useZoogiGame((state) => state.activateWrapsAbility);
+  const activateNightshadeAbility = useZoogiGame((state) => state.activateNightshadeAbility);
   const toggleLockOn = useZoogiGame((state) => state.toggleLockOn);
   const lockOnEnabled = useZoogiGame((state) => state.lockOnEnabled);
 
@@ -147,6 +150,7 @@ function CharacterAbilityButton({ zoogiId, entity }: {
     lars: { label: "Ricochet", unlocked: entity.larsAbilityUnlocked, onClick: () => activateLarsAbility(entity.id) },
     bolt: { label: "Shock", unlocked: entity.boltAbilityUnlocked, onClick: () => activateBoltAbility(entity.id) },
     wraps: { label: "Bind", unlocked: entity.wrapsAbilityUnlocked, onClick: () => activateWrapsAbility(entity.id) },
+    nightshade: { label: "Shadow", unlocked: entity.nightshadeAbilityUnlocked, onClick: () => activateNightshadeAbility(entity.id) },
     pinpoint: { label: "Lock-On", unlocked: true, onClick: toggleLockOn, active: lockOnEnabled },
   };
   const ability = spec[zoogiId];

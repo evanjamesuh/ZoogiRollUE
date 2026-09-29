@@ -227,6 +227,16 @@ export const ZOOGI_ROSTER: Zoogi[] = [
     ability: "Bandage Bind",
     abilityDescription: "Slow enemies on contact with ancient curses",
     stats: { speed: 50, power: 70, defense: 85, control: 65 }
+  },
+  {
+    id: "nightshade",
+    name: "Nightshade",
+    type: "Shadow",
+    color: "#6B46C1",
+    secondaryColor: "#9F7AEA",
+    ability: "Shadow Stun",
+    abilityDescription: "A short shadow pulse that freezes nearby opponents and skips their next turn",
+    stats: { speed: 62, power: 68, defense: 64, control: 84 }
   }
 ];
 
@@ -415,6 +425,7 @@ interface GameEntity {
   larsAbilityUnlocked: boolean;
   wrapsAbilityUnlocked: boolean;
   wrapsBindUntil: number;
+  nightshadeAbilityUnlocked: boolean;
   boltPhasingUntil: number;
   slowUntil: number;
   arcMovement: {
@@ -811,6 +822,8 @@ interface ZoogiGameState {
   canUseLarsAbility: () => boolean;
   activateWrapsAbility: (casterId: string) => void;
   canUseWrapsAbility: () => boolean;
+  activateNightshadeAbility: (casterId: string) => void;
+  canUseNightshadeAbility: () => boolean;
   aiPowerOpportunity: (casterId: string) => AiPowerName | null;
   useAiPower: (casterId: string) => AiPowerName | null;
   debugUnlockPower: (entityId: string) => void;
@@ -985,6 +998,7 @@ const createEnemy = (zoogi: Zoogi, position: [number, number, number], spawnPoin
   larsAbilityUnlocked: false,
   wrapsAbilityUnlocked: false,
   wrapsBindUntil: 0,
+  nightshadeAbilityUnlocked: false,
   boltPhasingUntil: 0,
   slowUntil: 0,
   arcMovement: null,
@@ -1162,6 +1176,7 @@ const initializePracticeGame = (selectedZoogi: Zoogi, orbMultiplier: 1 | 2 | 3 =
     larsAbilityUnlocked: false,
     wrapsAbilityUnlocked: false,
     wrapsBindUntil: 0,
+    nightshadeAbilityUnlocked: false,
     boltPhasingUntil: 0,
     slowUntil: 0,
     arcMovement: null,
@@ -1284,6 +1299,7 @@ const initializeGame = (
     larsAbilityUnlocked: false,
     wrapsAbilityUnlocked: false,
     wrapsBindUntil: 0,
+    nightshadeAbilityUnlocked: false,
     boltPhasingUntil: 0,
     slowUntil: 0,
     arcMovement: null,
@@ -1392,14 +1408,17 @@ function unlockPatchForZoogi(zoogiId: string): Partial<GameEntity> {
     case "bolt": return { boltAbilityUnlocked: true };
     case "lars": return { larsAbilityUnlocked: true };
     case "wraps": return { wrapsAbilityUnlocked: true };
+    case "nightshade": return { nightshadeAbilityUnlocked: true };
     default: return {};
   }
 }
 
-export type AiPowerName = "hotstreak" | "bolt" | "wolfgang" | "lars" | "wraps";
+export type AiPowerName = "hotstreak" | "bolt" | "wolfgang" | "lars" | "wraps" | "nightshade";
 
 const BLAST_RADIUS = 8;
 const BIND_RADIUS = 7;
+/** Shorter than Bolt's shock (8) and Wraps' bind (7). Close enough to catch a marble you are beside, not the whole ring. */
+export const SHADOW_STUN_RADIUS = 4.5;
 
 const flashedStarOrbIds = new Set<string>();
 
@@ -1500,6 +1519,9 @@ export function chooseAiPower(
     case "wraps":
       if (!caster.wrapsAbilityUnlocked) return null;
       return someoneInside(caster.position, foePoints, BIND_RADIUS) ? "wraps" : null;
+    case "nightshade":
+      if (!caster.nightshadeAbilityUnlocked) return null;
+      return someoneInside(caster.position, foePoints, SHADOW_STUN_RADIUS) ? "nightshade" : null;
     default:
       return null;
   }
@@ -2494,6 +2516,41 @@ export const useZoogiGame = create<ZoogiGameState>()(
 
     canUseWrapsAbility: () => !!get().getCurrentControlledEntity()?.wrapsAbilityUnlocked,
 
+    activateNightshadeAbility: (casterId: string) => {
+      const controlledEntity = readEntity(get(), casterId);
+      if (!controlledEntity?.nightshadeAbilityUnlocked) return;
+      const radius = SHADOW_STUN_RADIUS;
+      const origin = controlledEntity.position;
+      triggerAbilityFeel(origin, 0.8);
+      triggerAbilityCameraEffect("Shadow Stun");
+      useGameFeel.getState().triggerCartoonStarburst(origin, "#b69cff");
+      useAudio.getState().playShadowPulse();
+      get().triggerExplosion([...origin], "shadow", radius);
+      get().showAbilityNotice("Shadow Stun!");
+
+      set((s) => {
+        const apply = <T extends { id: string; position: [number, number, number] }>(entity: T) => {
+          if (entity.id === controlledEntity.id) {
+            return { ...entity, nightshadeAbilityUnlocked: false };
+          }
+          const dist = Math.hypot(entity.position[0] - origin[0], entity.position[2] - origin[2]);
+          if (dist >= radius || dist <= 0.1) return entity;
+          return {
+            ...entity,
+            velocity: [0, 0, 0] as [number, number, number],
+            isStunned: true,
+            stunTimer: 2,
+          };
+        };
+        return {
+          playerEntity: s.playerEntity ? apply(s.playerEntity) : null,
+          enemies: s.enemies.map((enemy) => apply(enemy)),
+        };
+      });
+    },
+
+    canUseNightshadeAbility: () => !!get().getCurrentControlledEntity()?.nightshadeAbilityUnlocked,
+
     aiPowerOpportunity: (casterId: string) => {
       const state = get();
       const caster = readEntity(state, casterId);
@@ -2509,6 +2566,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
       else if (choice === "bolt") get().activateBoltAbility(casterId);
       else if (choice === "wolfgang") get().activateWolfgangAbility(casterId);
       else if (choice === "lars") get().activateLarsAbility(casterId);
+      else if (choice === "nightshade") get().activateNightshadeAbility(casterId);
       else get().activateWrapsAbility(casterId);
       return get().aiPowerOpportunity(casterId) === null ? choice : null;
     },
@@ -3837,6 +3895,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
           larsAbilityUnlocked: false,
           wrapsAbilityUnlocked: false,
           wrapsBindUntil: 0,
+          nightshadeAbilityUnlocked: false,
           boltPhasingUntil: 0,
           slowUntil: 0,
           arcMovement: null,
