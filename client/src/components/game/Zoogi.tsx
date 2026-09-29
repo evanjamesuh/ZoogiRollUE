@@ -10,7 +10,7 @@ import { triggerLaunchFeel } from "@/lib/stores/useGameFeel";
 import { visualPosition } from "@/lib/renderInterp";
 import { marbleIsShown } from "@/lib/marblePresence";
 import { ZOOGI_DRAW_RADIUS } from "@/lib/restHeight";
-import { ARENA_SCALE } from "@/lib/arenaScale";
+import { arenaScaleFor } from "@/lib/mapDefaultConfigs";
 import { getMapLayout } from "@/lib/arenaColliders";
 import { AI_LAUNCH_DELAY, LAUNCH_POWER_MULTIPLIER, MAX_LAUNCH_SPEED } from "@/lib/simFeel";
 import { triggerLaunchCameraEffect, clearAimCameraEffect } from "@/lib/stores/useCameraEffects";
@@ -1078,7 +1078,8 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
           ffaCooldownRef.current = 1.5 + Math.random() * 1.5;
         }
         
-        const ARENA_RADIUS = getMapLayout(useZoogiGame.getState().selectedMap)?.knockoffRadius ?? 18 * ARENA_SCALE;
+        const selectedMap = useZoogiGame.getState().selectedMap;
+        const ARENA_RADIUS = getMapLayout(selectedMap)?.knockoffRadius ?? 18 * arenaScaleFor(selectedMap);
         const activeOrbs = orbs.filter(o => o.isActive);
         
         const getDistance = (p1: [number, number, number], p2: [number, number, number]) => 

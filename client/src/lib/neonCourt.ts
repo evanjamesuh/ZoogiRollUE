@@ -7,14 +7,28 @@
  */
 
 import type { MapLayout, ZonePlacement } from "./arenaColliders";
-import { scalePlay } from "./arenaScale";
+import { arenaScaleFor } from "./arenaScale";
 import { MAX_PLANAR_SPEED, RAIL_RESTITUTION } from "./simFeel";
 
-export const NEON_HALF_X = scalePlay(12);
-export const NEON_HALF_Z = scalePlay(8);
-export const NEON_RAIL_DEPTH = scalePlay(0.7);
+/** Authored court, in today's units. Readers multiply by the neon arenaScale. */
+export const NEON_HALF_X = 12;
+export const NEON_HALF_Z = 8;
+export const NEON_RAIL_DEPTH = 0.7;
 /** How far each rail stops short of a corner, leaving a knockout mouth. */
-export const NEON_CORNER_GAP = scalePlay(3.15);
+export const NEON_CORNER_GAP = 3.15;
+
+function courtScale(): number {
+  return arenaScaleFor("neon");
+}
+
+/** Knockoff rectangle in world units. Rail thickness is not included. */
+export function neonPlayHalfX(): number {
+  return NEON_HALF_X * courtScale();
+}
+
+export function neonPlayHalfZ(): number {
+  return NEON_HALF_Z * courtScale();
+}
 
 export interface NeonRail {
   id: string;
@@ -26,41 +40,44 @@ export interface NeonRail {
   color: string;
 }
 
-const GAP_X = NEON_HALF_X - NEON_CORNER_GAP;
-const GAP_Z = NEON_HALF_Z - NEON_CORNER_GAP;
-
 export function neonRails(): NeonRail[] {
+  const scale = courtScale();
+  const halfX = NEON_HALF_X * scale;
+  const halfZ = NEON_HALF_Z * scale;
+  const gapX = halfX - NEON_CORNER_GAP * scale;
+  const gapZ = halfZ - NEON_CORNER_GAP * scale;
+  const depth = NEON_RAIL_DEPTH;
   return [
     {
       id: "rail-north",
-      minX: -GAP_X,
-      maxX: GAP_X,
-      minZ: NEON_HALF_Z - NEON_RAIL_DEPTH,
-      maxZ: NEON_HALF_Z,
+      minX: -gapX,
+      maxX: gapX,
+      minZ: halfZ - depth,
+      maxZ: halfZ,
       color: "#b026ff",
     },
     {
       id: "rail-south",
-      minX: -GAP_X,
-      maxX: GAP_X,
-      minZ: -NEON_HALF_Z,
-      maxZ: -NEON_HALF_Z + NEON_RAIL_DEPTH,
+      minX: -gapX,
+      maxX: gapX,
+      minZ: -halfZ,
+      maxZ: -halfZ + depth,
       color: "#b026ff",
     },
     {
       id: "rail-east",
-      minX: NEON_HALF_X - NEON_RAIL_DEPTH,
-      maxX: NEON_HALF_X,
-      minZ: -GAP_Z,
-      maxZ: GAP_Z,
+      minX: halfX - depth,
+      maxX: halfX,
+      minZ: -gapZ,
+      maxZ: gapZ,
       color: "#ff2bd6",
     },
     {
       id: "rail-west",
-      minX: -NEON_HALF_X,
-      maxX: -NEON_HALF_X + NEON_RAIL_DEPTH,
-      minZ: -GAP_Z,
-      maxZ: GAP_Z,
+      minX: -halfX,
+      maxX: -halfX + depth,
+      minZ: -gapZ,
+      maxZ: gapZ,
       color: "#22e7ff",
     },
   ];
@@ -76,14 +93,20 @@ export interface NeonBumper {
  * Posts and taller pylons. All of them use the shared bumper circle,
  * so a marble bounces at BUMPER_RADIUS. They stay off the corner mouths.
  */
-export function neonBumpers(): NeonBumper[] {
+/** Bumper posts in today's units, for markings drawn inside the arena group. */
+export function neonBumperMarks(): NeonBumper[] {
   return [
     { id: "neon-post-a", x: -5.1, z: 2.7 },
     { id: "neon-post-b", x: 4.2, z: 3.4 },
     { id: "neon-post-c", x: -3.4, z: -4.6 },
     { id: "neon-pylon-west", x: -6.6, z: 5.6 },
     { id: "neon-pylon-east", x: 5.8, z: -2.6 },
-  ].map((bumper) => ({ ...bumper, x: scalePlay(bumper.x), z: scalePlay(bumper.z) }));
+  ];
+}
+
+export function neonBumpers(): NeonBumper[] {
+  const scale = courtScale();
+  return neonBumperMarks().map((bumper) => ({ ...bumper, x: bumper.x * scale, z: bumper.z * scale }));
 }
 
 export interface NeonBox {
@@ -99,7 +122,7 @@ export interface NeonBox {
  * Axis-aligned, so they bounce with the same rail sweep. The corner
  * mouths and the south-center lane stay clear.
  */
-export function neonObstacles(): NeonBox[] {
+function neonObstacleUnits(): NeonBox[] {
   return [
     { id: "pad-west", minX: -9.15, maxX: -7.45, minZ: -1.55, maxZ: 1.55 },
     { id: "pad-east", minX: 7.7, maxX: 9.2, minZ: -1.55, maxZ: 1.55 },
@@ -107,13 +130,19 @@ export function neonObstacles(): NeonBox[] {
     { id: "pad-south", minX: 1.6, maxX: 3.8, minZ: -6.7, maxZ: -5.55 },
     { id: "channel-north", minX: -2.35, maxX: 2.35, minZ: 0.72, maxZ: 1.08 },
     { id: "channel-south", minX: -2.35, maxX: 2.35, minZ: -1.08, maxZ: -0.72 },
-  ].map((box) => ({
-    ...box,
-    minX: scalePlay(box.minX),
-    maxX: scalePlay(box.maxX),
-    minZ: scalePlay(box.minZ),
-    maxZ: scalePlay(box.maxZ),
-  }));
+  ];
+}
+
+/** Pad centers move out with the court. The boxes themselves stay the same size. */
+export function neonObstacles(): NeonBox[] {
+  const scale = courtScale();
+  return neonObstacleUnits().map((box) => {
+    const cx = ((box.minX + box.maxX) / 2) * scale;
+    const cz = ((box.minZ + box.maxZ) / 2) * scale;
+    const hx = (box.maxX - box.minX) / 2;
+    const hz = (box.maxZ - box.minZ) / 2;
+    return { ...box, minX: cx - hx, maxX: cx + hx, minZ: cz - hz, maxZ: cz + hz };
+  });
 }
 
 function zoneAt(id: string, x: number, z: number, isSpawn: boolean): ZonePlacement {
@@ -127,30 +156,31 @@ function zoneAt(id: string, x: number, z: number, isSpawn: boolean): ZonePlaceme
 }
 
 export function neonCourtLayout(): MapLayout {
+  const scale = courtScale();
   return {
     id: "neon",
-    floorRadius: NEON_HALF_Z,
+    floorRadius: NEON_HALF_Z * scale,
     // Stored so other systems have a number. The live check is the rectangle.
-    knockoffRadius: NEON_HALF_X + scalePlay(0.35),
-    orbRingRadius: scalePlay(3.15),
+    knockoffRadius: (NEON_HALF_X + 0.35) * scale,
+    orbRingRadius: 3.15 * scale,
     scenery: [],
     bumpers: neonBumpers(),
     zones: [
-      zoneAt("spawn-0", scalePlay(-6.4), scalePlay(-1.1), true),
-      zoneAt("spawn-1", scalePlay(6.6), scalePlay(1.05), true),
-      zoneAt("spawn-2", scalePlay(-1.15), scalePlay(4.15), true),
-      zoneAt("spawn-3", scalePlay(1.2), scalePlay(-4.05), true),
-      zoneAt("score-0", scalePlay(7.6), scalePlay(4.55), false),
-      zoneAt("score-1", scalePlay(-7.7), scalePlay(4.4), false),
-      zoneAt("score-2", scalePlay(7.8), scalePlay(-4.35), false),
-      zoneAt("score-3", scalePlay(-7.5), scalePlay(-4.5), false),
+      zoneAt("spawn-0", -6.4 * scale, -1.1 * scale, true),
+      zoneAt("spawn-1", 6.6 * scale, 1.05 * scale, true),
+      zoneAt("spawn-2", -1.15 * scale, 4.15 * scale, true),
+      zoneAt("spawn-3", 1.2 * scale, -4.05 * scale, true),
+      zoneAt("score-0", 7.6 * scale, 4.55 * scale, false),
+      zoneAt("score-1", -7.7 * scale, 4.4 * scale, false),
+      zoneAt("score-2", 7.8 * scale, -4.35 * scale, false),
+      zoneAt("score-3", -7.5 * scale, -4.5 * scale, false),
     ],
   };
 }
 
 /** True when a marble center has left the floor, including through a corner mouth. */
 export function isOutsideNeonCourt(x: number, z: number): boolean {
-  return Math.abs(x) > NEON_HALF_X || Math.abs(z) > NEON_HALF_Z;
+  return Math.abs(x) > neonPlayHalfX() || Math.abs(z) > neonPlayHalfZ();
 }
 
 export interface RailHit {

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ARENA_SCALE } from "./arenaScale.ts";
+import { arenaScaleFor } from "./mapDefaultConfigs.ts";
 import {
   ARABIAN_STAGE,
   BUMPER_RADIUS,
@@ -146,33 +146,37 @@ test("fitted stages keep the knockoff on the measured floor", () => {
   assert.ok(saturn);
   assert.ok(lava);
   assert.ok(grass);
-  assert.ok(space.floorRadius > 14 * ARENA_SCALE && space.floorRadius < space.knockoffRadius);
-  assert.ok(Math.abs(space.knockoffRadius - 15.6 * ARENA_SCALE) < 0.02, "cosmic out line is the inner face of the lip");
+  const spaceScale = arenaScaleFor("space");
+  const grassScale = arenaScaleFor("grass");
+  assert.ok(space.floorRadius > 14 * spaceScale && space.floorRadius < space.knockoffRadius);
+  assert.ok(Math.abs(space.knockoffRadius - 15.6 * spaceScale) < 0.02, "cosmic out line is the inner face of the lip");
   assert.deepEqual(ARABIAN_STAGE.plazaCenter, [0, 0]);
-  assert.ok(Math.abs(saturn.knockoffRadius - 15.5 * ARENA_SCALE) < 0.02, "arabian plaza circle sits on the origin");
-  assert.ok(saturn.knockoffRadius - saturn.floorRadius < 0.6 * ARENA_SCALE, "fallback disk ends at the out line");
+  assert.ok(Math.abs(saturn.knockoffRadius - 15.5 * arenaScaleFor("saturn")) < 0.02, "arabian plaza circle sits on the origin");
+  assert.ok(saturn.knockoffRadius - saturn.floorRadius < 0.6 * arenaScaleFor("saturn"), "fallback disk ends at the out line");
   const placed = arabianPlayTransform();
-  assert.ok(Math.abs(placed.x - 385.08) < 0.05, "stage shift scales with the plaza");
-  assert.ok(Math.abs(placed.z - 16.08) < 0.05, "stage shift scales with the plaza");
+  assert.ok(Math.abs(placed.x - 256.72) < 0.05, "stage shift +4 x");
+  assert.ok(Math.abs(placed.z - 10.72) < 0.05, "stage shift +16 z");
   assert.equal(lava.scenery.length, 6, "south outer hoodoo is present");
   for (const hoodoo of lava.scenery) {
-    assert.ok(hoodoo.radius <= 0.25 * 2.8 * ARENA_SCALE + 1e-6, `${hoodoo.id} is trimmed to the stone`);
-    assert.ok(hoodoo.radius >= 0.25 * 2 * ARENA_SCALE - 1e-6, `${hoodoo.id} radius`);
+    assert.ok(hoodoo.radius <= 0.25 * 2.8 + 1e-6, `${hoodoo.id} is trimmed to the stone`);
+    assert.ok(hoodoo.radius >= 0.25 * 2 - 1e-6, `${hoodoo.id} radius`);
+    assert.ok(Math.hypot(hoodoo.x, hoodoo.z) >= 10 * arenaScaleFor("lava") - 1e-6, `${hoodoo.id} moved out`);
   }
-  assert.equal(grass.knockoffRadius, 15.5 * ARENA_SCALE);
+  assert.equal(grass.knockoffRadius, 15.5 * grassScale);
   const tree = grass.scenery.find((solid) => solid.id.startsWith("Tree1"));
-  assert.ok(tree && tree.radius < 0.5 * ARENA_SCALE, "Tree1 collider is the trunk");
+  assert.ok(tree && tree.radius < 0.5, "Tree1 collider is the trunk");
+  assert.ok(tree && Math.abs(tree.x - 6.6 * grassScale) < 1e-6, "Tree1 moved out with the island");
   for (const rock of grass.scenery.filter((solid) => solid.kind === "rock")) {
-    assert.ok(rock.radius <= 3 * ARENA_SCALE, `${rock.id} still uses the old oversized disk`);
+    assert.ok(rock.radius <= 3, `${rock.id} still uses the old oversized disk`);
   }
   for (const score of grass.zones.filter((zone) => !zone.isSpawn)) {
-    assert.ok(score.distance + SCORE_ZONE_RADIUS <= 13.5 * ARENA_SCALE, "score zone hangs off the grass");
+    assert.ok(score.distance + SCORE_ZONE_RADIUS <= 13.5 * grassScale, "score zone hangs off the grass");
   }
   const spawns = grass.zones.filter((zone) => zone.isSpawn);
   const south = spawns[1];
   assert.ok(south);
   const southZ = Math.sin(south.angle) * south.distance;
-  assert.ok(southZ < 7.5 * ARENA_SCALE, "south spawn is under the big tree canopy");
+  assert.ok(southZ < 7.5 * grassScale, "south spawn is under the big tree canopy");
 });
 
 test("knockoff centre stays on the origin for every map", () => {
@@ -192,16 +196,18 @@ test("frozen ring camp walls match the drawn props and stay off until the model 
   const near = (actual: number | undefined, expected: number, label: string) => {
     assert.ok(actual !== undefined && Math.abs(actual - expected) < 1e-6, `${label} ${actual} vs ${expected}`);
   };
-  near(byId.get("wall-16a")?.radius, 1.15 * ARENA_SCALE, "wall-16a");
-  near(byId.get("wall-16b")?.radius, 1.15 * ARENA_SCALE, "wall-16b");
-  near(byId.get("wall-16c")?.radius, 1.15 * ARENA_SCALE, "wall-16c");
+  const iceScale = arenaScaleFor("ice");
+  near(byId.get("wall-16a")?.radius, 1.15, "wall-16a");
+  near(byId.get("wall-16a")?.x, 10.94 * iceScale, "wall-16a x");
+  near(byId.get("wall-16b")?.radius, 1.15, "wall-16b");
+  near(byId.get("wall-16c")?.radius, 1.15, "wall-16c");
   assert.equal(byId.get("wall-16"), undefined);
-  near(byId.get("tower-17a")?.radius, 2.05 * ARENA_SCALE, "tower-17a");
-  near(byId.get("tower-17b")?.radius, 2.05 * ARENA_SCALE, "tower-17b");
-  near(byId.get("tower-19")?.radius, 2.05 * ARENA_SCALE, "tower-19");
-  near(byId.get("box-13")?.radius, 1.05 * ARENA_SCALE, "box-13");
-  near(byId.get("barrel-15")?.radius, 0.67 * ARENA_SCALE, "barrel-15");
-  near(byId.get("rail-12")?.radius, 1.19 * ARENA_SCALE, "rail-12");
+  near(byId.get("tower-17a")?.radius, 2.05, "tower-17a");
+  near(byId.get("tower-17b")?.radius, 2.05, "tower-17b");
+  near(byId.get("tower-19")?.radius, 2.05, "tower-19");
+  near(byId.get("box-13")?.radius, 1.05, "box-13");
+  near(byId.get("barrel-15")?.radius, 0.67, "barrel-15");
+  near(byId.get("rail-12")?.radius, 1.19, "rail-12");
   setWinterCampActive(false);
 });
 

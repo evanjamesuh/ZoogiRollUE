@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { getMapLayout } from "./arenaColliders.ts";
-import { ARENA_SCALE } from "./arenaScale.ts";
-import { isOutsideNeonCourt, NEON_HALF_X, NEON_HALF_Z } from "./neonCourt.ts";
+import { arenaScaleFor } from "./mapDefaultConfigs.ts";
+import { isOutsideNeonCourt, neonPlayHalfX, neonPlayHalfZ } from "./neonCourt.ts";
 import { marbleIsShown } from "./marblePresence.ts";
 import { resetInterp, setInterpFrame, visualPosition } from "./renderInterp.ts";
 import { MAX_LAUNCH_SPEED } from "./simFeel.ts";
@@ -188,10 +188,11 @@ test("knockout uses the enlarged edge on every arena", async () => {
     assert.ok(started.playerEntity, map);
     const layout = getMapLayout(map);
     assert.ok(layout, map);
-    assert.ok(layout.floorRadius >= 8 * ARENA_SCALE, map);
+    const scale = arenaScaleFor(map);
+    assert.ok(layout.floorRadius >= 8 * scale, map);
 
     const inside: [number, number, number] = map === "neon"
-      ? [NEON_HALF_X - 1.5, ZOOGI_REST_Y, 0]
+      ? [neonPlayHalfX() - 1.5, ZOOGI_REST_Y, 0]
       : [layout.knockoffRadius * 0.45, ZOOGI_REST_Y, 0];
     useZoogiGame.setState({
       phase: "playing",
@@ -217,11 +218,11 @@ test("knockout uses the enlarged edge on every arena", async () => {
       `${map} live edge ${useZoogiGame.getState().wallSettings.knockoffBoundaryRadius} vs ${layout.knockoffRadius}`,
     );
     if (map === "neon") {
-      assert.equal(isOutsideNeonCourt(0, NEON_HALF_Z + 0.2), true);
-      assert.equal(isOutsideNeonCourt(0, NEON_HALF_Z - 0.2), false);
+      assert.equal(isOutsideNeonCourt(0, neonPlayHalfZ() + 0.2), true);
+      assert.equal(isOutsideNeonCourt(0, neonPlayHalfZ() - 0.2), false);
     }
     const outside: [number, number, number] = map === "neon"
-      ? [NEON_HALF_X + 0.35, ZOOGI_REST_Y, 0]
+      ? [neonPlayHalfX() + 0.35, ZOOGI_REST_Y, 0]
       : [layout.knockoffRadius + 1.2, ZOOGI_REST_Y, 0];
     const still = useZoogiGame.getState().playerEntity;
     assert.ok(still);

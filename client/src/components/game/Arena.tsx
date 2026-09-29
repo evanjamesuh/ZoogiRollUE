@@ -27,6 +27,7 @@ import { PinballBumpers } from "./PinballBumpers";
 import { NeonCourtArena } from "./NeonCourtArena";
 import { ARENA_RADIUS } from "@/lib/arenaConstants";
 import { ARABIAN_STAGE, COSMOS_STAGE, GRASS_STAGE, WINTER_STAGE, arabianPlayTransform, getMapLayout, setWinterCampActive } from "@/lib/arenaColliders";
+import { arenaScaleFor } from "@/lib/mapDefaultConfigs";
 
 export { ARENA_RADIUS };
 
@@ -70,8 +71,10 @@ function FloatingIslandScene() {
   }, [scene]);
   
   return (
-    <group ref={groupRef} position={[modelX, modelY, modelZ]} scale={[modelScale, modelScale, modelScale]} rotation={modelRotation}>
-      <primitive object={scene} />
+    <group scale={arenaScaleFor("grass")}>
+      <group ref={groupRef} position={[modelX, modelY, modelZ]} scale={[modelScale, modelScale, modelScale]} rotation={modelRotation}>
+        <primitive object={scene} />
+      </group>
     </group>
   );
 }
@@ -115,8 +118,10 @@ function ArabianNightsScene() {
   }, [scene]);
   
   return (
-    <group ref={groupRef} position={[modelX, modelY, modelZ]} scale={[modelScale, modelScale, modelScale]} rotation={modelRotation}>
-      <primitive object={scene} />
+    <group scale={arenaScaleFor("saturn")}>
+      <group ref={groupRef} position={[modelX, modelY, modelZ]} scale={[modelScale, modelScale, modelScale]} rotation={modelRotation}>
+        <primitive object={scene} />
+      </group>
     </group>
   );
 }
@@ -349,8 +354,10 @@ function WinterLocationScene() {
   }, []);
 
   return (
-    <group ref={groupRef} position={[0, WINTER_STAGE.modelOffsetY, 0]} scale={[winterScale, winterScale, winterScale]}>
-      <primitive object={scene} />
+    <group scale={arenaScaleFor("ice")}>
+      <group ref={groupRef} position={[0, WINTER_STAGE.modelOffsetY, 0]} scale={[winterScale, winterScale, winterScale]}>
+        <primitive object={scene} />
+      </group>
     </group>
   );
 }
@@ -394,8 +401,10 @@ function CosmosArenaModel() {
     : [0, 0, 0];
   
   return (
-    <group ref={groupRef} position={modelPosition} scale={modelScale} rotation={modelRotation}>
-      <primitive object={scene} />
+    <group scale={arenaScaleFor("space")}>
+      <group ref={groupRef} position={modelPosition} scale={modelScale} rotation={modelRotation}>
+        <primitive object={scene} />
+      </group>
     </group>
   );
 }
@@ -790,8 +799,12 @@ export function Arena({ theme = "grass" }: ArenaProps) {
       )}
       {isIceTheme && <IcePatches />}
       {isIceTheme && <Snowmen />}
-      {isIceTheme && <SnowfallEffect />}
-      {isIceTheme && <WinterAnimals />}
+      {isIceTheme && (
+        <group scale={arenaScaleFor("ice")}>
+          <SnowfallEffect />
+          <WinterAnimals />
+        </group>
+      )}
       {currentTheme === "space" && (
         <MeshyArenaErrorBoundary fallback={stageFallback}>
           <Suspense fallback={stageFallback}>

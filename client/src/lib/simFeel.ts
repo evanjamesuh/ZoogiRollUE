@@ -1,4 +1,4 @@
-import { ARENA_SCALE } from "./arenaScale";
+import { ARENA_SCALE_BY_MAP } from "./arenaScale";
 
 /**
  * Match-feel numbers shared by the launch code and the fixed step.
@@ -10,21 +10,23 @@ import { ARENA_SCALE } from "./arenaScale";
  * cap in a shorter pull, rails and bumpers keep more speed, and the extra
  * rolling drag ends the slow tail so a turn can finish.
  *
- * Launch speed grows with the arenas so a full flick still crosses the ring
- * in about the same number of steps.
+ * Launch speed grows with the largest arenaScale so a full flick still
+ * crosses every ring in about the same number of steps. Damping stays put.
  */
 
+const LAUNCH_SCALE = Math.max(...Object.values(ARENA_SCALE_BY_MAP));
+
 /** Hard cap on planar speed, in units per 1/60 s step. */
-export const MAX_PLANAR_SPEED = 2.05 * ARENA_SCALE;
+export const MAX_PLANAR_SPEED = 2.05 * LAUNCH_SCALE;
 
 /** Drag distance (world units) times this is the launch speed, before the cap. */
-export const LAUNCH_POWER_MULTIPLIER = 0.36 * ARENA_SCALE;
+export const LAUNCH_POWER_MULTIPLIER = 0.36 * LAUNCH_SCALE;
 
 /** Top speed a player or AI flick is allowed to set. */
-export const MAX_LAUNCH_SPEED = 2.05 * ARENA_SCALE;
+export const MAX_LAUNCH_SPEED = 2.05 * LAUNCH_SCALE;
 
 /** Lock-on flicks use a set speed rather than the drag meter. */
-export const LOCKON_LAUNCH_SPEED = 1.65 * ARENA_SCALE;
+export const LOCKON_LAUNCH_SPEED = 1.65 * LAUNCH_SCALE;
 
 /** Seconds an AI waits after its turn starts before it flicks. */
 export const AI_LAUNCH_DELAY = 0.4;

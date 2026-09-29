@@ -1,5 +1,5 @@
 import { getSnowmanPositions } from "./arenaConstants";
-import { ARENA_SCALE, scalePlay } from "./arenaScale";
+import { arenaScaleFor } from "./arenaScale";
 import { neonCourtLayout } from "./neonCourt";
 import { BUMPER_RESTITUTION } from "./simFeel";
 
@@ -17,14 +17,14 @@ export const BUMPER_RADIUS = 0.955;
 export const BUMPER_MODEL_URL = "/models/bumber1.glb";
 export const MARBLE_RADIUS = 0.5;
 export const ORB_RADIUS = 0.4;
-export const SNOWMAN_RADIUS = 0.55 * ARENA_SCALE;
+export const SNOWMAN_RADIUS = 0.55;
 export const REST_SPEED = 0.02;
 
 export const GRASS_STAGE = {
-  /** Central grass disk in the glb is 0.45 wide. Scale 60 makes it radius ~13.5, then the arena scale. */
-  modelScale: 60 * ARENA_SCALE,
+  /** Central grass disk in the glb is 0.45 wide. Scale 60 makes it radius ~13.5. */
+  modelScale: 60,
   modelOffsetY: 0,
-  groundRadius: 0.225 * 60 * ARENA_SCALE,
+  groundRadius: 0.225 * 60,
 };
 
 /**
@@ -33,10 +33,10 @@ export const GRASS_STAGE = {
  * snow past the knockoff is backdrop, same as the grass map's outer islands.
  */
 export const WINTER_STAGE = {
-  modelScale: 0.9 * ARENA_SCALE,
-  modelOffsetY: -4.2 * ARENA_SCALE,
-  floorRadius: scalePlay(17.5),
-  knockoffRadius: scalePlay(18.4),
+  modelScale: 0.9,
+  modelOffsetY: -4.2,
+  floorRadius: 17.5,
+  knockoffRadius: 18.4,
 };
 
 /**
@@ -46,10 +46,10 @@ export const WINTER_STAGE = {
  * has rolled through the wall. Floor mesh is at local y=-0.02.
  */
 export const COSMOS_STAGE = {
-  modelScale: 1.08 * ARENA_SCALE,
-  modelOffsetY: 0.02 * 1.08 * ARENA_SCALE,
-  floorRadius: scalePlay(15.2),
-  knockoffRadius: scalePlay(15.6),
+  modelScale: 1.08,
+  modelOffsetY: 0.02 * 1.08,
+  floorRadius: 15.2,
+  knockoffRadius: 15.6,
 };
 
 /**
@@ -59,16 +59,16 @@ export const COSMOS_STAGE = {
  * lands that circle on the origin, so the standard spawns, bumpers, and score
  * zones stay centred on flat plaza inside the knockoff line.
  */
-const ARABIAN_PLAZA_SHIFT: [number, number] = [scalePlay(4), scalePlay(16)];
+const ARABIAN_PLAZA_SHIFT: [number, number] = [4, 16];
 
 export const ARABIAN_STAGE = {
-  modelScale: 0.48 * ARENA_SCALE,
+  modelScale: 0.48,
   floorCenter: [-656.5, 556.6, 11] as [number, number, number],
   plazaAnchor: [-526.5, 556.6, 11] as [number, number, number],
   plazaShift: ARABIAN_PLAZA_SHIFT,
   plazaCenter: [0, 0] as [number, number],
-  floorRadius: scalePlay(15.15),
-  knockoffRadius: scalePlay(15.5),
+  floorRadius: 15.15,
+  knockoffRadius: 15.5,
 };
 
 export function arabianPlayTransform(): { x: number; y: number; z: number; scale: number } {
@@ -126,28 +126,22 @@ function grassScenery(): SolidCircle[] {
     radius: radius * scale,
     kind: "bush",
   });
-  const world = (solid: SolidCircle): SolidCircle => ({
-    ...solid,
-    x: solid.x * ARENA_SCALE,
-    z: solid.z * ARENA_SCALE,
-    radius: solid.radius * ARENA_SCALE,
-  });
   return [
-    world({ id: "S_7_rock_a", x: 4.7, z: 13.2, radius: 2.9, kind: "rock" }),
-    world({ id: "S_7_rock_b", x: 9.6, z: 11.2, radius: 2.5, kind: "rock" }),
-    world({ id: "S_6_rock_a", x: -13.7, z: 2.7, radius: 2.8, kind: "rock" }),
-    world({ id: "S_6_rock_b", x: -12.1, z: 7.8, radius: 2.5, kind: "rock" }),
-    world({ id: "S_5_rock_a", x: -10.5, z: -9.9, radius: 2.5, kind: "rock" }),
-    world({ id: "S_5_rock_b", x: -12.8, z: -6.4, radius: 2.3, kind: "rock" }),
-    world({ id: "S_8_rock_a", x: 14.0, z: -3.0, radius: 1.75, kind: "rock" }),
-    world({ id: "S_8_rock_b", x: 14.0, z: 0.1, radius: 1.75, kind: "rock" }),
-    world({ id: "S_8_rock_c", x: 14.0, z: 2.9, radius: 1.45, kind: "rock" }),
-    world({ id: "S_4_rock_a", x: 9.6, z: -9.9, radius: 2.0, kind: "rock" }),
-    world({ id: "S_4_rock_b", x: 11.5, z: -7.4, radius: 2.0, kind: "rock" }),
-    world({ id: "S_1_rock_a", x: -3.2, z: -13.9, radius: 1.6, kind: "rock" }),
-    world({ id: "S_1_rock_b", x: -0.7, z: -13.9, radius: 1.6, kind: "rock" }),
-    world({ id: "S_1_rock_c", x: 1.8, z: -13.9, radius: 1.6, kind: "rock" }),
-    world({ id: "Tree1_Leavs_0", x: 6.6, z: -9.6, radius: 0.35, kind: "bush" }),
+    { id: "S_7_rock_a", x: 4.7, z: 13.2, radius: 2.9, kind: "rock" },
+    { id: "S_7_rock_b", x: 9.6, z: 11.2, radius: 2.5, kind: "rock" },
+    { id: "S_6_rock_a", x: -13.7, z: 2.7, radius: 2.8, kind: "rock" },
+    { id: "S_6_rock_b", x: -12.1, z: 7.8, radius: 2.5, kind: "rock" },
+    { id: "S_5_rock_a", x: -10.5, z: -9.9, radius: 2.5, kind: "rock" },
+    { id: "S_5_rock_b", x: -12.8, z: -6.4, radius: 2.3, kind: "rock" },
+    { id: "S_8_rock_a", x: 14.0, z: -3.0, radius: 1.75, kind: "rock" },
+    { id: "S_8_rock_b", x: 14.0, z: 0.1, radius: 1.75, kind: "rock" },
+    { id: "S_8_rock_c", x: 14.0, z: 2.9, radius: 1.45, kind: "rock" },
+    { id: "S_4_rock_a", x: 9.6, z: -9.9, radius: 2.0, kind: "rock" },
+    { id: "S_4_rock_b", x: 11.5, z: -7.4, radius: 2.0, kind: "rock" },
+    { id: "S_1_rock_a", x: -3.2, z: -13.9, radius: 1.6, kind: "rock" },
+    { id: "S_1_rock_b", x: -0.7, z: -13.9, radius: 1.6, kind: "rock" },
+    { id: "S_1_rock_c", x: 1.8, z: -13.9, radius: 1.6, kind: "rock" },
+    { id: "Tree1_Leavs_0", x: 6.6, z: -9.6, radius: 0.35, kind: "bush" },
     tree("Tree2_Leavs_0", -0.03, 0.2, 0.0385),
     tree("Tree3_Leavs_0", -0.2, -0.07, 0.0248),
     tree("Tree8_Leavs_0", 0.16, 0.1, 0.0193),
@@ -197,15 +191,15 @@ export interface HoodooDecor {
 const HOODOO_FOOTPRINT = 0.25;
 const HOODOO_BASE_LIFT = 0.367;
 
-export function getHoodooDecor(): HoodooDecor[] {
+function hoodooUnits(): HoodooDecor[] {
   const decor: HoodooDecor[] = [];
   const count = 6;
   for (let i = 0; i < count; i++) {
     const angle = (i / count) * Math.PI * 2 + 0.3;
-    const distance = scalePlay(10 + (i % 2) * 4);
+    const distance = 10 + (i % 2) * 4;
     const x = Math.cos(angle) * distance;
     const z = Math.sin(angle) * distance;
-    const scale = scalePlay(2.0 + (i % 3) * 0.4);
+    const scale = 2.0 + (i % 3) * 0.4;
     decor.push({
       id: `hoodoo-${i}`,
       position: [x, HOODOO_BASE_LIFT * scale, z],
@@ -217,6 +211,15 @@ export function getHoodooDecor(): HoodooDecor[] {
   return decor;
 }
 
+/** Hoodoo stones keep their size. Only the ring they stand on grows. */
+export function getHoodooDecor(): HoodooDecor[] {
+  const scale = arenaScaleFor("lava");
+  return hoodooUnits().map((hoodoo) => ({
+    ...hoodoo,
+    position: [hoodoo.position[0] * scale, hoodoo.position[1], hoodoo.position[2] * scale],
+  }));
+}
+
 export interface IcePatch {
   id: string;
   x: number;
@@ -225,22 +228,32 @@ export interface IcePatch {
   rotation: number;
 }
 
-/** Drawn ice disks and the slippery patch surface use this one list. */
-export function getIcePatches(): IcePatch[] {
+function icePatchUnits(): IcePatch[] {
   const patches: IcePatch[] = [];
   const patchCount = 4;
   for (let i = 0; i < patchCount; i++) {
     const angle = (i / patchCount) * Math.PI * 2 + 0.3;
-    const distance = scalePlay(8 + (i % 2) * 4);
+    const distance = 8 + (i % 2) * 4;
     patches.push({
       id: `ice-${i}`,
       x: Math.cos(angle) * distance,
       z: Math.sin(angle) * distance,
-      radius: scalePlay(3.0 + (i % 2) * 0.5),
+      radius: 3.0 + (i % 2) * 0.5,
       rotation: angle,
     });
   }
   return patches;
+}
+
+/** Drawn ice disks and the slippery patch surface use this one list. */
+export function getIcePatches(): IcePatch[] {
+  const scale = arenaScaleFor("ice");
+  return icePatchUnits().map((patch) => ({
+    ...patch,
+    x: patch.x * scale,
+    z: patch.z * scale,
+    radius: patch.radius * scale,
+  }));
 }
 
 const CARDINAL = [0, Math.PI / 2, Math.PI, Math.PI * 1.5];
@@ -259,7 +272,7 @@ function flatBumpers(distance: number, angles: number[]): { id: string; x: numbe
  * omitted. Stacked crates whose bottoms are above the marble are omitted.
  * Off until the winter mesh mounts, so a missing model leaves no camp walls.
  */
-const ICE_CAMP: SolidCircle[] = ([
+const ICE_CAMP: SolidCircle[] = [
   { id: "box-12", x: 12.28, z: -3.39, radius: 0.61, kind: "prop" },
   { id: "box-13", x: 12.8, z: -2.1, radius: 1.05, kind: "prop" },
   { id: "box-14", x: -12.37, z: -3.96, radius: 0.61, kind: "prop" },
@@ -276,12 +289,7 @@ const ICE_CAMP: SolidCircle[] = ([
   { id: "tower-17a", x: 14.67, z: 8.25, radius: 2.05, kind: "prop" },
   { id: "tower-17b", x: 7.25, z: 14.99, radius: 2.05, kind: "prop" },
   { id: "tower-19", x: -4.83, z: 19.01, radius: 2.05, kind: "prop" },
-] as SolidCircle[]).map((solid): SolidCircle => ({
-  ...solid,
-  x: solid.x * ARENA_SCALE,
-  z: solid.z * ARENA_SCALE,
-  radius: solid.radius * ARENA_SCALE,
-}));
+];
 
 let winterCampActive = false;
 let winterCampVersion = 0;
@@ -324,17 +332,17 @@ function buildLayout(
   bumperAngles: number[],
   scoreAngles: number[] = [0.35, 1.9, 3.5, 5.1],
 ): MapLayout {
-  const bumpers = flatBumpers(scalePlay(bumperDistance), bumperAngles);
+  const bumpers = flatBumpers(bumperDistance, bumperAngles);
   return {
     id,
     floorRadius,
     knockoffRadius,
-    orbRingRadius: scalePlay(4.2),
+    orbRingRadius: 4.2,
     scenery,
     bumpers,
     zones: zones(
-      CARDINAL.map((angle) => ({ angle, distance: scalePlay(7.6) })),
-      scoreAngles.map((angle) => ({ angle, distance: scalePlay(11.2) })),
+      CARDINAL.map((angle) => ({ angle, distance: 7.6 })),
+      scoreAngles.map((angle) => ({ angle, distance: 11.2 })),
     ),
   };
 }
@@ -346,21 +354,21 @@ const LAYOUTS: Record<string, MapLayout> = {
     // Grass edge is about 13.2–15 (typically 13.5). 15.5 is just past the outer
     // lobes, so a marble still on grass is in, and leaving the island is out
     // without the old flight across empty air out to 19.2.
-    knockoffRadius: scalePlay(15.5),
-    orbRingRadius: scalePlay(4.2),
+    knockoffRadius: 15.5,
+    orbRingRadius: 4.2,
     scenery: grassScenery(),
-    bumpers: flatBumpers(scalePlay(6.4), DIAGONAL),
+    bumpers: flatBumpers(6.4, DIAGONAL),
     zones: zones(
       // South spawn (105°) sits in front of the big tree canopy, which covers
       // about x -5.7..2.5 and z 7.7..15.9. The four outward-lane counts match.
       [
-        { angle: (350 * Math.PI) / 180, distance: scalePlay(8) },
-        { angle: (105 * Math.PI) / 180, distance: scalePlay(7) },
-        { angle: (190 * Math.PI) / 180, distance: scalePlay(8) },
-        { angle: (270 * Math.PI) / 180, distance: scalePlay(8.2) },
+        { angle: (350 * Math.PI) / 180, distance: 8 },
+        { angle: (105 * Math.PI) / 180, distance: 7 },
+        { angle: (190 * Math.PI) / 180, distance: 8 },
+        { angle: (270 * Math.PI) / 180, distance: 8.2 },
       ],
       // Radius-4 zones at 9.4 end near 13.4, on the grass (edge ~13.5).
-      [45, 150, 230, 315].map((deg) => ({ angle: (deg * Math.PI) / 180, distance: scalePlay(9.4) })),
+      [45, 150, 230, 315].map((deg) => ({ angle: (deg * Math.PI) / 180, distance: 9.4 })),
     ),
   },
   ice: buildLayout(
@@ -373,9 +381,9 @@ const LAYOUTS: Record<string, MapLayout> = {
   ),
   lava: buildLayout(
     "lava",
-    scalePlay(18),
-    scalePlay(18.6),
-    getHoodooDecor().map((hoodoo) => ({
+    18,
+    18.6,
+    hoodooUnits().map((hoodoo) => ({
       id: hoodoo.id,
       x: hoodoo.position[0],
       z: hoodoo.position[2],
@@ -390,10 +398,30 @@ const LAYOUTS: Record<string, MapLayout> = {
   saturn: buildLayout("saturn", ARABIAN_STAGE.floorRadius, ARABIAN_STAGE.knockoffRadius, [], 8.5, DIAGONAL),
 };
 
+/**
+ * Spread a layout written in today's units. Obstacle and bumper radii stay
+ * put so the larger floor has more open space. Positions, the floor, the
+ * knockoff line, spawns, and score zones all grow.
+ */
+export function scaleLayout(layout: MapLayout, scale: number): MapLayout {
+  if (scale === 1) return layout;
+  return {
+    ...layout,
+    floorRadius: layout.floorRadius * scale,
+    knockoffRadius: layout.knockoffRadius * scale,
+    orbRingRadius: layout.orbRingRadius * scale,
+    zones: layout.zones.map((zone) => ({ ...zone, distance: zone.distance * scale })),
+    scenery: layout.scenery.map((solid) => ({ ...solid, x: solid.x * scale, z: solid.z * scale })),
+    bumpers: layout.bumpers.map((bumper) => ({ ...bumper, x: bumper.x * scale, z: bumper.z * scale })),
+  };
+}
+
 export function getMapLayout(mapId: string | null | undefined): MapLayout | null {
   if (!mapId) return null;
   if (mapId === "neon") return neonCourtLayout();
-  return LAYOUTS[mapId] ?? null;
+  const layout = LAYOUTS[mapId];
+  if (!layout) return null;
+  return scaleLayout(layout, arenaScaleFor(mapId));
 }
 
 export function bumperSolids(bumpers: { id: string; x: number; z: number }[]): SolidCircle[] {
@@ -434,7 +462,10 @@ export function collectMatchSolids(input: {
   editorModels: EditorProp[];
 }): SolidCircle[] {
   const layout = getMapLayout(input.map);
-  const camp = input.map === "ice" && winterCampActive ? ICE_CAMP : [];
+  const campScale = arenaScaleFor("ice");
+  const camp = input.map === "ice" && winterCampActive
+    ? ICE_CAMP.map((solid) => ({ ...solid, x: solid.x * campScale, z: solid.z * campScale }))
+    : [];
   const scenery = [...(layout?.scenery ?? []), ...camp];
   const bumpers: SolidCircle[] = input.bumpers.map((bumper) => ({
     id: bumper.id,

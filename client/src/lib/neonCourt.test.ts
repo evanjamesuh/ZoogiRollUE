@@ -9,6 +9,8 @@ import {
   neonBumpers,
   neonCourtLayout,
   neonObstacles,
+  neonPlayHalfX,
+  neonPlayHalfZ,
   neonRails,
   resolveNeonRails,
 } from "./neonCourt.ts";
@@ -21,8 +23,8 @@ test("night circuit is a closed rectangle with corner mouths and posts inside", 
   assert.equal(neonBumpers().length, layout.bumpers.length);
 
   for (const bumper of neonBumpers()) {
-    assert.ok(Math.abs(bumper.x) + BUMPER_RADIUS < NEON_HALF_X - 1);
-    assert.ok(Math.abs(bumper.z) + BUMPER_RADIUS < NEON_HALF_Z - 1);
+    assert.ok(Math.abs(bumper.x) + BUMPER_RADIUS < neonPlayHalfX() - 1);
+    assert.ok(Math.abs(bumper.z) + BUMPER_RADIUS < neonPlayHalfZ() - 1);
   }
 
   const spawns = layout.zones.filter((zone) => zone.isSpawn);
@@ -39,7 +41,8 @@ test("night circuit is a closed rectangle with corner mouths and posts inside", 
 });
 
 test("a marble aimed at a rail bounces back in", () => {
-  let pos: [number, number, number] = [0, 0.5, -6.2];
+  const court = neonPlayHalfZ() / NEON_HALF_Z;
+  let pos: [number, number, number] = [0, 0.5, -6.2 * court];
   let vel: [number, number, number] = [0, 0, -0.8];
   let bounced = false;
   for (let frame = 0; frame < 12; frame++) {
@@ -51,12 +54,13 @@ test("a marble aimed at a rail bounces back in", () => {
     vel = resolved.vel;
   }
   assert.equal(bounced, true);
-  assert.ok(pos[2] > -NEON_HALF_Z, "the bounce should leave the marble on the floor");
+  assert.ok(pos[2] > -neonPlayHalfZ(), "the bounce should leave the marble on the floor");
   assert.equal(isOutsideNeonCourt(pos[0], pos[2]), false);
 });
 
 test("a corner mouth is a real knockout, not a hidden wall", () => {
-  let pos: [number, number, number] = [-8.4, 0.5, -4.4];
+  const court = neonPlayHalfX() / NEON_HALF_X;
+  let pos: [number, number, number] = [-8.4 * court, 0.5, -4.4 * court];
   let vel: [number, number, number] = [-0.7, 0, -0.7];
   let exited = false;
   for (let frame = 0; frame < 16; frame++) {
@@ -80,20 +84,21 @@ test("layout helper matches getMapLayout", () => {
 });
 
 test("raised pads and the center channel bounce, and the corner mouths stay open", () => {
-  const gapX = NEON_HALF_X - NEON_CORNER_GAP;
-  const gapZ = NEON_HALF_Z - NEON_CORNER_GAP;
+  const scale = neonPlayHalfX() / NEON_HALF_X;
+  const gapX = neonPlayHalfX() - NEON_CORNER_GAP * scale;
+  const gapZ = neonPlayHalfZ() - NEON_CORNER_GAP * scale;
   const boxes = neonObstacles();
   assert.ok(boxes.length >= 4);
 
   const mouths = [
-    [gapX, NEON_HALF_X, gapZ, NEON_HALF_Z],
-    [-NEON_HALF_X, -gapX, gapZ, NEON_HALF_Z],
-    [gapX, NEON_HALF_X, -NEON_HALF_Z, -gapZ],
-    [-NEON_HALF_X, -gapX, -NEON_HALF_Z, -gapZ],
+    [gapX, neonPlayHalfX(), gapZ, neonPlayHalfZ()],
+    [-neonPlayHalfX(), -gapX, gapZ, neonPlayHalfZ()],
+    [gapX, neonPlayHalfX(), -neonPlayHalfZ(), -gapZ],
+    [-neonPlayHalfX(), -gapX, -neonPlayHalfZ(), -gapZ],
   ];
   for (const box of boxes) {
-    assert.ok(box.maxX < NEON_HALF_X && box.minX > -NEON_HALF_X, box.id);
-    assert.ok(box.maxZ < NEON_HALF_Z && box.minZ > -NEON_HALF_Z, box.id);
+    assert.ok(box.maxX < neonPlayHalfX() && box.minX > -neonPlayHalfX(), box.id);
+    assert.ok(box.maxZ < neonPlayHalfZ() && box.minZ > -neonPlayHalfZ(), box.id);
     for (const [x0, x1, z0, z1] of mouths) {
       const overlaps = box.minX < x1 && box.maxX > x0 && box.minZ < z1 && box.maxZ > z0;
       assert.equal(overlaps, false, `${box.id} blocks a knockout mouth`);

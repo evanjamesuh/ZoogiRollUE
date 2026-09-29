@@ -1,7 +1,6 @@
-import { ARENA_SCALE } from "./arenaScale";
 import { ZOOGI_REST_Y } from "./restHeight";
 
-export const ARENA_RADIUS = 18 * ARENA_SCALE;
+export const ARENA_RADIUS = 18;
 export const WALL_THICKNESS = 1.5;
 
 // Knockout scoring constants
@@ -21,7 +20,7 @@ export const INVULNERABILITY_DURATION = 2000; // 2 seconds invulnerability after
 export const SPAWN_POINT_RADIUS = ARENA_RADIUS + 8; // Well outside the ring
 
 // Ice theme: spawn inside the flat ice area (GLB island walls are at ~radius 15)
-export const ICE_SPAWN_POINT_RADIUS = 10 * ARENA_SCALE;
+export const ICE_SPAWN_POINT_RADIUS = 10;
 
 // Active map theme — set when a game starts so all spawn calls use the right radius
 let _activeMapTheme = "grass";
@@ -178,19 +177,15 @@ export function getSnowmanPositions(): { position: [number, number, number]; rad
   // Four on the open ice near the cardinals (radius 10). The other four used to
   // sit at radius 16, which is inside the winter camp walls and towers, so they
   // now stand on open ice between those and the bumpers.
-  const place = (x: number, z: number, radius: number) => ({
-    position: [x * ARENA_SCALE, 0, z * ARENA_SCALE] as [number, number, number],
-    radius: radius * ARENA_SCALE,
-  });
   return [
-    place(9.55, 2.96, 0.55),
-    place(4.23, 7.95, 0.55),
-    place(-2.96, 9.55, 0.55),
-    place(-7.95, 4.23, 0.55),
-    place(-9.55, -2.96, 0.55),
-    place(-4.23, -7.95, 0.55),
-    place(2.96, -9.55, 0.55),
-    place(7.95, -4.23, 0.55),
+    { position: [9.55, 0, 2.96], radius: 0.55 },
+    { position: [4.23, 0, 7.95], radius: 0.55 },
+    { position: [-2.96, 0, 9.55], radius: 0.55 },
+    { position: [-7.95, 0, 4.23], radius: 0.55 },
+    { position: [-9.55, 0, -2.96], radius: 0.55 },
+    { position: [-4.23, 0, -7.95], radius: 0.55 },
+    { position: [2.96, 0, -9.55], radius: 0.55 },
+    { position: [7.95, 0, -4.23], radius: 0.55 }
   ];
 }
 
