@@ -775,7 +775,7 @@ export function Arena({ theme = "grass" }: ArenaProps) {
       {currentTheme === "lava" && <DesertHoodoos />}
       {currentTheme === "grass" && (
         <MeshyArenaErrorBoundary fallback={stageFallback}>
-          <Suspense fallback={null}>
+          <Suspense fallback={stageFallback}>
             <FloatingIslandScene />
           </Suspense>
         </MeshyArenaErrorBoundary>
@@ -793,7 +793,7 @@ export function Arena({ theme = "grass" }: ArenaProps) {
       {isIceTheme && <WinterAnimals />}
       {currentTheme === "space" && (
         <MeshyArenaErrorBoundary fallback={stageFallback}>
-          <Suspense fallback={null}>
+          <Suspense fallback={stageFallback}>
             <CosmosArenaModel />
           </Suspense>
         </MeshyArenaErrorBoundary>
@@ -801,7 +801,7 @@ export function Arena({ theme = "grass" }: ArenaProps) {
       {currentTheme === "space" && <SpaceBackground />}
       {currentTheme === "saturn" && (
         <MeshyArenaErrorBoundary fallback={stageFallback}>
-          <Suspense fallback={null}>
+          <Suspense fallback={stageFallback}>
             <ArabianNightsScene />
           </Suspense>
         </MeshyArenaErrorBoundary>
