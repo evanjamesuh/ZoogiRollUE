@@ -2,6 +2,8 @@ import * as THREE from "three";
 import { Component, ReactNode, Suspense, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
+import { getMapLayout } from "@/lib/arenaColliders";
+import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 
 const GLOW_URL = "/textures/comic/glow_orange.png";
 
@@ -167,11 +169,31 @@ function EmberField() {
   );
 }
 
-/** Knockout line. The moat and the crust lip both meet this radius, with no gap. */
-const LAVA_EDGE = 18.6;
+/**
+ * Dark crust covers this share of the knockout radius, on the floor.
+ * The hot rim and the deep pool are the same kind of fraction, so a larger
+ * arena keeps the same three bands.
+ */
+const LIP_WIDTH_RATIO = 0.12;
+const MELT_WIDTH_RATIO = 0.06;
+const MOAT_OUTER_RATIO = 1.32;
+/** Low curb, in world units. Marbles are not scaled with the arena. */
+const LIP_CURB_HEIGHT = 0.16;
 
-function LavaMoat() {
+/**
+ * Same number the fall check uses. A lava match copies
+ * getMapLayout("lava").knockoffRadius into wallSettings.knockoffBoundaryRadius.
+ */
+function useLavaKnockoffRadius(): number {
+  const live = useZoogiGame((state) => state.wallSettings.knockoffBoundaryRadius);
+  if (live != null && Number.isFinite(live) && live > 0) return live;
+  return getMapLayout("lava")?.knockoffRadius ?? 0;
+}
+
+function LavaMoat({ edge }: { edge: number }) {
   const meltRef = useRef<THREE.MeshBasicMaterial>(null);
+  const meltOuter = edge * (1 + MELT_WIDTH_RATIO);
+  const moatOuter = edge * MOAT_OUTER_RATIO;
   useFrame((state) => {
     const mat = meltRef.current;
     if (!mat) return;
@@ -182,14 +204,15 @@ function LavaMoat() {
     mat.color.g = 1.05 + wave * 0.06;
     mat.color.b = 0.08;
   });
+  if (edge <= 0) return null;
   return (
     <group position={[0, 0.07, 0]}>
       <mesh rotation={[-Math.PI / 2, 0, 0]} renderOrder={2}>
-        <ringGeometry args={[LAVA_EDGE, 19.7, 80]} />
+        <ringGeometry args={[edge, meltOuter, 80]} />
         <meshBasicMaterial ref={meltRef} color="#ffcc33" toneMapped={false} fog={false} />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.012, 0]} renderOrder={1}>
-        <ringGeometry args={[19.7, 24.5, 80]} />
+        <ringGeometry args={[meltOuter, moatOuter, 80]} />
         <meshBasicMaterial color="#d01208" toneMapped={false} fog={false} />
       </mesh>
     </group>
@@ -197,15 +220,17 @@ function LavaMoat() {
 }
 
 /** Dark crust on the floor, ending exactly on the knockout line. */
-function BasaltLip() {
+function BasaltLip({ edge }: { edge: number }) {
+  if (edge <= 0) return null;
+  const lipInner = edge * (1 - LIP_WIDTH_RATIO);
   return (
     <group>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.065, 0]} renderOrder={2}>
-        <ringGeometry args={[16.4, LAVA_EDGE, 96]} />
+        <ringGeometry args={[lipInner, edge, 96]} />
         <meshBasicMaterial color="#100e0c" fog={false} />
       </mesh>
-      <mesh position={[0, 0.1, 0]} renderOrder={3}>
-        <cylinderGeometry args={[LAVA_EDGE, LAVA_EDGE, 0.16, 96, 1, true]} />
+      <mesh position={[0, LIP_CURB_HEIGHT / 2, 0]} renderOrder={3}>
+        <cylinderGeometry args={[edge, edge, LIP_CURB_HEIGHT, 96, 1, true]} />
         <meshBasicMaterial color="#161311" side={THREE.DoubleSide} fog={false} />
       </mesh>
     </group>
@@ -242,7 +267,7 @@ function RockSpires() {
   );
 }
 
-function VolcanicPitModel() {
+function VolcanicPitModel({ edge }: { edge: number }) {
   const { scene } = useGLTF("/models/volcanic_pit.glb");
   const cloned = useMemo(() => {
     const copy = scene.clone(true);
@@ -276,26 +301,27 @@ function VolcanicPitModel() {
     const fitted = new THREE.Box3().setFromObject(cloned);
     const center = new THREE.Vector3();
     fitted.getCenter(center);
-    // Nearest face sits just past the 18.6 knockoff so the pit reads in the
-    // gameplay and birds-eye cameras, while every point stays outside the ring.
-    const nearZ = -(18.6 + 4);
+    // Nearest face sits a fixed gap past the live knockout line, so the pit
+    // stays outside the ring when that radius changes.
+    const nearZ = -(edge + 4);
     cloned.position.set(-center.x, -fitted.min.y, nearZ - fitted.max.z);
-  }, [cloned]);
+  }, [cloned, edge]);
 
   return <primitive object={cloned} />;
 }
 
-/** Lighting, lava glow, embers, dusk rocks and an optional distant pit model. Play-field radius stays 18.6. */
+/** Lava glow, embers, dusk rocks, and an optional distant pit model. */
 export function VolcanicPitDressing() {
+  const edge = useLavaKnockoffRadius();
   return (
     <group>
-      <LavaMoat />
-      <BasaltLip />
+      <LavaMoat edge={edge} />
+      <BasaltLip edge={edge} />
       <RockSpires />
       <EmberField />
       <ModelErrorBoundary fallback={null}>
         <Suspense fallback={null}>
-          <VolcanicPitModel />
+          <VolcanicPitModel edge={edge} />
         </Suspense>
       </ModelErrorBoundary>
     </group>

@@ -5,7 +5,13 @@ import { useGLTF } from "@react-three/drei";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { useAudio } from "@/lib/stores/useAudio";
 import { getHoodooDecor, type HoodooDecor } from "@/lib/arenaColliders";
-import { fittedHoodooGeometry, HOODOO_LOCAL_COLLIDER_RADIUS } from "./volcanicHoodooFit";
+import { fittedHoodooGeometry } from "./volcanicHoodooFit";
+
+/** Collider radius in the mesh's local space. World radius is this times hoodoo.scale. */
+function localColliderRadius(hoodoo: HoodooDecor): number {
+  if (!Number.isFinite(hoodoo.scale) || Math.abs(hoodoo.scale) < 1e-6) return hoodoo.radius;
+  return hoodoo.radius / hoodoo.scale;
+}
 
 type HoodooData = HoodooDecor;
 
@@ -24,14 +30,15 @@ function StylizedHoodoo({ hoodoo }: { hoodoo: HoodooData }) {
   const lastHitTimeRef = useRef(0);
   
   const model = useGLTF("/models/stylized_desert_hoodoo.glb");
+  const localRadius = localColliderRadius(hoodoo);
   const clonedScene = useMemo(() => {
     const root = model.scene.clone(true);
     root.traverse((obj) => {
       if (!(obj instanceof THREE.Mesh)) return;
-      obj.geometry = fittedHoodooGeometry(obj.geometry);
+      obj.geometry = fittedHoodooGeometry(obj.geometry, localRadius);
     });
     return root;
-  }, [model.scene]);
+  }, [model.scene, localRadius]);
   
   const playerEntity = useZoogiGame(state => state.playerEntity);
   const enemies = useZoogiGame(state => state.enemies);
@@ -88,13 +95,14 @@ function StylizedHoodoo({ hoodoo }: { hoodoo: HoodooData }) {
 }
 
 function FallbackHoodoo({ hoodoo }: { hoodoo: HoodooData }) {
-  // Same local space as the fitted mesh: radius 0.25, base on the ground after the lift.
+  // Same local space as the fitted mesh. The group scale brings it up to hoodoo.radius.
   const height = 0.75;
   const base = -0.367;
+  const radius = localColliderRadius(hoodoo);
   return (
     <group position={hoodoo.position} scale={hoodoo.scale} rotation={[0, hoodoo.rotation, 0]}>
       <mesh position={[0, base + height / 2, 0]} castShadow>
-        <cylinderGeometry args={[HOODOO_LOCAL_COLLIDER_RADIUS, HOODOO_LOCAL_COLLIDER_RADIUS, height, 12]} />
+        <cylinderGeometry args={[radius, radius, height, 12]} />
         <meshStandardMaterial color="#3a332c" roughness={0.94} />
       </mesh>
     </group>

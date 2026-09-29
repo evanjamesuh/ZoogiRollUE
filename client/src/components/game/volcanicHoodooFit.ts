@@ -1,12 +1,5 @@
 import type { BufferGeometry } from "three";
 
-/**
- * Local collider radius of a lava hoodoo before the group scale.
- * getHoodooDecor uses world radius = 0.25 * scale. The mesh is drawn in that
- * same local space, so fitting the stone to this radius matches every scale.
- */
-export const HOODOO_LOCAL_COLLIDER_RADIUS = 0.25;
-
 const BIN = 0.01;
 const Y_ORIGIN = -0.42;
 /**
@@ -16,18 +9,17 @@ const Y_ORIGIN = -0.42;
  */
 const SHELL = 0.55;
 
-const fittedBySource = new WeakMap<BufferGeometry, BufferGeometry>();
+const fittedBySource = new WeakMap<BufferGeometry, Map<number, BufferGeometry>>();
 
 /**
  * Reshape stylized_desert_hoodoo so the visible stone matches its collider.
  * The raw mesh is a mushroom: at marble height the stem is much thinner than
  * the hit circle, and the flared foot is about 1.37x wider than that circle.
- * Radial fit runs once when the model loads.
+ * `targetRadius` is the collider radius in the mesh's local space
+ * (world radius divided by the group scale from getHoodooDecor).
+ * Radial fit runs once per target radius when the model loads.
  */
-export function fitHoodooGeometry(
-  geometry: BufferGeometry,
-  targetRadius = HOODOO_LOCAL_COLLIDER_RADIUS,
-): void {
+export function fitHoodooGeometry(geometry: BufferGeometry, targetRadius: number): void {
   const pos = geometry.getAttribute("position");
   if (!pos) return;
   const count = pos.count;
@@ -62,12 +54,21 @@ export function fitHoodooGeometry(
   geometry.computeBoundingSphere();
 }
 
-/** One fitted geometry shared by every lava hoodoo. The source mesh is left alone. */
-export function fittedHoodooGeometry(source: BufferGeometry): BufferGeometry {
-  const cached = fittedBySource.get(source);
+/**
+ * Fitted geometry for one collider radius. Hoodoos that share a local radius
+ * share the geometry. The source mesh is left alone.
+ */
+export function fittedHoodooGeometry(source: BufferGeometry, targetRadius: number): BufferGeometry {
+  const key = Math.round(targetRadius * 10000);
+  let byRadius = fittedBySource.get(source);
+  if (!byRadius) {
+    byRadius = new Map();
+    fittedBySource.set(source, byRadius);
+  }
+  const cached = byRadius.get(key);
   if (cached) return cached;
   const fitted = source.clone();
-  fitHoodooGeometry(fitted);
-  fittedBySource.set(source, fitted);
+  fitHoodooGeometry(fitted, targetRadius);
+  byRadius.set(key, fitted);
   return fitted;
 }
