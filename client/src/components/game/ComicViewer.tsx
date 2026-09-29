@@ -1,5 +1,5 @@
 import { Component, ReactNode, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Canvas, useThree } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, useGLTF } from "@react-three/drei";
 import { BookOpen, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import * as THREE from "three";
@@ -24,12 +24,14 @@ interface ComicViewerProps {
 
 type ManualCamera = THREE.PerspectiveCamera & { manual?: boolean };
 
-function ComicPanelStage({ page, onReady }: { page: number; onReady: () => void }) {
+function ComicPanelStage({ page, onReady }: { page: number; onReady: (page: number) => void }) {
   const url = introComicPanelUrl(page);
   const gltf = useGLTF(url);
   const prepared = useMemo(() => prepareComicPanel(gltf.scene, page), [gltf.scene, page]);
   const set = useThree((state) => state.set);
   const size = useThree((state) => state.size);
+  const frames = useRef(0);
+  const revealedPage = useRef(0);
 
   useLayoutEffect(() => {
     retainComicPanel(url, gltf.scene);
@@ -38,8 +40,19 @@ function ComicPanelStage({ page, onReady }: { page: number; onReady: () => void 
     camera.aspect = size.width / Math.max(1, size.height);
     camera.updateProjectionMatrix();
     set({ camera });
-    onReady();
-  }, [url, gltf.scene, prepared.camera, set, size.width, size.height, onReady]);
+    frames.current = 0;
+  }, [url, gltf.scene, prepared.camera, set, size.width, size.height]);
+
+  // The first frame compiles shaders. Reveal the panel on the frame after that
+  // so the loader stays up instead of flashing a blank canvas.
+  useFrame(() => {
+    if (revealedPage.current === page) return;
+    frames.current += 1;
+    if (frames.current >= 2) {
+      revealedPage.current = page;
+      onReady(page);
+    }
+  });
 
   return (
     <>
@@ -161,9 +174,7 @@ export function ComicViewer({ onBack }: ComicViewerProps) {
   const frameRef = useRef<HTMLDivElement>(null);
   const onBackRef = useRef(onBack);
   onBackRef.current = onBack;
-  const pageRef = useRef(page);
-  pageRef.current = page;
-  const markReady = useCallback(() => setReadyPage(pageRef.current), []);
+  const markReady = useCallback((shownPage: number) => setReadyPage(shownPage), []);
 
   const go = (delta: number) => setPage((current) => stepComicPage(current, delta));
 
