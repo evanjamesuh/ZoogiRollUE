@@ -1,22 +1,21 @@
 import * as THREE from "three";
 import { Component, ReactNode, Suspense, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { useAnimations, useGLTF } from "@react-three/drei";
+import { useAnimations, useGLTF, useTexture } from "@react-three/drei";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import {
-  GRASS_STAGE,
   WINTER_STAGE,
   arabianPlayTransform,
   getMapLayout,
   setWinterCampActive,
   type SolidCircle,
 } from "@/lib/arenaColliders";
-import { GRASS_RIM, ROUND_KNOCKOFF_RADIUS, rimPosition, type RimMark } from "@/lib/roundRim";
-import { RING_VISUAL_LIMIT, foliageBlocksRingView, ringPieceAction, type Aabb } from "@/lib/ringPlacement";
+import { GRASS_RIM, ROUND_FLOOR_RADIUS, ROUND_KNOCKOFF_RADIUS, rimPosition, type RimMark } from "@/lib/roundRim";
+import { RING_VISUAL_LIMIT, ringPieceAction, type Aabb } from "@/lib/ringPlacement";
+import { MEADOW_GROUND_Y, forestTopY, meadowForestPieces, type ForestPiece } from "@/lib/meadowDressing";
 
 const EDGE = ROUND_KNOCKOFF_RADIUS;
 const RIM_INNER = 14.7;
-const MEADOW_HIDE = /^(Grass\d|B_\d|Base_|Chain_|pPlatonic)/;
 
 class ModelErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
   constructor(props: { children: ReactNode }) {
@@ -248,7 +247,7 @@ function MeadowFlowers() {
     const colors = ["#ff5fa2", "#ffd24a", "#fff4ea", "#7ec8ff", "#ff7a3c"];
     return Array.from({ length: 26 }, (_, i) => {
       const angle = rand() * Math.PI * 2;
-      const dist = 17.4 + rand() * 5.5;
+      const dist = 16.45 + rand() * 1.15;
       return {
         id: `flower-${i}`,
         x: Math.cos(angle) * dist,
@@ -263,7 +262,7 @@ function MeadowFlowers() {
   return (
     <group>
       {flowers.map((flower) => (
-        <group key={flower.id} position={[flower.x, 0, flower.z]} rotation={[0, flower.rot, 0]} scale={flower.scale}>
+        <group key={flower.id} position={[flower.x, MEADOW_GROUND_Y, flower.z]} rotation={[0, flower.rot, 0]} scale={flower.scale}>
           <mesh position={[0, 0.16, 0]}>
             <cylinderGeometry args={[0.03, 0.03, 0.32, 5]} />
             <meshStandardMaterial color="#2f6a32" />
@@ -278,60 +277,169 @@ function MeadowFlowers() {
   );
 }
 
-/** A stone from the island, scaled so its widest point matches the rim collider. */
-function placeRimRock(source: THREE.Object3D, mark: RimMark): THREE.Group {
-  const clone = source.clone(true);
-  clone.position.set(0, 0, 0);
-  clone.rotation.set(0, 0, 0);
-  clone.scale.set(1, 1, 1);
-  clone.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(clone);
-  const center = box.getCenter(new THREE.Vector3());
-  clone.position.set(-center.x, -box.min.y, -center.z);
-  clone.updateMatrixWorld(true);
-  let maxR = 0.001;
-  const v = new THREE.Vector3();
-  clone.traverse((obj) => {
-    const mesh = obj as THREE.Mesh;
-    if (!mesh.isMesh) return;
-    const pos = mesh.geometry.getAttribute("position");
-    if (!pos) return;
-    for (let i = 0; i < pos.count; i++) {
-      v.fromBufferAttribute(pos as THREE.BufferAttribute, i).applyMatrix4(mesh.matrixWorld);
-      maxR = Math.max(maxR, Math.hypot(v.x, v.z));
-    }
-  });
-  const wrapper = new THREE.Group();
-  wrapper.add(clone);
-  wrapper.scale.setScalar(mark.radius / maxR);
-  const { x, z } = rimPosition(mark);
-  wrapper.position.set(x, 0, z);
-  wrapper.rotation.y = (mark.angleDeg * Math.PI) / 180;
-  wrapper.traverse((obj) => {
-    if (obj instanceof THREE.Mesh) {
-      obj.castShadow = true;
-      obj.receiveShadow = true;
-    }
-  });
-  return wrapper;
+function useTiledGrass(repeat: number) {
+  const source = useTexture("/textures/grass.png");
+  const map = useMemo(() => {
+    const tex = source.clone();
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(repeat, repeat);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 8;
+    tex.needsUpdate = true;
+    return tex;
+  }, [source, repeat]);
+  return map;
 }
 
-function MeadowRocks() {
-  const { scene } = useGLTF("/models/floating_island_stage.glb");
-  const group = useMemo(() => {
-    const sources: THREE.Object3D[] = [];
-    scene.traverse((obj) => {
-      if (/^S_\d+$/.test(obj.name) && obj.parent?.name === "Stones") sources.push(obj);
-    });
-    sources.sort((a, b) => a.name.localeCompare(b.name));
-    const root = new THREE.Group();
-    if (sources.length === 0) return root;
-    GRASS_RIM.forEach((mark, i) => {
-      root.add(placeRimRock(sources[i % sources.length], mark));
-    });
-    return root;
-  }, [scene]);
-  return <primitive object={group} />;
+function MeadowFloor() {
+  const grass = useTiledGrass(7);
+  const outer = useTiledGrass(10);
+  return (
+    <group>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} receiveShadow>
+        <circleGeometry args={[ROUND_FLOOR_RADIUS, 96]} />
+        <meshStandardMaterial map={grass} color="#ffffff" roughness={0.94} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.055, 0]} receiveShadow>
+        <ringGeometry args={[ROUND_FLOOR_RADIUS - 0.18, ROUND_KNOCKOFF_RADIUS, 96]} />
+        <meshStandardMaterial color="#d7e7a4" roughness={0.82} />
+      </mesh>
+      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.04, 0]} castShadow receiveShadow>
+        <torusGeometry args={[(ROUND_FLOOR_RADIUS + ROUND_KNOCKOFF_RADIUS) / 2, 0.16, 10, 80]} />
+        <meshStandardMaterial color="#e7f0c2" roughness={0.78} />
+      </mesh>
+      <mesh position={[0, -0.12, 0]} receiveShadow>
+        <cylinderGeometry args={[ROUND_KNOCKOFF_RADIUS, ROUND_KNOCKOFF_RADIUS + 0.12, 0.24, 80, 1, true]} />
+        <meshStandardMaterial color="#7f9a48" roughness={1} side={THREE.DoubleSide} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, MEADOW_GROUND_Y, 0]} receiveShadow>
+        <ringGeometry args={[ROUND_KNOCKOFF_RADIUS + 0.05, 19.2, 80]} />
+        <meshStandardMaterial map={outer} color="#d5e2a6" roughness={1} />
+      </mesh>
+    </group>
+  );
+}
+
+/** Mossy boulder or stump whose widest point is the rim collider. */
+function MeadowRimPiece({ mark, stump }: { mark: RimMark; stump: boolean }) {
+  const { x, z } = rimPosition(mark);
+  const moss = "#63b34a";
+  if (stump) {
+    const cap = 0.16;
+    const body = Math.max(0.45, mark.height - cap);
+    return (
+      <group position={[x, 0, z]} rotation={[0, (mark.angleDeg * Math.PI) / 180, 0]}>
+        <mesh position={[0, body / 2, 0]} castShadow receiveShadow>
+          <cylinderGeometry args={[mark.radius * 0.78, mark.radius * 0.9, body, 8]} />
+          <meshStandardMaterial color="#6b4630" roughness={0.92} />
+        </mesh>
+        <mesh position={[0, body + cap / 2, 0]} castShadow receiveShadow>
+          <cylinderGeometry args={[mark.radius, mark.radius * 0.94, cap, 10]} />
+          <meshStandardMaterial color="#8a5a38" roughness={0.88} />
+        </mesh>
+        <mesh position={[0.12, body + cap + 0.08, 0.05]} scale={[1, 0.45, 1]} castShadow>
+          <sphereGeometry args={[mark.radius * 0.42, 8, 6]} />
+          <meshStandardMaterial color={moss} roughness={0.8} />
+        </mesh>
+      </group>
+    );
+  }
+  return (
+    <group position={[x, 0, z]} rotation={[0, (mark.angleDeg * Math.PI) / 180, 0.08]}>
+      <mesh position={[0, mark.radius * 0.38, 0]} scale={[1, 0.62, 1]} castShadow receiveShadow>
+        <sphereGeometry args={[mark.radius, 14, 10]} />
+        <meshStandardMaterial color="#7d7368" roughness={0.94} />
+      </mesh>
+      <mesh position={[0.05, mark.radius * 0.72, 0.02]} scale={[1, 0.5, 0.9]} castShadow>
+        <sphereGeometry args={[mark.radius * 0.55, 10, 8]} />
+        <meshStandardMaterial color={moss} roughness={0.82} />
+      </mesh>
+    </group>
+  );
+}
+
+function MeadowRim() {
+  return (
+    <group>
+      {GRASS_RIM.map((mark, i) => (
+        <MeadowRimPiece key={mark.id} mark={mark} stump={i % 2 === 1} />
+      ))}
+    </group>
+  );
+}
+
+function ForestTree({ piece }: { piece: ForestPiece }) {
+  const top = forestTopY(piece);
+  const localTop = top - MEADOW_GROUND_Y;
+  const greens = piece.kind === "tree" ? ["#3eae4c", "#2f8a3c"] : ["#4cba58", "#2f7d3a"];
+  return (
+    <group position={[piece.x, MEADOW_GROUND_Y, piece.z]} rotation={[0, piece.rot, 0]}>
+      {piece.kind === "tree" && (
+        <mesh position={[0, piece.trunk / 2, 0]} castShadow receiveShadow>
+          <cylinderGeometry args={[0.16, 0.26, piece.trunk, 6]} />
+          <meshStandardMaterial color="#6a452c" roughness={0.94} />
+        </mesh>
+      )}
+      <mesh position={[0, localTop - piece.canopy, 0]} castShadow receiveShadow>
+        <sphereGeometry args={[piece.canopy, 12, 9]} />
+        <meshStandardMaterial color={greens[0]} roughness={0.82} />
+      </mesh>
+      <mesh position={[piece.canopy * 0.28, localTop - piece.canopy * 1.45, piece.canopy * 0.1]} castShadow>
+        <sphereGeometry args={[piece.canopy * 0.55, 8, 7]} />
+        <meshStandardMaterial color={greens[1]} roughness={0.84} />
+      </mesh>
+    </group>
+  );
+}
+
+function MeadowForest() {
+  const pieces = useMemo(() => meadowForestPieces(), []);
+  return (
+    <group>
+      {pieces.map((piece) => (
+        <ForestTree key={piece.id} piece={piece} />
+      ))}
+    </group>
+  );
+}
+
+function MeadowBackdrop() {
+  const source = useTexture("/textures/meadow_background.png");
+  const map = useMemo(() => {
+    const image = source.image as CanvasImageSource & { width: number; height: number };
+    const w = image.width;
+    const h = image.height;
+    const canvas = document.createElement("canvas");
+    canvas.width = w * 2;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.drawImage(image, 0, 0, w, h);
+      ctx.save();
+      ctx.translate(w * 2, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(image, 0, 0, w, h);
+      ctx.restore();
+    }
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    // Two mirrored copies, twice around the cylinder, cropped to the village and sky.
+    tex.repeat.set(4, 0.72);
+    tex.offset.set(0, 0.2);
+    tex.anisotropy = 8;
+    tex.needsUpdate = true;
+    return tex;
+  }, [source]);
+
+  return (
+    <mesh position={[0, 3.15, 0]} rotation={[0, 0.4, 0]}>
+      <cylinderGeometry args={[19.5, 19.5, 7.1, 80, 1, true]} />
+      <meshBasicMaterial map={map} side={THREE.BackSide} toneMapped={false} />
+    </mesh>
+  );
 }
 
 function SnowLip() {
@@ -553,97 +661,6 @@ function collectUnits(root: THREE.Object3D): THREE.Object3D[] {
   return units;
 }
 
-function scaleAboutWorld(object: THREE.Object3D, pivot: THREE.Vector3, factor: number) {
-  const parent = object.parent;
-  if (!parent) return;
-  parent.updateWorldMatrix(true, false);
-  const inverse = new THREE.Matrix4().copy(parent.matrixWorld).invert();
-  const localPivot = pivot.clone().applyMatrix4(inverse);
-  object.position.sub(localPivot).multiplyScalar(factor).add(localPivot);
-  object.scale.multiplyScalar(factor);
-  object.updateWorldMatrix(true, true);
-}
-
-function trunkPivot(tree: THREE.Object3D): THREE.Vector3 {
-  let trunk: THREE.Mesh | null = null;
-  tree.traverse((obj) => {
-    const mesh = obj as THREE.Mesh;
-    if (mesh.isMesh && /Trank/i.test(mesh.name)) trunk = mesh;
-  });
-  const source = trunk ?? tree;
-  source.updateWorldMatrix(true, true);
-  const box = new THREE.Box3().setFromObject(source);
-  const center = box.getCenter(new THREE.Vector3());
-  return new THREE.Vector3(center.x, box.min.y, center.z);
-}
-
-function treeBlocksView(tree: THREE.Object3D): boolean {
-  tree.updateWorldMatrix(true, true);
-  const v = new THREE.Vector3();
-  let blocked = false;
-  tree.traverse((obj) => {
-    if (blocked) return;
-    const mesh = obj as THREE.Mesh;
-    if (!mesh.isMesh || !mesh.visible) return;
-    const pos = mesh.geometry?.getAttribute("position") as THREE.BufferAttribute | undefined;
-    if (!pos) return;
-    const stride = 1;
-    for (let i = 0; i < pos.count; i += stride) {
-      v.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld);
-      if (foliageBlocksRingView(v.x, v.y, v.z)) {
-        blocked = true;
-        return;
-      }
-    }
-  });
-  return blocked;
-}
-
-/**
- * Palm crowns on the island are tall enough to hang in front of the
- * gameplay camera. Shorten a tree toward its base, then walk it outward,
- * until its leaves frame the ring instead of covering the grass.
- */
-function settleMeadowCanopies(root: THREE.Object3D) {
-  let shortened = 0;
-  let moved = 0;
-  let hid = 0;
-  const trees: THREE.Object3D[] = [];
-  root.traverse((obj) => {
-    if (/^Tree\d+$/.test(obj.name)) trees.push(obj);
-  });
-  for (const tree of trees) {
-    if (!tree.visible) continue;
-    const pivot = trunkPivot(tree);
-    let didShorten = false;
-    for (let step = 0; step < 5 && treeBlocksView(tree); step += 1) {
-      scaleAboutWorld(tree, pivot, 0.68);
-      didShorten = true;
-    }
-    if (didShorten) shortened += 1;
-    pushUnit(tree, RING_VISUAL_LIMIT);
-    let didMove = false;
-    for (let step = 0; step < 10 && treeBlocksView(tree); step += 1) {
-      const measured = measureUnit(tree);
-      if (!measured) break;
-      const len = Math.hypot(measured.cx, measured.cz) || 1;
-      applyWorldDelta(tree, (measured.cx / len) * 2.4, 0, (measured.cz / len) * 2.4);
-      tree.updateWorldMatrix(true, true);
-      didMove = true;
-    }
-    if (didMove) moved += 1;
-    if (treeBlocksView(tree)) {
-      tree.traverse((obj) => {
-        if (/Leav/i.test(obj.name)) obj.visible = false;
-      });
-      hid += 1;
-    }
-  }
-  if (shortened || moved || hid) {
-    console.info(`[ring] meadow canopies shortened ${shortened}, moved ${moved}, hid ${hid}`);
-  }
-}
-
 function arrangeRing(root: THREE.Object3D, map: "grass" | "ice" | "saturn"): { hid: number; pushed: number; clipped: number; kept: number } | null {
   if (root.userData.ringArranged) return null;
   root.userData.ringArranged = true;
@@ -653,9 +670,6 @@ function arrangeRing(root: THREE.Object3D, map: "grass" | "ice" | "saturn"): { h
   let kept = 0;
 
   root.traverse((obj) => {
-    if (map === "grass" && (MEADOW_HIDE.test(obj.name) || obj.name === "Lower_base" || obj.name === "Stones")) {
-      obj.visible = false;
-    }
     if (map === "saturn" && obj.name === "FrontSide_2") {
       applyWorldDelta(obj, 0, 3.5, 0);
     }
@@ -692,7 +706,6 @@ function arrangeRing(root: THREE.Object3D, map: "grass" | "ice" | "saturn"): { h
     }
     kept += 1;
   }
-  if (map === "grass") settleMeadowCanopies(root);
   return { hid, pushed, clipped, kept };
 }
 
@@ -798,32 +811,14 @@ function StageBoundary({ children }: { children: ReactNode }) {
 }
 
 export function MeadowArena() {
-  const gameMode = useZoogiGame((state) => state.gameMode);
-  const background = useZoogiGame((state) => state.backgroundSettings);
-  const arenaRotation = useZoogiGame((state) => state.elementTransforms.arenaModelRotation);
-  const editing = gameMode === "map_editor";
-  const position: [number, number, number] = editing
-    ? [background.modelPositionX ?? 0, background.modelPositionY ?? -0.5, background.modelPositionZ ?? 0]
-    : [0, GRASS_STAGE.modelOffsetY, 0];
-  const scale = editing ? (background.modelScale ?? 3) : GRASS_STAGE.modelScale;
-  const rotation: [number, number, number] = editing
-    ? [arenaRotation?.x ?? 0, arenaRotation?.y ?? 0, arenaRotation?.z ?? 0]
-    : [0, 0, 0];
-
   return (
     <group>
-      <RoundIsland kind="grass" lip="#efe6d4" underside="#241c16" sideColor="#b7a394" />
       <MeadowFlowers />
       <StageBoundary>
-        <MeadowRocks />
-        <RingStage
-          url="/models/floating_island_stage.glb"
-          position={position}
-          rotation={rotation}
-          scale={scale}
-          arrange={!editing}
-          idle="none"
-        />
+        <MeadowFloor />
+        <MeadowRim />
+        <MeadowForest />
+        <MeadowBackdrop />
       </StageBoundary>
     </group>
   );
@@ -892,6 +887,5 @@ export function ArabianArena() {
   );
 }
 
-useGLTF.preload("/models/floating_island_stage.glb");
 useGLTF.preload("/models/winter_location.glb");
 useGLTF.preload("/models/arabian_nights_stage.glb");

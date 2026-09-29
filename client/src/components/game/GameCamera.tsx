@@ -72,6 +72,7 @@ export function GameCamera() {
   const zoomRef = useRef(1);
   
   const [orbitAngle, setOrbitAngle] = useState(0);
+  const wideShot = new URLSearchParams(window.location.search).get("view") === "wide";
   const BIRDS_EYE_INITIAL_ZOOM = 70;
   const BIRDS_EYE_MIN_ZOOM = 35;
   const [birdsEyeZoom, setBirdsEyeZoom] = useState(BIRDS_EYE_INITIAL_ZOOM);
@@ -94,6 +95,13 @@ export function GameCamera() {
       delete (window as any).__ZOOGI_ORBIT_ANGLE__;
     };
   }, [orbitAngle]);
+
+  useEffect(() => {
+    (window as any).__ZOOGI_SET_ORBIT__ = (angle: number) => setOrbitAngle(angle);
+    return () => {
+      delete (window as any).__ZOOGI_SET_ORBIT__;
+    };
+  }, []);
 
   useEffect(() => {
     const canvas = gl.domElement;
@@ -197,6 +205,11 @@ export function GameCamera() {
   }, [gl, birdsEyeView, birdsEyeZoom]);
 
   useFrame((_state, delta) => {
+    if (wideShot) {
+      camera.position.set(14, 7.2, 30);
+      camera.lookAt(0, 1.2, -1);
+      return;
+    }
     if (developerCamera) return;
     
     // Handle map editor mode with no player - use static camera based on view mode

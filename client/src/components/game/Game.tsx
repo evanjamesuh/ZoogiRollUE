@@ -128,6 +128,7 @@ export function Game() {
   const meadowSun = [100, 20, 100] as [number, number, number];
   const comicMap = selectedMap === "lava" || selectedMap === "space" || selectedMap === "saturn" || selectedMap === "tomb";
   const background =
+    selectedMap === "grass" ? "#7ecbf5" :
     selectedMap === "ice" ? "#87CEEB" :
     selectedMap === "lava" ? "#1a0c18" :
     selectedMap === "space" ? "#070414" :
@@ -162,8 +163,8 @@ export function Game() {
           <Suspense fallback={null}>
             {selectedMap === "ice" && <GradientSky />}
             {comicMap && <MapAtmosphere map={selectedMap} />}
-            {!comicMap && selectedMap !== "ice" && <Sky sunPosition={meadowSun} />}
-            {!comicMap && selectedMap !== "ice" && <Environment preset="sunset" background={false} />}
+            {!comicMap && selectedMap !== "ice" && selectedMap !== "grass" && <Sky sunPosition={meadowSun} />}
+            {!comicMap && selectedMap !== "ice" && selectedMap !== "grass" && <Environment preset="sunset" background={false} />}
           </Suspense>
         </OptionalSceneBoundary>
 

@@ -11,12 +11,10 @@ import {
 /**
  * Solid shapes the marble simulation uses.
  *
- * Grass numbers were measured from floating_island_stage.glb (local space,
- * including node transforms) and scaled by GRASS_STAGE.modelScale. Rock and
- * bush radii are the horizontal footprint at marble height: the mean of the
- * mesh's X/Z size for rocks, and the narrow half of the canopy for bushes.
- * The old pinball radius (2) was paired with bumper.glb, which is 0.03 wide
- * at the scale it was drawn, so those hits were invisible.
+ * Meadow's six rim solids are the mossy boulders and stumps drawn on the
+ * grass disc. Each radius is that piece's horizontal footprint. The old
+ * pinball radius (2) was paired with bumper.glb, which is 0.03 wide at the
+ * scale it was drawn, so those hits were invisible.
  */
 export const BUMPER_RADIUS = 0.955;
 export const BUMPER_MODEL_URL = "/models/bumber1.glb";
@@ -27,9 +25,8 @@ export const REST_SPEED = 0.02;
 
 export const GRASS_STAGE = {
   /**
-   * floating_island_stage.glb is about 1.5 units across. Scale 48 makes the
-   * cliffs a ring around the grass circle. The round floor is drawn in code,
-   * and the model's own grass disc is hidden.
+   * The map editor still stores a stage transform for grass. Meadow no longer
+   * loads a stage model; the disc is drawn in code.
    */
   modelScale: 48,
   modelOffsetY: -2.4,

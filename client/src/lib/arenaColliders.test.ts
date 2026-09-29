@@ -22,6 +22,7 @@ import {
   subscribeWinterCamp,
 } from "./arenaColliders.ts";
 import { foliageBlocksRingView, GAMEPLAY_CAM_DISTANCE, GAMEPLAY_CAM_HEIGHT, ringPieceAction, shouldHideRingPiece, translationToClear, type Aabb } from "./ringPlacement.ts";
+import { forestTopY, meadowForestPieces } from "./meadowDressing.ts";
 
 const MAPS = ["grass", "ice", "lava", "space", "saturn", "tomb"] as const;
 const SCORE_ZONE_RADIUS = 4;
@@ -173,7 +174,7 @@ test("fitted stages keep the knockoff on the measured floor", () => {
   assert.equal(grass.scenery.length, 6);
   for (const rock of grass.scenery) {
     assert.equal(rock.kind, "rock");
-    assert.ok(rock.radius <= 1.25, `${rock.id} is a rim stone`);
+    assert.ok(rock.radius >= 1 && rock.radius <= 1.25, `${rock.id} matches the drawn boulder or stump`);
     assert.ok(Math.hypot(rock.x, rock.z) - rock.radius >= 11, `${rock.id} sits in the middle`);
   }
 });
@@ -394,6 +395,20 @@ test("ring placement hides the playfield slab and pushes props outside", () => {
   const outside = box(20, 0, -1, 24, 3, 1);
   const stay = translationToClear(outside, 16.35, 32);
   assert.deepEqual(stay, { dx: 0, dz: 0 });
+});
+
+test("meadow forest stays outside the knockoff and under the camera", () => {
+  const pieces = meadowForestPieces();
+  assert.ok(pieces.filter((piece) => piece.kind === "tree").length >= 10);
+  assert.ok(pieces.some((piece) => piece.kind === "bush"));
+  for (const piece of pieces) {
+    const dist = Math.hypot(piece.x, piece.z);
+    const reach = piece.kind === "bush" ? piece.canopy : piece.canopy * 0.9;
+    assert.ok(dist - reach > 15.5, `${piece.id} crosses the knockoff`);
+    assert.ok(dist + reach < 19.15, `${piece.id} pokes through the backdrop`);
+    const top = forestTopY(piece);
+    assert.equal(foliageBlocksRingView(piece.x, top, piece.z), false, `${piece.id} covers the grass`);
+  }
 });
 
 test("meadow canopies must stay under the gameplay camera", () => {
