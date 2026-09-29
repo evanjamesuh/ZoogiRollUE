@@ -10,14 +10,16 @@ import {
   subscribeVfxQuality,
   type VfxQuality,
 } from "@/vfx/quality";
+import { isMobileGraphics } from "@/lib/mobileGraphics";
 
 /**
  * One composer for the match. Bloom follows `?vfx=high|low`, and a run of
- * slow frames drops that cost when the query does not lock it. The threshold
- * stays high enough that the court and grass stay matte. Tone mapping runs
- * after bloom so the glow is not crushed first.
+ * slow frames drops that cost when the query does not lock it. Phones use the
+ * low bloom budget. The threshold stays high enough that the court and grass
+ * stay matte. Tone mapping runs after bloom so the glow is not crushed first.
  */
 export function PostFX() {
+  const [phone] = useState(() => isMobileGraphics());
   const [quality, setQuality] = useState<VfxQuality>(getVfxQuality);
   const watch = useRef({ warm: 0, slow: 0, dropped: false });
 
@@ -37,10 +39,11 @@ export function PostFX() {
     }
   });
 
-  const bloom = bloomParams(quality);
+  const level: VfxQuality = phone ? "low" : quality;
+  const bloom = bloomParams(level);
 
   return (
-    <EffectComposer enableNormalPass={false} multisampling={quality === "low" ? 0 : 4}>
+    <EffectComposer enableNormalPass={false} multisampling={level === "low" ? 0 : 4}>
       <Bloom
         intensity={bloom.intensity}
         luminanceThreshold={1.12}

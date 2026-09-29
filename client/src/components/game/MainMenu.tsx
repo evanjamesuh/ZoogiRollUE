@@ -154,8 +154,11 @@ export function MainMenu() {
         setShowTownView(false);
         break;
       case "practice":
-      case "marble_arena":
         setGameMode("practice");
+        setPhase("character_selection");
+        break;
+      case "marble_arena":
+        setGameMode("classic");
         setPhase("character_selection");
         break;
       case "create_zoogi":
@@ -676,7 +679,7 @@ export function MainMenu() {
                   
                   <button
                     onClick={() => {
-                      setGameMode("practice");
+                      setGameMode("classic");
                       setPhase("character_selection");
                     }}
                     className="flex items-center justify-center gap-2 px-8 py-4 min-h-[56px] bg-gradient-to-r from-amber-500 to-orange-600 text-white text-xl font-bold rounded-full shadow-lg shadow-amber-500/50 hover:shadow-amber-500/70 transition-shadow active:scale-95"

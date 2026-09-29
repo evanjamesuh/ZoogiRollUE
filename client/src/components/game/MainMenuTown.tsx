@@ -146,7 +146,7 @@ export function MainMenuTown({ onNavigate }: MainMenuTownProps) {
   }
 
   return (
-    <div className="absolute inset-0 bg-gradient-to-b from-gray-900 via-purple-900/50 to-gray-900 overflow-auto">
+    <div className="allow-pan-y absolute inset-0 bg-gradient-to-b from-gray-900 via-purple-900/50 to-gray-900 overflow-auto">
       <div className="absolute inset-0 pointer-events-none">
         <AnimatedDotsBackground />
       </div>

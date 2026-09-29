@@ -894,7 +894,7 @@ export function PlayerZoogi() {
           position={pos} 
           onPointerDown={handlePointerDown}
         >
-          <sphereGeometry args={[1.2, 16, 16]} />
+          <sphereGeometry args={[3, 16, 16]} />
           <meshBasicMaterial transparent opacity={0} />
         </mesh>
       )}
@@ -1837,7 +1837,7 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
           position={pos} 
           onPointerDown={handlePointerDown}
         >
-          <sphereGeometry args={[1.2, 16, 16]} />
+          <sphereGeometry args={[3, 16, 16]} />
           <meshBasicMaterial transparent opacity={0} />
         </mesh>
       )}
