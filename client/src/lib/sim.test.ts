@@ -1287,3 +1287,113 @@ test("a knockoff offset does not carry from one map into the next", async () => 
   assert.deepEqual(useZoogiGame.getState().elementTransforms.knockoffBoundaryOffset, { x: 0, y: 0, z: 0 });
   assert.equal(useZoogiGame.getState().wallSettings.knockoffBoundaryRadius, 15.5);
 });
+
+test("frozen ring ice patches coast without speeding a marble up", async () => {
+  const { getIcePatches } = await import("./arenaColliders.ts");
+  const patch = getIcePatches()[0];
+  assert.ok(patch, "Frozen Ring should still draw an ice patch");
+  const useZoogiGame = await playingMarble();
+  const player = useZoogiGame.getState().playerEntity;
+  assert.ok(player);
+
+  const onPatch: [number, number, number] = [patch.x, 0.5, patch.z];
+  const onRink: [number, number, number] = [0, 0.5, 0];
+  const inwardLen = Math.hypot(patch.x, patch.z) || 1;
+  const dirX = -patch.x / inwardLen;
+  const dirZ = -patch.z / inwardLen;
+
+  const step = (map: "ice" | "grass", position: [number, number, number], speed: number, asEnemy = false) => {
+    const velocity: [number, number, number] = [dirX * speed, 0, dirZ * speed];
+    const body = {
+      ...player,
+      arcMovement: null,
+      isStunned: false,
+      isKnockedOut: false,
+      isRespawning: false,
+      spawnImmunity: false,
+      slowUntil: 0,
+      larsRicochetBoost: 1,
+    };
+    useZoogiGame.setState({
+      phase: "playing",
+      selectedMap: map,
+      gameMode: "classic",
+      isPlayerTurn: true,
+      turnHasLaunched: false,
+      score: 0,
+      orbs: [],
+      mushrooms: [],
+      pinballBumpers: [],
+      landedRocks: [],
+      editorPlacedModels: [],
+      wolfClones: [],
+      zoneEditorConfigs: [],
+      playerEntity: asEnemy
+        ? { ...body, position: onRink, velocity: [0, 0, 0] }
+        : { ...body, position, velocity },
+      enemies: asEnemy
+        ? [{
+          ...body,
+          id: "ice-enemy",
+          isPlayer: false,
+          position,
+          velocity,
+        }]
+        : [],
+    });
+    useZoogiGame.getState().physicsTick(1 / 60);
+  };
+
+  for (const speed of [0.08, 0.2, 0.5, 1.0, 1.4]) {
+    step("ice", onPatch, speed);
+    const iced = useZoogiGame.getState().playerEntity;
+    assert.ok(iced);
+    const iceSpeed = planarSpeed(iced.velocity);
+    assert.ok(iceSpeed < speed, `a patch must not add speed: ${speed} -> ${iceSpeed}`);
+
+    step("ice", onRink, speed);
+    const rinked = useZoogiGame.getState().playerEntity;
+    assert.ok(rinked);
+    const rinkSpeed = planarSpeed(rinked.velocity);
+    assert.ok(rinkSpeed < speed, `open ice should still slow a marble: ${speed} -> ${rinkSpeed}`);
+    if (speed >= 0.2) {
+      assert.ok(
+        iceSpeed > rinkSpeed,
+        `a patch should keep more speed than the rink at ${speed}: patch=${iceSpeed} rink=${rinkSpeed}`,
+      );
+    }
+  }
+
+  step("grass", onPatch, 0.5);
+  const grassSpeed = planarSpeed(useZoogiGame.getState().playerEntity?.velocity ?? [0, 0, 0]);
+  step("ice", onRink, 0.5);
+  const rinkSpeed = planarSpeed(useZoogiGame.getState().playerEntity?.velocity ?? [0, 0, 0]);
+  assert.ok(
+    Math.abs(grassSpeed - rinkSpeed) < 1e-9,
+    `standing on a patch coordinate off Frozen Ring should use normal ground, grass=${grassSpeed} rink=${rinkSpeed}`,
+  );
+
+  let patchCoast = 0.5;
+  for (let frame = 0; frame < 30; frame++) {
+    const before = patchCoast;
+    step("ice", onPatch, patchCoast);
+    patchCoast = planarSpeed(useZoogiGame.getState().playerEntity?.velocity ?? [0, 0, 0]);
+    assert.ok(patchCoast < before, `frame ${frame + 1} on a patch sped up: ${before} -> ${patchCoast}`);
+  }
+  let rinkCoast = 0.5;
+  for (let frame = 0; frame < 30; frame++) {
+    step("ice", onRink, rinkCoast);
+    rinkCoast = planarSpeed(useZoogiGame.getState().playerEntity?.velocity ?? [0, 0, 0]);
+  }
+  assert.ok(
+    patchCoast > rinkCoast,
+    `after the same coast, the patch (${patchCoast}) should still be faster than the rink (${rinkCoast})`,
+  );
+
+  step("ice", onPatch, 0.5, true);
+  const enemy = useZoogiGame.getState().enemies[0];
+  assert.ok(enemy);
+  const enemySpeed = planarSpeed(enemy.velocity);
+  assert.ok(enemySpeed < 0.5, `an enemy on a patch sped up: ${enemySpeed}`);
+  assert.ok(enemySpeed > rinkSpeed, `an enemy on a patch should coast more than the rink: enemy=${enemySpeed} rink=${rinkSpeed}`);
+});
