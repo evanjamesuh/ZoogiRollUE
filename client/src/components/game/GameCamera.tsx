@@ -16,6 +16,13 @@ import {
   getTrauma,
   smoothShake,
 } from "@/lib/cameraRig";
+import {
+  formatAlphaCamDebug,
+  matchActorKey,
+  stepAlphaCamera,
+  type AlphaCamState,
+} from "@/lib/alphaCamera";
+import { FALL_OUT_Y, SIM_HZ } from "@/lib/simFeel";
 import * as THREE from "three";
 import { arenaScaleFor } from "@/lib/mapDefaultConfigs";
 import { getMapLayout } from "@/lib/arenaColliders";
@@ -84,9 +91,15 @@ export function GameCamera() {
   
   const arenaSnapRef = useRef(false);
   const arenaViewRef = useRef(true);
+  const alphaRef = useRef<AlphaCamState | null>(null);
+  const alphaDirectRef = useRef(false);
+  const camDebugEl = useRef<HTMLDivElement | null>(null);
   
   const [orbitAngle, setOrbitAngle] = useState(0);
-  const wideShot = new URLSearchParams(window.location.search).get("view") === "wide";
+  const searchParams = new URLSearchParams(window.location.search);
+  const wideShot = searchParams.get("view") === "wide";
+  const overviewCamera = searchParams.get("cam") === "overview";
+  const camDebug = searchParams.get("camdebug") === "1";
   const BIRDS_EYE_INITIAL_ZOOM = 70;
   const BIRDS_EYE_MIN_ZOOM = 35;
   const [birdsEyeZoom, setBirdsEyeZoom] = useState(BIRDS_EYE_INITIAL_ZOOM);
@@ -102,6 +115,30 @@ export function GameCamera() {
       delete (window as any).__ZOOGI_CAMERA__;
     };
   }, [camera]);
+
+  useEffect(() => {
+    if (!camDebug) return;
+    const el = document.createElement("div");
+    el.setAttribute("data-camdebug", "1");
+    el.style.cssText = [
+      "position:fixed",
+      "left:8px",
+      "bottom:8px",
+      "z-index:40",
+      "padding:4px 8px",
+      "border-radius:4px",
+      "background:rgba(0,0,0,0.55)",
+      "color:#fff",
+      "font:12px/1.4 ui-monospace,monospace",
+      "pointer-events:none",
+    ].join(";");
+    document.body.appendChild(el);
+    camDebugEl.current = el;
+    return () => {
+      el.remove();
+      camDebugEl.current = null;
+    };
+  }, [camDebug]);
   
   useEffect(() => {
     (window as any).__ZOOGI_ORBIT_ANGLE__ = orbitAngle;
@@ -315,6 +352,8 @@ export function GameCamera() {
       }
     }
 
+    alphaDirectRef.current = false;
+
     let idealCameraPos: THREE.Vector3;
     let idealLookAt: THREE.Vector3;
     
@@ -448,6 +487,49 @@ export function GameCamera() {
           playerPos[2]
         );
       }
+    } else if (!overviewCamera) {
+      const persp = camera as THREE.PerspectiveCamera;
+      if (persp.isPerspectiveCamera && Math.abs(persp.fov - ARENA_FOV_DEG) > 0.1) {
+        persp.fov = ARENA_FOV_DEG;
+        persp.updateProjectionMatrix();
+      }
+      const live = useZoogiGame.getState();
+      let liveEntity = live.playerEntity;
+      if (live.gameMode === "local_multiplayer") {
+        if (live.currentLocalPlayerIndex > 0) {
+          liveEntity = live.enemies[live.currentLocalPlayerIndex - 1] ?? liveEntity;
+        }
+      } else if (!live.isPlayerTurn && live.turnIndex < live.enemies.length) {
+        liveEntity = live.enemies[live.turnIndex];
+      }
+      const entity = liveEntity ?? targetEntity;
+      const scale = arenaScaleFor(live.selectedMap);
+      const floor = (getMapLayout(live.selectedMap)?.floorRadius ?? 15.5) * scale;
+      const dt = Math.min(Math.max(delta, 0), 0.05);
+      alphaRef.current = stepAlphaCamera(alphaRef.current, {
+        dt,
+        actorKey: matchActorKey(live),
+        target: {
+          id: entity.id,
+          x: entity.position[0],
+          y: entity.position[1],
+          z: entity.position[2],
+          vx: entity.velocity[0] * SIM_HZ,
+          vz: entity.velocity[2] * SIM_HZ,
+        },
+        isAiming: live.isAiming,
+        turnHasLaunched: live.turnHasLaunched,
+        fallen: entity.isKnockedOut || entity.isRespawning || entity.position[1] < FALL_OUT_Y,
+        fovDeg: ARENA_FOV_DEG,
+        arenaScale: scale,
+        onCourt: Math.hypot(entity.position[0], entity.position[2]) <= floor + 0.75,
+        zoom: zoomNudge,
+      });
+      const pose = alphaRef.current;
+      idealCameraPos = new THREE.Vector3(pose.camX, pose.camY, pose.camZ);
+      idealLookAt = new THREE.Vector3(pose.lookX, pose.lookY, pose.lookZ);
+      alphaDirectRef.current = true;
+      if (camDebugEl.current) camDebugEl.current.textContent = formatAlphaCamDebug(pose);
     } else {
       const persp = camera as THREE.PerspectiveCamera;
       if (persp.isPerspectiveCamera && Math.abs(persp.fov - ARENA_FOV_DEG) > 0.1) {
@@ -529,7 +611,10 @@ export function GameCamera() {
     } else {
       const dt = Math.min(Math.max(delta, 0), 0.05);
       const arenaView = arenaViewRef.current;
-      if (arenaView && !arenaSnapRef.current) {
+      if (alphaDirectRef.current) {
+        cameraPositionRef.current.copy(idealCameraPos);
+        lookAtRef.current.copy(idealLookAt);
+      } else if (arenaView && !arenaSnapRef.current) {
         cameraPositionRef.current.copy(idealCameraPos);
         lookAtRef.current.copy(idealLookAt);
         arenaSnapRef.current = true;
