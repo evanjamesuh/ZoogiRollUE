@@ -159,18 +159,20 @@ test("full power crosses the arena in under a second and flies off", async () =>
   });
 
   let crossStep = -1;
+  let flewOff = false;
   for (let step = 0; step < 180; step++) {
     useZoogiGame.getState().physicsTick(1 / 60);
     const marble = useZoogiGame.getState().playerEntity;
     assert.ok(marble);
     if (crossStep < 0 && marble.position[0] - startX >= diameter) crossStep = step + 1;
+    if (marble.offTheFloor || marble.isKnockedOut || marble.position[1] < ZOOGI_REST_Y) flewOff = true;
   }
   const flown = useZoogiGame.getState().playerEntity;
   assert.ok(flown);
   assert.ok(crossStep > 0, "the flick should cross the floor");
   const seconds = crossStep / 60;
   assert.ok(seconds < 1, `crossed in ${seconds.toFixed(3)}s`);
-  assert.ok(flown.offTheFloor || flown.isKnockedOut || flown.position[1] < ZOOGI_REST_Y, "an open full shot flies off");
+  assert.equal(flewOff, true, "an open full shot flies off");
   console.log(`MEASURE fullCrossSec=${seconds.toFixed(3)} fullSpeed=${FULL_LAUNCH_SPEED_PER_SEC} decel=${ROLLING_DECEL}`);
 });
 

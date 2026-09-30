@@ -32,7 +32,9 @@ import { triggerAbilityCameraEffect, triggerKnockoffCameraEffect, triggerCollisi
 import { getDeviceId } from "@/lib/deviceId";
 import { GRASS_STAGE, MARBLE_RADIUS, ORB_RADIUS, arabianPlayTransform, centerPastOpenEdge, collectMatchSolids, cosmosPlayTransform, getIcePatches, getMapLayout, knockoffOffsetForMap, resolveSolidCollision } from "../arenaColliders";
 import { resolveNeonRails } from "../neonCourt";
-import { FALL_GRAVITY_STEP, FALL_OUT_Y, ICE_ROLLING_DRAG, LOCKON_LAUNCH_SPEED, MARBLE_RESTITUTION, MAX_PLANAR_SPEED, ORB_MASS, REST_SPEED, ROLLING_DRAG, SETTLE_DELAY_STEPS, ZOOGI_MASS } from "../simFeel";
+import { FALL_GRAVITY_STEP, FALL_OUT_Y, ICE_ROLLING_DRAG, LOCKON_LAUNCH_SPEED, MARBLE_RESTITUTION, MAX_PLANAR_SPEED, ORB_BOUNCE_REST, ORB_MASS, ORB_ORB_RESTITUTION, REST_SPEED, ROLLING_DRAG, ZOOGI_MASS } from "../simFeel";
+import { orbDropY, orbsHaveLanded } from "../orbDrop";
+import { turnHandoffReady } from "../turnSettle";
 import { circleTimeOfImpact } from "../sweptHit";
 import { ORB_REST_Y, ZOOGI_REST_Y } from "../restHeight";
 import { motionOnly, overlayList, overlayRecord } from "../simPublish";
@@ -1043,7 +1045,7 @@ const createOrbs = (ringRadius = 5): Orb[] => {
     
     orbs.push({
       id: `orb-${i}-${Math.random().toString(36).substr(2, 9)}`,
-      position: [x, ORB_REST_Y, z],
+      position: [x, orbDropY(i), z],
       velocity: [0, 0, 0],
       color: orbColor,
       points: 50,
@@ -1126,7 +1128,7 @@ const createPracticeOrbs = (multiplier: 1 | 2 | 3 = 1): Orb[] => {
       
       orbs.push({
         id: `orb-r${ring}-i${i}`,
-        position: [x, ORB_REST_Y, z],
+        position: [x, orbDropY(orbIndex), z],
         velocity: [0, 0, 0],
         color: colors[orbIndex % colors.length],
         points: 50,
@@ -1342,6 +1344,7 @@ let lastTurnEndedAt = 0;
 let turnWatchKey = "";
 let turnReadyForLaunch = false;
 let settleHoldSteps = 0;
+let unsettledSteps = 0;
 
 /** Fold this round's score into the round-win counters. A tied round goes to the player. */
 function awardRoundWin(
@@ -3377,6 +3380,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
     
     updatePlayerVelocity: (velocity) => set((state) => {
       if (!state.playerEntity) return {};
+      if (!orbsHaveLanded(state.orbs) && Math.hypot(velocity[0], velocity[2]) > 0.05) return {};
       
       const MAX_VELOCITY = MAX_PLANAR_SPEED;
       const isPinpoint = state.playerEntity.zoogi.id === "pinpoint";
@@ -3425,6 +3429,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
     
     updateLocalPlayerVelocity: (playerIndex, velocity) => {
       const state = get();
+      if (!orbsHaveLanded(state.orbs) && Math.hypot(velocity[0], velocity[2]) > 0.05) return;
       const MAX_VELOCITY = 2.5;
       const speed = Math.sqrt(velocity[0] ** 2 + velocity[2] ** 2);
       let cappedVelocity = velocity;
@@ -3479,6 +3484,10 @@ export const useZoogiGame = create<ZoogiGameState>()(
     },
     
     updateEnemy: (id, updates) => set((state) => {
+      if (updates.velocity && !orbsHaveLanded(state.orbs) && Math.hypot(updates.velocity[0], updates.velocity[2]) > 0.05) {
+        const { velocity: _blocked, ...rest } = updates;
+        updates = rest;
+      }
       const speed = updates.velocity ? Math.hypot(updates.velocity[0], updates.velocity[2]) : 0;
       const index = state.enemies.findIndex(e => e.id === id);
       const theirTurn = state.gameMode === "local_multiplayer"
@@ -4507,7 +4516,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
       const COLLISION_PROFILES = {
         playerPlayer: { restitution: MARBLE_RESTITUTION, friction: 0.35, minImpulse: 0, maxVelocity: MAX_PLANAR_SPEED },
         playerOrb: { restitution: 0.68, friction: 0.4, minImpulse: 0, maxVelocity: MAX_PLANAR_SPEED },
-        orbOrb: { restitution: 0.55, friction: 0.45, minImpulse: 0, maxVelocity: MAX_PLANAR_SPEED },
+        orbOrb: { restitution: ORB_ORB_RESTITUTION, friction: 0.45, minImpulse: 0, maxVelocity: MAX_PLANAR_SPEED },
       };
 
       // One physicsTick is one fixed 1/60 s step. Velocity is distance per step.
@@ -5932,15 +5941,8 @@ export const useZoogiGame = create<ZoogiGameState>()(
           player.isRespawning = true; // Mark as waiting for respawn on next turn
           player.isKnockedOut = false; // Clear knocked out state so turn can advance
           console.log(`Player knocked out - will respawn at spawn point on next turn`);
-          
-          // Only if this marble is still the one up. A handoff that already
-          // happened must not be ended again when the timer fires.
-          setTimeout(() => {
-            const live = get();
-            if (live.phase !== "playing" || live.gameMode === "ringer_royale") return;
-            const stillUp = live.gameMode === "local_multiplayer" ? live.currentLocalPlayerIndex === 0 : live.isPlayerTurn;
-            if (stillUp) live.endTurn();
-          }, 100);
+          // The settle pass ends the turn once every body is still. A short
+          // timer here used to hand off while orbs were still rolling.
         }
       }
       
@@ -6022,23 +6024,12 @@ export const useZoogiGame = create<ZoogiGameState>()(
       });
       
       // Process knocked out enemies - mark for respawn on next turn when momentum stops
-      enemies = enemies.map((enemy, idx) => {
+      enemies = enemies.map((enemy) => {
         if (enemy.isKnockedOut && !enemy.isRespawning) {
           const enemySpeed = Math.sqrt(enemy.velocity[0] ** 2 + enemy.velocity[2] ** 2);
           if (enemySpeed < 0.02) {
             // Momentum stopped - mark for respawn on their next turn
             console.log(`Enemy ${enemy.zoogi.name} knocked out - will respawn at spawn point on next turn`);
-            
-            // For local multiplayer, trigger turn end for this player
-            if (gameMode === "local_multiplayer" && currentLocalPlayerIndex === idx + 1) {
-              const knockedIndex = idx + 1;
-              setTimeout(() => {
-                const live = get();
-                if (live.phase === "playing" && live.gameMode === "local_multiplayer" && live.currentLocalPlayerIndex === knockedIndex) {
-                  live.endTurn();
-                }
-              }, 100);
-            }
             
             return {
               ...enemy,
@@ -6221,6 +6212,46 @@ export const useZoogiGame = create<ZoogiGameState>()(
           fellOut: false,
         };
       };
+      // Orbs over the floor fall and bounce. Past the edge they keep falling.
+      // The planar step above is unchanged.
+      const integrateOrbDrop = (
+        position: [number, number, number],
+        velocity: [number, number, number],
+        overTheEdge: boolean,
+      ): { position: [number, number, number]; velocity: [number, number, number]; fellOut: boolean } => {
+        const vy = velocity[1] - FALL_GRAVITY_STEP;
+        const y = position[1] + vy;
+        if (overTheEdge) {
+          if (y < FALL_OUT_Y) {
+            return { position: [position[0], y, position[2]], velocity: [0, 0, 0], fellOut: true };
+          }
+          return {
+            position: [position[0], y, position[2]],
+            velocity: [velocity[0], vy, velocity[2]],
+            fellOut: false,
+          };
+        }
+        if (y <= ORB_REST_Y) {
+          const rebound = -vy * ORB_ORB_RESTITUTION;
+          if (rebound <= ORB_BOUNCE_REST) {
+            return {
+              position: [position[0], ORB_REST_Y, position[2]],
+              velocity: [velocity[0], 0, velocity[2]],
+              fellOut: false,
+            };
+          }
+          return {
+            position: [position[0], ORB_REST_Y, position[2]],
+            velocity: [velocity[0], rebound, velocity[2]],
+            fellOut: false,
+          };
+        }
+        return {
+          position: [position[0], y, position[2]],
+          velocity: [velocity[0], vy, velocity[2]],
+          fellOut: false,
+        };
+      };
       if (!ridingArc(player.arcMovement)) {
         const dropped = dropOrRest(player.position, player.velocity, !!player.offTheFloor, ZOOGI_REST_Y);
         player.position = dropped.position;
@@ -6243,7 +6274,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
       });
       orbs = orbs.map((orb) => {
         if (!orb.isActive) return orb;
-        const dropped = dropOrRest(orb.position, orb.velocity, !!orb.isOutOfRing, ORB_REST_Y);
+        const dropped = integrateOrbDrop(orb.position, orb.velocity, !!orb.isOutOfRing);
         if (dropped.fellOut) awardFallenOrb(orb);
         return {
           ...orb,
@@ -6337,6 +6368,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
           turnWatchKey = watchKey;
           turnReadyForLaunch = false;
           settleHoldSteps = 0;
+          unsettledSteps = 0;
         }
         const actor = actorTakingTurn(settled);
         if (actor && !turnReadyForLaunch) {
@@ -6355,20 +6387,22 @@ export const useZoogiGame = create<ZoogiGameState>()(
         const orbSettled = (orb: { isActive: boolean; isOutOfRing?: boolean; position: [number, number, number]; velocity: [number, number, number] }) => {
           if (!orb.isActive) return true;
           if (orb.isOutOfRing || orb.position[1] < ORB_REST_Y - 0.05) return false;
+          if (orb.position[1] > ORB_REST_Y + 0.02) return false;
+          if (Math.abs(orb.velocity[1]) > ORB_BOUNCE_REST) return false;
           return Math.hypot(orb.velocity[0], orb.velocity[2]) < REST_SPEED;
         };
         const marbles = [settled.playerEntity, ...settled.enemies];
         const courtStill = marbles.every(bodySettled) && settled.orbs.every(orbSettled);
         const shotHappened = get().turnHasLaunched || !!(actor && (actor.isKnockedOut || actor.isRespawning || actor.offTheFloor));
-        if (shotHappened && courtStill) {
-          settleHoldSteps += 1;
-          if (settleHoldSteps >= SETTLE_DELAY_STEPS) {
-            settleHoldSteps = 0;
-            get().endTurn();
-          }
-        } else {
-          settleHoldSteps = 0;
-        }
+        const handoff = turnHandoffReady({
+          shotHappened,
+          courtStill,
+          settleHoldSteps,
+          unsettledSteps,
+        });
+        settleHoldSteps = handoff.settleHoldSteps;
+        unsettledSteps = handoff.unsettledSteps;
+        if (handoff.pass) get().endTurn();
       }
     }
   }))
