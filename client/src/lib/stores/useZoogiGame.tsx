@@ -32,7 +32,7 @@ import { triggerAbilityCameraEffect, triggerKnockoffCameraEffect, triggerCollisi
 import { getDeviceId } from "@/lib/deviceId";
 import { GRASS_STAGE, MARBLE_RADIUS, ORB_RADIUS, arabianPlayTransform, centerPastOpenEdge, collectMatchSolids, cosmosPlayTransform, getIcePatches, getMapLayout, knockoffOffsetForMap, resolveSolidCollision } from "../arenaColliders";
 import { resolveNeonRails } from "../neonCourt";
-import { FALL_GRAVITY_STEP, FALL_OUT_Y, ICE_ROLLING_DRAG, LOCKON_LAUNCH_SPEED, MARBLE_RESTITUTION, MAX_PLANAR_SPEED, ORB_BOUNCE_REST, ORB_MASS, ORB_ORB_RESTITUTION, REST_SPEED, ROLLING_DRAG, ZOOGI_MASS } from "../simFeel";
+import { FALL_GRAVITY_STEP, FALL_OUT_Y, ICE_ROLLING_DRAG, LOCKON_LAUNCH_SPEED, MARBLE_RESTITUTION, MAX_PLANAR_SPEED, ORB_BOUNCE_REST, ORB_MASS, ORB_ORB_RESTITUTION, REST_SPEED, ROLLING_DRAG, zoogiMassFromDefense } from "../simFeel";
 import { orbDropY, orbsHaveLanded } from "../orbDrop";
 import { turnHandoffReady } from "../turnSettle";
 import { circleTimeOfImpact } from "../sweptHit";
@@ -4934,7 +4934,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
           player.position = pos1;
           orb.position = pos2;
           
-          const result = resolveCollision(player.position, player.velocity, orb.position, orb.velocity, COLLISION_PROFILES.playerOrb, ZOOGI_MASS, ORB_MASS);
+          const result = resolveCollision(player.position, player.velocity, orb.position, orb.velocity, COLLISION_PROFILES.playerOrb, zoogiMassFromDefense(player.zoogi.stats.defense), ORB_MASS);
           player.velocity = capVelocity(result.vel1, player.zoogi.id);
           orb.velocity = result.vel2;
           
@@ -5010,7 +5010,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
           
           {
             
-            const result = resolveCollision(player.position, player.velocity, enemy.position, enemy.velocity, COLLISION_PROFILES.playerPlayer, ZOOGI_MASS, ZOOGI_MASS);
+            const result = resolveCollision(player.position, player.velocity, enemy.position, enemy.velocity, COLLISION_PROFILES.playerPlayer, zoogiMassFromDefense(player.zoogi.stats.defense), zoogiMassFromDefense(enemy.zoogi.stats.defense));
             player.velocity = capVelocity(result.vel1, player.zoogi.id);
             enemy.velocity = capVelocity(result.vel2, enemy.zoogi.id);
             
@@ -5237,7 +5237,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
             enemy.position = pos1;
             orb.position = pos2;
             
-            const result = resolveCollision(enemy.position, enemy.velocity, orb.position, orb.velocity, COLLISION_PROFILES.playerOrb, ZOOGI_MASS, ORB_MASS);
+            const result = resolveCollision(enemy.position, enemy.velocity, orb.position, orb.velocity, COLLISION_PROFILES.playerOrb, zoogiMassFromDefense(enemy.zoogi.stats.defense), ORB_MASS);
             enemy.velocity = capVelocity(result.vel1, enemy.zoogi.id);
             orb.velocity = result.vel2;
             
@@ -5340,7 +5340,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
             const nx = dx / dist;
             const nz = dz / dist;
             
-            const result = resolveCollision(enemies[i].position, enemies[i].velocity, enemies[j].position, enemies[j].velocity, COLLISION_PROFILES.playerPlayer, ZOOGI_MASS, ZOOGI_MASS);
+            const result = resolveCollision(enemies[i].position, enemies[i].velocity, enemies[j].position, enemies[j].velocity, COLLISION_PROFILES.playerPlayer, zoogiMassFromDefense(enemies[i].zoogi.stats.defense), zoogiMassFromDefense(enemies[j].zoogi.stats.defense));
             enemies[i].velocity = capVelocity(result.vel1, enemies[i].zoogi.id);
             enemies[j].velocity = capVelocity(result.vel2, enemies[j].zoogi.id);
             
@@ -5402,7 +5402,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         enemies.forEach((enemy, ei) => {
           if (enemy.id === clone.spawnedByPlayerId) return;
           if (checkCollision(clone.position, enemy.position, CLONE_RADIUS, COLLISION_RADIUS)) {
-            const result = resolveCollision(clone.position, clone.velocity, enemy.position, enemy.velocity, COLLISION_PROFILES.playerPlayer, 0.6, 1);
+            const result = resolveCollision(clone.position, clone.velocity, enemy.position, enemy.velocity, COLLISION_PROFILES.playerPlayer, 0.6, zoogiMassFromDefense(enemy.zoogi.stats.defense));
             clone.velocity = result.vel1;
             enemy.velocity = capVelocity(result.vel2, enemy.zoogi.id);
             enemy.lastHitByPlayer = true;

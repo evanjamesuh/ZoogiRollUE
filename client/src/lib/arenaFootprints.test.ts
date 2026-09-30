@@ -235,12 +235,15 @@ test("the drawn floor edge and knockout rim match the colliders", () => {
   }
   assert.ok(space.knockoffRadius - flat > 0.2, "a flat is inside the corner circle");
   assert.equal(centerPastOpenEdge("space", 0, flat + 0.1, space.knockoffRadius, 0, []), true, "+Z past the flat falls inside the corner radius");
-  for (const [name, inner] of [["curb", COSMOS_CURB_INNER], ["wall", COSMOS_WALL_INNER], ["stands", COSMOS_STANDS_INNER]] as const) {
-    const world = inner * arenaScaleFor("space");
-    const pushed = world * cosmosRingPush(world);
-    const limit = cosmosLipRadius(0) + MARBLE_RADIUS;
-    assert.ok(world < limit, `${name} inner face ${world.toFixed(3)} starts inside knockoff + 0.5`);
-    assert.ok(pushed >= limit - 1e-6, `${name} inner face ${pushed.toFixed(3)} clears knockoff + 0.5`);
+  const ringFaces = [
+    ["curb", COSMOS_CURB_INNER, 14.544],
+    ["wall", COSMOS_WALL_INNER, 14.834],
+    ["stands", COSMOS_STANDS_INNER, 14.885],
+  ] as const;
+  for (const [name, inner, measured] of ringFaces) {
+    assert.equal(inner, measured, `${name} hard-coded inner face`);
+    const pushed = measured * cosmosRingPush(measured);
+    assert.ok(Math.abs(pushed - 16.1) < 1e-6, `${name} ${measured} * push = ${pushed.toFixed(4)}, expected 16.1`);
   }
 
   const neon = arenaVisualEdge("neon");

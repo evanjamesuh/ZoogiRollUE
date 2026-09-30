@@ -13,7 +13,7 @@ import { marbleIsShown } from "@/lib/marblePresence";
 import { ZOOGI_DRAW_RADIUS, ZOOGI_FX_SCALE } from "@/lib/restHeight";
 import { arenaScaleFor } from "@/lib/mapDefaultConfigs";
 import { getMapLayout } from "@/lib/arenaColliders";
-import { AI_LAUNCH_DELAY, LAUNCH_POWER_MULTIPLIER, MAX_LAUNCH_SPEED } from "@/lib/simFeel";
+import { AI_LAUNCH_DELAY, launchPlanarVelocity, launchSpeedForPull, MAX_LAUNCH_SPEED } from "@/lib/simFeel";
 import { triggerLaunchCameraEffect, clearAimCameraEffect } from "@/lib/stores/useCameraEffects";
 import { getSkinEffect, getRainbowColor } from "@/lib/skinEffects";
 import { StunnedIndicator } from "./PowerEffects";
@@ -477,18 +477,14 @@ export function PlayerZoogi() {
           const speedBoost = playerEntity.speedBoost || 1;
           const larsBoost = playerEntity.zoogi.id === "lars" ? (playerEntity.larsRicochetBoost || 1) : 1;
           const totalBoost = speedBoost * larsBoost;
-          
-          let vx = adjustedDx * LAUNCH_POWER_MULTIPLIER * totalBoost;
-          let vz = adjustedDz * LAUNCH_POWER_MULTIPLIER * totalBoost;
-          
-          const launchSpeed = Math.sqrt(vx * vx + vz * vz);
-          if (launchSpeed > MAX_LAUNCH_SPEED) {
-            const scale = MAX_LAUNCH_SPEED / launchSpeed;
-            vx *= scale;
-            vz *= scale;
+          const shot = launchPlanarVelocity(adjustedDx, adjustedDz, totalBoost);
+          if (!shot) {
+            clearAimCameraEffect();
+            setIsDragging(false);
+            setIsAiming(false);
+            return;
           }
-          
-          const newVelocity: [number, number, number] = [vx, 0, vz];
+          const newVelocity: [number, number, number] = [shot[0], 0, shot[1]];
           updatePlayerVelocity(newVelocity);
           hasLaunchedRef.current = true;
           launchCooldownRef.current = true;
@@ -1254,7 +1250,7 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
         
         if (distance > 0.1) {
           const statFraction = 0.72 + (enemy.zoogi.stats.power / 100) * 0.28;
-          const AI_MAX_LAUNCH_SPEED = MAX_LAUNCH_SPEED * statFraction;
+          const aiCap = MAX_LAUNCH_SPEED * statFraction;
           const targetIsPlayer = chosenTarget.type === 'player';
           const targetNearEdge = isNearEdge(chosenTarget.position);
           
@@ -1317,10 +1313,10 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
             powerLevel = 0.8 + Math.random() * 0.15;
           }
           
-          const distanceBonus = Math.min(0.15, distance / 40);
-          // Apply AI power multiplier from controls
-          const adjustedPower = powerLevel * aiControls.powerMultiplier;
-          const launchSpeed = Math.min(AI_MAX_LAUNCH_SPEED * aiControls.powerMultiplier, AI_MAX_LAUNCH_SPEED * adjustedPower + distanceBonus);
+          // A long shot adds a little pull, not a flat speed bonus that skips the curve.
+          const distanceBonus = Math.min(0.04, distance / 500);
+          const pull = Math.min(1, powerLevel * aiControls.powerMultiplier + distanceBonus);
+          const launchSpeed = Math.min(aiCap, launchSpeedForPull(pull) * statFraction);
           
           // Accuracy from AI controls - lower accuracy = more random angle offset
           const baseAccuracy = aiControls.accuracy;
@@ -1557,17 +1553,14 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
         const power = Math.min(Math.sqrt(adjustedDx * adjustedDx + adjustedDz * adjustedDz), 15);
         
         if (power > 1) {
-          let vx = adjustedDx * LAUNCH_POWER_MULTIPLIER;
-          let vz = adjustedDz * LAUNCH_POWER_MULTIPLIER;
-          
-          const launchSpeed = Math.sqrt(vx * vx + vz * vz);
-          if (launchSpeed > MAX_LAUNCH_SPEED) {
-            const scale = MAX_LAUNCH_SPEED / launchSpeed;
-            vx *= scale;
-            vz *= scale;
+          const shot = launchPlanarVelocity(adjustedDx, adjustedDz);
+          if (!shot) {
+            clearAimCameraEffect();
+            setIsDragging(false);
+            setIsAiming(false);
+            return;
           }
-          
-          const newVelocity: [number, number, number] = [vx, 0, vz];
+          const newVelocity: [number, number, number] = [shot[0], 0, shot[1]];
           updateLocalPlayerVelocity(playerIndex, newVelocity);
           hasLaunchedRef.current = true;
           launchCooldownRef.current = true;
