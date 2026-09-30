@@ -1,9 +1,7 @@
 import * as THREE from "three";
 import { useLayoutEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { getSnowmanPositions } from "@/lib/arenaConstants";
 import { BUMPER_RADIUS, getIcePatches, getMapLayout } from "@/lib/arenaColliders";
-import { RING_VISUAL_LIMIT } from "@/lib/ringPlacement";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 
 /**
@@ -11,9 +9,9 @@ import { useZoogiGame } from "@/lib/stores/useZoogiGame";
  * at the ice map's knockoff radius. Paint inside that radius is still in.
  * Paint outside it is the drop, so the line you see is the line that counts.
  *
- * The rink radii come from getMapLayout("ice"). Patch, snowman, and bumper
- * marks come from their getters. Shares below keep today's look on the
- * current rink and follow those getters when they change.
+ * Radii and positions come from getMapLayout("ice") and getIcePatches(),
+ * the same reads the meshes and colliders use. Shares below keep today's
+ * look and follow arenaScale when those getters change.
  */
 
 /** Even cosmetic berm. 1.1× the knockout is the middle of the old 16.7–17.4 mounds. */
@@ -40,7 +38,7 @@ function iceRinkFrame(): RinkFrame | null {
   const knock = layout.knockoffRadius;
   const floor = layout.floorRadius;
   const lip = knock - floor;
-  const snowDist = Math.max(knock * SNOW_LIP_SHARE, RING_VISUAL_LIMIT + knock * SNOW_LIP_SHARE * SNOW_MOUND_SHARE);
+  const snowDist = knock * SNOW_LIP_SHARE;
   return {
     navyInner: floor - lip * (5 / 3),
     cyanInner: floor - lip * 0.6,
@@ -63,7 +61,8 @@ const AMBER = "#ffb000";
 const INK = "#07141e";
 const SNOW = "#f4f8ff";
 
-const MARK_Y = 0.074;
+/** Above the y=0 floor and the 0.06 lip, and under the collider overlay at 0.12. */
+const MARK_Y = 0.072;
 
 interface RingSpec {
   x: number;
@@ -110,12 +109,16 @@ function FlatPaint({
   geometry,
   material,
   y,
+  renderOrder,
 }: {
   geometry: THREE.BufferGeometry;
   material: THREE.Material;
   y: number;
+  renderOrder: number;
 }) {
-  return <mesh geometry={geometry} material={material} position={[0, y, 0]} frustumCulled={false} />;
+  return (
+    <mesh geometry={geometry} material={material} position={[0, y, 0]} renderOrder={renderOrder} frustumCulled={false} />
+  );
 }
 
 function FootDiscs({
@@ -141,7 +144,7 @@ function FootDiscs({
   }, [items, y]);
   if (items.length === 0) return null;
   return (
-    <instancedMesh ref={ref} args={[undefined, undefined, items.length]} material={material} frustumCulled={false}>
+    <instancedMesh ref={ref} args={[undefined, undefined, items.length]} material={material} renderOrder={2} frustumCulled={false}>
       <circleGeometry args={[1, 40]} />
     </instancedMesh>
   );
@@ -170,10 +173,10 @@ function SymmetricSnowLip({ frame }: { frame: RinkFrame }) {
 
   return (
     <group>
-      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.18, 0]} material={snow}>
+      <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, 0.22, 0]} material={snow} renderOrder={1}>
         <torusGeometry args={[dist, frame.snowTube, 8, 72]} />
       </mesh>
-      <instancedMesh ref={ref} args={[undefined, undefined, count]} material={snow} frustumCulled={false}>
+      <instancedMesh ref={ref} args={[undefined, undefined, count]} material={snow} renderOrder={1} frustumCulled={false}>
         <sphereGeometry args={[1, 10, 8]} />
       </instancedMesh>
     </group>
@@ -224,10 +227,10 @@ function KnockoutEdge({ frame }: { frame: RinkFrame }) {
 
   return (
     <group>
-      <FlatPaint geometry={bands.navy} material={navy} y={0.088} />
-      <FlatPaint geometry={bands.cyan} material={cyan} y={0.094} />
-      <FlatPaint geometry={bands.amber} material={amber} y={0.1} />
-      <FlatPaint geometry={bands.ink} material={ink} y={0.106} />
+      <FlatPaint geometry={bands.navy} material={navy} y={0.09} renderOrder={4} />
+      <FlatPaint geometry={bands.cyan} material={cyan} y={0.096} renderOrder={5} />
+      <FlatPaint geometry={bands.amber} material={amber} y={0.102} renderOrder={6} />
+      <FlatPaint geometry={bands.ink} material={ink} y={0.108} renderOrder={7} />
     </group>
   );
 }
@@ -239,11 +242,9 @@ export function FrozenRinkMarkings() {
 
   const snowmen = useMemo(
     () =>
-      getSnowmanPositions().map((snowman) => ({
-        x: snowman.position[0],
-        z: snowman.position[2],
-        r: snowman.radius,
-      })),
+      (getMapLayout("ice")?.scenery ?? [])
+        .filter((solid) => solid.kind === "snowman")
+        .map((solid) => ({ x: solid.x, z: solid.z, r: solid.radius })),
     [],
   );
   const bumpers = useMemo(
@@ -286,9 +287,9 @@ export function FrozenRinkMarkings() {
     <group>
       <FootDiscs items={snowmen} material={navy} y={MARK_Y} />
       <FootDiscs items={bumpers} material={navy} y={MARK_Y} />
-      <FlatPaint geometry={rings.obstacle} material={amber} y={MARK_Y + 0.008} />
-      <FlatPaint geometry={rings.coastNavy} material={navy} y={MARK_Y + 0.012} />
-      <FlatPaint geometry={rings.coastCyan} material={cyan} y={MARK_Y + 0.018} />
+      <FlatPaint geometry={rings.obstacle} material={amber} y={MARK_Y + 0.008} renderOrder={3} />
+      <FlatPaint geometry={rings.coastNavy} material={navy} y={MARK_Y + 0.014} renderOrder={3} />
+      <FlatPaint geometry={rings.coastCyan} material={cyan} y={MARK_Y + 0.02} renderOrder={3} />
       {frame && <KnockoutEdge frame={frame} />}
       {frame && <SymmetricSnowLip frame={frame} />}
     </group>
