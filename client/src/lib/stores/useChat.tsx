@@ -39,6 +39,8 @@ export const useChat = create<ChatState>()((set, get) => ({
           messages: { ...state.messages, [channel]: data.messages },
           isLoading: false,
         }));
+      } else {
+        set({ isLoading: false });
       }
     } catch (err) {
       console.error("Fetch messages error:", err);
@@ -57,6 +59,8 @@ export const useChat = create<ChatState>()((set, get) => ({
           messages: { ...state.messages, [key]: data.messages },
           isLoading: false,
         }));
+      } else {
+        set({ isLoading: false });
       }
     } catch (err) {
       console.error("Fetch DMs error:", err);

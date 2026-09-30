@@ -323,9 +323,3 @@ export function WinterAnimals() {
     </group>
   );
 }
-
-useGLTF.preload("/models/winter/fox.glb");
-useGLTF.preload("/models/winter/polar_bear.glb");
-useGLTF.preload("/models/winter/walrus.glb");
-useGLTF.preload("/models/winter/fish_1.glb");
-useGLTF.preload("/models/winter/fish_2.glb");

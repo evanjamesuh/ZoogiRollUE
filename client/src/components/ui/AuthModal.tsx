@@ -2,6 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, User, Lock, Mail, Eye, EyeOff, Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/stores/useAuth";
+import { OnlineNotice } from "@/components/ui/OnlineNotice";
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -73,6 +74,8 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
                   ? "Sign in to track your progress"
                   : "Create an account to save your scores"}
               </p>
+
+              <OnlineNotice className="mb-4" />
 
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="relative">

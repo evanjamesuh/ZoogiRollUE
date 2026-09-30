@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useCommunity } from "@/lib/stores/useCommunity";
 import { useAuth } from "@/lib/stores/useAuth";
 import { X, Trophy, Calendar, Users, Coins, Clock, ChevronRight } from "lucide-react";
+import { OnlineNotice } from "@/components/ui/OnlineNotice";
 
 interface TournamentsPanelProps {
   onClose: () => void;
@@ -73,6 +74,8 @@ export function TournamentsPanel({ onClose }: TournamentsPanelProps) {
             <X className="w-6 h-6 text-white" />
           </button>
         </div>
+
+        <OnlineNotice compact className="mx-4 mt-3" />
 
         <div className="p-4 overflow-y-auto max-h-[70vh]">
           {allTournaments.length === 0 ? (
