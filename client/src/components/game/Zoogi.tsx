@@ -4,12 +4,16 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { Line, Html, useGLTF } from "@react-three/drei";
 import { MarbleNameplate } from "./MarbleNameplate";
 import { stopFrameMayEndTurn, useZoogiGame } from "@/lib/stores/useZoogiGame";
-import { marbleUniformScale, resolveZoogiModel, rollMarble, zoogiModelPreloadUrls, type ZoogiModelSettings } from "@/lib/zoogiModels";
+import { fittedUniformScale, resolveZoogiModel, rollMarble, zoogiModelPreloadUrls, type ZoogiModelSettings } from "@/lib/zoogiModels";
 import { useAudio } from "@/lib/stores/useAudio";
 import { useProgression } from "@/lib/stores/useProgression";
 import { triggerLaunchFeel } from "@/lib/stores/useGameFeel";
 import { visualPosition } from "@/lib/renderInterp";
-import { AI_LAUNCH_DELAY, LAUNCH_POWER_MULTIPLIER, MAX_LAUNCH_SPEED } from "@/lib/simFeel";
+import { marbleIsShown } from "@/lib/marblePresence";
+import { ZOOGI_DRAW_RADIUS, ZOOGI_FX_SCALE } from "@/lib/restHeight";
+import { arenaScaleFor } from "@/lib/mapDefaultConfigs";
+import { getMapLayout } from "@/lib/arenaColliders";
+import { AI_LAUNCH_DELAY, launchPlanarVelocity, launchSpeedForPull, MAX_LAUNCH_SPEED } from "@/lib/simFeel";
 import { triggerLaunchCameraEffect, clearAimCameraEffect } from "@/lib/stores/useCameraEffects";
 import { getSkinEffect, getRainbowColor } from "@/lib/skinEffects";
 import { StunnedIndicator } from "./PowerEffects";
@@ -17,7 +21,7 @@ import { useShadowBound } from "@/vfx/shadowMarks";
 import { AimBeam, AimPath, BindRibbons, Glint, RicochetShell, type Vec3 } from "@/vfx/powerLooks";
 
 // Global scale control - adjust this to resize ALL Zoogis uniformly
-let globalZoogiScale = 0.86;
+let globalZoogiScale = ZOOGI_DRAW_RADIUS;
 
 export function getGlobalZoogiScale(): number {
   return globalZoogiScale;
@@ -125,8 +129,7 @@ function FittedZoogiModel({ settings, marbleRadius }: { settings: ZoogiModelSett
     return { size, center };
   }, [cloned]);
 
-  const maxDimension = Math.max(bounds.size.x, bounds.size.y, bounds.size.z, 1e-4);
-  const uniform = ((marbleRadius * 2) / maxDimension) * settings.scale;
+  const uniform = fittedUniformScale(settings, marbleRadius, bounds.size);
   // After the fit, shift so the lowest point sits on the floor like the ball.
   const bottom = -(bounds.size.y / 2) * uniform;
   const restOnFloor = -marbleRadius - bottom;
@@ -134,7 +137,7 @@ function FittedZoogiModel({ settings, marbleRadius }: { settings: ZoogiModelSett
   // Horns (and anything else past the ball) must not drive the fit. The file
   // origin is already the ball centre, so scale it like the roster and leave Y alone.
   if (settings.fit === "pivot") {
-    const pivotScale = marbleUniformScale(marbleRadius, settings);
+    const pivotScale = fittedUniformScale(settings, marbleRadius, bounds.size);
     return (
       <group
         position={[settings.offset[0], settings.offset[1], settings.offset[2]]}
@@ -275,10 +278,10 @@ function boundNow(entity: { wrapsBindUntil?: number; slowUntil?: number }): bool
 
 function StatusLooks({ ricochet, bound }: { ricochet: boolean; bound: boolean }) {
   return (
-    <>
+    <group scale={ZOOGI_FX_SCALE}>
       {ricochet && <RicochetShell />}
       {bound && <BindRibbons />}
-    </>
+    </group>
   );
 }
 
@@ -334,6 +337,7 @@ function TurnStunMarker({ entity }: { entity: { id: string; position: [number, n
 
 export function PlayerZoogi() {
   const meshRef = useRef<THREE.Group>(null);
+  const visRef = useRef<[number, number, number]>([0, 0, 0]);
   const { 
     playerEntity, 
     updatePlayerVelocity,
@@ -474,18 +478,14 @@ export function PlayerZoogi() {
           const speedBoost = playerEntity.speedBoost || 1;
           const larsBoost = playerEntity.zoogi.id === "lars" ? (playerEntity.larsRicochetBoost || 1) : 1;
           const totalBoost = speedBoost * larsBoost;
-          
-          let vx = adjustedDx * LAUNCH_POWER_MULTIPLIER * totalBoost;
-          let vz = adjustedDz * LAUNCH_POWER_MULTIPLIER * totalBoost;
-          
-          const launchSpeed = Math.sqrt(vx * vx + vz * vz);
-          if (launchSpeed > MAX_LAUNCH_SPEED) {
-            const scale = MAX_LAUNCH_SPEED / launchSpeed;
-            vx *= scale;
-            vz *= scale;
+          const shot = launchPlanarVelocity(adjustedDx, adjustedDz, totalBoost);
+          if (!shot) {
+            clearAimCameraEffect();
+            setIsDragging(false);
+            setIsAiming(false);
+            return;
           }
-          
-          const newVelocity: [number, number, number] = [vx, 0, vz];
+          const newVelocity: [number, number, number] = [shot[0], 0, shot[1]];
           updatePlayerVelocity(newVelocity);
           hasLaunchedRef.current = true;
           launchCooldownRef.current = true;
@@ -658,7 +658,7 @@ export function PlayerZoogi() {
   useFrame(() => {
     if (!meshRef.current || !playerEntity) return;
     
-    const playerVis = visualPosition(playerEntity.id, playerEntity.position);
+    const playerVis = visualPosition(playerEntity.id, playerEntity.position, visRef.current);
     meshRef.current.position.set(playerVis[0], playerVis[1], playerVis[2]);
     
     const speed = Math.sqrt(playerEntity.velocity[0] ** 2 + playerEntity.velocity[2] ** 2);
@@ -846,17 +846,17 @@ export function PlayerZoogi() {
 
   return (
     <group>
-      <group ref={meshRef} position={pos} visible={!firstPersonView && !playerEntity.isKnockedOut && !playerEntity.isRespawning}>
+      <group ref={meshRef} position={pos} visible={marbleIsShown(playerEntity, firstPersonView)}>
         <ZoogiModelSwitch zoogiId={playerEntity.zoogi.id} hasShield={playerEntity.hasShield} hasSpawnImmunity={playerEntity.spawnImmunity} color={playerEntity.zoogi.color} customModelUrl={playerEntity.customModelUrl} isPlayer={true} />
         <StatusLooks ricochet={playerEntity.larsRicochetBoost > 1} bound={boundNow(playerEntity)} />
         {(playerEntity.boltPhasingUntil || 0) > Date.now() && (
-          <mesh>
+          <mesh scale={ZOOGI_FX_SCALE}>
             <sphereGeometry args={[1.15, 16, 16]} />
             <meshBasicMaterial color="#FDE047" transparent opacity={0.35} />
           </mesh>
         )}
         {playerEntity.speedBoost > 1 && (
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} scale={ZOOGI_FX_SCALE}>
             <ringGeometry args={[0.9, 1.15, 20]} />
             <meshBasicMaterial color="#e5e7eb" transparent opacity={0.8} />
           </mesh>
@@ -912,12 +912,12 @@ export function PlayerZoogi() {
             const arrowLength = Math.min(rawLength, 8);
             const arrowRotation = Math.atan2(launchDz, launchDx);
             const shaftLength = arrowLength * 0.7;
-            const headSize = Math.min(0.5, arrowLength * 0.15);
+            const headSize = Math.min(0.5 * ZOOGI_FX_SCALE, arrowLength * 0.15);
             
             return arrowLength > 0.3 ? (
               <group position={[pos[0], 0.15, pos[2]]} rotation={[0, -arrowRotation + Math.PI / 2, 0]}>
                 <mesh position={[0, 0, shaftLength / 2]} rotation={[-Math.PI / 2, 0, 0]}>
-                  <planeGeometry args={[0.25, shaftLength]} />
+                  <planeGeometry args={[0.25 * ZOOGI_FX_SCALE, shaftLength]} />
                   <meshBasicMaterial color="#3B82F6" transparent opacity={0.4} side={THREE.DoubleSide} />
                 </mesh>
                 <mesh position={[0, 0, shaftLength + headSize / 2]} rotation={[Math.PI / 2, 0, 0]}>
@@ -927,7 +927,7 @@ export function PlayerZoogi() {
               </group>
             ) : null;
           })()}
-          <mesh position={[pos[0], 0.1, pos[2]]} rotation={[-Math.PI / 2, 0, 0]}>
+          <mesh position={[pos[0], 0.1, pos[2]]} rotation={[-Math.PI / 2, 0, 0]} scale={ZOOGI_FX_SCALE}>
             <ringGeometry args={[0.6, 0.8, 32]} />
             <meshBasicMaterial color="#3B82F6" transparent opacity={0.5} />
           </mesh>
@@ -957,24 +957,19 @@ export function PlayerZoogi() {
       )}
 
       {(isPlayerTurn || isFreeForAll) && !isDragging && !playerEntity.isKnockedOut && !playerEntity.isRespawning && (
-        <mesh position={[pos[0], 0.05, pos[2]]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh position={[pos[0], 0.05, pos[2]]} rotation={[-Math.PI / 2, 0, 0]} scale={ZOOGI_FX_SCALE}>
           <ringGeometry args={[0.7, 0.9, 32]} />
           <meshBasicMaterial color={isFreeForAll ? "#A855F7" : "#00FF00"} transparent opacity={0.5} />
         </mesh>
       )}
 
-      <pointLight
-        position={[pos[0], pos[1] + 1, pos[2]]}
-        color={playerEntity.zoogi.color}
-        intensity={0.5}
-        distance={5}
-      />
     </group>
   );
 }
 
 export function EnemyZoogi({ entityId }: { entityId: string }) {
   const meshRef = useRef<THREE.Group>(null);
+  const visRef = useRef<[number, number, number]>([0, 0, 0]);
   const aiTimerRef = useRef(0);
   const hasLaunchedRef = useRef(false);
   const prevTurnRef = useRef(false);
@@ -995,7 +990,7 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
   useFrame((_, delta) => {
     if (!meshRef.current || !enemy || !playerEntity) return;
     
-    const enemyVis = visualPosition(enemy.id, enemy.position);
+    const enemyVis = visualPosition(enemy.id, enemy.position, visRef.current);
     meshRef.current.position.set(enemyVis[0], enemyVis[1], enemyVis[2]);
     
     const speed = Math.sqrt(enemy.velocity[0] ** 2 + enemy.velocity[2] ** 2);
@@ -1076,7 +1071,8 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
           ffaCooldownRef.current = 1.5 + Math.random() * 1.5;
         }
         
-        const ARENA_RADIUS = 18;
+        const selectedMap = useZoogiGame.getState().selectedMap;
+        const ARENA_RADIUS = getMapLayout(selectedMap)?.knockoffRadius ?? 18 * arenaScaleFor(selectedMap);
         const activeOrbs = orbs.filter(o => o.isActive);
         
         const getDistance = (p1: [number, number, number], p2: [number, number, number]) => 
@@ -1240,7 +1236,7 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
         
         if (distance > 0.1) {
           const statFraction = 0.72 + (enemy.zoogi.stats.power / 100) * 0.28;
-          const AI_MAX_LAUNCH_SPEED = MAX_LAUNCH_SPEED * statFraction;
+          const aiCap = MAX_LAUNCH_SPEED * statFraction;
           const targetIsPlayer = chosenTarget.type === 'player';
           const targetNearEdge = isNearEdge(chosenTarget.position);
           
@@ -1303,10 +1299,10 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
             powerLevel = 0.8 + Math.random() * 0.15;
           }
           
-          const distanceBonus = Math.min(0.15, distance / 40);
-          // Apply AI power multiplier from controls
-          const adjustedPower = powerLevel * aiControls.powerMultiplier;
-          const launchSpeed = Math.min(AI_MAX_LAUNCH_SPEED * aiControls.powerMultiplier, AI_MAX_LAUNCH_SPEED * adjustedPower + distanceBonus);
+          // A long shot adds a little pull, not a flat speed bonus that skips the curve.
+          const distanceBonus = Math.min(0.04, distance / 500);
+          const pull = Math.min(1, powerLevel * aiControls.powerMultiplier + distanceBonus);
+          const launchSpeed = Math.min(aiCap, launchSpeedForPull(pull) * statFraction);
           
           // Accuracy from AI controls - lower accuracy = more random angle offset
           const baseAccuracy = aiControls.accuracy;
@@ -1387,7 +1383,7 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
 
   return (
     <group>
-      <group ref={meshRef} position={enemy.position} onClick={handleClick} visible={!enemy.isKnockedOut && !enemy.isRespawning}>
+      <group ref={meshRef} position={enemy.position} onClick={handleClick} visible={marbleIsShown(enemy)}>
         <ZoogiModelSwitch zoogiId={enemy.zoogi.id} hasShield={false} hasSpawnImmunity={enemy.spawnImmunity} color={enemy.zoogi.color} />
         <StatusLooks ricochet={enemy.larsRicochetBoost > 1} bound={boundNow(enemy)} />
         {!enemy.isKnockedOut && !enemy.isRespawning && (
@@ -1402,14 +1398,14 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
             stunned={enemy.isStunned}
           />
         )}
+        {isMyTurn && !isFreeForAll && (
+          <mesh position={[0, 0.05 - enemy.position[1], 0]} rotation={[-Math.PI / 2, 0, 0]} scale={ZOOGI_FX_SCALE}>
+            <ringGeometry args={[0.7, 0.9, 32]} />
+            <meshBasicMaterial color="#FF6600" transparent opacity={0.5} />
+          </mesh>
+        )}
       </group>
 
-      {isMyTurn && !isFreeForAll && (
-        <mesh position={[enemy.position[0], 0.05, enemy.position[2]]} rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[0.7, 0.9, 32]} />
-          <meshBasicMaterial color="#FF6600" transparent opacity={0.5} />
-        </mesh>
-      )}
       
       {isLockedOn && (
         <Glint
@@ -1420,19 +1416,13 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
       )}
       
       <TurnStunMarker entity={enemy} />
-
-      <pointLight
-        position={[enemy.position[0], enemy.position[1] + 0.5, enemy.position[2]]}
-        color={enemy.zoogi.color}
-        intensity={0.3}
-        distance={3}
-      />
     </group>
   );
 }
 
 export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) {
   const meshRef = useRef<THREE.Group>(null);
+  const visRef = useRef<[number, number, number]>([0, 0, 0]);
   const { 
     playerEntity, 
     enemies,
@@ -1534,17 +1524,14 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
         const power = Math.min(Math.sqrt(adjustedDx * adjustedDx + adjustedDz * adjustedDz), 15);
         
         if (power > 1) {
-          let vx = adjustedDx * LAUNCH_POWER_MULTIPLIER;
-          let vz = adjustedDz * LAUNCH_POWER_MULTIPLIER;
-          
-          const launchSpeed = Math.sqrt(vx * vx + vz * vz);
-          if (launchSpeed > MAX_LAUNCH_SPEED) {
-            const scale = MAX_LAUNCH_SPEED / launchSpeed;
-            vx *= scale;
-            vz *= scale;
+          const shot = launchPlanarVelocity(adjustedDx, adjustedDz);
+          if (!shot) {
+            clearAimCameraEffect();
+            setIsDragging(false);
+            setIsAiming(false);
+            return;
           }
-          
-          const newVelocity: [number, number, number] = [vx, 0, vz];
+          const newVelocity: [number, number, number] = [shot[0], 0, shot[1]];
           updateLocalPlayerVelocity(playerIndex, newVelocity);
           hasLaunchedRef.current = true;
           launchCooldownRef.current = true;
@@ -1573,7 +1560,7 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
   useFrame(() => {
     if (!meshRef.current || !entity) return;
     
-    const localVis = visualPosition(entity.id, entity.position);
+    const localVis = visualPosition(entity.id, entity.position, visRef.current);
     meshRef.current.position.set(localVis[0], localVis[1], localVis[2]);
     
     const speed = Math.sqrt(entity.velocity[0] ** 2 + entity.velocity[2] ** 2);
@@ -1749,15 +1736,9 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
     }
   };
 
-  // In local multiplayer, only show the player whose turn it is
-  // Other players are hidden at their spawn points until their turn
-  if (gameMode === "local_multiplayer" && !isMyTurn) {
-    return null;
-  }
-
   return (
     <group>
-      <group ref={meshRef} position={pos} visible={!entity.isKnockedOut && !entity.isRespawning}>
+      <group ref={meshRef} position={pos} visible={marbleIsShown(entity)}>
         <ZoogiModelSwitch zoogiId={entity.zoogi.id} hasShield={false} color={entity.zoogi.color} />
         <StatusLooks ricochet={entity.larsRicochetBoost > 1} bound={boundNow(entity)} />
         <MarbleNameplate
@@ -1783,7 +1764,7 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
       )}
       
       {isMyTurn && (
-        <mesh position={[pos[0], 0.05, pos[2]]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh position={[pos[0], 0.05, pos[2]]} rotation={[-Math.PI / 2, 0, 0]} scale={ZOOGI_FX_SCALE}>
           <ringGeometry args={[0.7, 0.9, 32]} />
           <meshBasicMaterial color={playerColors[playerIndex]} transparent opacity={0.6} />
         </mesh>
@@ -1814,12 +1795,12 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
             const arrowLength = Math.min(rawLength, 8);
             const arrowRotation = Math.atan2(launchDz, launchDx);
             const shaftLength = arrowLength * 0.7;
-            const headSize = Math.min(0.5, arrowLength * 0.15);
+            const headSize = Math.min(0.5 * ZOOGI_FX_SCALE, arrowLength * 0.15);
             
             return arrowLength > 0.3 ? (
               <group position={[pos[0], 0.15, pos[2]]} rotation={[0, -arrowRotation + Math.PI / 2, 0]}>
                 <mesh position={[0, 0, shaftLength / 2]} rotation={[-Math.PI / 2, 0, 0]}>
-                  <planeGeometry args={[0.25, shaftLength]} />
+                  <planeGeometry args={[0.25 * ZOOGI_FX_SCALE, shaftLength]} />
                   <meshBasicMaterial color="#3B82F6" transparent opacity={0.4} side={THREE.DoubleSide} />
                 </mesh>
                 <mesh position={[0, 0, shaftLength + headSize / 2]} rotation={[Math.PI / 2, 0, 0]}>
@@ -1829,7 +1810,7 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
               </group>
             ) : null;
           })()}
-          <mesh position={[pos[0], 0.1, pos[2]]} rotation={[-Math.PI / 2, 0, 0]}>
+          <mesh position={[pos[0], 0.1, pos[2]]} rotation={[-Math.PI / 2, 0, 0]} scale={ZOOGI_FX_SCALE}>
             <ringGeometry args={[0.6, 0.8, 32]} />
             <meshBasicMaterial color="#3B82F6" transparent opacity={0.5} />
           </mesh>
@@ -1837,13 +1818,6 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
       )}
 
       <TurnStunMarker entity={entity} />
-
-      <pointLight
-        position={[pos[0], pos[1] + 0.5, pos[2]]}
-        color={playerColors[playerIndex]}
-        intensity={isMyTurn ? 0.6 : 0.3}
-        distance={3}
-      />
     </group>
   );
 }

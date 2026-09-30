@@ -1,5 +1,6 @@
 import { killSprite, spawnSprite, type SpritePool } from "./pool";
 import { particleBudget } from "./quality";
+import { ZOOGI_FX_SCALE } from "@/lib/restHeight";
 
 /** Pool sizes match the high budget. Low quality spawns fewer into the same pools. */
 export const SMOKE_CAP = 28;
@@ -474,15 +475,15 @@ export function seedOzone(pool: SpritePool, rand: () => number, count: number): 
   for (let i = 0; i < n; i++) {
     const ang = rand() * Math.PI * 2;
     spawnSprite(pool, {
-      x: Math.cos(ang) * (0.2 + rand() * 0.45),
+      x: Math.cos(ang) * (0.2 + rand() * 0.45) * ZOOGI_FX_SCALE,
       y: 0.25 + rand() * 0.35,
-      z: Math.sin(ang) * (0.2 + rand() * 0.45),
+      z: Math.sin(ang) * (0.2 + rand() * 0.45) * ZOOGI_FX_SCALE,
       vx: Math.cos(ang) * 0.25,
       vy: 0.25 + rand() * 0.35,
       vz: Math.sin(ang) * 0.25,
       life: 0.7 + rand() * 0.35,
-      size: 0.55 + rand() * 0.35,
-      grow: 0.12,
+      size: (0.55 + rand() * 0.35) * ZOOGI_FX_SCALE,
+      grow: 0.12 * ZOOGI_FX_SCALE,
       spin: (rand() - 0.5) * 0.4,
       r: 0.7,
       g: 0.8,
@@ -505,7 +506,7 @@ export function seedRisingEmbers(pool: SpritePool, rand: () => number, count: nu
       vy: 1.6 + rand() * 1.8,
       vz: Math.sin(ang) * (0.15 + rand() * 0.35),
       life: 0.75 + rand() * 0.4,
-      size: point ? 0.16 : 0.22 + rand() * 0.12,
+      size: (point ? 0.16 : 0.22 + rand() * 0.12) * ZOOGI_FX_SCALE,
       grow: 0.01,
       spin: 0,
       r: 1,
@@ -572,8 +573,8 @@ export function seedDustPuff(pool: SpritePool, rand: () => number, count: number
       vy: 0.35 + rand() * 0.7,
       vz: Math.sin(ang) * speed,
       life: 0.4 + rand() * 0.35,
-      size: 0.32 + rand() * 0.28,
-      grow: 0.22,
+      size: (0.32 + rand() * 0.28) * ZOOGI_FX_SCALE,
+      grow: 0.22 * ZOOGI_FX_SCALE,
       spin: (rand() - 0.5) * 0.8,
       r: 0.62,
       g: 0.48,

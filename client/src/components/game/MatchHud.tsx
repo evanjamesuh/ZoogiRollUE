@@ -1,5 +1,5 @@
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
-import { BUMPER_SCORE, KNOCKOUT_PENALTY, KNOCKOUT_SCORE_ORB, KNOCKOUT_SCORE_PLAYER, ZONE_SCORE_ORB } from "@/lib/arenaConstants";
+import { BUMPER_SCORE, KNOCKOUT_PENALTY, KNOCKOUT_SCORE_ORB, KNOCKOUT_SCORE_PLAYER } from "@/lib/arenaConstants";
 import { useViewportLayout } from "@/lib/mobileGraphics";
 import { useAudio } from "@/lib/stores/useAudio";
 import { useProgression } from "@/lib/stores/useProgression";
@@ -450,7 +450,6 @@ function InfoPanel({ onClose }: { onClose: () => void }) {
         <li>Orb knock-off <span className="font-bold text-yellow-300">+{KNOCKOUT_SCORE_ORB}</span></li>
         <li>Opponent knock-off <span className="font-bold text-yellow-300">+{KNOCKOUT_SCORE_PLAYER}</span></li>
         <li>Bumper touch <span className="font-bold text-yellow-300">+{BUMPER_SCORE}</span></li>
-        <li>Score zone <span className="font-bold text-yellow-300">+{ZONE_SCORE_ORB}</span></li>
         <li>Fall off the island <span className="font-bold text-red-300">-{KNOCKOUT_PENALTY}</span></li>
       </ul>
     </div>

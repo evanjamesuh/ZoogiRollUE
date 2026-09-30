@@ -4,10 +4,12 @@ import { NightCircuitStadium } from "./NightCircuitStadium";
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { BUMPER_RADIUS } from "@/lib/arenaColliders";
+import { arenaScaleFor } from "@/lib/mapDefaultConfigs";
 import {
   NEON_CORNER_GAP,
   NEON_HALF_X,
   NEON_HALF_Z,
+  neonBumperMarks,
   neonBumpers,
   neonObstacles,
   neonRails,
@@ -202,14 +204,16 @@ function paintCourt(ctx: CanvasRenderingContext2D) {
   ctx.textBaseline = "middle";
   ctx.fillText("ZR", cx + 2, cy + 28);
 
-  for (const post of neonBumpers()) {
+  // The floor texture is scaled with the court. Shrink the mark so its world size stays put.
+  const mark = 1 / arenaScaleFor("neon");
+  for (const post of neonBumperMarks()) {
     const [px, py] = worldToCanvas(post.x, post.z);
-    const g = ctx.createRadialGradient(px, py, 8, px, py, 1.35 * PX);
+    const g = ctx.createRadialGradient(px, py, 8, px, py, 1.35 * mark * PX);
     g.addColorStop(0, "rgba(0,0,0,0.5)");
     g.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.ellipse(px, py, 1.45 * PX, 1.15 * PX, 0, 0, Math.PI * 2);
+    ctx.ellipse(px, py, 1.45 * mark * PX, 1.15 * mark * PX, 0, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -566,8 +570,8 @@ export function NeonCourtLights() {
         intensity={0.82}
         color="#e7eefc"
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
         shadow-bias={-0.00035}
         shadow-camera-far={64}
         shadow-camera-left={-20}
@@ -696,10 +700,12 @@ export function NeonCourtArena() {
   const rails = neonRails();
   const posts = neonBumpers();
   const tints = ["#22e7ff", "#ff2bd6", "#b026ff"];
+  const dress = arenaScaleFor("neon");
 
   return (
     <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} receiveShadow>
+      <group scale={dress}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
         <planeGeometry args={[NEON_HALF_X * 2, NEON_HALF_Z * 2]} />
         <meshPhysicalMaterial
           color="#ffffff"
@@ -720,26 +726,6 @@ export function NeonCourtArena() {
       </mesh>
 
       <KnockoutMouths />
-
-      {rails.map((rail) => (
-        <Rail key={rail.id} {...rail} />
-      ))}
-
-      {posts.map((post, index) => (
-        post.id.includes("pylon")
-          ? <Pylon key={post.id} x={post.x} z={post.z} tint={post.x < 0 ? "#22e7ff" : "#ff2bd6"} />
-          : <BumperPost key={post.id} x={post.x} z={post.z} tint={tints[index % tints.length]} />
-      ))}
-
-      {neonObstacles().map((box) => (
-        <RaisedBlock
-          key={box.id}
-          {...box}
-          tint={BLOCK_TINT[box.id] ?? "#22e7ff"}
-          height={box.id.startsWith("channel") ? 0.5 : 0.68}
-          panels={panelTexture}
-        />
-      ))}
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.16, 0]}>
         <circleGeometry args={[46, 48]} />
@@ -810,6 +796,27 @@ export function NeonCourtArena() {
           }]}
         />
       </mesh>
+      </group>
+
+      {rails.map((rail) => (
+        <Rail key={rail.id} {...rail} />
+      ))}
+
+      {posts.map((post, index) => (
+        post.id.includes("pylon")
+          ? <Pylon key={post.id} x={post.x} z={post.z} tint={post.x < 0 ? "#22e7ff" : "#ff2bd6"} />
+          : <BumperPost key={post.id} x={post.x} z={post.z} tint={tints[index % tints.length]} />
+      ))}
+
+      {neonObstacles().map((box) => (
+        <RaisedBlock
+          key={box.id}
+          {...box}
+          tint={BLOCK_TINT[box.id] ?? "#22e7ff"}
+          height={box.id.startsWith("channel") ? 0.5 : 0.68}
+          panels={panelTexture}
+        />
+      ))}
     </group>
   );
 }

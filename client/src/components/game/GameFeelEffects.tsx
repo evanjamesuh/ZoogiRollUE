@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { useGameFeel } from "@/lib/stores/useGameFeel";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { emitImpact } from "@/vfx/impacts";
+import { ZOOGI_FX_SCALE } from "@/lib/restHeight";
 
 export function HitEffects() {
   const hitEffects = useGameFeel((state) => state.hitEffects);
@@ -93,12 +94,12 @@ function HitParticle({ effect }: HitParticleProps) {
     
     if (particlesRef.current.material instanceof THREE.PointsMaterial) {
       particlesRef.current.material.opacity = 1 - progress;
-      particlesRef.current.material.size = 0.15 * (1 - progress * 0.5);
+      particlesRef.current.material.size = ZOOGI_FX_SCALE * 0.15 * (1 - progress * 0.5);
     }
   });
   
   return (
-    <group ref={groupRef} position={effect.position}>
+    <group ref={groupRef} position={effect.position} scale={ZOOGI_FX_SCALE}>
       <points ref={particlesRef}>
         <bufferGeometry>
           <bufferAttribute
@@ -115,7 +116,7 @@ function HitParticle({ effect }: HitParticleProps) {
           />
         </bufferGeometry>
         <pointsMaterial
-          size={0.15}
+          size={0.15 * ZOOGI_FX_SCALE}
           vertexColors
           transparent
           opacity={1}
@@ -131,6 +132,7 @@ function HitParticle({ effect }: HitParticleProps) {
   );
 }
 
+/** Pop ring for a knockout. The mesh scale is the authored 0.86-era size; the parent group applies ZOOGI_FX_SCALE. */
 function RingExplosion({ timestamp }: { timestamp: number }) {
   const ringRef = useRef<THREE.Mesh>(null);
   
@@ -306,7 +308,7 @@ function FireBurstEffect({ burst }: { burst: { id: string; position: [number, nu
   });
   
   return (
-    <group ref={groupRef} position={burst.position}>
+    <group ref={groupRef} position={burst.position} scale={ZOOGI_FX_SCALE}>
       <mesh ref={coreRef}>
         <sphereGeometry args={[0.5, 16, 16]} />
         <meshBasicMaterial color="#ffffff" transparent opacity={1} />
@@ -332,7 +334,7 @@ function FireBurstEffect({ burst }: { burst: { id: string; position: [number, nu
           />
         </bufferGeometry>
         <pointsMaterial
-          size={0.2}
+          size={0.2 * ZOOGI_FX_SCALE}
           color="#ff4400"
           transparent
           opacity={1}
@@ -351,7 +353,7 @@ function FireBurstEffect({ burst }: { burst: { id: string; position: [number, nu
           />
         </bufferGeometry>
         <pointsMaterial
-          size={0.35}
+          size={0.35 * ZOOGI_FX_SCALE}
           color="#ffaa00"
           transparent
           opacity={0.5}

@@ -137,7 +137,7 @@ export function modeCopy(gameMode: string): { title: string; blurb: string } {
     return { title: "Ringer Royale", blurb: "Knock opponents out of the ring." };
   }
   if (gameMode === "practice") {
-    return { title: "Marble Arena", blurb: "Knock orbs and opponents off the island." };
+    return { title: "Practice", blurb: "Knock orbs and opponents off the island." };
   }
   if (gameMode === "local_multiplayer") {
     return { title: "Local Match", blurb: "Take turns. Knock orbs and opponents off the island." };

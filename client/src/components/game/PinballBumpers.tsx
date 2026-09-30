@@ -1,10 +1,10 @@
 import * as THREE from "three";
-import { useRef, useState, useEffect, useMemo, Suspense, Component, ReactNode } from "react";
+import { useRef, useMemo, Suspense, Component, ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { useAudio } from "@/lib/stores/useAudio";
-import { BUMPER_MODEL_URL } from "@/lib/arenaColliders";
+import { BUMPER_MODEL_URL, BUMPER_RADIUS } from "@/lib/arenaColliders";
 
 class BumperModelErrorBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { hasError: boolean }> {
   state = { hasError: false };
@@ -19,7 +19,7 @@ class BumperModelErrorBoundary extends Component<{ children: ReactNode; fallback
 function BumperStandIn() {
   return (
     <mesh position={[0, 0.55, 0]} castShadow>
-      <cylinderGeometry args={[0.9, 1.05, 1.1, 20]} />
+      <cylinderGeometry args={[BUMPER_RADIUS, BUMPER_RADIUS, 1.1, 20]} />
       <meshStandardMaterial color="#F59E0B" emissive="#F59E0B" emissiveIntensity={0.35} />
     </mesh>
   );
@@ -57,37 +57,35 @@ interface PinballBumperProps {
 function PinballBumper({ bumper }: PinballBumperProps) {
   const groupRef = useRef<THREE.Group>(null);
   const glowRef = useRef<THREE.PointLight>(null);
-  const [jiggleIntensity, setJiggleIntensity] = useState(0);
-  const [glowIntensity, setGlowIntensity] = useState(0);
+  const jiggleRef = useRef(0);
+  const glowAmtRef = useRef(0);
   const lastHitTimeRef = useRef(0);
   const { playSound } = useAudio();
 
-  useEffect(() => {
+  useFrame((_state, delta) => {
     if (bumper.lastHitTime && bumper.lastHitTime > lastHitTimeRef.current) {
       lastHitTimeRef.current = bumper.lastHitTime;
-      setJiggleIntensity(1);
-      setGlowIntensity(2);
+      jiggleRef.current = 1;
+      glowAmtRef.current = 2;
       playSound("collision_mushroom");
     }
-  }, [bumper.lastHitTime, playSound]);
 
-  useFrame((_state, delta) => {
-    if (groupRef.current && jiggleIntensity > 0) {
-      const jiggle = Math.sin(Date.now() * 0.03) * jiggleIntensity * 0.2;
+    if (groupRef.current && jiggleRef.current > 0) {
+      const jiggle = Math.sin(Date.now() * 0.03) * jiggleRef.current * 0.2;
       groupRef.current.scale.set(
         1 + jiggle,
         1 - jiggle * 0.5,
         1 + jiggle
       );
-      setJiggleIntensity(prev => Math.max(0, prev - delta * 4));
+      jiggleRef.current = Math.max(0, jiggleRef.current - delta * 4);
     } else if (groupRef.current) {
       groupRef.current.scale.set(1, 1, 1);
     }
 
     if (glowRef.current) {
-      if (glowIntensity > 0) {
-        glowRef.current.intensity = glowIntensity;
-        setGlowIntensity(prev => Math.max(0, prev - delta * 5));
+      if (glowAmtRef.current > 0) {
+        glowRef.current.intensity = glowAmtRef.current;
+        glowAmtRef.current = Math.max(0, glowAmtRef.current - delta * 5);
       } else {
         glowRef.current.intensity = 0.3;
       }

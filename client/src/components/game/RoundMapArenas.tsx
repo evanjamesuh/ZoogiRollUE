@@ -10,7 +10,7 @@ import {
   setWinterCampActive,
   type SolidCircle,
 } from "@/lib/arenaColliders";
-import { GRASS_RIM, ROUND_FLOOR_RADIUS, ROUND_KNOCKOFF_RADIUS, rimPosition, type RimMark } from "@/lib/roundRim";
+import { GRASS_RIM, ROUND_FLOOR_RADIUS, ROUND_KNOCKOFF_RADIUS, type RimMark } from "@/lib/roundRim";
 import { RING_VISUAL_LIMIT, ringPieceAction, type Aabb } from "@/lib/ringPlacement";
 import { MEADOW_BACKDROP_RADIUS, MEADOW_GROUND_RADIUS, MEADOW_GROUND_Y, forestTopY, meadowForestPieces, type ForestPiece } from "@/lib/meadowDressing";
 
@@ -204,7 +204,7 @@ function RoundIsland({
         <cylinderGeometry args={[EDGE, EDGE + 1.2, 2.7, 80, 1, true]} />
         <meshStandardMaterial map={maps.side} color={sideColor} roughness={0.95} side={THREE.DoubleSide} />
       </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} receiveShadow>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
         <circleGeometry args={[EDGE, 80]} />
         <meshStandardMaterial
           map={maps.top}
@@ -297,7 +297,7 @@ function MeadowFloor() {
   const outer = useTiledGrass(80);
   return (
     <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} receiveShadow>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
         <circleGeometry args={[ROUND_FLOOR_RADIUS, 96]} />
         <meshStandardMaterial map={grass} color="#ffffff" roughness={0.94} />
       </mesh>
@@ -322,8 +322,7 @@ function MeadowFloor() {
 }
 
 /** Mossy boulder or stump whose widest point is the rim collider. */
-function MeadowRimPiece({ mark, stump }: { mark: RimMark; stump: boolean }) {
-  const { x, z } = rimPosition(mark);
+function MeadowRimPiece({ mark, stump, x, z }: { mark: RimMark; stump: boolean; x: number; z: number }) {
   const moss = "#63b34a";
   if (stump) {
     const cap = 0.16;
@@ -360,11 +359,22 @@ function MeadowRimPiece({ mark, stump }: { mark: RimMark; stump: boolean }) {
 }
 
 function MeadowRim() {
+  const rocks = useMemo(() => getMapLayout("grass")?.scenery ?? [], []);
   return (
     <group>
-      {GRASS_RIM.map((mark, i) => (
-        <MeadowRimPiece key={mark.id} mark={mark} stump={i % 2 === 1} />
-      ))}
+      {rocks.map((rock, i) => {
+        const mark = GRASS_RIM.find((item) => item.id === rock.id);
+        if (!mark) return null;
+        return (
+          <MeadowRimPiece
+            key={rock.id}
+            mark={{ ...mark, radius: rock.radius }}
+            stump={i % 2 === 1}
+            x={rock.x}
+            z={rock.z}
+          />
+        );
+      })}
     </group>
   );
 }
@@ -470,7 +480,7 @@ function MeadowForest() {
           leaf={band.leaf}
           shade={band.shade}
           bark={band.bark}
-          shadow={band.max <= 42}
+          shadow={false}
         />
       ))}
     </group>
@@ -872,7 +882,7 @@ function RingStage({
       if (idle === "winter") idleRef.current = collectWinterIdle(clone);
       clone.traverse((obj) => {
         if (obj instanceof THREE.Mesh) {
-          obj.castShadow = true;
+          obj.castShadow = false;
           obj.receiveShadow = true;
         }
       });
