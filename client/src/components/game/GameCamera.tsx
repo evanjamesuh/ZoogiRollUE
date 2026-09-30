@@ -10,6 +10,7 @@ import {
   actionBounds,
   cameraOffset,
   clampDistance,
+  matchCameraMax,
   damp,
   decayTrauma,
   fitDistance,
@@ -20,6 +21,7 @@ import * as THREE from "three";
 import { arenaScaleFor } from "@/lib/mapDefaultConfigs";
 import { getMapLayout } from "@/lib/arenaColliders";
 import { neonPlayHalfX, neonPlayHalfZ } from "@/lib/neonCourt";
+import { launchPadsFor } from "@/lib/launchPads";
 
 export function DeveloperCamera() {
   const developerDragActive = useZoogiGame((state) => state.developerDragActive);
@@ -460,6 +462,10 @@ export function GameCamera() {
         ...(onCourt(playerEntity) ? [{ x: playerEntity.position[0], z: playerEntity.position[2] }] : []),
         ...enemies.filter(onCourt).map((enemy) => ({ x: enemy.position[0], z: enemy.position[2] })),
       ];
+      const padCount = (playerEntity ? 1 : 0) + enemies.length;
+      for (const pad of launchPadsFor(selectedMap).slice(0, padCount)) {
+        points.push({ x: pad.x, z: pad.z });
+      }
       const aspect = size.width / Math.max(1, size.height);
       const neonCourt = selectedMap === "neon";
       const frameScale = arenaScaleFor(selectedMap);
@@ -490,7 +496,7 @@ export function GameCamera() {
       const distance = clampDistance(
         fitDistance(bounds, ARENA_PITCH, ARENA_FOV_DEG, aspect, pad) * zoomNudge,
         (neonCourt ? 19 : 13.5) * frameScale,
-        34 * frameScale,
+        matchCameraMax(aspect, frameScale),
       );
       const offset = cameraOffset(distance, ARENA_PITCH);
       idealCameraPos = new THREE.Vector3(lookX + offset.x, offset.y, lookZ + offset.z);

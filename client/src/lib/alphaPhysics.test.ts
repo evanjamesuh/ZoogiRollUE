@@ -359,7 +359,6 @@ test("bumpers kick harder than rocks", () => {
 
 test("the turn waits for every body, then the settle delay, and only the next Zoogi returns to the pad", async () => {
   const { useZoogiGame, player, enemy } = await playing();
-  const enemyHome = [...enemy.position] as [number, number, number];
   const parkedPlayer: [number, number, number] = [-4, ZOOGI_REST_Y, 2];
   const parkedEnemy: [number, number, number] = [5, ZOOGI_REST_Y, -3];
   const realNow = Date.now;
@@ -435,8 +434,8 @@ test("the turn waits for every body, then the settle delay, and only the next Zo
       "the shooter stays where they stopped",
     );
     assert.ok(
-      Math.hypot(handed.enemies[0].position[0] - enemyHome[0], handed.enemies[0].position[2] - enemyHome[2]) < 0.2,
-      "the next Zoogi goes to the start pad",
+      Math.hypot(handed.enemies[0].position[0] - parkedEnemy[0], handed.enemies[0].position[2] - parkedEnemy[2]) < 0.05,
+      "a Zoogi who stayed on the court is not moved",
     );
     assert.equal(handed.playerEntity.isKnockedOut, false);
     assert.equal(handed.enemies[0].isKnockedOut, false);
