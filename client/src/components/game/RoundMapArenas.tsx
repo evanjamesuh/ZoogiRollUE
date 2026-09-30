@@ -204,7 +204,7 @@ function RoundIsland({
         <cylinderGeometry args={[EDGE, EDGE + 1.2, 2.7, 80, 1, true]} />
         <meshStandardMaterial map={maps.side} color={sideColor} roughness={0.95} side={THREE.DoubleSide} />
       </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} receiveShadow>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
         <circleGeometry args={[EDGE, 80]} />
         <meshStandardMaterial
           map={maps.top}
@@ -297,7 +297,7 @@ function MeadowFloor() {
   const outer = useTiledGrass(80);
   return (
     <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} receiveShadow>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
         <circleGeometry args={[ROUND_FLOOR_RADIUS, 96]} />
         <meshStandardMaterial map={grass} color="#ffffff" roughness={0.94} />
       </mesh>

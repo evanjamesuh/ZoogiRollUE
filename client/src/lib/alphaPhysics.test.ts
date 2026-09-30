@@ -16,8 +16,10 @@ import {
   MOMENTUM_TRANSFER,
   ORB_MASS,
   ZOOGI_MASS,
-  NORMAL_LAUNCH_SPEED,
+  launchSpeedForPull,
+  launchSpeedPerSecForPull,
   ROCK_RESTITUTION,
+  zoogiMassFromDefense,
   ICE_LINEAR_DAMPING,
   ICE_ROLLING_DECEL,
   LINEAR_DAMPING,
@@ -76,55 +78,80 @@ test("every map scale defaults to 1 and grass is about 31 Zoogi widths", () => {
   assert.ok(Math.abs(ratio - 1.3) < 0.1, `Zoogi-to-orb ratio ${ratio.toFixed(3)}`);
 });
 
-test("a normal shot rolls straight and rests in 2 to 4 seconds", async () => {
+test("realistic pulls settle on the court and a full pull still flies", async () => {
   const { useZoogiGame, player } = await playing();
-  useZoogiGame.setState({
-    phase: "playing",
-    currentRound: 41,
-    isPlayerTurn: true,
-    turnHasLaunched: true,
-    firstTickProcessed: true,
-    orbs: [],
-    enemies: [],
-    mushrooms: [],
-    pinballBumpers: [],
-    wolfClones: [],
-    wallSettings: { ...useZoogiGame.getState().wallSettings, knockoffBoundaryRadius: 80 },
-    playerEntity: {
-      ...player,
-      position: [-12, ZOOGI_REST_Y, 0],
-      velocity: [NORMAL_LAUNCH_SPEED, 0, 0],
-      arcMovement: null,
-      isStunned: false,
-      isKnockedOut: false,
-      isRespawning: false,
-      offTheFloor: false,
-      spawnImmunity: false,
-      larsRicochetBoost: 1,
-    },
-  });
+  assert.ok(Math.abs(launchSpeedForPull(1) - MAX_LAUNCH_SPEED) < 1e-9, "a full pull is the speed cap");
+  const pulls = [0.3, 0.4, 0.5, 0.8, 1];
+  const measured: { pull: number; seconds: number; traveled: number; speed: number }[] = [];
 
-  let restStep = -1;
-  for (let step = 0; step < 400; step++) {
-    useZoogiGame.getState().physicsTick(1 / 60);
-    const marble = useZoogiGame.getState().playerEntity;
-    assert.ok(marble);
-    assert.ok(Math.abs(marble.position[2]) < 0.02, "the shot should stay on a straight line");
-    const speed = Math.hypot(marble.velocity[0], marble.velocity[2]);
-    if (speed === 0) {
-      restStep = step + 1;
-      break;
+  for (const pull of pulls) {
+    const speed = launchSpeedForPull(pull);
+    useZoogiGame.setState({
+      phase: "playing",
+      currentRound: 41,
+      isPlayerTurn: true,
+      turnHasLaunched: true,
+      firstTickProcessed: true,
+      orbs: [],
+      enemies: [],
+      mushrooms: [],
+      pinballBumpers: [],
+      wolfClones: [],
+      wallSettings: { ...useZoogiGame.getState().wallSettings, knockoffBoundaryRadius: 400 },
+      playerEntity: {
+        ...player,
+        position: [-12, ZOOGI_REST_Y, 0],
+        velocity: [speed, 0, 0],
+        arcMovement: null,
+        isStunned: false,
+        isKnockedOut: false,
+        isRespawning: false,
+        offTheFloor: false,
+        spawnImmunity: false,
+        larsRicochetBoost: 1,
+      },
+    });
+
+    let restStep = -1;
+    let crossStep = -1;
+    for (let step = 0; step < 1200; step++) {
+      useZoogiGame.getState().physicsTick(1 / 60);
+      const marble = useZoogiGame.getState().playerEntity;
+      assert.ok(marble);
+      assert.ok(Math.abs(marble.position[2]) < 0.05, `pull ${pull} should stay on a straight line`);
+      const traveledNow = marble.position[0] - (-12);
+      if (crossStep < 0 && traveledNow >= 31) crossStep = step + 1;
+      const planar = Math.hypot(marble.velocity[0], marble.velocity[2]);
+      if (planar === 0) {
+        restStep = step + 1;
+        break;
+      }
+    }
+    const rested = useZoogiGame.getState().playerEntity;
+    assert.ok(rested);
+    assert.equal(rested.isKnockedOut, false, `pull ${pull} rested before the open edge`);
+    assert.equal(rested.offTheFloor, false, `pull ${pull} stayed on the open court`);
+    const seconds = restStep / 60;
+    const traveled = rested.position[0] - (-12);
+    measured.push({ pull, seconds, traveled, speed: launchSpeedPerSecForPull(pull) });
+    console.log(`MEASURE pull=${pull.toFixed(2)} speed=${launchSpeedPerSecForPull(pull).toFixed(2)} restSec=${seconds.toFixed(3)} travel=${traveled.toFixed(3)} cross31=${crossStep < 0 ? "na" : (crossStep / 60).toFixed(3)}`);
+    if (pull === 1) {
+      assert.ok(crossStep > 0 && crossStep / 60 < 1, `full pull crossed 31 in ${crossStep / 60}s`);
     }
   }
-  const rested = useZoogiGame.getState().playerEntity;
-  assert.ok(rested);
-  const seconds = restStep / 60;
-  assert.ok(seconds >= 2 && seconds <= 4, `rested in ${seconds.toFixed(2)}s`);
-  assert.equal(rested.isKnockedOut, false);
-  assert.equal(rested.offTheFloor, false);
-  const traveled = rested.position[0] - (-12);
-  assert.ok(traveled > 15 && traveled < 26, `traveled ${traveled.toFixed(2)}`);
-  console.log(`MEASURE normalRestSec=${seconds.toFixed(3)} normalTravel=${traveled.toFixed(3)}`);
+
+  const byPull = Object.fromEntries(measured.map((row) => [row.pull, row]));
+  for (const pull of [0.4, 0.5, 0.8]) {
+    const row = byPull[pull];
+    assert.ok(row.seconds >= 2 && row.seconds <= 4, `${pull * 100}% rested in ${row.seconds.toFixed(2)}s`);
+    assert.ok(row.traveled < 32, `${pull * 100}% traveled ${row.traveled.toFixed(2)}, mostly on a 31 court`);
+  }
+  assert.ok(byPull[0.3].seconds < byPull[0.5].seconds, "30% settles sooner than 50%");
+  assert.ok(byPull[0.3].traveled < byPull[0.5].traveled, "30% stays shorter than 50%");
+  assert.ok(byPull[0.5].traveled < byPull[0.8].traveled, "50% stays shorter than 80%");
+  assert.ok(byPull[0.8].traveled < 31, "80% mostly stays on the court");
+  assert.ok(byPull[1].traveled > 80, `full pull coast ${byPull[1].traveled.toFixed(1)} should leave the court`);
+  assert.ok(byPull[1].seconds > 4, "full pull does not die in the everyday window");
 });
 
 test("full power crosses the arena in under a second and flies off", async () => {
@@ -199,6 +226,7 @@ test("a head-on hit keeps some shooter speed and gives most of it to the target"
     },
     enemies: [{
       ...enemy,
+      zoogi: player.zoogi,
       position: [MARBLE_RADIUS * 2 + 0.12, ZOOGI_REST_Y, 0],
       velocity: [0, 0, 0],
       arcMovement: null,
@@ -223,6 +251,90 @@ test("a head-on hit keeps some shooter speed and gives most of it to the target"
   assert.ok(Math.abs(kept - SHOOTER_KEEP) < 0.08, `kept ${kept.toFixed(3)} vs ${SHOOTER_KEEP}`);
   assert.equal(MARBLE_RESTITUTION, 0.75);
   console.log(`MEASURE transfer=${transfer.toFixed(3)} kept=${kept.toFixed(3)}`);
+});
+
+test("heavier Zoogis hit harder and get pushed less", async () => {
+  const { useZoogiGame, ZOOGI_ROSTER } = await import("./stores/useZoogiGame.tsx");
+  const bolt = ZOOGI_ROSTER.find((zoogi) => zoogi.id === "bolt");
+  const wraps = ZOOGI_ROSTER.find((zoogi) => zoogi.id === "wraps");
+  assert.ok(bolt && wraps);
+  const boltMass = zoogiMassFromDefense(bolt.stats.defense);
+  const wrapsMass = zoogiMassFromDefense(wraps.stats.defense);
+  assert.equal(bolt.stats.defense, 40);
+  assert.equal(wraps.stats.defense, 85);
+  assert.ok(wrapsMass > boltMass * 1.5, `wraps ${wrapsMass.toFixed(3)} should outweigh bolt ${boltMass.toFixed(3)}`);
+  assert.ok(boltMass > ORB_MASS, "even the lightest Zoogi outweighs an orb");
+  for (const zoogi of ZOOGI_ROSTER) {
+    assert.ok(zoogiMassFromDefense(zoogi.stats.defense) > ORB_MASS, zoogi.id);
+  }
+
+  useZoogiGame.getState().selectZoogi(bolt);
+  useZoogiGame.setState({ aiPlayerCount: 1, gameMode: "classic", selectedMap: "space", phase: "menu" });
+  useZoogiGame.getState().startGame();
+  const started = useZoogiGame.getState();
+  const player = started.playerEntity;
+  const enemy = started.enemies[0];
+  assert.ok(player && enemy);
+
+  const strike = (shooterZoogi: typeof bolt, targetZoogi: typeof wraps) => {
+    useZoogiGame.setState({
+      phase: "playing",
+      currentRound: 44,
+      isPlayerTurn: true,
+      turnHasLaunched: false,
+      firstTickProcessed: true,
+      orbs: [],
+      mushrooms: [],
+      pinballBumpers: [],
+      wolfClones: [],
+      wallSettings: { ...useZoogiGame.getState().wallSettings, knockoffBoundaryRadius: 80 },
+      playerEntity: {
+        ...player,
+        zoogi: shooterZoogi,
+        position: [0, ZOOGI_REST_Y, 0],
+        velocity: [0.4, 0, 0],
+        arcMovement: null,
+        isStunned: false,
+        larsRicochetBoost: 1,
+        spawnImmunity: false,
+        boltPhasingUntil: 0,
+        wrapsBindUntil: 0,
+      },
+      enemies: [{
+        ...enemy,
+        zoogi: targetZoogi,
+        position: [MARBLE_RADIUS * 2 + 0.12, ZOOGI_REST_Y, 0],
+        velocity: [0, 0, 0],
+        arcMovement: null,
+        isStunned: false,
+        isKnockedOut: false,
+        isRespawning: false,
+        larsRicochetBoost: 1,
+        boltPhasingUntil: 0,
+        wrapsBindUntil: 0,
+      }],
+    });
+    useZoogiGame.getState().physicsTick(1 / 60);
+    const after = useZoogiGame.getState();
+    const shooter = after.playerEntity;
+    const target = after.enemies[0];
+    assert.ok(shooter && target);
+    const shooterSpeed = shooter.velocity[0];
+    const targetSpeed = target.velocity[0];
+    const shooterKe = 0.5 * zoogiMassFromDefense(shooterZoogi.stats.defense) * shooterSpeed * shooterSpeed;
+    const targetKe = 0.5 * zoogiMassFromDefense(targetZoogi.stats.defense) * targetSpeed * targetSpeed;
+    return { shooterSpeed, targetSpeed, shooterKe, targetKe };
+  };
+
+  const heavy = strike(wraps, bolt);
+  const light = strike(bolt, wraps);
+  assert.ok(heavy.targetSpeed > light.targetSpeed * 1.4, `wraps pushes bolt at ${heavy.targetSpeed.toFixed(3)}, bolt pushes wraps at ${light.targetSpeed.toFixed(3)}`);
+  assert.ok(heavy.shooterSpeed > light.shooterSpeed, "the heavier shooter keeps more forward speed");
+  assert.ok(heavy.shooterSpeed > 0.05, "a heavy shooter is not stopped dead");
+  assert.ok(heavy.targetKe > heavy.shooterKe, "the target still takes most of the energy");
+  assert.ok(light.targetKe > light.shooterKe, "even a heavy target keeps most of the energy");
+  assert.ok(light.targetSpeed > 0, "a light Zoogi still pushes a heavy one");
+  console.log(`MEASURE wrapsOnBolt target=${heavy.targetSpeed.toFixed(3)} shooter=${heavy.shooterSpeed.toFixed(3)} boltOnWraps target=${light.targetSpeed.toFixed(3)} shooter=${light.shooterSpeed.toFixed(3)} boltMass=${boltMass.toFixed(3)} wrapsMass=${wrapsMass.toFixed(3)}`);
 });
 
 test("bumpers kick harder than rocks", () => {

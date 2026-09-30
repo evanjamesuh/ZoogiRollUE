@@ -820,7 +820,7 @@ export function NeonCourtArena() {
   return (
     <group>
       <group scale={dress}>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} receiveShadow>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
         <planeGeometry args={[NEON_HALF_X * 2, NEON_HALF_Z * 2]} />
         <meshPhysicalMaterial
           color="#ffffff"

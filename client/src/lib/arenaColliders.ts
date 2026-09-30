@@ -744,8 +744,19 @@ export function resolveSolidCollision(
         }
       }
       const sep = minDist + 0.04;
-      x = solid.x + nx * sep;
-      z = solid.z + nz * sep;
+      const placedX = solid.x + nx * sep;
+      const placedZ = solid.z + nz * sep;
+      // A rim rock's inward normal used to drop the marble on the far
+      // face, about three units through the rock. Cap that shove.
+      const jump = Math.hypot(placedX - x, placedZ - z);
+      const maxPush = 0.2;
+      if (jump > maxPush) {
+        x += ((placedX - x) / jump) * maxPush;
+        z += ((placedZ - z) / jump) * maxPush;
+      } else {
+        x = placedX;
+        z = placedZ;
+      }
       hits.push(solid.id);
       hitThisPass = true;
     }

@@ -147,7 +147,9 @@ export interface NeonBox {
  */
 function neonObstacleUnits(): NeonBox[] {
   return [
-    { id: "pad-west", minX: -9.15, maxX: -7.45, minZ: -1.55, maxZ: 1.55 },
+    // Flush to the west rail (0.3 gap). A 2-unit slot there trapped a
+    // straight shot and rattled it between the pad and the rail.
+    { id: "pad-west", minX: -11, maxX: -9.3, minZ: -1.55, maxZ: 1.55 },
     { id: "pad-east", minX: 7.7, maxX: 9.2, minZ: -1.55, maxZ: 1.55 },
     { id: "pad-north", minX: -2.4, maxX: 0.4, minZ: 5.55, maxZ: 6.7 },
     { id: "pad-south", minX: 1.6, maxX: 3.8, minZ: -6.7, maxZ: -5.55 },
