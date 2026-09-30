@@ -81,7 +81,21 @@ test("every map scale defaults to 1 and grass is about 31 Zoogi widths", () => {
 test("realistic pulls settle on the court and a full pull still flies", async () => {
   const { useZoogiGame, player } = await playing();
   assert.ok(Math.abs(launchSpeedForPull(1) - MAX_LAUNCH_SPEED) < 1e-9, "a full pull is the speed cap");
-  const pulls = [0.3, 0.4, 0.5, 0.8, 1];
+  assert.ok(Math.abs(launchSpeedPerSecForPull(0.4) - 10.7) < 0.05, "40% stays near 10.7");
+  assert.ok(Math.abs(launchSpeedPerSecForPull(0.8) - 16) < 0.05, "80% stays near 16");
+  assert.ok(Math.abs(launchSpeedPerSecForPull(0.85) - 19.125) < 0.05, "85% is about 20");
+  assert.ok(Math.abs(launchSpeedPerSecForPull(0.93) - 30.365) < 0.05, "93% is about 30");
+  let previous = 0;
+  let peakStep = 0;
+  for (let percent = 1; percent <= 100; percent++) {
+    const speed = launchSpeedPerSecForPull(percent / 100);
+    const step = speed - previous;
+    assert.ok(step >= -1e-9, `speed dipped at ${percent}%`);
+    if (step > peakStep) peakStep = step;
+    previous = speed;
+  }
+  assert.ok(peakStep < 2, `a 1% pull jumped ${peakStep.toFixed(3)} u/s`);
+  const pulls = [0.3, 0.4, 0.5, 0.8, 0.85, 0.9, 0.95, 1];
   const measured: { pull: number; seconds: number; traveled: number; speed: number }[] = [];
 
   for (const pull of pulls) {
@@ -146,10 +160,20 @@ test("realistic pulls settle on the court and a full pull still flies", async ()
     assert.ok(row.seconds >= 2 && row.seconds <= 4, `${pull * 100}% rested in ${row.seconds.toFixed(2)}s`);
     assert.ok(row.traveled < 32, `${pull * 100}% traveled ${row.traveled.toFixed(2)}, mostly on a 31 court`);
   }
+  for (let i = 1; i < measured.length; i++) {
+    const prev = measured[i - 1];
+    const row = measured[i];
+    assert.ok(row.speed > prev.speed, `${row.pull} speed should keep rising`);
+    assert.ok(row.traveled > prev.traveled, `${row.pull} should coast farther`);
+    assert.ok(row.seconds > prev.seconds, `${row.pull} should settle later`);
+  }
   assert.ok(byPull[0.3].seconds < byPull[0.5].seconds, "30% settles sooner than 50%");
   assert.ok(byPull[0.3].traveled < byPull[0.5].traveled, "30% stays shorter than 50%");
   assert.ok(byPull[0.5].traveled < byPull[0.8].traveled, "50% stays shorter than 80%");
   assert.ok(byPull[0.8].traveled < 31, "80% mostly stays on the court");
+  assert.ok(byPull[0.85].speed > 18 && byPull[0.85].speed < 22, "85% is in the early rise");
+  assert.ok(byPull[0.9].speed > 24 && byPull[0.9].speed < 28, "90% is mid-rise");
+  assert.ok(byPull[0.95].speed > 30 && byPull[0.95].speed < 35, "95% is late in the rise, not still flat");
   assert.ok(byPull[1].traveled > 80, `full pull coast ${byPull[1].traveled.toFixed(1)} should leave the court`);
   assert.ok(byPull[1].seconds > 4, "full pull does not die in the everyday window");
 });

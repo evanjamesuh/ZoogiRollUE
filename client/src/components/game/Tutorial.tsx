@@ -16,7 +16,7 @@ const BASE_TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     title: "Power Control",
-    message: "Drag further for more power! GREEN = Low, YELLOW = Medium, RED = High power.",
+    message: "Drag further for more power! GREEN = Low, YELLOW = Medium, RED = High. Keep pulling and the label turns SLINGSHOT.",
     icon: "💪"
   },
   {

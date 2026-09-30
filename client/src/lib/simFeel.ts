@@ -4,8 +4,8 @@
  * One physics step is 1/60 s. Planar speeds are world units per step.
  * Rolling friction is a constant deceleration. Pull strength is not
  * linear: everyday drags stay in a narrow speed band and rest in a
- * few seconds, and only the end of the slingshot kicks up to a full
- * shot that crosses the court and flies off.
+ * few seconds. From 80% to a full pull the shot smoothsteps up to a
+ * slingshot that crosses the court and flies off.
  */
 
 import { ORB_DRAW_RADIUS, ZOOGI_DRAW_RADIUS } from "./restHeight";
@@ -65,36 +65,34 @@ export const MAX_LAUNCH_SPEED = MAX_PLANAR_SPEED;
 /**
  * The aim drag is measured in world units and capped at this pull.
  * Speed comes from launchSpeedForPull, not from a constant times the
- * drag. The everyday band is gentle. The last part of the pull is the
- * kick that reaches full power.
+ * drag. Everyday pulls stay gentle through 80%. The last 3 world
+ * units are the slingshot rise up to a full shot.
  */
 export const FULL_PULL_DISTANCE = 15;
+
+/** Pull fraction where the slingshot rise starts. Drag of 12 on a full pull of 15. */
+export const SLINGSHOT_PULL = 0.8;
 
 /** Kept so older call sites can scale a raw drag. New shots use launchSpeedForPull. */
 export const LAUNCH_POWER_MULTIPLIER = MAX_LAUNCH_SPEED / FULL_PULL_DISTANCE;
 
 /**
- * Everyday pulls (through 95%) ease from a soft flick up to a shot
- * that still rests in a few seconds. Past that, the slingshot kicks
- * up to a full pull.
+ * Everyday pulls through 80% follow a quadratic fit through a soft
+ * 40% flick (about 10.7 u/s) and an 80% shot of 16 u/s. The last
+ * 3 world units of drag then smoothstep from 16 up to a full 36:
+ * about 20 u/s near 85% and about 30 near 93%.
  */
-const EVERYDAY_PULL = 0.95;
-const EVERYDAY_TOP_SPEED = 16.2;
-const MID_PULL = 0.5;
-const MID_SPEED = 12.5;
+const RISE_START_SPEED = 16;
 
 /** World units per second for a pull fraction in 0..1. */
 export function launchSpeedPerSecForPull(pullFraction: number): number {
   const p = Math.min(1, Math.max(0, pullFraction));
-  if (p <= EVERYDAY_PULL) {
-    const u = p / EVERYDAY_PULL;
-    const uMid = MID_PULL / EVERYDAY_PULL;
-    const curve = (EVERYDAY_TOP_SPEED * uMid - MID_SPEED) / (uMid - uMid * uMid);
-    const slope = EVERYDAY_TOP_SPEED - curve;
-    return slope * u + curve * u * u;
+  if (p <= SLINGSHOT_PULL) {
+    return 33.5 * p - 16.875 * p * p;
   }
-  const u = (p - EVERYDAY_PULL) / (1 - EVERYDAY_PULL);
-  return EVERYDAY_TOP_SPEED + (FULL_LAUNCH_SPEED_PER_SEC - EVERYDAY_TOP_SPEED) * Math.pow(u, 1.35);
+  const t = (p - SLINGSHOT_PULL) / (1 - SLINGSHOT_PULL);
+  const smooth = t * t * (3 - 2 * t);
+  return RISE_START_SPEED + (FULL_LAUNCH_SPEED_PER_SEC - RISE_START_SPEED) * smooth;
 }
 
 /** Planar speed, units per step, for a pull fraction in 0..1. */
