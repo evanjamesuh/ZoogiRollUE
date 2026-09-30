@@ -39,7 +39,9 @@ export function PostFX() {
     }
   });
 
-  const level: VfxQuality = phone ? "low" : quality;
+  // The expensive bloom path is opt-in with ?vfx=high. A match otherwise uses
+  // the smaller bloom and no MSAA resolve, which is what kept frames uneven.
+  const level: VfxQuality = phone || quality !== "high" || !isVfxQualityLocked() ? "low" : "high";
   const bloom = bloomParams(level);
 
   return (

@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { TOMB_STAGE, getTombBackdrop, getTombBlocks, type TombPiece } from "@/lib/arenaColliders";
+import { TOMB_STAGE, getMapLayout, getTombBackdrop, getTombBlocks, type TombPiece } from "@/lib/arenaColliders";
 
 const SAND_URL = "/textures/comic/paint_sand_512.jpg";
 const STONE_URL = "/textures/comic/paint_stone_512.jpg";
@@ -326,10 +326,16 @@ export function PharaohTombArena() {
   const sand = useRepeatMap(SAND_URL, 7, 7);
   const stone = useRepeatMap(STONE_URL, 1.4, 1.4);
   const glyphMap = useMemo(() => carvedGlyphs(), []);
-  const blocks = useMemo(() => getTombBlocks(), []);
+  const blocks = useMemo(() => {
+    const placed = new Map((getMapLayout("tomb")?.scenery ?? []).map((solid) => [solid.id, solid]));
+    return getTombBlocks().map((block) => {
+      const solid = placed.get(block.id);
+      return solid ? { ...block, x: solid.x, z: solid.z, radius: solid.radius } : block;
+    });
+  }, []);
   const backdrop = useMemo(() => getTombBackdrop(), []);
   const walls = useMemo(() => backdrop.filter((piece) => piece.kind === "wall"), [backdrop]);
-  const floor = TOMB_STAGE.knockoffRadius;
+  const floor = getMapLayout("tomb")?.knockoffRadius ?? TOMB_STAGE.knockoffRadius;
   const shaftMat = useSharedMaterial(stone, "#e4c092", 0.88);
   const capMat = useSharedMaterial(stone, "#efd0a4", 0.88);
   const baseMat = useSharedMaterial(stone, "#c99668", 0.88);

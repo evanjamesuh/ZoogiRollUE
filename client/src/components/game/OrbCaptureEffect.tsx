@@ -2,6 +2,7 @@ import { useRef, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
+import { ORB_FX_SCALE } from "@/lib/restHeight";
 
 export function OrbCaptureEffects() {
   const orbCaptureEffects = useZoogiGame((state) => state.orbCaptureEffects);
@@ -114,7 +115,7 @@ function OrbCaptureVisual({ effect }: OrbCaptureVisualProps) {
   });
 
   return (
-    <group ref={groupRef} position={effect.position}>
+    <group ref={groupRef} position={effect.position} scale={ORB_FX_SCALE}>
       <mesh ref={beamRef} position={[0, 0, 0]}>
         <cylinderGeometry args={[0.15, 0.25, 1, 8]} />
         <meshBasicMaterial 
@@ -173,7 +174,7 @@ function OrbCaptureVisual({ effect }: OrbCaptureVisualProps) {
           />
         </bufferGeometry>
         <pointsMaterial
-          size={0.1}
+          size={0.1 * ORB_FX_SCALE}
           color={effect.color}
           transparent
           opacity={0.8}

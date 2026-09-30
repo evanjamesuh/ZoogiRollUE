@@ -6,6 +6,7 @@ import { emitImpact } from "@/vfx/impacts";
 import { BoltDischarge, StunCrawlers, UnlockGlow } from "@/vfx/powerLooks";
 import { ShadowPulseLook, ShadowWrap } from "@/vfx/shadowPulse";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
+import { ZOOGI_FX_SCALE } from "@/lib/restHeight";
 
 export { ShadowWrap };
 
@@ -139,7 +140,7 @@ export function StunnedIndicator({
   if (!pulse && remaining <= 0 && duration <= 0) return null;
 
   return (
-    <group position={position}>
+    <group position={position} scale={ZOOGI_FX_SCALE}>
       {look === "shadow" ? <ShadowWrap /> : <StunCrawlers />}
     </group>
   );
