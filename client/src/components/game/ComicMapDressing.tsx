@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { Component, ReactNode, Suspense, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
+import { PharaohsTombBackdrop } from "./PharaohsTombBackdrop";
 
 const GLOW_URL = "/textures/comic/glow_orange.png";
 
@@ -411,12 +412,7 @@ export function MapAtmosphere({ map }: { map: string | null }) {
     );
   }
   if (map === "tomb") {
-    return (
-      <>
-        <SkyDome top="#140a28" horizon="#5c3c78" ground="#1a1028" stars={320} starSeed={9} />
-        <fog attach="fog" args={["#1a1030", 46, 135]} />
-      </>
-    );
+    return <PharaohsTombBackdrop />;
   }
   return null;
 }
