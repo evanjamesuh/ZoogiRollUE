@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { useRef, useState, useEffect, useMemo, Suspense, Component, type ReactNode } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { Line, Html, useGLTF } from "@react-three/drei";
+import { MarbleNameplate } from "./MarbleNameplate";
 import { stopFrameMayEndTurn, useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { fittedUniformScale, resolveZoogiModel, rollMarble, zoogiModelPreloadUrls, type ZoogiModelSettings } from "@/lib/zoogiModels";
 import { useAudio } from "@/lib/stores/useAudio";
@@ -860,36 +861,17 @@ export function PlayerZoogi() {
             <meshBasicMaterial color="#e5e7eb" transparent opacity={0.8} />
           </mesh>
         )}
+        {!firstPersonView && !playerEntity.isKnockedOut && !playerEntity.isRespawning && (
+          <MarbleNameplate
+            letter={playerEntity.zoogi.name?.charAt(0)?.toUpperCase() || "P"}
+            color={playerEntity.zoogi.color || "#6366f1"}
+            border="2px solid white"
+            size={32}
+            fontSize={14}
+            lift={3.2}
+          />
+        )}
       </group>
-      
-      {/* Floating player icon */}
-      {!firstPersonView && !playerEntity.isKnockedOut && !playerEntity.isRespawning && (
-        <Html
-          position={[pos[0], pos[1] + 3.2, pos[2]]}
-          center
-          style={{ pointerEvents: 'none' }}
-        >
-          <div
-            style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '50%',
-              backgroundColor: playerEntity.zoogi.color || '#6366f1',
-              border: '2px solid white',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'white',
-              fontWeight: 'bold',
-              fontSize: '14px',
-              textShadow: '0 1px 2px rgba(0,0,0,0.5)',
-            }}
-          >
-            {playerEntity.zoogi.name?.charAt(0)?.toUpperCase() || 'P'}
-          </div>
-        </Html>
-      )}
       
       {/* Invisible hitbox for drag interaction - disabled in first person, over shoulder, and birds eye views */}
       {(isPlayerTurn || isFreeForAll) && !launchCooldownRef.current && !playerEntity.isKnockedOut && !playerEntity.isRespawning && !firstPersonView && !overShoulderView && !birdsEyeView && (
@@ -1405,37 +1387,16 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
         <ZoogiModelSwitch zoogiId={enemy.zoogi.id} hasShield={false} hasSpawnImmunity={enemy.spawnImmunity} color={enemy.zoogi.color} />
         <StatusLooks ricochet={enemy.larsRicochetBoost > 1} bound={boundNow(enemy)} />
         {!enemy.isKnockedOut && !enemy.isRespawning && (
-        <Html position={[0, 3.2, 0]} center style={{ pointerEvents: "none" }}>
-          <div
-            style={{
-              width: "28px",
-              height: "28px",
-              borderRadius: "50%",
-              backgroundColor: enemy.zoogi.color || "#ef4444",
-              border: "2px solid #fca5a5",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.4)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "white",
-              fontWeight: "bold",
-              fontSize: "12px",
-              textShadow: "0 1px 2px rgba(0,0,0,0.5)",
-            }}
-          >
-            {enemy.zoogi.name?.charAt(0)?.toUpperCase() || "E"}
-          </div>
-          {(enemy.slowUntil || 0) > Date.now() && (
-            <div style={{ marginTop: 4, background: "#D4C4B0", color: "#3f2e22", fontWeight: 700, fontSize: 11, padding: "2px 6px", borderRadius: 6 }}>
-              Slowed
-            </div>
-          )}
-          {enemy.isStunned && (
-            <div style={{ marginTop: 4, background: "#FDE047", color: "#3f2e22", fontWeight: 700, fontSize: 11, padding: "2px 6px", borderRadius: 6 }}>
-              Stunned
-            </div>
-          )}
-        </Html>
+          <MarbleNameplate
+            letter={enemy.zoogi.name?.charAt(0)?.toUpperCase() || "E"}
+            color={enemy.zoogi.color || "#ef4444"}
+            border="2px solid #fca5a5"
+            size={28}
+            fontSize={12}
+            lift={3.2}
+            slowed={(enemy.slowUntil || 0) > Date.now()}
+            stunned={enemy.isStunned}
+          />
         )}
         {isMyTurn && !isFreeForAll && (
           <mesh position={[0, 0.05 - enemy.position[1], 0]} rotation={[-Math.PI / 2, 0, 0]} scale={ZOOGI_FX_SCALE}>
@@ -1780,27 +1741,15 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
       <group ref={meshRef} position={pos} visible={marbleIsShown(entity)}>
         <ZoogiModelSwitch zoogiId={entity.zoogi.id} hasShield={false} color={entity.zoogi.color} />
         <StatusLooks ricochet={entity.larsRicochetBoost > 1} bound={boundNow(entity)} />
-        <Html position={[0, 1.8, 0]} center style={{ pointerEvents: "none" }}>
-          <div
-            style={{
-              width: "30px",
-              height: "30px",
-              borderRadius: "50%",
-              backgroundColor: playerColors[playerIndex] || "#6366f1",
-              border: isMyTurn ? "3px solid #fbbf24" : "2px solid white",
-              boxShadow: isMyTurn ? "0 0 12px rgba(251, 191, 36, 0.6)" : "0 2px 8px rgba(0,0,0,0.4)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "white",
-              fontWeight: "bold",
-              fontSize: "13px",
-              textShadow: "0 1px 2px rgba(0,0,0,0.5)",
-            }}
-          >
-            P{playerIndex + 1}
-          </div>
-        </Html>
+        <MarbleNameplate
+          letter={`P${playerIndex + 1}`}
+          color={playerColors[playerIndex] || "#6366f1"}
+          border={isMyTurn ? "3px solid #fbbf24" : "2px solid white"}
+          size={30}
+          fontSize={13}
+          lift={1.8}
+          glow={isMyTurn}
+        />
       </group>
       
       {/* Invisible hitbox for drag interaction - disabled in first person, over shoulder, and birds eye views */}
