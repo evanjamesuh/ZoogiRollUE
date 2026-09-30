@@ -1,4 +1,5 @@
 import type { Server } from "node:http";
+import type { UserConfig, UserConfigExport } from "vite";
 
 export const VITE_HMR_PATH = "/vite-hmr";
 
@@ -18,4 +19,15 @@ export function viteMiddlewareOptions(httpServer: Server, port: number) {
       clientPort: port,
     },
   };
+}
+
+/**
+ * vite.config.ts exports `defineConfig(({ mode }) => ({ ... }))`, a function.
+ * The dev server passes `configFile: false`, so it must call that function
+ * itself. Spreading the function would drop root, plugins, and aliases.
+ */
+export async function resolveDevViteConfig(config: UserConfigExport): Promise<UserConfig> {
+  return typeof config === "function"
+    ? await config({ command: "serve", mode: "development" })
+    : await config;
 }

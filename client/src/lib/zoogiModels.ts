@@ -41,6 +41,30 @@ export function marbleUniformScale(marbleRadius: number, settings: ZoogiModelSet
   return (marbleRadius / reference) * settings.scale;
 }
 
+/**
+ * Scale used by the match model. Pivot fits (Nightshade) use marbleRadius /
+ * referenceRadius. Bounds fits make the mesh's longest side the marble diameter.
+ */
+export function fittedUniformScale(
+  settings: ZoogiModelSettings,
+  marbleRadius: number,
+  rawSize: { x: number; y: number; z: number },
+): number {
+  if (settings.fit === "pivot") return marbleUniformScale(marbleRadius, settings);
+  const maxDimension = Math.max(rawSize.x, rawSize.y, rawSize.z, 1e-4);
+  return ((marbleRadius * 2) / maxDimension) * settings.scale;
+}
+
+/** Axis-aligned size of the model after fittedUniformScale. */
+export function fittedBoxSize(
+  settings: ZoogiModelSettings,
+  marbleRadius: number,
+  rawSize: { x: number; y: number; z: number },
+): { x: number; y: number; z: number } {
+  const scale = fittedUniformScale(settings, marbleRadius, rawSize);
+  return { x: rawSize.x * scale, y: rawSize.y * scale, z: rawSize.z * scale };
+}
+
 function model(url: string): ZoogiModelSettings {
   return {
     url,

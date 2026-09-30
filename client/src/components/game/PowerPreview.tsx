@@ -10,6 +10,8 @@ import { AimBeam, BindRibbons, RicochetShell } from "@/vfx/powerLooks";
 import {
   ExplosionBlast,
   PowerUnlockFlash,
+  ShadowPulse,
+  ShadowWrap,
   StunBurst,
   StunnedIndicator,
   WolfCloneLook,
@@ -43,10 +45,12 @@ function PreviewCamera() {
       : undefined;
     if (aimed) focus.current.set(aimed[0], aimed[1], aimed[2]);
     else focus.current.set(0, 0.4, 0);
+    // A focused close-up sits near the marble so a stun wrap reads; the wide close shot stays back.
+    const tight = !!aimed;
     base.current.set(
       focus.current.x,
-      focus.current.y + (close ? 4.2 : 17.6),
-      focus.current.z + (close ? 6.6 : 15.6),
+      focus.current.y + (close ? (tight ? 1.55 : 4.2) : 17.6),
+      focus.current.z + (close ? (tight ? 2.35 : 6.6) : 15.6),
     );
     const shake = useGameFeel.getState().screenShake;
     let amp = 0;
@@ -106,7 +110,7 @@ function MovingClone({ angle, startTime }: { angle: number; startTime: number })
 
 interface Blast {
   id: number;
-  kind: "explosion" | "stun" | "unlock";
+  kind: "explosion" | "stun" | "unlock" | "shadow";
   position: Vec3;
   startTime: number;
 }
@@ -127,7 +131,9 @@ export function PowerPreview() {
   const playPowerUnlock = useAudio((state) => state.playPowerUnlock);
   const playRicochetPing = useAudio((state) => state.playRicochetPing);
   const playBindWrap = useAudio((state) => state.playBindWrap);
+  const playShadowPulse = useAudio((state) => state.playShadowPulse);
   const [blasts, setBlasts] = useState<Blast[]>([]);
+  const [shadowBinds, setShadowBinds] = useState<{ id: number; position: Vec3 }[]>([]);
   const [wolfStart, setWolfStart] = useState<number | null>(null);
   const [stun, setStun] = useState<StunClock | null>(null);
   const [shellOn, setShellOn] = useState(false);
@@ -148,7 +154,7 @@ export function PowerPreview() {
     const id = idRef.current++;
     const startTime = Date.now();
     setBlasts((prev) => [...prev, { id, kind, position, startTime }]);
-    const life = kind === "explosion" ? 16000 : 1200;
+    const life = kind === "explosion" ? 16000 : kind === "shadow" ? 2800 : 1200;
     window.setTimeout(() => {
       setBlasts((prev) => prev.filter((blast) => blast.id !== id));
     }, life);
@@ -216,6 +222,16 @@ export function PowerPreview() {
               />
             );
           }
+          if (blast.kind === "shadow") {
+            return (
+              <ShadowPulse
+                key={blast.id}
+                position={blast.position}
+                startTime={blast.startTime}
+                radius={4.5}
+              />
+            );
+          }
           return (
             <PowerUnlockFlash
               key={blast.id}
@@ -234,6 +250,11 @@ export function PowerPreview() {
             duration={stun.duration}
           />
         )}
+        {shadowBinds.map((bind) => (
+          <group key={bind.id} position={bind.position}>
+            <ShadowWrap />
+          </group>
+        ))}
         {wolfStart !== null && (
           <group key={wolfStart}>
             {[Math.PI / 2 - 0.9, Math.PI / 2, Math.PI / 2 + 0.9].map((angle) => (
@@ -278,6 +299,21 @@ export function PowerPreview() {
             playStunZap();
             pushBlast("stun", [0, 0, 0]);
             setStun({ id: idRef.current++, position: [2.6, 0.5, -1.8], duration: 2 });
+          }}
+        />
+        <PreviewButton
+          label="Shadow"
+          color="#6B46C1"
+          onClick={() => {
+            playShadowPulse();
+            pushBlast("shadow", [0, 0, 0]);
+            const id = idRef.current;
+            idRef.current += 2;
+            setShadowBinds([
+              { id, position: [2.6, 0.5, -1.8] },
+              { id: id + 1, position: [-3.1, 0.5, 1.6] },
+            ]);
+            window.setTimeout(() => setShadowBinds([]), 8000);
           }}
         />
         <PreviewButton

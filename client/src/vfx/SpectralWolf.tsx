@@ -251,6 +251,7 @@ export function SpectralWolf({
   useFrame(({ clock }, dt) => {
     const root = group.current;
     if (!root) return;
+    root.position.set(position[0], position[1], position[2]);
     const [vx, , vz] = velRef.current;
     if (Math.hypot(vx, vz) > 0.02) root.rotation.y = Math.atan2(vx, vz);
     root.getWorldPosition(lastWorld.current);

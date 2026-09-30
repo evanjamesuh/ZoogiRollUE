@@ -1,0 +1,39 @@
+# Files left out of the iPhone pack only.
+# The website build still copies these. One path per line, relative to client/public.
+# Meadow Arena loads textures/grass.png, so that file stays in the phone pack.
+textures/sand.jpg
+textures/sky.png
+textures/wood.jpg
+textures/asphalt.png
+geometries/heart.gltf
+textures/character_colors.png
+models/winter/penguin.glb
+models/character/socks.glb
+models/character/acc_pacifier.glb
+textures/orb_preview.png
+models/nightshade_display.glb
+textures/frozen_background.png
+textures/lava_background.png
+textures/meadows_skybox.png
+models/werewolf.glb
+models/ghost.glb
+models/zombie.glb
+models/troll.glb
+models/druid.glb
+models/squid.glb
+models/demon.glb
+models/platforms/props.glb
+models/wizard.glb
+textures/meadows_background.mp4
+textures/wraps-profile.png
+textures/cosmos_background.png
+models/orb.glb
+textures/cosmos_background.mp4
+models/battle_arena.glb
+models/daily_shrine.glb
+models/library_building.glb
+models/workshop.glb
+models/zoogi_town.glb
+models/work_shop.glb
+models/saturn_park_scene.glb
+models/floating_island_stage.glb

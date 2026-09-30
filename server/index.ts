@@ -8,10 +8,13 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { listenLogLines, resolveListenHost, resolveListenPort } from "./listen";
 import { applyPlayGate, attachPlayGateUpgradeGuard, readPlayPassword } from "./playGate";
+import { applyApiCors, readCorsOrigins, sessionCookieSameSite } from "./apiCors";
 
 const app = express();
 app.set("trust proxy", 1);
 const httpServer = createServer(app);
+const corsOrigins = readCorsOrigins();
+applyApiCors(app, corsOrigins);
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -44,7 +47,10 @@ app.use(
       secure: process.env.NODE_ENV === "production",
       httpOnly: true,
       maxAge: THIRTY_DAYS_MS,
-      sameSite: "lax",
+      sameSite: sessionCookieSameSite({
+        NODE_ENV: process.env.NODE_ENV,
+        API_CORS_ORIGIN: process.env.API_CORS_ORIGIN,
+      }),
     },
   })
 );
@@ -99,6 +105,9 @@ app.use((req, res, next) => {
   attachPlayGateUpgradeGuard(httpServer, playGate);
   if (playPassword) {
     log("Play password is on. Visitors must enter it before the game loads.");
+  }
+  if (corsOrigins.length > 0) {
+    log(`iPhone app may call this API from: ${corsOrigins.join(", ")}`);
   }
 
   if (!databaseConfigured) {

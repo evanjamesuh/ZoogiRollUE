@@ -1,5 +1,5 @@
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
-import { BUMPER_SCORE, KNOCKOUT_PENALTY, KNOCKOUT_SCORE_ORB, KNOCKOUT_SCORE_PLAYER, ZONE_SCORE_ORB } from "@/lib/arenaConstants";
+import { BUMPER_SCORE, KNOCKOUT_PENALTY, KNOCKOUT_SCORE_ORB, KNOCKOUT_SCORE_PLAYER } from "@/lib/arenaConstants";
 import { motion, AnimatePresence } from "framer-motion";
 import { Eye, EyeOff, Home, HelpCircle, Users, User, Zap, Crosshair, Star, Trophy, Coins, Info, X, Phone, Video, Move, Check, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, ChevronUp, ChevronDown, RotateCcw, RotateCw, Minus, Plus, Anchor, Download, ScanEye, Camera, Target, Lock, Flame, Package, MapPin, Palette } from "lucide-react";
 import { moveSelectedElementByArrows, confirmPlacements, rotateSelectedElement, snapToGround, getIncrement, setIncrement } from "./DeveloperMoveControls";
@@ -189,7 +189,7 @@ function modeRules(gameMode: string): { title: string; blurb: string } {
     return { title: "Ringer Royale", blurb: "Knock opponents out of the ring!" };
   }
   if (gameMode === "practice") {
-    return { title: "Marble Arena", blurb: "Knock orbs and opponents off the island." };
+    return { title: "Practice", blurb: "Knock orbs and opponents off the island." };
   }
   if (gameMode === "local_multiplayer") {
     return { title: "Local Match", blurb: "Take turns. Knock orbs and opponents off the island." };
@@ -374,6 +374,17 @@ function LaunchPadHeightControl() {
 
 export function GameUI() {
   const { playerEntity, enemies, score, orbs, currentRound, maxRounds, playerRoundWins, isPlayerTurn, birdsEyeView, toggleBirdsEyeView, firstPersonView, toggleFirstPersonView, overShoulderView, toggleOverShoulderView, launchPadView, toggleLaunchPadView, setPhase, gameTimer, openTutorial, gameMode, localPlayers, currentLocalPlayerIndex, activateWolfgangAbility, canUseWolfgangAbility, activateHotstreakAbility, canUseHotstreakAbility, activateBoltAbility, canUseBoltAbility, lockOnEnabled, toggleLockOn, sessionId, arcType, setArcType, straightMode, toggleStraightMode, tangentOffset, setTangentOffset, lockOnTargetId, triggerArcLaunch, orbMultiplier, incrementOrbMultiplier, decrementOrbMultiplier, restrictionPhaseActive, restrictionPhaseStartTime } = useZoogiGame();
+  const [matchClock, setMatchClock] = useState(gameTimer);
+  useEffect(() => {
+    setMatchClock(gameTimer);
+  }, [gameTimer]);
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const next = useZoogiGame.getState().gameTimer;
+      setMatchClock((prev) => (Math.abs(prev - next) < 0.2 ? prev : next));
+    }, 250);
+    return () => window.clearInterval(id);
+  }, []);
   const selectedMap = useZoogiGame((state) => state.selectedMap);
   const showCollisionTuningPanel = useZoogiGame((state) => state.showCollisionTuningPanel);
   const setShowCollisionTuningPanel = useZoogiGame((state) => state.setShowCollisionTuningPanel);
@@ -773,10 +784,10 @@ export function GameUI() {
 
   const activeOrbs = orbs.filter(o => o.isActive).length;
   
-  const minutes = Math.floor(gameTimer / 60);
-  const seconds = Math.floor(gameTimer % 60);
+  const minutes = Math.floor(matchClock / 60);
+  const seconds = Math.floor(matchClock % 60);
   const timerDisplay = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-  const timerColor = gameTimer <= 60 ? "text-red-400" : gameTimer <= 180 ? "text-yellow-400" : "text-white";
+  const timerColor = matchClock <= 60 ? "text-red-400" : matchClock <= 180 ? "text-yellow-400" : "text-white";
   
   const wallOwnershipMode = useZoogiGame(state => state.wallOwnershipMode);
   const ownershipScores = useZoogiGame(state => state.ownershipScores);
@@ -1156,7 +1167,6 @@ export function GameUI() {
               <p>Orb knock-off: <span className="text-yellow-400">+{KNOCKOUT_SCORE_ORB}</span></p>
               <p>Opponent knock-off: <span className="text-yellow-400">+{KNOCKOUT_SCORE_PLAYER}</span></p>
               <p>Bumper touch: <span className="text-yellow-400">+{BUMPER_SCORE}</span></p>
-              <p>Score zone: <span className="text-yellow-400">+{ZONE_SCORE_ORB}</span></p>
               <p>Fall off the island: <span className="text-red-400">-{KNOCKOUT_PENALTY}</span></p>
             </div>
           </div>

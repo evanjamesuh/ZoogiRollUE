@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { arenaScaleFor } from "./mapDefaultConfigs.ts";
 import {
   ARABIAN_STAGE,
   BUMPER_RADIUS,
@@ -70,8 +71,8 @@ test("every map keeps goals, spawns, and orbs off the solids", () => {
       );
       assert.equal(hit, null, `${id} orb ${i} overlaps a solid`);
     }
-    if (id === "tomb") {
-      assert.equal(layout.knockoffRadius, layout.floorRadius, "tomb knockoff is the sandstone edge");
+    if (id === "tomb" || id === "space") {
+      assert.equal(layout.knockoffRadius, layout.floorRadius, `${id} knockoff is the drawn edge`);
     } else {
       assert.ok(layout.knockoffRadius > layout.floorRadius);
     }
@@ -156,11 +157,13 @@ test("fitted stages keep the knockoff on the measured floor", () => {
   assert.ok(saturn);
   assert.ok(lava);
   assert.ok(grass);
-  assert.ok(space.floorRadius > 14 && space.floorRadius < space.knockoffRadius);
-  assert.ok(Math.abs(space.knockoffRadius - 15.6) < 0.02, "cosmic out line is the inner face of the lip");
+  const spaceScale = arenaScaleFor("space");
+  const grassScale = arenaScaleFor("grass");
+  assert.equal(space.floorRadius, space.knockoffRadius, "cosmic floor lip is the knockout");
+  assert.ok(Math.abs(space.knockoffRadius - 15.6 * spaceScale) < 0.02, "cosmic lip stays on the 15.6 knockout");
   assert.deepEqual(ARABIAN_STAGE.plazaCenter, [0, 0]);
-  assert.ok(Math.abs(saturn.knockoffRadius - 15.5) < 0.02, "arabian plaza circle sits on the origin");
-  assert.ok(saturn.knockoffRadius - saturn.floorRadius < 0.6, "fallback disk ends at the out line");
+  assert.ok(Math.abs(saturn.knockoffRadius - 15.5 * arenaScaleFor("saturn")) < 0.02, "arabian plaza circle sits on the origin");
+  assert.ok(saturn.knockoffRadius - saturn.floorRadius < 0.6 * arenaScaleFor("saturn"), "fallback disk ends at the out line");
   const placed = arabianPlayTransform();
   assert.ok(Math.abs(placed.x - 315.12) < 0.05, "courtyard centred on x");
   assert.ok(Math.abs(placed.y + 267.168) < 0.05, "floor sits on y=0");
@@ -169,14 +172,15 @@ test("fitted stages keep the knockoff on the measured floor", () => {
   for (const hoodoo of lava.scenery) {
     assert.ok(hoodoo.radius <= 0.25 * 2.8 + 1e-6, `${hoodoo.id} is trimmed to the stone`);
     assert.ok(hoodoo.radius >= 0.25 * 2 - 1e-6, `${hoodoo.id} radius`);
+    assert.ok(Math.hypot(hoodoo.x, hoodoo.z) >= 10 * arenaScaleFor("lava") - 1e-6, `${hoodoo.id} moved out`);
   }
-  assert.equal(grass.floorRadius, 15.2);
-  assert.equal(grass.knockoffRadius, 15.5);
+  assert.equal(grass.floorRadius, 15.2 * grassScale);
+  assert.equal(grass.knockoffRadius, 15.5 * grassScale);
   assert.equal(grass.scenery.length, 6);
   for (const rock of grass.scenery) {
     assert.equal(rock.kind, "rock");
     assert.ok(rock.radius >= 1 && rock.radius <= 1.25, `${rock.id} matches the drawn boulder or stump`);
-    assert.ok(Math.hypot(rock.x, rock.z) - rock.radius >= 11, `${rock.id} sits in the middle`);
+    assert.ok(Math.hypot(rock.x, rock.z) - rock.radius >= 11 * grassScale, `${rock.id} sits in the middle`);
   }
 });
 
@@ -199,7 +203,7 @@ test("frozen ring camp props stay scenery even after the winter mesh mounts", ()
   assert.equal(live.some((solid) => solid.id.startsWith("box-")), false);
   for (const solid of live) {
     const inner = Math.hypot(solid.x, solid.z) - solid.radius;
-    assert.ok(inner >= 11, `${solid.id} sits in the central play area`);
+    assert.ok(inner >= 11 * arenaScaleFor("ice"), `${solid.id} sits in the central play area`);
   }
   setWinterCampActive(false);
 });
@@ -276,9 +280,10 @@ const PR9_LAYOUTS: Record<string, { knockoffRadius: number; scenery: number; zon
 
 test("existing maps keep the PR #9 knockoff, zones, and scenery count", () => {
   for (const [id, expected] of Object.entries(PR9_LAYOUTS)) {
+    const scale = arenaScaleFor(id);
     const layout = getMapLayout(id);
     assert.ok(layout, id);
-    assert.equal(layout.knockoffRadius, expected.knockoffRadius, id);
+    assert.ok(Math.abs(layout.knockoffRadius - expected.knockoffRadius * scale) < 1e-6, id);
     assert.equal(layout.scenery.length, expected.scenery, id);
     assert.equal(layout.zones.length, expected.zones.length, id);
     expected.zones.forEach((zone, i) => {
@@ -286,7 +291,7 @@ test("existing maps keep the PR #9 knockoff, zones, and scenery count", () => {
       assert.ok(actual, `${id} zone ${i}`);
       assert.equal(actual.id, zone.id);
       assert.ok(Math.abs(actual.angle - zone.angle) < 1e-9, `${id} ${zone.id} angle`);
-      assert.equal(actual.distance, zone.distance);
+      assert.ok(Math.abs(actual.distance - zone.distance * scale) < 1e-6, `${id} ${zone.id} distance`);
       assert.equal(actual.isSpawn, zone.isSpawn);
     });
   }
@@ -310,9 +315,10 @@ test("pharaoh's tomb is a centred sandstone ring with matching rim blocks", () =
     const solid = layout.scenery.find((item) => item.id === block.id);
     assert.ok(solid, block.id);
     assert.equal(solid.kind, "rock");
-    assert.equal(solid.radius, block.radius);
-    assert.ok(Math.abs(solid.x - block.x) < 1e-9);
-    assert.ok(Math.abs(solid.z - block.z) < 1e-9);
+    assert.equal(solid.radius, block.radius, `${block.id} keeps its authored size`);
+    const gap = layout.knockoffRadius - Math.hypot(solid.x, solid.z) - solid.radius;
+    const widths = gap / (MARBLE_RADIUS * 2);
+    assert.ok(widths < 0.4 || widths >= 1.7, `${block.id} rim gap ${widths.toFixed(3)} marble widths`);
     assert.ok(Math.hypot(solid.x, solid.z) + solid.radius <= layout.knockoffRadius + 1e-6, `${block.id} crosses the edge`);
   }
   for (const piece of getTombBackdrop()) {

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createSpritePool } from "./pool.ts";
 import { mulberry32 } from "./random.ts";
-import { seedBlastEmbers, seedBlastFire, seedBlastSmoke, seedBurstSparks, seedDustPuff, stepDust, stepEmbers, stepFire, stepGlints, stepSmoke } from "./sim.ts";
+import { seedBlastEmbers, seedBlastFire, seedBlastSmoke, seedBurstSparks, seedDustPuff, seedShadowSuck, seedShadowWave, stepDust, stepEmbers, stepFire, stepGlints, stepShadowSuck, stepShadowWave, stepSmoke } from "./sim.ts";
 
 test("blast particles stay pooled, smoke rises, and embers cool", () => {
   const smoke = createSpritePool(28);
@@ -53,6 +53,48 @@ test("grenade-sized blasts use the same sim at a smaller radius", () => {
     const dist = Math.hypot(embers.px[i], embers.pz[i]);
     assert.ok(dist < 4 * 1.2, `ember traveled ${dist}`);
   }
+});
+
+test("shadow smoke pulls inward, then the wave stops on the stun radius", () => {
+  const suck = createSpritePool(18);
+  const wave = createSpritePool(28);
+  seedShadowSuck(suck, mulberry32(3), 12);
+  seedShadowWave(wave, 4.5, mulberry32(5), 20);
+  assert.equal(suck.px.length, 18);
+  assert.equal(wave.px.length, 28);
+  assert.ok(wave.alive >= 16);
+  let startDist = 0;
+  let suckCount = 0;
+  for (let i = 0; i < suck.capacity; i++) {
+    if (suck.active[i] === 0) continue;
+    startDist += Math.hypot(suck.px[i], suck.pz[i]);
+    suckCount += 1;
+  }
+  for (let frame = 0; frame < 10; frame++) stepShadowSuck(suck, frame / 60, 1 / 60);
+  let later = 0;
+  let still = 0;
+  for (let i = 0; i < suck.capacity; i++) {
+    if (suck.active[i] === 0) continue;
+    later += Math.hypot(suck.px[i], suck.pz[i]);
+    still += 1;
+  }
+  assert.ok(still > 0);
+  assert.ok(later / still < startDist / suckCount, "wisps should be pulled inward");
+
+  for (let frame = 0; frame < 90; frame++) stepShadowWave(wave, 4.5, frame / 60, 1 / 60);
+  let seen = 0;
+  let farthest = 0;
+  for (let i = 0; i < wave.capacity; i++) {
+    if (wave.active[i] === 0) continue;
+    seen += 1;
+    const edge = Math.hypot(wave.px[i], wave.pz[i]) + wave.size[i] * 0.5;
+    farthest = Math.max(farthest, edge);
+    assert.ok(edge <= 4.5 + 1e-3, `wave edge ${edge} passed 4.5`);
+    assert.ok(wave.py[i] < 1.15, "the wave stays on the ground");
+    assert.ok(wave.b[i] > wave.g[i], "smoke stays inky purple");
+  }
+  assert.ok(seen > 0);
+  assert.ok(farthest > 4, `front ${farthest} should reach the gameplay radius`);
 });
 
 test("impact sparks and dust stay inside their pools", () => {
