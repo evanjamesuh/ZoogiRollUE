@@ -15,6 +15,7 @@ import { getMapLayout } from "@/lib/arenaColliders";
 import { AI_LAUNCH_DELAY, launchPlanarVelocity, launchSpeedForPull, MAX_LAUNCH_SPEED } from "@/lib/simFeel";
 import { triggerLaunchCameraEffect, clearAimCameraEffect } from "@/lib/stores/useCameraEffects";
 import { getSkinEffect, getRainbowColor } from "@/lib/skinEffects";
+import { useMatchWorldLabelsHidden } from "@/lib/matchLoader";
 import { StunnedIndicator } from "./PowerEffects";
 import { useShadowBound } from "@/vfx/shadowMarks";
 import { AimBeam, AimPath, BindRibbons, Glint, RicochetShell, type Vec3 } from "@/vfx/powerLooks";
@@ -362,6 +363,7 @@ export function PlayerZoogi() {
   } = useZoogiGame();
   const { camera, gl } = useThree();
   const { playSound } = useAudio();
+  const hideWorldLabels = useMatchWorldLabelsHidden();
   
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<[number, number]>([0, 0]);
@@ -863,7 +865,7 @@ export function PlayerZoogi() {
       </group>
       
       {/* Floating player icon */}
-      {!firstPersonView && !playerEntity.isKnockedOut && !playerEntity.isRespawning && (
+      {!hideWorldLabels && !firstPersonView && !playerEntity.isKnockedOut && !playerEntity.isRespawning && (
         <Html
           position={[pos[0], pos[1] + 3.2, pos[2]]}
           center
@@ -949,7 +951,7 @@ export function PlayerZoogi() {
             <ringGeometry args={[0.6, 0.8, 32]} />
             <meshBasicMaterial color="#3B82F6" transparent opacity={0.5} />
           </mesh>
-          {dragPower > 0.1 && (
+          {!hideWorldLabels && dragPower > 0.1 && (
             <Html
               position={[pos[0] + launchDx * 0.5, 1.5, pos[2] + launchDz * 0.5]}
               center
@@ -1000,6 +1002,7 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
   
   const { enemies, isPlayerTurn, turnIndex, currentRound, playerEntity, orbs, updateEnemy, endTurn, setMovementStopped, spawnWolfClones, gameMode, lockOnEnabled, lockOnTargetId, setLockOnTarget, aiControls } = useZoogiGame();
   
+  const hideWorldLabels = useMatchWorldLabelsHidden();
   const enemy = enemies.find(e => e.id === entityId);
   const myIndex = enemies.findIndex(e => e.id === entityId);
   const isFreeForAll = gameMode === "ringer_royale";
@@ -1404,7 +1407,7 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
       <group ref={meshRef} position={enemy.position} onClick={handleClick} visible={marbleIsShown(enemy)}>
         <ZoogiModelSwitch zoogiId={enemy.zoogi.id} hasShield={false} hasSpawnImmunity={enemy.spawnImmunity} color={enemy.zoogi.color} />
         <StatusLooks ricochet={enemy.larsRicochetBoost > 1} bound={boundNow(enemy)} />
-        {!enemy.isKnockedOut && !enemy.isRespawning && (
+        {!hideWorldLabels && !enemy.isKnockedOut && !enemy.isRespawning && (
         <Html position={[0, 3.2, 0]} center style={{ pointerEvents: "none" }}>
           <div
             style={{
@@ -1445,7 +1448,6 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
         )}
       </group>
 
-      
       {isLockedOn && (
         <Glint
           position={[enemy.position[0], enemy.position[1] + 0.2, enemy.position[2]]}
@@ -1486,6 +1488,7 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
     setIsAiming
   } = useZoogiGame();
   const { camera, gl } = useThree();
+  const hideWorldLabels = useMatchWorldLabelsHidden();
   
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState<[number, number]>([0, 0]);
@@ -1780,6 +1783,7 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
       <group ref={meshRef} position={pos} visible={marbleIsShown(entity)}>
         <ZoogiModelSwitch zoogiId={entity.zoogi.id} hasShield={false} color={entity.zoogi.color} />
         <StatusLooks ricochet={entity.larsRicochetBoost > 1} bound={boundNow(entity)} />
+        {!hideWorldLabels && (
         <Html position={[0, 1.8, 0]} center style={{ pointerEvents: "none" }}>
           <div
             style={{
@@ -1801,6 +1805,7 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
             P{playerIndex + 1}
           </div>
         </Html>
+        )}
       </group>
       
       {/* Invisible hitbox for drag interaction - disabled in first person, over shoulder, and birds eye views */}
