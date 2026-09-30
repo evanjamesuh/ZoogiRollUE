@@ -6,6 +6,7 @@ import { clearSpritePool, createSpritePool } from "./pool";
 import { mulberry32 } from "./random";
 import { seedBurstSparks, seedDustPuff, stepDust, stepGlints } from "./sim";
 import { usePlayedClock } from "./bursts";
+import { ZOOGI_FX_SCALE } from "@/lib/restHeight";
 
 export type ImpactKind = "spark" | "dust" | "electric";
 
@@ -64,7 +65,7 @@ function ImpactBurst({ impact }: { impact: ImpactEvent }) {
     } else if (electric) {
       seedBurstSparks(sparks, rand, 10, [0.75, 0.9, 1], [0, 1, 0]);
     } else {
-      seedBurstSparks(sparks, rand, 26, [1.55, 1.15, 0.55], impact.dir, 3.4);
+      seedBurstSparks(sparks, rand, 26, [1.55, 1.15, 0.55], impact.dir, 3.4 * ZOOGI_FX_SCALE);
       seedDustPuff(dust, rand, 5);
     }
     return () => {

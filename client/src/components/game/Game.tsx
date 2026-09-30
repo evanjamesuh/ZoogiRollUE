@@ -273,8 +273,8 @@ export function Game() {
           far: 1000
         }}
         gl={{
-          antialias: !graphics.mobile,
-          powerPreference: "default",
+          antialias: false,
+          powerPreference: "high-performance",
           toneMapping: THREE.ACESFilmicToneMapping,
           toneMappingExposure: 1.0,
           outputColorSpace: THREE.SRGBColorSpace

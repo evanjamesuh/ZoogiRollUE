@@ -83,11 +83,11 @@ function FallbackHoodoo({ hoodoo }: { hoodoo: HoodooData }) {
   return (
     <group position={hoodoo.position} scale={hoodoo.scale}>
       <mesh position={[0, 0.8, 0]} castShadow>
-        <cylinderGeometry args={[0.3, 0.5, 1.6, 8]} />
+        <cylinderGeometry args={[0.25, 0.25, 1.6, 8]} />
         <meshStandardMaterial color="#CD853F" roughness={0.9} />
       </mesh>
       <mesh position={[0, 2.0, 0]} castShadow>
-        <cylinderGeometry args={[0.6, 0.3, 0.8, 8]} />
+        <cylinderGeometry args={[0.25, 0.25, 0.8, 8]} />
         <meshStandardMaterial color="#D2691E" roughness={0.9} />
       </mesh>
     </group>
@@ -122,5 +122,3 @@ export function getHoodooPositions(): { position: [number, number, number]; radi
     radius: hoodoo.radius,
   }));
 }
-
-useGLTF.preload("/models/stylized_desert_hoodoo.glb");

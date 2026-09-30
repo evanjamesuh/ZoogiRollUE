@@ -1,7 +1,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { collectMatchSolids, getMapLayout, getWinterCampVersion, subscribeWinterCamp, type SolidKind } from "@/lib/arenaColliders";
-import { NEON_HALF_X, NEON_HALF_Z, neonObstacles, neonRails } from "@/lib/neonCourt";
+import { neonObstacles, neonPlayHalfX, neonPlayHalfZ, neonRails } from "@/lib/neonCourt";
 
 const KIND_COLOR: Record<SolidKind, string> = {
   bumper: "#ff00ff",
@@ -88,20 +88,20 @@ export function ColliderDebug() {
       ))}
       {selectedMap === "neon" && (
         <group position={[knockoffOffset?.x ?? 0, 0.14, knockoffOffset?.z ?? 0]}>
-          <mesh position={[0, 0, NEON_HALF_Z]}>
-            <boxGeometry args={[NEON_HALF_X * 2, 0.04, 0.08]} />
+          <mesh position={[0, 0, neonPlayHalfZ()]}>
+            <boxGeometry args={[neonPlayHalfX() * 2, 0.04, 0.08]} />
             <meshBasicMaterial color="#ffffff" wireframe />
           </mesh>
-          <mesh position={[0, 0, -NEON_HALF_Z]}>
-            <boxGeometry args={[NEON_HALF_X * 2, 0.04, 0.08]} />
+          <mesh position={[0, 0, -neonPlayHalfZ()]}>
+            <boxGeometry args={[neonPlayHalfX() * 2, 0.04, 0.08]} />
             <meshBasicMaterial color="#ffffff" wireframe />
           </mesh>
-          <mesh position={[NEON_HALF_X, 0, 0]}>
-            <boxGeometry args={[0.08, 0.04, NEON_HALF_Z * 2]} />
+          <mesh position={[neonPlayHalfX(), 0, 0]}>
+            <boxGeometry args={[0.08, 0.04, neonPlayHalfZ() * 2]} />
             <meshBasicMaterial color="#ffffff" wireframe />
           </mesh>
-          <mesh position={[-NEON_HALF_X, 0, 0]}>
-            <boxGeometry args={[0.08, 0.04, NEON_HALF_Z * 2]} />
+          <mesh position={[-neonPlayHalfX(), 0, 0]}>
+            <boxGeometry args={[0.08, 0.04, neonPlayHalfZ() * 2]} />
             <meshBasicMaterial color="#ffffff" wireframe />
           </mesh>
         </group>

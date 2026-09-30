@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo } from "react";
 import { Trophy, Crown, Medal, Calendar, Star, Flame, Clock, Users, ChevronRight, Sparkles } from "lucide-react";
 import { useAuth } from "@/lib/stores/useAuth";
 import { getSpotlightZoogi, getTimeRemaining as getSpotlightTimeRemaining, ZOOGI_LORE, getRarityColor, getRarityGradient } from "@/components/game/ZoogiSpotlight";
+import { OnlineNotice } from "@/components/ui/OnlineNotice";
+import { useOnlineMessage } from "@/lib/serverStatus";
 
 interface LeaderboardEntry {
   id: number;
@@ -39,6 +41,7 @@ interface EnhancedLeaderboardProps {
 
 export function EnhancedLeaderboard({ onClose }: EnhancedLeaderboardProps) {
   const { user } = useAuth();
+  const onlineMessage = useOnlineMessage();
   const [activeTab, setActiveTab] = useState<LeaderboardTab>("all-time");
   const [allTimeEntries, setAllTimeEntries] = useState<LeaderboardEntry[]>([]);
   const [weeklyEntries, setWeeklyEntries] = useState<LeaderboardEntry[]>([]);
@@ -268,10 +271,14 @@ export function EnhancedLeaderboard({ onClose }: EnhancedLeaderboardProps) {
               {((activeTab === "all-time" && allTimeEntries.length === 0) ||
                 (activeTab === "weekly" && weeklyEntries.length === 0) ||
                 (activeTab === "seasonal" && seasonalEntries.length === 0)) && (
-                <div className="text-center py-12 text-white/50">
-                  <Trophy className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                  <p>No scores yet. Be the first!</p>
-                </div>
+                onlineMessage ? (
+                  <OnlineNotice />
+                ) : (
+                  <div className="text-center py-12 text-white/50">
+                    <Trophy className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <p>No scores yet. Be the first!</p>
+                  </div>
+                )
               )}
             </div>
           )}

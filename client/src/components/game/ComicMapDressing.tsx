@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { Component, ReactNode, Suspense, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
+import { getMapLayout } from "@/lib/arenaColliders";
 
 const GLOW_URL = "/textures/comic/glow_orange.png";
 
@@ -169,6 +170,7 @@ function EmberField() {
 
 function LavaMoat() {
   const ref = useRef<THREE.Mesh>(null);
+  const inner = (getMapLayout("lava")?.knockoffRadius ?? 18.6) + 0.1;
   useFrame((state) => {
     const mat = ref.current?.material;
     if (mat && !Array.isArray(mat) && mat instanceof THREE.MeshStandardMaterial) {
@@ -177,7 +179,7 @@ function LavaMoat() {
   });
   return (
     <mesh ref={ref} rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.06, 0]}>
-      <ringGeometry args={[18.7, 24.5, 72]} />
+      <ringGeometry args={[inner, inner + 5.8, 72]} />
       <meshStandardMaterial color="#ff5a12" emissive="#ff4a00" emissiveIntensity={1.15} roughness={0.45} metalness={0.05} />
     </mesh>
   );
@@ -247,9 +249,10 @@ function VolcanicPitModel() {
     const fitted = new THREE.Box3().setFromObject(cloned);
     const center = new THREE.Vector3();
     fitted.getCenter(center);
-    // Nearest face sits just past the 18.6 knockoff so the pit reads in the
+    // Nearest face sits just past the knockoff so the pit reads in the
     // gameplay and birds-eye cameras, while every point stays outside the ring.
-    const nearZ = -(18.6 + 4);
+    const knockoff = getMapLayout("lava")?.knockoffRadius ?? 18.6;
+    const nearZ = -(knockoff + 4);
     cloned.position.set(-center.x, -fitted.min.y, nearZ - fitted.max.z);
   }, [cloned]);
 

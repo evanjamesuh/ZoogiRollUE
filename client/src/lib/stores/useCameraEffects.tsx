@@ -188,9 +188,7 @@ export const KNOCKOFF_CAMERA_HOOK: AbilityCameraHook = {
     zoom: 18,
     tilt: 15,
     shake: 0.4,
-    timeScale: 0.3,
     lockTarget: "falling",
-    freezeFrame: 0.15
   }
 };
 
@@ -200,7 +198,6 @@ export const COLLISION_CAMERA_HOOK: AbilityCameraHook = {
   effects: {
     zoom: -3,
     shake: 0.3,
-    timeScale: 0.8
   }
 };
 

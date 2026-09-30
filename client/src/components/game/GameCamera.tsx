@@ -17,6 +17,9 @@ import {
   smoothShake,
 } from "@/lib/cameraRig";
 import * as THREE from "three";
+import { arenaScaleFor } from "@/lib/mapDefaultConfigs";
+import { getMapLayout } from "@/lib/arenaColliders";
+import { neonPlayHalfX, neonPlayHalfZ } from "@/lib/neonCourt";
 
 export function DeveloperCamera() {
   const developerDragActive = useZoogiGame((state) => state.developerDragActive);
@@ -451,22 +454,43 @@ export function GameCamera() {
         persp.fov = ARENA_FOV_DEG;
         persp.updateProjectionMatrix();
       }
+      const onCourt = (entity: { isKnockedOut?: boolean; isRespawning?: boolean }) =>
+        !entity.isKnockedOut && !entity.isRespawning;
       const points = [
-        { x: playerEntity.position[0], z: playerEntity.position[2] },
-        ...enemies.map((enemy) => ({ x: enemy.position[0], z: enemy.position[2] })),
+        ...(onCourt(playerEntity) ? [{ x: playerEntity.position[0], z: playerEntity.position[2] }] : []),
+        ...enemies.filter(onCourt).map((enemy) => ({ x: enemy.position[0], z: enemy.position[2] })),
       ];
       const aspect = size.width / Math.max(1, size.height);
       const neonCourt = selectedMap === "neon";
+      const frameScale = arenaScaleFor(selectedMap);
+      if (neonCourt) {
+        const halfX = neonPlayHalfX();
+        const halfZ = neonPlayHalfZ();
+        points.push(
+          { x: halfX, z: halfZ },
+          { x: halfX, z: -halfZ },
+          { x: -halfX, z: halfZ },
+          { x: -halfX, z: -halfZ },
+        );
+      } else {
+        const ring = getMapLayout(selectedMap)?.floorRadius ?? 18 * frameScale;
+        points.push(
+          { x: ring, z: ring },
+          { x: ring, z: -ring },
+          { x: -ring, z: ring },
+          { x: -ring, z: -ring },
+        );
+      }
       // Night Circuit sits a little farther back and aims slightly toward the
       // far bowl so the stands and skyline clear the top of the frame.
-      const pad = (aspect < 0.9 ? 1.3 : 2.6) + (neonCourt ? 1.6 : 0);
+      const pad = ((aspect < 0.9 ? 1.3 : 2.6) + (neonCourt ? 1.6 : 0)) * frameScale;
       const bounds = actionBounds(points, 0);
       const lookX = ((bounds.minX + bounds.maxX) / 2) * 0.7;
-      const lookZ = ((bounds.minZ + bounds.maxZ) / 2) * 0.7 + (neonCourt ? -3.5 : 0);
+      const lookZ = ((bounds.minZ + bounds.maxZ) / 2) * 0.7 + (neonCourt ? -3.5 * frameScale : 0);
       const distance = clampDistance(
         fitDistance(bounds, ARENA_PITCH, ARENA_FOV_DEG, aspect, pad) * zoomNudge,
-        neonCourt ? 19 : 13.5,
-        34,
+        (neonCourt ? 19 : 13.5) * frameScale,
+        34 * frameScale,
       );
       const offset = cameraOffset(distance, ARENA_PITCH);
       idealCameraPos = new THREE.Vector3(lookX + offset.x, offset.y, lookZ + offset.z);
