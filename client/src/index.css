@@ -206,6 +206,13 @@
   position: fixed;
 }
 
+.menu-safe {
+  padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
+  padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
+  padding-bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+  padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+}
+
 canvas {
   width: 100% !important;
   height: 100% !important;

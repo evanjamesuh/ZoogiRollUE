@@ -1127,17 +1127,6 @@ test("an off-screen star burst anchors on the unlocking marble", async () => {
   assert.deepEqual(resolveUnlockSpot(exit, null, false), exit);
 });
 
-test("practice mode places star orbs", async () => {
-  const { useZoogiGame, ZOOGI_ROSTER } = await loadGame();
-  useZoogiGame.getState().selectZoogi(ZOOGI_ROSTER[0]);
-  useZoogiGame.setState({ orbMultiplier: 1, selectedCustomZoogi: null });
-  useZoogiGame.getState().startPracticeGame();
-  const stars = useZoogiGame.getState().orbs.filter((orb) => orb.isStarOrb);
-  assert.equal(stars.length, 3, "practice should include the same three star orbs as a classic match");
-  const kinds = new Set(stars.map((orb) => orb.starOrbType));
-  assert.equal(kinds.size, 3);
-});
-
 test("a launched flick ends the turn when the marble stops, even if no render saw the slowdown", async () => {
   await new Promise((resolve) => setTimeout(resolve, 500));
   const useZoogiGame = await playingMarble();

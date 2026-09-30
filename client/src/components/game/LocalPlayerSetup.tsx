@@ -1,7 +1,9 @@
 import { useZoogiGame, ZOOGI_ROSTER, Zoogi, LocalPlayer } from "@/lib/stores/useZoogiGame";
-import { motion, AnimatePresence } from "framer-motion";
-import { useState, useEffect } from "react";
-import { ArrowLeft, Users, Check, ChevronLeft, ChevronRight } from "lucide-react";
+import { motion } from "framer-motion";
+import { useState, useEffect, useCallback } from "react";
+import { Check, ChevronLeft, ChevronRight } from "lucide-react";
+import { useMenuKeys } from "@/hooks/useMenuKeys";
+import { returnToMenuScreen } from "@/lib/menuReturn";
 
 const PORTRAIT_IMAGES: Record<string, string> = {
   wolfgang: "/portraits/wolfgang.png",
@@ -57,7 +59,7 @@ function ZoogiCard({
           }}
         />
       )}
-      <h3 className="text-white font-bold text-center text-sm">{zoogi.name}</h3>
+      <h3 className="w-full truncate text-center text-xs font-bold text-white sm:text-sm">{zoogi.name}</h3>
       
       {isSelected && (
         <motion.div
@@ -108,7 +110,7 @@ function PlayerSetupCard({
           type="text"
           value={player.name}
           onChange={(e) => onNameChange(e.target.value)}
-          className="flex-1 bg-white/10 text-white px-3 py-2 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-yellow-400"
+          className="min-h-11 flex-1 rounded-lg bg-white/10 px-3 py-2 text-sm font-medium text-white focus:outline-none focus:ring-2 focus:ring-yellow-400"
           placeholder={`Player ${playerIndex + 1}`}
         />
       </div>
@@ -117,7 +119,7 @@ function PlayerSetupCard({
         <motion.div
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: "auto" }}
-          className="grid grid-cols-5 gap-2"
+          className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-7"
         >
           {ZOOGI_ROSTER.map((zoogi) => (
             <ZoogiCard
@@ -207,56 +209,64 @@ export function LocalPlayerSetup() {
     }
   };
   
-  const handleStartGame = () => {
-    if (allPlayersReady) {
-      useZoogiGame.getState().setGameMode("local_multiplayer");
-      setPhase("map_selection");
-    }
-  };
+  const goBack = useCallback(() => {
+    returnToMenuScreen("play");
+    setPhase("menu");
+  }, [setPhase]);
+
+  const handleStartGame = useCallback(() => {
+    if (!allPlayersReady) return;
+    useZoogiGame.getState().setGameMode("local_multiplayer");
+    setPhase("map_selection");
+  }, [allPlayersReady, setPhase]);
+
+  useMenuKeys({ onBack: goBack, onConfirm: handleStartGame });
 
   return (
-    <div className="fixed inset-0 flex flex-col overflow-hidden">
-      <div className="relative z-10 p-4 flex items-center gap-4">
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => setPhase("menu")}
-          className="p-2 bg-white/10 rounded-full hover:bg-white/20"
+    <div className="menu-safe fixed inset-0 flex flex-col overflow-hidden" data-testid="local-setup">
+      <div className="relative z-10 flex items-center gap-3 pb-3">
+        <button
+          type="button"
+          onClick={goBack}
+          className="inline-flex min-h-11 items-center gap-1 rounded-full bg-white/10 px-4 font-semibold text-white hover:bg-white/20"
         >
-          <ArrowLeft size={24} className="text-white" />
-        </motion.button>
+          <ChevronLeft size={20} />
+          Back
+        </button>
         
-        <div className="flex items-center gap-2">
-          <Users className="text-blue-400" size={28} />
-          <h1 className="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">
-            Local Multiplayer
+        <div className="min-w-0">
+          <h1 className="bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-2xl font-bold text-transparent md:text-3xl">
+            Choose Your Zoogis
           </h1>
+          <p className="text-sm text-white/60">Local multiplayer on this device</p>
         </div>
       </div>
 
-      <div className="relative z-10 px-4 mb-4">
-        <div className="flex items-center justify-center gap-4 bg-black/30 rounded-xl p-3">
+      <div className="relative z-10 mb-4">
+        <div className="mx-auto flex max-w-md items-center justify-center gap-4 rounded-xl bg-black/30 p-3">
           <span className="text-white/70">Players:</span>
           <button
             onClick={() => handlePlayerCountChange(-1)}
             disabled={localPlayerCount <= 2}
-            className="p-2 bg-white/10 rounded-full hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed"
+            aria-label="Fewer players"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-30"
           >
             <ChevronLeft size={20} className="text-white" />
           </button>
-          <span className="text-white font-bold text-2xl w-8 text-center">{localPlayerCount}</span>
+          <span className="w-8 text-center text-2xl font-bold text-white">{localPlayerCount}</span>
           <button
             onClick={() => handlePlayerCountChange(1)}
             disabled={localPlayerCount >= 4}
-            className="p-2 bg-white/10 rounded-full hover:bg-white/20 disabled:opacity-30 disabled:cursor-not-allowed"
+            aria-label="More players"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-30"
           >
             <ChevronRight size={20} className="text-white" />
           </button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 pb-4">
-        <div className="space-y-4">
+      <div className="flex-1 overflow-y-auto pb-4">
+        <div className="mx-auto grid w-full max-w-6xl gap-4 lg:grid-cols-2">
           {localPlayers.map((player, index) => (
             <div key={player.id} onClick={() => setActivePlayerIndex(index)}>
               <PlayerSetupCard
@@ -272,25 +282,24 @@ export function LocalPlayerSetup() {
         </div>
       </div>
 
-      <div className="relative z-10 p-4 flex gap-4">
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={() => setPhase("menu")}
-          className="flex-1 py-3 bg-white/10 text-white font-semibold rounded-full hover:bg-white/20"
+      <div className="relative z-10 flex gap-3 pt-2">
+        <button
+          type="button"
+          onClick={goBack}
+          className="min-h-11 flex-1 rounded-full bg-white/10 font-semibold text-white hover:bg-white/20"
         >
           Back
-        </motion.button>
+        </button>
         
         <motion.button
           whileHover={{ scale: allPlayersReady ? 1.02 : 1 }}
           whileTap={{ scale: allPlayersReady ? 0.98 : 1 }}
           onClick={handleStartGame}
           disabled={!allPlayersReady}
-          className={`flex-1 py-3 font-bold rounded-full transition-all ${
+          className={`min-h-11 flex-1 rounded-full font-bold transition-all ${
             allPlayersReady
               ? "bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg shadow-green-500/50"
-              : "bg-white/20 text-white/50 cursor-not-allowed"
+              : "cursor-not-allowed bg-white/20 text-white/50"
           }`}
         >
           {allPlayersReady ? "Choose Arena →" : `Select All Zoogis (${localPlayers.filter(p => p.zoogi).length}/${localPlayerCount})`}

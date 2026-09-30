@@ -188,9 +188,6 @@ function modeRules(gameMode: string): { title: string; blurb: string } {
   if (gameMode === "ringer_royale") {
     return { title: "Ringer Royale", blurb: "Knock opponents out of the ring!" };
   }
-  if (gameMode === "practice") {
-    return { title: "Practice", blurb: "Knock orbs and opponents off the island." };
-  }
   if (gameMode === "local_multiplayer") {
     return { title: "Local Match", blurb: "Take turns. Knock orbs and opponents off the island." };
   }
@@ -373,7 +370,7 @@ function LaunchPadHeightControl() {
 }
 
 export function GameUI() {
-  const { playerEntity, enemies, score, orbs, currentRound, maxRounds, playerRoundWins, isPlayerTurn, birdsEyeView, toggleBirdsEyeView, firstPersonView, toggleFirstPersonView, overShoulderView, toggleOverShoulderView, launchPadView, toggleLaunchPadView, setPhase, gameTimer, openTutorial, gameMode, localPlayers, currentLocalPlayerIndex, activateWolfgangAbility, canUseWolfgangAbility, activateHotstreakAbility, canUseHotstreakAbility, activateBoltAbility, canUseBoltAbility, lockOnEnabled, toggleLockOn, sessionId, arcType, setArcType, straightMode, toggleStraightMode, tangentOffset, setTangentOffset, lockOnTargetId, triggerArcLaunch, orbMultiplier, incrementOrbMultiplier, decrementOrbMultiplier, restrictionPhaseActive, restrictionPhaseStartTime } = useZoogiGame();
+  const { playerEntity, enemies, score, orbs, currentRound, maxRounds, playerRoundWins, isPlayerTurn, birdsEyeView, toggleBirdsEyeView, firstPersonView, toggleFirstPersonView, overShoulderView, toggleOverShoulderView, launchPadView, toggleLaunchPadView, setPhase, gameTimer, openTutorial, gameMode, localPlayers, currentLocalPlayerIndex, activateWolfgangAbility, canUseWolfgangAbility, activateHotstreakAbility, canUseHotstreakAbility, activateBoltAbility, canUseBoltAbility, lockOnEnabled, toggleLockOn, sessionId, arcType, setArcType, straightMode, toggleStraightMode, tangentOffset, setTangentOffset, lockOnTargetId, triggerArcLaunch, restrictionPhaseActive, restrictionPhaseStartTime } = useZoogiGame();
   const [matchClock, setMatchClock] = useState(gameTimer);
   useEffect(() => {
     setMatchClock(gameTimer);
@@ -1215,43 +1212,6 @@ export function GameUI() {
             >
               Unlock foe
             </button>
-          </div>
-        )}
-        
-        {/* Orb Multiplier Control */}
-        {gameMode === "practice" && (
-          <div className={phoneControls
-            ? "flex flex-row items-center gap-1 bg-black/70 rounded-xl px-1 h-11"
-            : "flex flex-col items-center gap-1 bg-black/70 rounded-xl p-2 backdrop-blur-sm"
-          }>
-            <button
-              onClick={incrementOrbMultiplier}
-              disabled={orbMultiplier >= 3}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
-                orbMultiplier >= 3 
-                  ? "bg-gray-600/50 text-gray-500 cursor-not-allowed" 
-                  : "bg-pink-500/80 text-white hover:bg-pink-600/80"
-              }`}
-              title="Add orb ring"
-            >
-              <Plus size={16} />
-            </button>
-            <div className="flex items-center gap-1">
-              <span className="text-pink-400 font-bold text-sm">x{orbMultiplier}</span>
-            </div>
-            <button
-              onClick={decrementOrbMultiplier}
-              disabled={orbMultiplier <= 1}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${
-                orbMultiplier <= 1 
-                  ? "bg-gray-600/50 text-gray-500 cursor-not-allowed" 
-                  : "bg-pink-500/80 text-white hover:bg-pink-600/80"
-              }`}
-              title="Remove orb ring"
-            >
-              <Minus size={16} />
-            </button>
-            <span className="text-white/60 text-[10px]">Orbs</span>
           </div>
         )}
         

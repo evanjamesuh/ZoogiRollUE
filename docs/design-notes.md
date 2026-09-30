@@ -12,7 +12,7 @@ The client is React, TypeScript, and Tailwind, with Three.js through React Three
 
 Five base Zoogis are Wolfgang, Hotstreak, Lars, Pinpoint, and Bolt. Each has its own ability. Trajectory colors follow the character: Wolfgang gray, Hotstreak orange, Lars blue, Pinpoint purple, Bolt yellow. Power is shown as low, medium, or high from how far you drag.
 
-Modes you can start from the menu include practice (Marble Arena), local pass-and-play, and Ringer Royale against AI opponents on this machine. Co-op 2v2 is not a finished online mode.
+From the menu you can play against the computer or play local pass-and-play on one device. Story opens the comic. Settings covers sound and the arena button size.
 
 Arenas are circular maps with obstacles such as mushrooms, snowmen, aliens, and trees. Ice patches speed marbles up. Flower patches slow them. The grass, ice, space, and other themes draw extra models from `client/public` when those files are present. Orbs bob and spin. Scoring zones and the knockout ring are part of the match.
 
@@ -40,4 +40,4 @@ Voice chat uses a WebSocket on this server for signaling and WebRTC between brow
 
 ## Art
 
-Models, sounds, videos, and textures are files under `client/public`. They are not required for the menu. They are required for the 3D stages, music, and Ringer Trials character parts that reference them.
+Models, sounds, videos, and textures are files under `client/public`. They are not required for the menu. They are required for the 3D stages and music.

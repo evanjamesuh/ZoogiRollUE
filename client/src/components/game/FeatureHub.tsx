@@ -3,7 +3,6 @@ import { motion } from "framer-motion";
 import { 
   Play, 
   Users, 
-  Target, 
   Wand2, 
   MapPin, 
   Trophy, 
@@ -69,11 +68,6 @@ export function FeatureHub() {
   const handleMultiplayer = () => {
     setGameMode("local_multiplayer");
     setPhase("local_setup");
-  };
-
-  const handlePractice = () => {
-    setGameMode("practice");
-    setPhase("character_selection");
   };
 
   const handleBack = () => {
@@ -157,15 +151,6 @@ export function FeatureHub() {
             <span>Multiplayer</span>
           </motion.button>
 
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={handlePractice}
-            className="w-full py-4 px-6 rounded-full bg-gradient-to-r from-orange-400 to-orange-600 text-white text-xl font-bold shadow-lg flex items-center justify-center gap-3"
-          >
-            <Target size={24} />
-            <span>Practice</span>
-          </motion.button>
         </div>
 
         <div className="grid grid-cols-2 gap-3 mb-4">

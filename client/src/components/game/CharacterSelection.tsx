@@ -7,6 +7,8 @@ import useEmblaCarousel from "embla-carousel-react";
 import { AuthModal } from "@/components/ui/AuthModal";
 import { useViewportLayout } from "@/lib/mobileGraphics";
 import { ZoogiPortrait } from "./ZoogiPortrait";
+import { useMenuKeys } from "@/hooks/useMenuKeys";
+import { returnToMenuScreen } from "@/lib/menuReturn";
 
 function StatBar({ label, value, color }: { label: string; value: number; color: string }) {
   return (
@@ -97,7 +99,7 @@ function CustomZoogiSlide({ customZoogi, isSelected, onClick }: { customZoogi: C
 }
 
 export function CharacterSelection() {
-  const { selectedZoogi, selectZoogi, selectCustomZoogi, selectedCustomZoogi, setPhase, gameMode, startPracticeGame, aiPlayerCount, incrementAiPlayerCount, decrementAiPlayerCount } = useZoogiGame();
+  const { selectedZoogi, selectZoogi, selectCustomZoogi, selectedCustomZoogi, setPhase, gameMode, aiPlayerCount, incrementAiPlayerCount, decrementAiPlayerCount } = useZoogiGame();
   const [customZoogis, setCustomZoogis] = useState<CustomZoogiData[]>([]);
   const [isLoadingCustom, setIsLoadingCustom] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -159,6 +161,19 @@ export function CharacterSelection() {
   
   const displayZoogi = selectedZoogi || ZOOGI_ROSTER[0];
   const hasSelection = selectedZoogi || selectedCustomZoogi;
+  const goBack = useCallback(() => {
+    if (showAuthModal) {
+      setShowAuthModal(false);
+      return;
+    }
+    returnToMenuScreen("play");
+    setPhase("menu");
+  }, [setPhase, showAuthModal]);
+  const confirmSelection = useCallback(() => {
+    if (!hasSelection || showAuthModal) return;
+    setPhase("map_selection");
+  }, [hasSelection, setPhase, showAuthModal]);
+  useMenuKeys({ onBack: goBack, onConfirm: confirmSelection });
   const { phone, portrait } = useViewportLayout();
 
   const roster = (
@@ -316,7 +331,7 @@ export function CharacterSelection() {
         <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
-          onClick={() => setPhase("menu")}
+          onClick={goBack}
           className="min-h-12 px-6 py-3 bg-white/10 text-white font-semibold rounded-full hover:bg-white/20 transition-colors"
         >
           Back
@@ -325,14 +340,7 @@ export function CharacterSelection() {
         <motion.button
           whileHover={{ scale: hasSelection ? 1.05 : 1 }}
           whileTap={{ scale: hasSelection ? 0.95 : 1 }}
-          onClick={() => {
-            if (!hasSelection) return;
-            if (gameMode === "practice") {
-              startPracticeGame();
-            } else {
-              setPhase("map_selection");
-            }
-          }}
+          onClick={confirmSelection}
           className={`flex-1 max-w-xs min-h-12 px-6 py-3 font-bold rounded-full transition-all ${
             hasSelection 
               ? "bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg shadow-green-500/50" 
@@ -340,13 +348,13 @@ export function CharacterSelection() {
           }`}
           disabled={!hasSelection}
         >
-          {hasSelection ? (gameMode === "practice" ? "Start Practice →" : "Choose Arena →") : "Select a Zoogi"}
+          {hasSelection ? "Choose Arena →" : "Select a Zoogi"}
         </motion.button>
       </div>
   );
 
   return (
-    <div className={`fixed inset-0 flex flex-col overflow-hidden ${phone ? "phone-safe-x phone-safe-bottom" : ""}`}>
+    <div className={`fixed inset-0 flex flex-col overflow-hidden ${phone ? "phone-safe-x phone-safe-bottom" : ""}`} data-testid="character-selection">
       <div className={`absolute right-4 z-20 ${phone ? "phone-safe-top-offset" : "top-4"}`}>
         <motion.button
           whileHover={{ scale: 1.05 }}
