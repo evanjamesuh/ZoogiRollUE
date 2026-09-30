@@ -94,6 +94,103 @@ function ringGeometry(rings: RingSpec[], segments = 80): THREE.BufferGeometry {
   return geom;
 }
 
+interface FlatPoint {
+  x: number;
+  z: number;
+}
+
+function pointOnRing(ring: RingSpec, radius: number, angle: number): FlatPoint {
+  return { x: ring.x + Math.cos(angle) * radius, z: ring.z + Math.sin(angle) * radius };
+}
+
+function diskHits(a: FlatPoint, b: FlatPoint, limit: number): FlatPoint[] {
+  const dx = b.x - a.x;
+  const dz = b.z - a.z;
+  const quad = dx * dx + dz * dz;
+  if (quad < 1e-12) return [];
+  const linear = 2 * (a.x * dx + a.z * dz);
+  const constant = a.x * a.x + a.z * a.z - limit * limit;
+  const disc = linear * linear - 4 * quad * constant;
+  if (disc < 0) return [];
+  const root = Math.sqrt(disc);
+  const hits: { t: number; x: number; z: number }[] = [];
+  for (const t of [(-linear - root) / (2 * quad), (-linear + root) / (2 * quad)]) {
+    if (t >= -1e-5 && t <= 1 + 1e-5) {
+      const clamped = Math.min(1, Math.max(0, t));
+      hits.push({ t: clamped, x: a.x + dx * clamped, z: a.z + dz * clamped });
+    }
+  }
+  hits.sort((p, q) => p.t - q.t);
+  return hits;
+}
+
+/** Keep the part of a convex polygon that sits inside the rink circle. */
+function clipPolyToDisk(poly: FlatPoint[], limit: number): FlatPoint[] {
+  const limitSq = limit * limit;
+  const inside = (p: FlatPoint) => p.x * p.x + p.z * p.z <= limitSq + 1e-4;
+  const out: FlatPoint[] = [];
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i];
+    const b = poly[(i + 1) % poly.length];
+    const aIn = inside(a);
+    const bIn = inside(b);
+    if (aIn && bIn) {
+      out.push(b);
+    } else if (aIn && !bIn) {
+      const hits = diskHits(a, b, limit);
+      if (hits.length > 0) out.push(hits[0]);
+    } else if (!aIn && bIn) {
+      const hits = diskHits(a, b, limit);
+      if (hits.length > 0) out.push(hits[hits.length - 1]);
+      out.push(b);
+    } else {
+      const hits = diskHits(a, b, limit);
+      if (hits.length === 2) out.push(hits[0], hits[1]);
+    }
+  }
+  const unique: FlatPoint[] = [];
+  for (const point of out) {
+    const prev = unique[unique.length - 1];
+    if (!prev || Math.hypot(point.x - prev.x, point.z - prev.z) > 1e-4) unique.push(point);
+  }
+  if (unique.length > 1 && Math.hypot(unique[0].x - unique[unique.length - 1].x, unique[0].z - unique[unique.length - 1].z) <= 1e-4) {
+    unique.pop();
+  }
+  return unique;
+}
+
+/**
+ * Patch coasts stop at the navy band's inner edge so they don't cut the
+ * knockout stripes. The limit is the layout radius, not a fixed number.
+ */
+function ringsInsideRadius(rings: RingSpec[], limit: number, segments = 96): THREE.BufferGeometry {
+  const positions: number[] = [];
+  const index: number[] = [];
+  for (const ring of rings) {
+    for (let i = 0; i < segments; i++) {
+      const t0 = (i / segments) * Math.PI * 2;
+      const t1 = ((i + 1) / segments) * Math.PI * 2;
+      const clipped = clipPolyToDisk(
+        [
+          pointOnRing(ring, ring.inner, t0),
+          pointOnRing(ring, ring.outer, t0),
+          pointOnRing(ring, ring.outer, t1),
+          pointOnRing(ring, ring.inner, t1),
+        ],
+        limit,
+      );
+      if (clipped.length < 3) continue;
+      const base = positions.length / 3;
+      for (const point of clipped) positions.push(point.x, 0, point.z);
+      for (let k = 1; k < clipped.length - 1; k++) index.push(base, base + k, base + k + 1);
+    }
+  }
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geom.setIndex(index);
+  return geom;
+}
+
 function paintMaterial(color: string, pull = 4) {
   return new THREE.MeshBasicMaterial({
     color,
@@ -184,10 +281,10 @@ function SymmetricSnowLip({ frame }: { frame: RinkFrame }) {
 }
 
 function KnockoutEdge({ frame }: { frame: RinkFrame }) {
-  const amber = useMemo(() => paintMaterial(AMBER, 0), []);
-  const navy = useMemo(() => paintMaterial(NAVY, 0), []);
-  const cyan = useMemo(() => paintMaterial(CYAN, 0), []);
-  const ink = useMemo(() => paintMaterial(INK, 0), []);
+  const navy = useMemo(() => paintMaterial(NAVY, 4), []);
+  const cyan = useMemo(() => paintMaterial(CYAN, 8), []);
+  const amber = useMemo(() => paintMaterial(AMBER, 12), []);
+  const ink = useMemo(() => paintMaterial(INK, 16), []);
   const flash = useZoogiGame((state) => state.knockoffBoundaryFlash);
   const flashStart = useRef<number | null>(null);
   const flashColor = useRef("#ffffff");
@@ -227,10 +324,10 @@ function KnockoutEdge({ frame }: { frame: RinkFrame }) {
 
   return (
     <group>
-      <FlatPaint geometry={bands.navy} material={navy} y={0.09} renderOrder={4} />
-      <FlatPaint geometry={bands.cyan} material={cyan} y={0.096} renderOrder={5} />
-      <FlatPaint geometry={bands.amber} material={amber} y={0.102} renderOrder={6} />
-      <FlatPaint geometry={bands.ink} material={ink} y={0.108} renderOrder={7} />
+      <FlatPaint geometry={bands.navy} material={navy} y={0.09} renderOrder={8} />
+      <FlatPaint geometry={bands.cyan} material={cyan} y={0.096} renderOrder={9} />
+      <FlatPaint geometry={bands.amber} material={amber} y={0.102} renderOrder={10} />
+      <FlatPaint geometry={bands.ink} material={ink} y={0.108} renderOrder={11} />
     </group>
   );
 }
@@ -276,12 +373,13 @@ export function FrozenRinkMarkings() {
       inner: patch.radius * (1 - COAST_CYAN_SHARE),
       outer: patch.radius,
     }));
+    const coastLimit = frame?.navyInner ?? Number.POSITIVE_INFINITY;
     return {
       obstacle: ringGeometry(obstacle, 40),
-      coastNavy: ringGeometry(coastNavy, 64),
-      coastCyan: ringGeometry(coastCyan, 64),
+      coastNavy: ringsInsideRadius(coastNavy, coastLimit, 96),
+      coastCyan: ringsInsideRadius(coastCyan, coastLimit, 96),
     };
-  }, [bumpers, patches, snowmen]);
+  }, [bumpers, frame, patches, snowmen]);
 
   return (
     <group>
