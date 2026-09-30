@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import { getOnlineMessage, getServerEnv } from "@/lib/serverStatus";
+import { voiceChatWebSocketUrl } from "@/lib/serverUrl";
 
 interface Peer {
   id: string;
@@ -46,6 +48,12 @@ export const useVoiceChat = create<VoiceChatState>((set, get) => ({
     const state = get();
     if (state.isConnected || state.isConnecting) return;
 
+    const offline = getOnlineMessage();
+    if (offline) {
+      set({ isConnecting: false, error: offline });
+      return;
+    }
+
     set({ isConnecting: true, error: null });
 
     try {
@@ -59,8 +67,12 @@ export const useVoiceChat = create<VoiceChatState>((set, get) => ({
 
       const peerId = `peer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       
-      const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const wsUrl = `${wsProtocol}//${window.location.host}/voice-chat`;
+      const wsUrl = voiceChatWebSocketUrl(getServerEnv(), window.location);
+      if (!wsUrl) {
+        stream.getTracks().forEach((track) => track.stop());
+        set({ isConnecting: false, error: getOnlineMessage() });
+        return;
+      }
       const ws = new WebSocket(wsUrl);
 
       ws.onopen = () => {

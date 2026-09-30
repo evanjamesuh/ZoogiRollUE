@@ -10,6 +10,7 @@ import { ARENA_FOV_DEG, ARENA_PITCH, actionBounds, fitDistance, matchCameraMax }
 import { launchPadsFor } from "./launchPads.ts";
 import { meadowForestPieces } from "./meadowDressing.ts";
 import { arenaScaleFor } from "./arenaScale.ts";
+import { BOWL_DECKS } from "../components/game/nightCircuitBowl.ts";
 import { isOutsideNeonCourt, leftNeonOpenEdge, neonObstacles, neonPlayHalfX, neonPlayHalfZ, neonRails } from "./neonCourt.ts";
 import { ZOOGI_REST_Y } from "./restHeight.ts";
 
@@ -39,6 +40,21 @@ test("each map has four launch pads outside the lip and clear of scenery", () =>
         assert.equal(leftNeonOpenEdge(pad.x, pad.z, MARBLE_RADIUS), true, `${map} pad ${pad.index} is blocked by a rail`);
         for (const box of [...neonRails(), ...neonObstacles()]) {
           assert.equal(overlapsBox(pad.x, pad.z, MARBLE_RADIUS + 0.15, box), false, `${map} ${box.id}`);
+        }
+        for (const deck of BOWL_DECKS) {
+          const [cx, , cz] = deck.pos;
+          const [sx, , sz] = deck.size;
+          const footprint = {
+            minX: cx - sx / 2,
+            maxX: cx + sx / 2,
+            minZ: cz - sz / 2,
+            maxZ: cz + sz / 2,
+          };
+          assert.equal(
+            overlapsBox(pad.x, pad.z, MARBLE_RADIUS + 0.15, footprint),
+            false,
+            `neon pad ${pad.index} sits in the ${deck.face} bowl`,
+          );
         }
       } else {
         assert.equal(

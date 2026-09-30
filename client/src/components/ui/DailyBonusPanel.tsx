@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useCommunity } from "@/lib/stores/useCommunity";
 import { X, Gift, Coins, Gem, Check, Flame } from "lucide-react";
+import { OnlineNotice } from "@/components/ui/OnlineNotice";
 
 interface DailyBonusPanelProps {
   onClose: () => void;
@@ -59,6 +60,8 @@ export function DailyBonusPanel({ onClose }: DailyBonusPanelProps) {
             <X className="w-6 h-6 text-white" />
           </button>
         </div>
+
+        <OnlineNotice compact className="mx-4 mt-3" />
 
         <div className="p-4">
           {claimedReward ? (

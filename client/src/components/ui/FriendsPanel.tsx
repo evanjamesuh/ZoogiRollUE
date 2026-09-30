@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Search, UserPlus, Check, X as XIcon, MessageCircle, Loader2 } from "lucide-react";
 import { useAuth, User, Friendship } from "@/lib/stores/useAuth";
+import { OnlineNotice } from "@/components/ui/OnlineNotice";
 
 interface FriendsPanelProps {
   isOpen: boolean;
@@ -75,6 +76,8 @@ export function FriendsPanel({ isOpen, onClose, onOpenChat }: FriendsPanelProps)
                 <X size={24} />
               </button>
             </div>
+
+            <OnlineNotice compact className="mx-4 mt-3" />
 
             <div className="p-4">
               <div className="relative">
