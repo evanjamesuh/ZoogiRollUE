@@ -122,5 +122,3 @@ export function getHoodooPositions(): { position: [number, number, number]; radi
     radius: hoodoo.radius,
   }));
 }
-
-useGLTF.preload("/models/stylized_desert_hoodoo.glb");

@@ -985,6 +985,3 @@ export function ArabianArena() {
     </group>
   );
 }
-
-useGLTF.preload("/models/winter_location.glb");
-useGLTF.preload("/models/arabian_nights_stage.glb");
