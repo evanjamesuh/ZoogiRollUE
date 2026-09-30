@@ -2,7 +2,8 @@ import * as THREE from "three";
 import { useRef, useState, useEffect, useMemo, Suspense, Component, type ReactNode } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
 import { Line, Html, useGLTF } from "@react-three/drei";
-import { stopFrameMayEndTurn, useZoogiGame } from "@/lib/stores/useZoogiGame";
+import { useZoogiGame } from "@/lib/stores/useZoogiGame";
+import { orbsHaveLanded } from "@/lib/orbDrop";
 import { fittedUniformScale, resolveZoogiModel, rollMarble, zoogiModelPreloadUrls, type ZoogiModelSettings } from "@/lib/zoogiModels";
 import { useAudio } from "@/lib/stores/useAudio";
 import { useProgression } from "@/lib/stores/useProgression";
@@ -342,7 +343,6 @@ export function PlayerZoogi() {
     updatePlayerVelocity,
     isPlayerTurn,
     currentRound,
-    endTurn,
     setMovementStopped,
     armHotstreakGrenade,
     gameMode,
@@ -671,13 +671,7 @@ export function PlayerZoogi() {
       hasLaunchedRef.current = false;
       launchCooldownRef.current = false;
       setMovementStopped(true);
-
-      // Physics already ends the turn when the roll stops. A later frame can
-      // still see this same slowdown. Ending again would skip whoever is up now.
-      if (!isFreeForAll && stopFrameMayEndTurn(useZoogiGame.getState(), "player")) {
-        endTurn();
-        console.log("Player turn ended");
-      }
+      // The simulation passes the turn after every marble and orb is at rest.
     }
     prevSpeedRef.current = speed;
   });
@@ -816,6 +810,7 @@ export function PlayerZoogi() {
 
   const handlePointerDown = (e: any) => {
     if (!playerEntity || launchCooldownRef.current) return;
+    if (!orbsHaveLanded(useZoogiGame.getState().orbs)) return;
     if (!isPlayerTurn && !isFreeForAll) return;
     if (firstPersonView || overShoulderView || birdsEyeView) return;
     if (playerEntity.isKnockedOut) return;
@@ -1050,8 +1045,9 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
     
     const canLaunchFFA = isFreeForAll && speed < 0.1 && !enemy.isStunned;
     const canLaunchTurnBased = liveIsMyTurn && !hasLaunchedRef.current;
+    const orbsLanded = orbsHaveLanded(useZoogiGame.getState().orbs);
     
-    if (canLaunchFFA || canLaunchTurnBased) {
+    if ((canLaunchFFA || canLaunchTurnBased) && orbsLanded) {
       aiTimerRef.current += delta;
       
       // The flick waits past the 0.4s power windup, so a cast still happens
@@ -1363,12 +1359,7 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
       prePowerRef.current = "pending";
       wolfTimerRef.current = null;
       setMovementStopped(true);
-      // A late frame after physics already handed the turn back must not skip
-      // the human, and a power cast must not be what ends the turn.
-      if (!isFreeForAll && stopFrameMayEndTurn(useZoogiGame.getState(), "enemy", myIndex)) {
-        endTurn();
-        console.log(`Enemy ${enemy.zoogi.name}'s turn ended`);
-      }
+      // The simulation passes the turn after every marble and orb is at rest.
     }
     prevSpeedRef.current = speed;
     
@@ -1470,7 +1461,6 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
     currentRound,
     localPlayers,
     updateLocalPlayerVelocity,
-    endTurn,
     setMovementStopped,
     spawnWolfClones,
     gameMode,
@@ -1611,10 +1601,7 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
       hasLaunchedRef.current = false;
       launchCooldownRef.current = false;
       setMovementStopped(true);
-      if (stopFrameMayEndTurn(useZoogiGame.getState(), "local", playerIndex)) {
-        console.log(`Local player ${playerIndex} turn ended`);
-        endTurn();
-      }
+      // The simulation passes the turn after every marble and orb is at rest.
     }
     prevSpeedRef.current = speed;
   });
@@ -1749,6 +1736,7 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
 
   const handlePointerDown = (e: any) => {
     if (!entity || launchCooldownRef.current) return;
+    if (!orbsHaveLanded(useZoogiGame.getState().orbs)) return;
     if (!isMyTurn) return;
     if (firstPersonView || overShoulderView || birdsEyeView) return;
     

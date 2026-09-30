@@ -147,8 +147,29 @@ export const RAIL_RESTITUTION = 0.7;
  * After every marble and orb is at rest or has fallen out, wait this
  * long before the turn passes.
  */
-export const SETTLE_DELAY_SECONDS = 1.5;
+export const SETTLE_DELAY_SECONDS = 1.2;
 export const SETTLE_DELAY_STEPS = Math.round(SETTLE_DELAY_SECONDS * SIM_HZ);
+
+/**
+ * A body that never quite rests (a jittering contact) must not hold the
+ * turn forever. The clock starts when the shot happens.
+ */
+export const SETTLE_TIMEOUT_SECONDS = 48;
+export const SETTLE_TIMEOUT_STEPS = Math.round(SETTLE_TIMEOUT_SECONDS * SIM_HZ);
+
+/**
+ * Orbs are released above the floor and fall with FALL_GRAVITY.
+ * Later orbs start higher so the ring lands as a short cascade.
+ * Nothing waits in the air.
+ */
+export const ORB_DROP_HEIGHT = 7.2;
+export const ORB_DROP_STAGGER = 0.42;
+
+/** Orb-on-orb bounce. The floor uses the same number. */
+export const ORB_ORB_RESTITUTION = 0.55;
+
+/** Upward speed, units per step, below which a floor hit settles. */
+export const ORB_BOUNCE_REST = 0.015;
 
 /** PhysicsManager uses the same pause before it marks the court idle. */
 export const SETTLE_GRACE_SECONDS = SETTLE_DELAY_SECONDS;
