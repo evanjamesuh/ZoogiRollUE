@@ -33,8 +33,8 @@ export function LaunchPads() {
               />
             </mesh>
             <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]}>
-              <ringGeometry args={[0.72, 0.92, 28]} />
-              <meshBasicMaterial color="#ffffff" transparent opacity={0.85} />
+              <ringGeometry args={[0.78, 0.95, 28]} />
+              <meshBasicMaterial color={color} transparent opacity={0.95} />
             </mesh>
           </group>
         );
