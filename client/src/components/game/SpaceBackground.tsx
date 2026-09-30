@@ -161,37 +161,40 @@ export function SpaceBackground() {
         </mesh>
       ))}
       
-      <mesh ref={nebulaRef} position={[0, 20, -60]}>
-        <planeGeometry args={[100, 100]} />
+      <mesh ref={nebulaRef} position={[0, 22, -68]}>
+        <circleGeometry args={[48, 48]} />
         <meshBasicMaterial
-          color="#4B0082"
+          color="#6d3cae"
           transparent
-          opacity={0.15}
+          opacity={0.32}
           side={THREE.DoubleSide}
+          depthWrite={false}
         />
       </mesh>
       
-      <mesh position={[40, 30, -50]}>
-        <planeGeometry args={[60, 40]} />
+      <mesh position={[-26, 30, -58]} rotation={[0.2, 0.4, 0.2]}>
+        <circleGeometry args={[30, 40]} />
         <meshBasicMaterial
-          color="#8B008B"
+          color="#3a1868"
           transparent
-          opacity={0.1}
+          opacity={0.24}
           side={THREE.DoubleSide}
+          depthWrite={false}
         />
       </mesh>
       
-      <mesh position={[-30, 40, -40]}>
-        <planeGeometry args={[50, 50]} />
+      <mesh position={[34, 18, -50]}>
+        <circleGeometry args={[16, 32]} />
         <meshBasicMaterial
-          color="#00CED1"
+          color="#1ad4d0"
           transparent
           opacity={0.08}
           side={THREE.DoubleSide}
+          depthWrite={false}
         />
       </mesh>
       
-      <ambientLight intensity={0.3} color="#4B0082" />
+      <ambientLight intensity={0.08} color="#2a1458" />
     </group>
   );
 }

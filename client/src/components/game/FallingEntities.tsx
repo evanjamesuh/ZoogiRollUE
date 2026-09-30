@@ -10,10 +10,13 @@ const GROUND_SIZE = ARENA_RADIUS * 4;
 function FallingOrb({ position, color, hasLanded }: { position: [number, number, number]; color: string; hasLanded: boolean }) {
   const meshRef = useRef<THREE.Mesh>(null);
   
-  useFrame((state) => {
-    if (meshRef.current && !hasLanded) {
-      meshRef.current.rotation.x += 0.1;
-      meshRef.current.rotation.z += 0.05;
+  useFrame(() => {
+    const mesh = meshRef.current;
+    if (!mesh) return;
+    mesh.position.set(position[0], position[1], position[2]);
+    if (!hasLanded) {
+      mesh.rotation.x += 0.1;
+      mesh.rotation.z += 0.05;
     }
   });
   
@@ -34,10 +37,13 @@ function FallingOrb({ position, color, hasLanded }: { position: [number, number,
 function FallingZoogi({ position, color, zoogiId, hasLanded }: { position: [number, number, number]; color: string; zoogiId?: string; hasLanded: boolean }) {
   const meshRef = useRef<THREE.Group>(null);
   
-  useFrame((state) => {
-    if (meshRef.current && !hasLanded) {
-      meshRef.current.rotation.x += 0.15;
-      meshRef.current.rotation.z += 0.1;
+  useFrame(() => {
+    const mesh = meshRef.current;
+    if (!mesh) return;
+    mesh.position.set(position[0], position[1], position[2]);
+    if (!hasLanded) {
+      mesh.rotation.x += 0.15;
+      mesh.rotation.z += 0.1;
     }
   });
   
@@ -99,7 +105,8 @@ export function GroundPlane() {
     ice: { color: "#1a4a6a", emissive: "#0a2a3a" },
     lava: { color: "#1a0a0a", emissive: "#3a1a0a" },
     space: { color: "#0a0a1a", emissive: "#1a0a3a" },
-    saturn: { color: "#1a1a0a", emissive: "#0a0a0a" }
+    saturn: { color: "#1a1a0a", emissive: "#0a0a0a" },
+    tomb: { color: "#3a2818", emissive: "#1a1008" }
   };
   
   const theme = selectedMap || "grass";

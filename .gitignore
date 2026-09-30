@@ -5,7 +5,3 @@ server/public
 vite.config.ts.*
 *.tar.gz
 .env
-client/public/models/
-client/public/portraits/
-client/public/textures/
-client/public/geometries/

@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { getMapLayout } from "./arenaColliders.ts";
-import { ARENA_SCALE } from "./arenaScale.ts";
-import { isOutsideNeonCourt, NEON_HALF_X, NEON_HALF_Z } from "./neonCourt.ts";
+import { arenaScaleFor } from "./mapDefaultConfigs.ts";
+import { isOutsideNeonCourt, neonPlayHalfX, neonPlayHalfZ } from "./neonCourt.ts";
 import { marbleIsShown } from "./marblePresence.ts";
 import { resetInterp, setInterpFrame, visualPosition } from "./renderInterp.ts";
 import { MAX_LAUNCH_SPEED } from "./simFeel.ts";
@@ -188,10 +188,11 @@ test("knockout uses the enlarged edge on every arena", async () => {
     assert.ok(started.playerEntity, map);
     const layout = getMapLayout(map);
     assert.ok(layout, map);
-    assert.ok(layout.floorRadius >= 8 * ARENA_SCALE, map);
+    const scale = arenaScaleFor(map);
+    assert.ok(layout.floorRadius >= 8 * scale, map);
 
     const inside: [number, number, number] = map === "neon"
-      ? [NEON_HALF_X - 1.5, ZOOGI_REST_Y, 0]
+      ? [neonPlayHalfX() - 1.5, ZOOGI_REST_Y, 0]
       : [layout.knockoffRadius * 0.45, ZOOGI_REST_Y, 0];
     useZoogiGame.setState({
       phase: "playing",
@@ -217,11 +218,27 @@ test("knockout uses the enlarged edge on every arena", async () => {
       `${map} live edge ${useZoogiGame.getState().wallSettings.knockoffBoundaryRadius} vs ${layout.knockoffRadius}`,
     );
     if (map === "neon") {
-      assert.equal(isOutsideNeonCourt(0, NEON_HALF_Z + 0.2), true);
-      assert.equal(isOutsideNeonCourt(0, NEON_HALF_Z - 0.2), false);
+      assert.equal(isOutsideNeonCourt(0, neonPlayHalfZ() + 0.2), true);
+      assert.equal(isOutsideNeonCourt(0, neonPlayHalfZ() - 0.2), false);
+      const onRail = useZoogiGame.getState().playerEntity;
+      assert.ok(onRail);
+      useZoogiGame.setState({
+        playerEntity: {
+          ...onRail,
+          position: [0, ZOOGI_REST_Y, neonPlayHalfZ() + 0.25],
+          velocity: [0, 0, 0],
+          isKnockedOut: false,
+          isRespawning: false,
+          offTheFloor: false,
+          spawnImmunity: false,
+          invulnerableUntil: null,
+        },
+      });
+      useZoogiGame.getState().physicsTick(1 / 60);
+      assert.equal(useZoogiGame.getState().playerEntity?.offTheFloor, false, "a rail overlap is not the open edge");
     }
     const outside: [number, number, number] = map === "neon"
-      ? [NEON_HALF_X + 0.35, ZOOGI_REST_Y, 0]
+      ? [neonPlayHalfX() - 0.4, ZOOGI_REST_Y, neonPlayHalfZ() + 1.2]
       : [layout.knockoffRadius + 1.2, ZOOGI_REST_Y, 0];
     const still = useZoogiGame.getState().playerEntity;
     assert.ok(still);
@@ -237,6 +254,12 @@ test("knockout uses the enlarged edge on every arena", async () => {
       },
     });
     useZoogiGame.getState().physicsTick(1 / 60);
+    const falling = useZoogiGame.getState().playerEntity;
+    assert.equal(falling?.isKnockedOut, false, `${map} stays visible at the start of the fall`);
+    assert.ok((falling?.position[1] ?? 1) < ZOOGI_REST_Y, `${map} gravity`);
+    for (let step = 0; step < 120 && !useZoogiGame.getState().playerEntity?.isKnockedOut; step++) {
+      useZoogiGame.getState().physicsTick(1 / 60);
+    }
     const knocked = useZoogiGame.getState().playerEntity;
     assert.equal(knocked?.isKnockedOut, true, `${map} outside`);
     if (map === "neon") assert.equal(isOutsideNeonCourt(outside[0], outside[2]), true);
@@ -280,5 +303,5 @@ test("a full flick still crosses the enlarged arena", async () => {
   assert.ok(ended);
   const traveled = farthest - startX;
   assert.ok(traveled > layout.floorRadius, `full flick reached ${traveled} on a floor of radius ${layout.floorRadius}`);
-  assert.equal(ended.isKnockedOut, false);
+  assert.equal(ended.isKnockedOut || ended.offTheFloor, true, "a full flick flies off the open edge");
 });

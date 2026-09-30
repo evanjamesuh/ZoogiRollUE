@@ -160,6 +160,8 @@ export function getMapElementTypes(map: MapTheme): ElementType[] {
       return ["alien", "crystal"];
     case "saturn":
       return ["rock", "crystal"];
+    case "tomb":
+      return [];
     default:
       return [];
   }
@@ -168,7 +170,7 @@ export function getMapElementTypes(map: MapTheme): ElementType[] {
 export function exportAllOffsets(): string {
   const exportData: { [map: string]: { elements: any[] } } = {};
   
-  const maps: MapTheme[] = ["grass", "ice", "lava", "space", "saturn"];
+  const maps: MapTheme[] = ["grass", "ice", "lava", "space", "saturn", "tomb"];
   
   for (const map of maps) {
     const elements = getMapElements(map);

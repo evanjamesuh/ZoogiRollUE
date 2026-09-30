@@ -27,6 +27,7 @@ const DEFAULT_ASSETS: AssetData = {
     lava: null,
     space: null,
     saturn: null,
+    tomb: null,
     neon: null,
   },
   previewVideos: {
@@ -35,6 +36,7 @@ const DEFAULT_ASSETS: AssetData = {
     lava: null,
     space: null,
     saturn: null,
+    tomb: null,
     neon: null,
   },
 };
@@ -491,13 +493,13 @@ export function MapSelection() {
         )}
       </AnimatePresence>
 
-      <div className="relative z-10 min-h-0 flex-1 overflow-y-auto">
+      <div className="allow-pan-y relative z-10 min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto grid w-full max-w-6xl gap-4 lg:grid-cols-[minmax(240px,320px)_1fr] lg:items-start lg:gap-8">
       <div className="pr-14 lg:pr-0">
       <motion.h1
         initial={{ y: -50, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="relative z-10 mb-1 text-3xl font-bold text-white lg:text-5xl"
+        className="relative z-10 mb-1 mt-2 text-2xl font-bold text-white sm:text-3xl lg:text-5xl"
       >
         Choose Arena
       </motion.h1>
@@ -594,7 +596,7 @@ export function MapSelection() {
                   : "hover:scale-[1.01]"
               }`}
               style={{
-                height: `${devSettings.buttonHeight}px`,
+                height: `${Math.min(devSettings.buttonHeight, Math.min(window.innerWidth, window.innerHeight) < 500 ? 56 : devSettings.buttonHeight)}px`,
                 borderRadius: `${devSettings.buttonRadius}px`,
                 backgroundColor: backgroundImage ? undefined : map.color,
                 boxShadow: selectedMap === map.id && !selectedCustomArena

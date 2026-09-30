@@ -1,13 +1,15 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useThree } from "@react-three/fiber";
+import { NightCircuitCrowd } from "./NightCircuitCrowd";
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { BUMPER_RADIUS } from "@/lib/arenaColliders";
-import { ARENA_SCALE } from "@/lib/arenaScale";
+import { arenaScaleFor } from "@/lib/mapDefaultConfigs";
 import {
   NEON_CORNER_GAP,
   NEON_HALF_X,
   NEON_HALF_Z,
+  neonBumperMarks,
   neonBumpers,
   neonObstacles,
   neonRails,
@@ -111,54 +113,53 @@ function paintCourt(ctx: CanvasRenderingContext2D) {
   const [cx, cy] = worldToCanvas(0, 0);
   ctx.strokeStyle = "#8b9bb8";
   ctx.lineWidth = 5;
-  const S = ARENA_SCALE;
   ctx.beginPath();
-  ctx.arc(cx, cy, 2.35 * S * PX, 0, Math.PI * 2);
+  ctx.arc(cx, cy, 2.35 * PX, 0, Math.PI * 2);
   ctx.stroke();
   ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.arc(cx, cy, 1.15 * S * PX, 0, Math.PI * 2);
+  ctx.arc(cx, cy, 1.15 * PX, 0, Math.PI * 2);
   ctx.stroke();
 
   ctx.setLineDash([18, 16]);
   ctx.lineWidth = 3;
   ctx.beginPath();
-  ctx.moveTo(cx - 7.2 * S * PX, cy - 2.15 * S * PX);
-  ctx.lineTo(cx + 7.2 * S * PX, cy - 2.15 * S * PX);
-  ctx.moveTo(cx - 7.2 * S * PX, cy + 2.15 * S * PX);
-  ctx.lineTo(cx + 7.2 * S * PX, cy + 2.15 * S * PX);
+  ctx.moveTo(cx - 7.2 * PX, cy - 2.15 * PX);
+  ctx.lineTo(cx + 7.2 * PX, cy - 2.15 * PX);
+  ctx.moveTo(cx - 7.2 * PX, cy + 2.15 * PX);
+  ctx.lineTo(cx + 7.2 * PX, cy + 2.15 * PX);
   ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(cx - 4.4 * S * PX, cy - 5.4 * S * PX);
-  ctx.lineTo(cx - 4.4 * S * PX, cy + 5.4 * S * PX);
-  ctx.moveTo(cx + 4.4 * S * PX, cy - 5.4 * S * PX);
-  ctx.lineTo(cx + 4.4 * S * PX, cy + 5.4 * S * PX);
+  ctx.moveTo(cx - 4.4 * PX, cy - 5.4 * PX);
+  ctx.lineTo(cx - 4.4 * PX, cy + 5.4 * PX);
+  ctx.moveTo(cx + 4.4 * PX, cy - 5.4 * PX);
+  ctx.lineTo(cx + 4.4 * PX, cy + 5.4 * PX);
   ctx.stroke();
   ctx.setLineDash([]);
 
   ctx.strokeStyle = "#6d7e98";
   ctx.lineWidth = 4;
   ctx.beginPath();
-  ctx.arc(cx, cy, 5.6 * S * PX, -0.55, 0.55);
+  ctx.arc(cx, cy, 5.6 * PX, -0.55, 0.55);
   ctx.stroke();
   ctx.beginPath();
-  ctx.arc(cx, cy, 5.6 * S * PX, Math.PI - 0.55, Math.PI + 0.55);
+  ctx.arc(cx, cy, 5.6 * PX, Math.PI - 0.55, Math.PI + 0.55);
   ctx.stroke();
 
-  paintEndZone(ctx, -11.3 * S, -3.6 * S, -6.35 * S, 3.6 * S, "rgba(18, 120, 150, 0.34)");
-  paintEndZone(ctx, 6.35 * S, -3.6 * S, 11.3 * S, 3.6 * S, "rgba(150, 28, 90, 0.34)");
+  paintEndZone(ctx, -11.3, -3.6, -6.35, 3.6, "rgba(18, 120, 150, 0.34)");
+  paintEndZone(ctx, 6.35, -3.6, 11.3, 3.6, "rgba(150, 28, 90, 0.34)");
 
   ctx.strokeStyle = "#d5deee";
   ctx.lineWidth = 4;
   ctx.beginPath();
-  ctx.moveTo(cx, cy - 6.4 * S * PX);
-  ctx.lineTo(cx, cy - 2.5 * S * PX);
-  ctx.moveTo(cx, cy + 2.5 * S * PX);
-  ctx.lineTo(cx, cy + 6.4 * S * PX);
+  ctx.moveTo(cx, cy - 6.4 * PX);
+  ctx.lineTo(cx, cy - 2.5 * PX);
+  ctx.moveTo(cx, cy + 2.5 * PX);
+  ctx.lineTo(cx, cy + 6.4 * PX);
   ctx.stroke();
   ctx.lineWidth = 3;
-  for (let z = -5.2 * S; z <= 5.2 * S; z += 1.3 * S) {
-    if (Math.abs(z) < 2.2 * S) continue;
+  for (let z = -5.2; z <= 5.2; z += 1.3) {
+    if (Math.abs(z) < 2.2) continue;
     const [hx, hy] = worldToCanvas(0, z);
     ctx.beginPath();
     ctx.moveTo(hx - 10, hy);
@@ -166,36 +167,36 @@ function paintCourt(ctx: CanvasRenderingContext2D) {
     ctx.stroke();
   }
 
-  for (const x of [-9.4, -8.5, -7.6]) paintChevron(ctx, x * ARENA_SCALE, 2.35 * ARENA_SCALE, 1, "#7ee7ff");
-  for (const x of [7.6, 8.5, 9.4]) paintChevron(ctx, x * ARENA_SCALE, -2.35 * ARENA_SCALE, -1, "#ff7ad4");
+  for (const x of [-9.4, -8.5, -7.6]) paintChevron(ctx, x, 2.35, 1, "#7ee7ff");
+  for (const x of [7.6, 8.5, 9.4]) paintChevron(ctx, x, -2.35, -1, "#ff7ad4");
 
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.font = "700 72px sans-serif";
   ctx.fillStyle = "rgba(150, 230, 245, 0.72)";
-  const [n1x, n1y] = worldToCanvas(-8.3 * ARENA_SCALE, 2.55 * ARENA_SCALE);
+  const [n1x, n1y] = worldToCanvas(-8.3, 2.55);
   ctx.fillText("1", n1x, n1y);
   ctx.fillStyle = "rgba(255, 150, 200, 0.72)";
-  const [n2x, n2y] = worldToCanvas(8.45 * ARENA_SCALE, -2.55 * ARENA_SCALE);
+  const [n2x, n2y] = worldToCanvas(8.45, -2.55);
   ctx.fillText("2", n2x, n2y);
 
   // Original center mark: a marble, a roll crescent, and the letters ZR.
   ctx.fillStyle = "#243044";
   ctx.beginPath();
-  ctx.arc(cx, cy, 0.72 * ARENA_SCALE * PX, 0, Math.PI * 2);
+  ctx.arc(cx, cy, 0.72 * PX, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = "#d7deea";
   ctx.beginPath();
-  ctx.arc(cx - 6, cy + 4, 0.34 * ARENA_SCALE * PX, 0, Math.PI * 2);
+  ctx.arc(cx - 6, cy + 4, 0.34 * PX, 0, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = "#8ea0bd";
   ctx.beginPath();
-  ctx.arc(cx - 12, cy - 2, 0.12 * ARENA_SCALE * PX, 0, Math.PI * 2);
+  ctx.arc(cx - 12, cy - 2, 0.12 * PX, 0, Math.PI * 2);
   ctx.fill();
   ctx.strokeStyle = "#9eb0cc";
   ctx.lineWidth = 5;
   ctx.beginPath();
-  ctx.arc(cx + 10, cy - 2, 0.42 * ARENA_SCALE * PX, Math.PI * 0.85, Math.PI * 1.85);
+  ctx.arc(cx + 10, cy - 2, 0.42 * PX, Math.PI * 0.85, Math.PI * 1.85);
   ctx.stroke();
   ctx.fillStyle = "#c5d0e4";
   ctx.font = "700 34px sans-serif";
@@ -203,18 +204,20 @@ function paintCourt(ctx: CanvasRenderingContext2D) {
   ctx.textBaseline = "middle";
   ctx.fillText("ZR", cx + 2, cy + 28);
 
-  for (const post of neonBumpers()) {
+  // The floor texture is scaled with the court. Shrink the mark so its world size stays put.
+  const mark = 1 / arenaScaleFor("neon");
+  for (const post of neonBumperMarks()) {
     const [px, py] = worldToCanvas(post.x, post.z);
-    const g = ctx.createRadialGradient(px, py, 8, px, py, 1.35 * ARENA_SCALE * PX);
+    const g = ctx.createRadialGradient(px, py, 8, px, py, 1.35 * mark * PX);
     g.addColorStop(0, "rgba(0,0,0,0.5)");
     g.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.ellipse(px, py, 1.45 * ARENA_SCALE * PX, 1.15 * ARENA_SCALE * PX, 0, 0, Math.PI * 2);
+    ctx.ellipse(px, py, 1.45 * mark * PX, 1.15 * mark * PX, 0, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  const vignette = ctx.createRadialGradient(cx, cy, 3.2 * ARENA_SCALE * PX, cx, cy, 11.5 * ARENA_SCALE * PX);
+  const vignette = ctx.createRadialGradient(cx, cy, 3.2 * PX, cx, cy, 11.5 * PX);
   vignette.addColorStop(0, "rgba(0,0,0,0)");
   vignette.addColorStop(1, "rgba(0,0,0,0.28)");
   ctx.fillStyle = vignette;
@@ -524,67 +527,15 @@ const STANDS: Array<{ pos: [number, number, number]; size: [number, number, numb
   { pos: [-16.6, 1.15, 0], size: [2.2, 1.15, 16] },
 ];
 
-function crowdSpots(): Array<[number, number, number, number]> {
-  const spots: Array<[number, number, number, number]> = [];
-  const row = (z: number, y: number, x0: number, x1: number, step: number) => {
-    for (let x = x0; x <= x1 + 0.01; x += step) {
-      const n = Math.sin(x * 12.7 + z * 4.3);
-      spots.push([x, y + (n * 0.5 + 0.5) * 0.16, z + n * 0.06, 0.75 + (Math.cos(x * 2.2) * 0.5 + 0.5) * 0.4]);
-    }
-  };
-  row(-9.35, 1.02, -6.6, 6.6, 0.72);
-  row(-10.35, 1.85, -8.2, 8.2, 0.68);
-  row(-10.55, 1.38, -7.2, 7.2, 0.7);
-  row(9.35, 1.02, -6.6, 6.6, 0.72);
-  row(10.55, 1.38, -7.2, 7.2, 0.7);
-  row(-15.2, 2.3, -10, 10, 0.85);
-  row(15.2, 2.3, -10, 10, 0.85);
-  for (let z = -3.6; z <= 3.6; z += 0.8) {
-    const n = Math.sin(z * 9.1);
-    spots.push([13.15, 0.92 + (n * 0.5 + 0.5) * 0.1, z, 0.8]);
-    spots.push([-13.15, 0.92 + (n * 0.5 + 0.5) * 0.1, z, 0.82]);
-  }
-  return spots.map(([x, y, z, s]) => [x * ARENA_SCALE, y, z * ARENA_SCALE, s] as [number, number, number, number]);
-}
-
-function Crowd() {
-  const ref = useRef<THREE.InstancedMesh>(null);
-  const spots = useMemo(() => crowdSpots(), []);
-  useLayoutEffect(() => {
-    const mesh = ref.current;
-    if (!mesh) return;
-    const dummy = new THREE.Object3D();
-    spots.forEach(([x, y, z, s], i) => {
-      dummy.position.set(x, y, z);
-      dummy.scale.set(s, 0.85 + s * 0.35, s * 0.7);
-      dummy.updateMatrix();
-      mesh.setMatrixAt(i, dummy.matrix);
-    });
-    mesh.instanceMatrix.needsUpdate = true;
-  }, [spots]);
-  return (
-    <instancedMesh ref={ref} args={[undefined, undefined, spots.length]} frustumCulled={false}>
-      <boxGeometry args={[0.32, 0.62, 0.24]} />
-      <meshStandardMaterial color="#10131c" roughness={1} metalness={0} />
-    </instancedMesh>
-  );
-}
-
-function FarBowl() {
+function FarBowl({ envMap }: { envMap: THREE.Texture | null }) {
   const tiers = [
     { z: -9.22, y: 0.58, h: 0.82, depth: 0.7, width: 16.6 },
     { z: -10.02, y: 1.16, h: 0.96, depth: 0.78, width: 17.8 },
     { z: -10.86, y: 1.74, h: 1.08, depth: 0.84, width: 18.8 },
-  ].map((tier) => ({
-    ...tier,
-    z: tier.z * ARENA_SCALE,
-    depth: tier.depth * ARENA_SCALE,
-    width: tier.width * ARENA_SCALE,
-  }));
-  const seats = [-6.4, -4.6, -2.8, -1.0, 1.0, 2.8, 4.6, 6.4].map((x) => x * ARENA_SCALE);
+  ];
   return (
     <group>
-      {tiers.map((tier, index) => {
+      {tiers.map((tier) => {
         const frontZ = tier.z + tier.depth / 2 - 0.03;
         const lipY = tier.y + tier.h / 2 + 0.02;
         const half = tier.width / 2 - 0.12;
@@ -593,19 +544,15 @@ function FarBowl() {
             <mesh position={[0, tier.y, tier.z]} receiveShadow>
               <boxGeometry args={[tier.width, tier.h, tier.depth]} />
               <meshStandardMaterial
-                color={index === 0 ? "#b7c4da" : "#9aabc4"}
-                emissive="#7f93b4"
-                emissiveIntensity={0.42}
-                metalness={0.22}
-                roughness={0.48}
+                color="#070b16"
+                emissive="#0c1428"
+                emissiveIntensity={0.12}
+                metalness={0.84}
+                roughness={0.18}
+                envMap={envMap ?? undefined}
+                envMapIntensity={0.62}
               />
             </mesh>
-            {[-6.2, -3.1, 0, 3.1, 6.2].map((rib) => rib * ARENA_SCALE).map((rib) => (
-              <mesh key={`${tier.z}-${rib}`} position={[rib, tier.y, frontZ + 0.02]}>
-                <boxGeometry args={[0.08, tier.h * 0.72, 0.06]} />
-                <meshStandardMaterial color="#d5e0f0" metalness={0.4} roughness={0.35} />
-              </mesh>
-            ))}
             <mesh position={[-half / 2, lipY, frontZ]}>
               <boxGeometry args={[half, 0.08, 0.1]} />
               <meshStandardMaterial color="#22e7ff" emissive="#22e7ff" emissiveIntensity={1.9} toneMapped={false} />
@@ -617,26 +564,15 @@ function FarBowl() {
           </group>
         );
       })}
-      {seats.map((x) => (
-        <mesh key={`seat-${x}`} position={[x, 1.08, -9.0 * ARENA_SCALE]}>
-          <boxGeometry args={[0.7, 0.07, 0.14]} />
-          <meshStandardMaterial
-            color={x < 0 ? "#bff8ff" : "#ffd0f4"}
-            emissive={x < 0 ? "#22e7ff" : "#ff2bd6"}
-            emissiveIntensity={1.65}
-            toneMapped={false}
-          />
-        </mesh>
-      ))}
-      {[-8.9, 8.9].map((x) => x * ARENA_SCALE).map((x) => (
-        <group key={`mast-${x}`} position={[x, 0, -10.55 * ARENA_SCALE]}>
+      {[-8.9, 8.9].map((x) => (
+        <group key={`mast-${x}`} position={[x, 0, -10.55]}>
           <mesh position={[0, 1.65, 0]}>
             <cylinderGeometry args={[0.08, 0.12, 3.3, 8]} />
-            <meshStandardMaterial color="#b7c3d6" metalness={0.72} roughness={0.28} />
+            <meshStandardMaterial color="#121826" metalness={0.82} roughness={0.22} envMap={envMap ?? undefined} envMapIntensity={0.4} />
           </mesh>
           <mesh position={[0, 3.2, 0]}>
             <boxGeometry args={[0.55, 0.12, 0.28]} />
-            <meshStandardMaterial color="#d5deec" metalness={0.6} roughness={0.3} />
+            <meshStandardMaterial color="#161c2c" metalness={0.78} roughness={0.24} />
           </mesh>
           <mesh position={[0, 3.38, 0]}>
             <sphereGeometry args={[0.16, 10, 8]} />
@@ -653,7 +589,7 @@ function FarBowl() {
         <group key={`pilaster-${sx}`} position={[sx * 12.55, 0, -5.5]}>
           <mesh position={[0, 1.2, 0]}>
             <boxGeometry args={[0.24, 2.4, 0.28]} />
-            <meshStandardMaterial color="#3a4458" metalness={0.62} roughness={0.34} />
+            <meshStandardMaterial color="#121826" metalness={0.78} roughness={0.24} envMap={envMap ?? undefined} envMapIntensity={0.35} />
           </mesh>
           <mesh position={[sx * -0.02, 1.2, 0.16]}>
             <boxGeometry args={[0.07, 2.1, 0.05]} />
@@ -675,6 +611,20 @@ function FarBowl() {
         <meshBasicMaterial color="#ff2bd6" transparent opacity={0.28} depthWrite={false} />
       </mesh>
       <LightRig z={-10.4} y={2.85} />
+      {[-6.2, -2.1, 2.1, 6.2].map((x) => (
+        <mesh key={`beam-${x}`} position={[x, 2.05, -10.15]} rotation={[0.22, 0, 0]}>
+          <coneGeometry args={[0.42, 1.35, 7, 1, true]} />
+          <meshBasicMaterial
+            color={x < 0 ? "#22e7ff" : "#ff2bd6"}
+            transparent
+            opacity={0.07}
+            depthWrite={false}
+            side={THREE.DoubleSide}
+            blending={THREE.AdditiveBlending}
+            toneMapped={false}
+          />
+        </mesh>
+      ))}
     </group>
   );
 }
@@ -735,8 +685,8 @@ export function NeonCourtLights() {
         intensity={0.82}
         color="#e7eefc"
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
         shadow-bias={-0.00035}
         shadow-camera-far={64}
         shadow-camera-left={-20}
@@ -865,9 +815,11 @@ export function NeonCourtArena() {
   const rails = neonRails();
   const posts = neonBumpers();
   const tints = ["#22e7ff", "#ff2bd6", "#b026ff"];
+  const dress = arenaScaleFor("neon");
 
   return (
     <group>
+      <group scale={dress}>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} receiveShadow>
         <planeGeometry args={[NEON_HALF_X * 2, NEON_HALF_Z * 2]} />
         <meshPhysicalMaterial
@@ -890,62 +842,38 @@ export function NeonCourtArena() {
 
       <KnockoutMouths />
 
-      {rails.map((rail) => (
-        <Rail key={rail.id} {...rail} />
-      ))}
-
-      {posts.map((post, index) => (
-        post.id.includes("pylon")
-          ? <Pylon key={post.id} x={post.x} z={post.z} tint={post.x < 0 ? "#22e7ff" : "#ff2bd6"} />
-          : <BumperPost key={post.id} x={post.x} z={post.z} tint={tints[index % tints.length]} />
-      ))}
-
-      {neonObstacles().map((box) => (
-        <RaisedBlock
-          key={box.id}
-          {...box}
-          tint={BLOCK_TINT[box.id] ?? "#22e7ff"}
-          height={box.id.startsWith("channel") ? 0.5 : 0.68}
-          panels={panelTexture}
-        />
-      ))}
-
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.16, 0]}>
-        <circleGeometry args={[46 * ARENA_SCALE, 48]} />
+        <circleGeometry args={[46, 48]} />
         <meshStandardMaterial color="#090b12" roughness={1} metalness={0} />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.14, 0]}>
-        <ringGeometry args={[13.6 * ARENA_SCALE, 14.15 * ARENA_SCALE, 64]} />
+        <ringGeometry args={[13.6, 14.15, 64]} />
         <meshStandardMaterial color="#1a2233" emissive="#33506a" emissiveIntensity={0.45} roughness={0.6} metalness={0.2} />
       </mesh>
 
       {STANDS.map((stand) => (
-        <mesh
-          key={stand.pos.join(",")}
-          position={[stand.pos[0] * ARENA_SCALE, stand.pos[1], stand.pos[2] * ARENA_SCALE]}
-          receiveShadow
-        >
-          <boxGeometry args={[stand.size[0] * ARENA_SCALE, stand.size[1], stand.size[2] * ARENA_SCALE]} />
-          <meshStandardMaterial color="#3a455c" roughness={0.62} metalness={0.28} />
+        <mesh key={stand.pos.join(",")} position={stand.pos} receiveShadow>
+          <boxGeometry args={stand.size} />
+          <meshStandardMaterial color="#0c1018" roughness={0.32} metalness={0.72} />
         </mesh>
       ))}
-      <Crowd />
-      <FarBowl />
+      <NightCircuitCrowd />
+      <FarBowl envMap={envMap} />
       <ArenaRim />
       <Skyline />
-      <LightRig z={12.2 * ARENA_SCALE} y={5.2} />
+      <LightRig z={12.2} y={5.2} />
       {/* Dim inner lip so the bowl has an edge without blooming over the court. */}
-      <mesh position={[0, 0.55, -8.42 * ARENA_SCALE]}>
-        <boxGeometry args={[15.2 * ARENA_SCALE, 0.06, 0.06]} />
+      <mesh position={[0, 0.55, -8.42]}>
+        <boxGeometry args={[15.2, 0.06, 0.06]} />
         <meshStandardMaterial color="#7ec8e8" emissive="#7ec8e8" emissiveIntensity={0.55} roughness={0.4} />
       </mesh>
-      <mesh position={[0, 0.55, 8.42 * ARENA_SCALE]}>
-        <boxGeometry args={[15.2 * ARENA_SCALE, 0.06, 0.06]} />
+      <mesh position={[0, 0.55, 8.42]}>
+        <boxGeometry args={[15.2, 0.06, 0.06]} />
         <meshStandardMaterial color="#e48cff" emissive="#e48cff" emissiveIntensity={0.45} roughness={0.4} />
       </mesh>
 
       {[-1, 1].flatMap((sx) => [-1, 1].map((sz) => (
-        <group key={`tower-${sx}-${sz}`} position={[sx * 23.5 * ARENA_SCALE, 0, sz * 15.5 * ARENA_SCALE]}>
+        <group key={`tower-${sx}-${sz}`} position={[sx * 23.5, 0, sz * 15.5]}>
           <mesh position={[0, 3.2, 0]}>
             <cylinderGeometry args={[0.08, 0.12, 6.4, 8]} />
             <meshStandardMaterial color="#232838" metalness={0.65} roughness={0.4} />
@@ -990,6 +918,27 @@ export function NeonCourtArena() {
           }]}
         />
       </mesh>
+      </group>
+
+      {rails.map((rail) => (
+        <Rail key={rail.id} {...rail} />
+      ))}
+
+      {posts.map((post, index) => (
+        post.id.includes("pylon")
+          ? <Pylon key={post.id} x={post.x} z={post.z} tint={post.x < 0 ? "#22e7ff" : "#ff2bd6"} />
+          : <BumperPost key={post.id} x={post.x} z={post.z} tint={tints[index % tints.length]} />
+      ))}
+
+      {neonObstacles().map((box) => (
+        <RaisedBlock
+          key={box.id}
+          {...box}
+          tint={BLOCK_TINT[box.id] ?? "#22e7ff"}
+          height={box.id.startsWith("channel") ? 0.5 : 0.68}
+          panels={panelTexture}
+        />
+      ))}
     </group>
   );
 }

@@ -23,6 +23,7 @@ function MiniArena({ mapId }: { mapId: MapTheme }) {
       case "ice": return "#81D4FA";
       case "lava": return "#FF5722";
       case "space": return "#7C4DFF";
+      case "tomb": return "#E0B88A";
       default: return "#4CAF50";
     }
   }, [mapId]);
@@ -72,6 +73,27 @@ function MiniArena({ mapId }: { mapId: MapTheme }) {
             <AlienCrystalSpire position={[-0.6, 0, 0.2]} />
             <AlienCrystalSpire position={[0.1, 0, 0.6]} />
             <Crystal position={[0.5, 0, 0.5]} />
+          </>
+        );
+      case "tomb":
+        return (
+          <>
+            <mesh position={[-0.55, 0.16, -0.35]}>
+              <boxGeometry args={[0.08, 0.32, 0.08]} />
+              <meshStandardMaterial color="#c9956a" />
+            </mesh>
+            <mesh position={[0.5, 0.2, -0.4]}>
+              <boxGeometry args={[0.08, 0.4, 0.08]} />
+              <meshStandardMaterial color="#e0b88a" />
+            </mesh>
+            <mesh position={[0, 0.18, -0.7]}>
+              <boxGeometry args={[0.7, 0.22, 0.08]} />
+              <meshStandardMaterial color="#d7ae78" />
+            </mesh>
+            <mesh position={[0.35, 0.06, 0.35]}>
+              <sphereGeometry args={[0.1, 10, 8]} />
+              <meshStandardMaterial color="#e8c49a" />
+            </mesh>
           </>
         );
       default:

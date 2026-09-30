@@ -17,9 +17,9 @@ import {
   smoothShake,
 } from "@/lib/cameraRig";
 import * as THREE from "three";
-import { ARENA_SCALE } from "@/lib/arenaScale";
+import { arenaScaleFor } from "@/lib/mapDefaultConfigs";
 import { getMapLayout } from "@/lib/arenaColliders";
-import { NEON_HALF_X, NEON_HALF_Z } from "@/lib/neonCourt";
+import { neonPlayHalfX, neonPlayHalfZ } from "@/lib/neonCourt";
 
 export function DeveloperCamera() {
   const developerDragActive = useZoogiGame((state) => state.developerDragActive);
@@ -86,6 +86,7 @@ export function GameCamera() {
   const arenaViewRef = useRef(true);
   
   const [orbitAngle, setOrbitAngle] = useState(0);
+  const wideShot = new URLSearchParams(window.location.search).get("view") === "wide";
   const BIRDS_EYE_INITIAL_ZOOM = 70;
   const BIRDS_EYE_MIN_ZOOM = 35;
   const [birdsEyeZoom, setBirdsEyeZoom] = useState(BIRDS_EYE_INITIAL_ZOOM);
@@ -110,6 +111,13 @@ export function GameCamera() {
   }, [orbitAngle]);
 
   arenaViewRef.current = !birdsEyeView && !firstPersonView && !overShoulderView && !launchPadView && !developerCamera;
+
+  useEffect(() => {
+    (window as any).__ZOOGI_SET_ORBIT__ = (angle: number) => setOrbitAngle(angle);
+    return () => {
+      delete (window as any).__ZOOGI_SET_ORBIT__;
+    };
+  }, []);
 
   useEffect(() => {
     const canvas = gl.domElement;
@@ -215,6 +223,11 @@ export function GameCamera() {
   }, [gl, birdsEyeView, birdsEyeZoom]);
 
   useFrame((state, delta) => {
+    if (wideShot) {
+      camera.position.set(14, 7.2, 30);
+      camera.lookAt(0, 1.2, -1);
+      return;
+    }
     if (developerCamera) return;
     
     // Handle map editor mode with no player - use static camera based on view mode
@@ -449,15 +462,18 @@ export function GameCamera() {
       ];
       const aspect = size.width / Math.max(1, size.height);
       const neonCourt = selectedMap === "neon";
+      const frameScale = arenaScaleFor(selectedMap);
       if (neonCourt) {
+        const halfX = neonPlayHalfX();
+        const halfZ = neonPlayHalfZ();
         points.push(
-          { x: NEON_HALF_X, z: NEON_HALF_Z },
-          { x: NEON_HALF_X, z: -NEON_HALF_Z },
-          { x: -NEON_HALF_X, z: NEON_HALF_Z },
-          { x: -NEON_HALF_X, z: -NEON_HALF_Z },
+          { x: halfX, z: halfZ },
+          { x: halfX, z: -halfZ },
+          { x: -halfX, z: halfZ },
+          { x: -halfX, z: -halfZ },
         );
       } else {
-        const ring = getMapLayout(selectedMap)?.floorRadius ?? 18 * ARENA_SCALE;
+        const ring = getMapLayout(selectedMap)?.floorRadius ?? 18 * frameScale;
         points.push(
           { x: ring, z: ring },
           { x: ring, z: -ring },
@@ -467,14 +483,14 @@ export function GameCamera() {
       }
       // Night Circuit sits a little farther back and aims slightly toward the
       // far bowl so the stands and skyline clear the top of the frame.
-      const pad = ((aspect < 0.9 ? 1.3 : 2.6) + (neonCourt ? 1.6 : 0)) * ARENA_SCALE;
+      const pad = ((aspect < 0.9 ? 1.3 : 2.6) + (neonCourt ? 1.6 : 0)) * frameScale;
       const bounds = actionBounds(points, 0);
       const lookX = ((bounds.minX + bounds.maxX) / 2) * 0.7;
-      const lookZ = ((bounds.minZ + bounds.maxZ) / 2) * 0.7 + (neonCourt ? -3.5 * ARENA_SCALE : 0);
+      const lookZ = ((bounds.minZ + bounds.maxZ) / 2) * 0.7 + (neonCourt ? -3.5 * frameScale : 0);
       const distance = clampDistance(
         fitDistance(bounds, ARENA_PITCH, ARENA_FOV_DEG, aspect, pad) * zoomNudge,
-        (neonCourt ? 19 : 13.5) * ARENA_SCALE,
-        34 * ARENA_SCALE,
+        (neonCourt ? 19 : 13.5) * frameScale,
+        34 * frameScale,
       );
       const offset = cameraOffset(distance, ARENA_PITCH);
       idealCameraPos = new THREE.Vector3(lookX + offset.x, offset.y, lookZ + offset.z);

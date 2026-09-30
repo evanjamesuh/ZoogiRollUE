@@ -6,8 +6,11 @@ import { databaseConfigured, pool } from "./db";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { listenLogLines, resolveListenHost, resolveListenPort } from "./listen";
+import { applyPlayGate, attachPlayGateUpgradeGuard, readPlayPassword } from "./playGate";
 
 const app = express();
+app.set("trust proxy", 1);
 const httpServer = createServer(app);
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
@@ -87,6 +90,17 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  const playPassword = readPlayPassword();
+  const playGate = {
+    password: playPassword,
+    secret: process.env.SESSION_SECRET || "zoogi-roll-dev-secret-change-in-prod",
+  };
+  applyPlayGate(app, playGate);
+  attachPlayGateUpgradeGuard(httpServer, playGate);
+  if (playPassword) {
+    log("Play password is on. Visitors must enter it before the game loads.");
+  }
+
   if (!databaseConfigured) {
     app.use("/api", (_req, res) => {
       res.status(503).json({ error: DATABASE_UNAVAILABLE_MESSAGE });
@@ -103,15 +117,15 @@ app.use((req, res, next) => {
     throw err;
   });
 
+  const port = resolveListenPort();
+  const host = resolveListenHost();
+
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
     const { setupVite } = await import("./vite");
-    await setupVite(httpServer, app);
+    await setupVite(httpServer, app, port);
   }
-
-  const port = parseInt(process.env.PORT || "5000", 10);
-  const host = process.env.HOST || "127.0.0.1";
 
   httpServer.on("error", (err: NodeJS.ErrnoException) => {
     if (err.code === "EADDRINUSE") {
@@ -123,6 +137,8 @@ app.use((req, res, next) => {
   });
 
   httpServer.listen({ port, host }, () => {
-    log(`serving on http://${host}:${port}`);
+    for (const line of listenLogLines(host, port)) {
+      log(line);
+    }
   });
 })();

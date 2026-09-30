@@ -3,8 +3,7 @@ import { useRef, useMemo, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { useAudio } from "@/lib/stores/useAudio";
-import { getSnowmanPositions } from "@/lib/arenaConstants";
-import { ARENA_SCALE } from "@/lib/arenaScale";
+import { SNOWMAN_RADIUS, getMapLayout } from "@/lib/arenaColliders";
 import { getElementOffset } from "@/lib/treeOffsets";
 
 interface Snowman {
@@ -18,10 +17,10 @@ export function Snowmen() {
   const selectedMap = useZoogiGame((state) => state.selectedMap) || "ice";
   
   const snowmenData = useMemo<Snowman[]>(() => {
-    const sharedPositions = getSnowmanPositions();
-    return sharedPositions.map((pos, i) => ({
-      id: `snowman-${i}`,
-      position: pos.position,
+    const scenery = getMapLayout("ice")?.scenery.filter((solid) => solid.kind === "snowman") ?? [];
+    return scenery.map((solid, i) => ({
+      id: solid.id,
+      position: [solid.x, 0, solid.z] as [number, number, number],
       originalIndex: i
     }));
   }, []);
@@ -59,7 +58,7 @@ function SnowmanMesh({ snowman }: { snowman: Snowman }) {
       const dx = pos[0] - snowman.position[0];
       const dz = pos[2] - snowman.position[2];
       const dist = Math.sqrt(dx * dx + dz * dz);
-      return dist < 1.2 * ARENA_SCALE;
+      return dist < 1.2;
     };
     
     let wasHit = false;
@@ -90,21 +89,21 @@ function SnowmanMesh({ snowman }: { snowman: Snowman }) {
       const jiggle = Math.sin(state.clock.elapsedTime * 25) * jiggleIntensity * 0.1;
       groupRef.current.rotation.z = jiggle;
       groupRef.current.scale.set(
-        ARENA_SCALE * (1 + jiggle * 0.5),
-        ARENA_SCALE * (1 - jiggle * 0.3),
-        ARENA_SCALE * (1 + jiggle * 0.5)
+        1 + jiggle * 0.5,
+        1 - jiggle * 0.3,
+        1 + jiggle * 0.5
       );
       setJiggleIntensity(prev => Math.max(0, prev - delta * 3));
     } else {
       groupRef.current.rotation.z = 0;
-      groupRef.current.scale.set(ARENA_SCALE, ARENA_SCALE, ARENA_SCALE);
+      groupRef.current.scale.set(1, 1, 1);
     }
   });
 
   return (
-    <group ref={groupRef} position={snowman.position} scale={ARENA_SCALE}>
-      <mesh position={[0, 0.5, 0]} castShadow>
-        <sphereGeometry args={[0.5, 12, 8]} />
+    <group ref={groupRef} position={snowman.position}>
+      <mesh position={[0, SNOWMAN_RADIUS, 0]} castShadow>
+        <sphereGeometry args={[SNOWMAN_RADIUS, 12, 8]} />
         <meshStandardMaterial color="#FFFFFF" roughness={0.8} />
       </mesh>
       
