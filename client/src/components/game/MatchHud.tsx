@@ -311,7 +311,7 @@ function ToolsMenu({
   return (
     <div
       data-testid="match-menu"
-      className={`allow-pan-y pointer-events-auto absolute bottom-full right-0 z-30 mb-2 w-[min(100%,20rem)] overflow-y-auto rounded-2xl bg-black/90 px-3 py-2 text-white shadow-2xl backdrop-blur-md ${tall ? "max-h-[32.75rem]" : "max-h-[calc(100dvh-13.5rem)]"}`}
+      className={`allow-pan-y pointer-events-auto absolute bottom-full right-0 z-30 mb-2 w-[min(100%,20rem)] overflow-y-auto rounded-2xl bg-black/90 px-3 py-2 text-white shadow-2xl backdrop-blur-md ${tall ? "max-h-[33rem]" : "max-h-[calc(100dvh-13.5rem)]"}`}
     >
       <p className="mb-1 text-base font-black">Menu</p>
 
