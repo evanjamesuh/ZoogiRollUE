@@ -582,29 +582,79 @@ export function NeonCourtLights() {
 }
 
 const BLOCKS: Array<{ position: [number, number, number]; size: [number, number, number]; windows: string }> = [
-  { position: [-48, 0, -56], size: [6, 16, 5], windows: "#7ef6ff" },
-  { position: [-24, 0, -62], size: [4.5, 24, 4], windows: "#ff4ad8" },
-  { position: [-6, 0, -58], size: [7, 12, 5], windows: "#c084fc" },
-  { position: [12, 0, -66], size: [5, 20, 4.5], windows: "#7ef6ff" },
-  { position: [36, 0, -54], size: [6, 28, 5], windows: "#ff4ad8" },
-  { position: [62, 0, -20], size: [4, 14, 6], windows: "#fbbf24" },
-  { position: [-66, 0, -6], size: [5, 18, 5], windows: "#7ef6ff" },
-  { position: [68, 0, 10], size: [5, 22, 4], windows: "#c084fc" },
-  { position: [-40, 0, 52], size: [7, 10, 5], windows: "#ff4ad8" },
-  { position: [28, 0, 56], size: [6, 15, 5], windows: "#7ef6ff" },
-  { position: [4, 0, 62], size: [8, 9, 4], windows: "#fbbf24" },
-  { position: [-16, 0, 58], size: [4, 16, 4], windows: "#c084fc" },
+  { position: [-32, 0, -26], size: [6, 16, 5], windows: "#7ef6ff" },
+  { position: [-20, 0, -34], size: [4.5, 24, 4], windows: "#ff4ad8" },
+  { position: [-6, 0, -38], size: [7, 12, 5], windows: "#c084fc" },
+  { position: [10, 0, -40], size: [5, 20, 4.5], windows: "#7ef6ff" },
+  { position: [24, 0, -30], size: [6, 28, 5], windows: "#ff4ad8" },
+  { position: [36, 0, -16], size: [4, 14, 6], windows: "#fbbf24" },
+  { position: [-38, 0, -4], size: [5, 18, 5], windows: "#7ef6ff" },
+  { position: [38, 0, 6], size: [5, 22, 4], windows: "#c084fc" },
+  { position: [-28, 0, 22], size: [7, 10, 5], windows: "#ff4ad8" },
+  { position: [26, 0, 24], size: [6, 15, 5], windows: "#7ef6ff" },
+  { position: [2, 0, 36], size: [8, 9, 4], windows: "#fbbf24" },
+  { position: [-14, 0, 34], size: [4, 16, 4], windows: "#c084fc" },
 ];
 
+function ArenaRim() {
+  const lip = (x: number, z: number, sx: number, sz: number, color: string, key: string) => (
+    <mesh key={key} position={[x, 1.05, z]}>
+      <boxGeometry args={[sx, 0.07, sz]} />
+      <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1.7} toneMapped={false} roughness={0.3} />
+    </mesh>
+  );
+  return (
+    <group>
+      <mesh position={[-12.28, 0.62, 0]} castShadow>
+        <boxGeometry args={[0.28, 1.24, 7.2]} />
+        <meshStandardMaterial color="#1a2436" metalness={0.55} roughness={0.45} />
+      </mesh>
+      <mesh position={[12.28, 0.62, 0]} castShadow>
+        <boxGeometry args={[0.28, 1.24, 7.2]} />
+        <meshStandardMaterial color="#2a1828" metalness={0.55} roughness={0.45} />
+      </mesh>
+      <mesh position={[-3.6, 0.58, -8.72]}>
+        <boxGeometry args={[7.2, 1.16, 0.4]} />
+        <meshStandardMaterial color="#1a2436" metalness={0.5} roughness={0.48} />
+      </mesh>
+      <mesh position={[3.6, 0.58, -8.72]}>
+        <boxGeometry args={[7.2, 1.16, 0.4]} />
+        <meshStandardMaterial color="#2a1828" metalness={0.5} roughness={0.48} />
+      </mesh>
+      {lip(-12.28, 0, 0.08, 7.0, "#22e7ff", "west")}
+      {lip(12.28, 0, 0.08, 7.0, "#ff2bd6", "east")}
+      {lip(-3.6, -8.72, 7.0, 0.1, "#22e7ff", "far-cyan")}
+      {lip(3.6, -8.72, 7.0, 0.1, "#ff2bd6", "far-magenta")}
+      {[
+        [-12.28, -3.7, "#22e7ff"],
+        [-12.28, 3.7, "#22e7ff"],
+        [12.28, -3.7, "#ff2bd6"],
+        [12.28, 3.7, "#ff2bd6"],
+      ].map(([x, z, color]) => (
+        <group key={`${x}-${z}`} position={[Number(x), 0, Number(z)]}>
+          <mesh position={[0, 0.7, 0]}>
+            <cylinderGeometry args={[0.28, 0.34, 1.4, 16]} />
+            <meshStandardMaterial color="#2a3144" metalness={0.7} roughness={0.35} />
+          </mesh>
+          <mesh position={[0, 1.35, 0]} rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry args={[0.36, 0.05, 8, 20]} />
+            <meshStandardMaterial color={color as string} emissive={color as string} emissiveIntensity={1.9} toneMapped={false} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
 const SKYLINE: Array<{ x: number; z: number; h: number; w: number; tint: string }> = [
-  { x: -8.2, z: -48.4, h: 2.45, w: 1.15, tint: "#22e7ff" },
-  { x: -5.7, z: -48.2, h: 3.05, w: 0.9, tint: "#7ef6ff" },
-  { x: -3.3, z: -48.5, h: 2.2, w: 1.3, tint: "#9ad8ff" },
-  { x: -0.9, z: -48.3, h: 2.75, w: 1.0, tint: "#e7f2ff" },
-  { x: 1.5, z: -48.5, h: 2.95, w: 0.88, tint: "#ff2bd6" },
-  { x: 3.9, z: -48.2, h: 2.25, w: 1.25, tint: "#ff6a8a" },
-  { x: 6.4, z: -48.4, h: 3.1, w: 0.9, tint: "#ff2bd6" },
-  { x: 8.7, z: -48.2, h: 2.4, w: 1.1, tint: "#ff4a6a" },
+  { x: -8.2, z: -11.42, h: 2.45, w: 1.15, tint: "#22e7ff" },
+  { x: -5.7, z: -11.22, h: 3.05, w: 0.9, tint: "#7ef6ff" },
+  { x: -3.3, z: -11.5, h: 2.2, w: 1.3, tint: "#9ad8ff" },
+  { x: -0.9, z: -11.28, h: 2.75, w: 1.0, tint: "#e7f2ff" },
+  { x: 1.5, z: -11.48, h: 2.95, w: 0.88, tint: "#ff2bd6" },
+  { x: 3.9, z: -11.18, h: 2.25, w: 1.25, tint: "#ff6a8a" },
+  { x: 6.4, z: -11.42, h: 3.1, w: 0.9, tint: "#ff2bd6" },
+  { x: 8.7, z: -11.2, h: 2.4, w: 1.1, tint: "#ff4a6a" },
 ];
 
 function Skyline() {
@@ -691,12 +741,31 @@ export function NeonCourtArena() {
         />
       ))}
 
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.16, 0]}>
+        <circleGeometry args={[46, 48]} />
+        <meshStandardMaterial color="#090b12" roughness={1} metalness={0} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.14, 0]}>
+        <ringGeometry args={[13.6, 14.15, 64]} />
+        <meshStandardMaterial color="#1a2233" emissive="#33506a" emissiveIntensity={0.45} roughness={0.6} metalness={0.2} />
+      </mesh>
+
       <NightCircuitStadium envMap={envMap} />
+      <ArenaRim />
       <Skyline />
-      <LightRig z={24.2} y={8.4} />
+      <LightRig z={12.2} y={5.2} />
+      {/* Dim inner lip so the bowl has an edge without blooming over the court. */}
+      <mesh position={[0, 0.55, -8.42]}>
+        <boxGeometry args={[15.2, 0.06, 0.06]} />
+        <meshStandardMaterial color="#7ec8e8" emissive="#7ec8e8" emissiveIntensity={0.55} roughness={0.4} />
+      </mesh>
+      <mesh position={[0, 0.55, 8.42]}>
+        <boxGeometry args={[15.2, 0.06, 0.06]} />
+        <meshStandardMaterial color="#e48cff" emissive="#e48cff" emissiveIntensity={0.45} roughness={0.4} />
+      </mesh>
 
       {[-1, 1].flatMap((sx) => [-1, 1].map((sz) => (
-        <group key={`tower-${sx}-${sz}`} position={[sx * 52, 0, sz * 44]}>
+        <group key={`tower-${sx}-${sz}`} position={[sx * 23.5, 0, sz * 15.5]}>
           <mesh position={[0, 3.2, 0]}>
             <cylinderGeometry args={[0.08, 0.12, 6.4, 8]} />
             <meshStandardMaterial color="#232838" metalness={0.65} roughness={0.4} />

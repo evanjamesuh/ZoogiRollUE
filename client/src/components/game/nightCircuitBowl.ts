@@ -1,9 +1,14 @@
 /**
- * Night Circuit grandstand decks. Visual only: these boxes are not colliders.
- * The court ends at |x| = 12 and |z| = 8. Every deck stays several meters
- * outside that line so the bowl reads as a pit around the floor.
- * Face is the side that looks at the court.
+ * Night Circuit grandstand. Visual only: these boxes are not colliders.
+ *
+ * Every distance is measured from the live floor. NEON_HALF_X / NEON_HALF_Z
+ * are the court's half-extents (12 and 8 today, 24 by 16). A later arena
+ * scale that multiplies those halves, or a parent scale around this mount,
+ * moves the bowl with the floor. The pit clearances below stay the gap
+ * past whatever that edge is.
  */
+import { NEON_HALF_X, NEON_HALF_Z } from "@/lib/neonCourt";
+
 export type BowlFace = "north" | "south" | "east" | "west";
 
 export type BowlDeck = {
@@ -12,35 +17,75 @@ export type BowlDeck = {
   face: BowlFace;
 };
 
-/**
- * Far bowl, about twice the old reach. The first tier is the one the tight
- * camera still catches along the top of the frame; the rest climbs back
- * into the dark.
- */
-export const FAR_DECKS: BowlDeck[] = [
-  { pos: [0, 3.0, -14.85], size: [76, 3.7, 3.3], face: "north" },
-  { pos: [0, 3.7, -20.35], size: [84, 3.8, 3.2], face: "north" },
-  { pos: [0, 5.5, -24.7], size: [92, 3.8, 3.4], face: "north" },
-  { pos: [0, 7.2, -29.3], size: [100, 3.8, 3.6], face: "north" },
-  { pos: [0, 8.6, -34.1], size: [108, 3.6, 3.8], face: "north" },
-  { pos: [0, 9.8, -39.0], size: [116, 3.4, 4.0], face: "north" },
-];
+/** Meters of empty air past the floor edge. A full-speed marble drops under these faces. */
+export const FAR_PIT_M = 3.45;
+export const SIDE_PIT_M = 3.8;
+export const NEAR_PIT_M = 10.5;
 
-/** Flanks set back from the side rails, stepping out and up. */
-export const SIDE_DECKS: BowlDeck[] = [
-  { pos: [-21.2, 4.65, -1.05], size: [5.6, 6.4, 24], face: "west" },
-  { pos: [21.2, 4.65, -1.05], size: [5.6, 6.4, 24], face: "east" },
-  { pos: [-27.65, 4.5, 0.95], size: [6.2, 7.0, 28], face: "west" },
-  { pos: [27.65, 4.5, 0.95], size: [6.2, 7.0, 28], face: "east" },
-  { pos: [-34.65, 5.6, 2.95], size: [6.6, 7.2, 32], face: "west" },
-  { pos: [34.65, 5.6, 2.95], size: [6.6, 7.2, 32], face: "east" },
-];
+const hx = NEON_HALF_X;
+const hz = NEON_HALF_Z;
 
-/** Near end of the bowl, behind the camera until a rally opens the view. */
-export const END_DECKS: BowlDeck[] = [
-  { pos: [0, 3.55, 23.4], size: [84, 6.6, 5.4], face: "south" },
-  { pos: [0, 7.5, 30.2], size: [100, 7.2, 5.8], face: "south" },
-  { pos: [0, 11.4, 37.2], size: [116, 7.6, 6.2], face: "south" },
-];
+function deck(pos: [number, number, number], size: [number, number, number], face: BowlFace): BowlDeck {
+  return { pos, size, face };
+}
 
+function buildFar(): BowlDeck[] {
+  const rows = [
+    { depth: hz * 0.34, bottom: 1.25, height: 2.45, width: hx * 5.5 },
+    { depth: hz * 0.42, bottom: 2.35, height: hz * 0.7, width: hx * 6.0 },
+    { depth: hz * 0.46, bottom: 4.15, height: hz * 0.64, width: hx * 6.5 },
+    { depth: hz * 0.5, bottom: 5.85, height: hz * 0.58, width: hx * 7.0 },
+    { depth: hz * 0.54, bottom: 7.35, height: hz * 0.52, width: hx * 7.5 },
+    { depth: hz * 0.58, bottom: 8.55, height: hz * 0.46, width: hx * 8.0 },
+  ];
+  let front = -(hz + FAR_PIT_M);
+  return rows.map((row) => {
+    const cz = front - row.depth / 2;
+    const cy = row.bottom + row.height / 2;
+    const built = deck([0, cy, cz], [row.width, row.height, row.depth], "north");
+    front -= row.depth + 0.5;
+    return built;
+  });
+}
+
+function buildSides(): BowlDeck[] {
+  const rows = [
+    { thick: hx * 0.46, bottom: 1.4, height: 4.4, length: hz * 2.35 },
+    { thick: hx * 0.52, bottom: 2.2, height: hz * 0.78, length: hz * 2.65 },
+    { thick: hx * 0.56, bottom: 3.4, height: hz * 0.82, length: hz * 2.95 },
+  ];
+  const north = -(hz + FAR_PIT_M) + 0.28;
+  let inner = hx + SIDE_PIT_M;
+  const decks: BowlDeck[] = [];
+  for (const row of rows) {
+    const south = north + row.length;
+    const cz = (north + south) / 2;
+    const cy = row.bottom + row.height / 2;
+    const cx = inner + row.thick / 2;
+    decks.push(deck([-cx, cy, cz], [row.thick, row.height, row.length], "west"));
+    decks.push(deck([cx, cy, cz], [row.thick, row.height, row.length], "east"));
+    inner += row.thick + 0.5;
+  }
+  return decks;
+}
+
+function buildNear(): BowlDeck[] {
+  const rows = [
+    { depth: hz * 0.62, bottom: 0.45, height: 4.6, width: hx * 5.8 },
+    { depth: hz * 0.7, bottom: 3.0, height: hz * 0.9, width: hx * 6.6 },
+    { depth: hz * 0.76, bottom: 5.6, height: hz * 0.95, width: hx * 7.4 },
+  ];
+  let inner = hz + NEAR_PIT_M;
+  return rows.map((row) => {
+    const cz = inner + row.depth / 2;
+    const cy = row.bottom + row.height / 2;
+    const built = deck([0, cy, cz], [row.width, row.height, row.depth], "south");
+    inner += row.depth + 0.7;
+    return built;
+  });
+}
+
+export const FAR_DECKS: BowlDeck[] = buildFar();
+export const SIDE_DECKS: BowlDeck[] = buildSides();
+export const END_DECKS: BowlDeck[] = buildNear();
 export const BOWL_DECKS: BowlDeck[] = [...FAR_DECKS, ...SIDE_DECKS, ...END_DECKS];

@@ -1,5 +1,6 @@
 import { useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
+import { NEON_HALF_X, NEON_HALF_Z } from "@/lib/neonCourt";
 import { BOWL_DECKS, type BowlFace } from "./nightCircuitBowl";
 
 type CrowdLight = { x: number; y: number; z: number; scale: number; phase: number; color: THREE.Color };
@@ -21,12 +22,13 @@ function crowdLights(): CrowdLight[] {
   const phone = new THREE.Color("#ffd7a1");
 
   const push = (x: number, y: number, z: number, face: BowlFace, deckIndex: number) => {
-    if (Math.abs(x) < 12.4 && Math.abs(z) < 8.4) return;
-    if (face === "north" && Math.abs(x) < 7.4) return;
-    if (face === "north" && y > 4 && Math.abs(x) < 11) return;
+    if (Math.abs(x) < NEON_HALF_X + 0.35 && Math.abs(z) < NEON_HALF_Z + 0.35) return;
+    const scoreboard = NEON_HALF_X * 0.62;
+    if (face === "north" && Math.abs(x) < scoreboard) return;
+    if (face === "north" && y > 4.2 && Math.abs(x) < NEON_HALF_X * 0.9) return;
 
     const cell = crowdHash(Math.floor(x / 2.35) * 19.1 + Math.floor(y / 1.7) * 7.3 + Math.floor(z / 2.35) * 13.7);
-    const onRim = face === "north" && deckIndex === 0 && y < 2.9 && Math.abs(x) < 24;
+    const onRim = face === "north" && deckIndex === 0 && Math.abs(x) < NEON_HALF_X * 2.2;
     if (!onRim && cell < 0.34) return;
     if (onRim && cell < 0.1) return;
 
