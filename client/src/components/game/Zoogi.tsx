@@ -12,6 +12,7 @@ import { AI_LAUNCH_DELAY, LAUNCH_POWER_MULTIPLIER, MAX_LAUNCH_SPEED } from "@/li
 import { triggerLaunchCameraEffect, clearAimCameraEffect } from "@/lib/stores/useCameraEffects";
 import { getSkinEffect, getRainbowColor } from "@/lib/skinEffects";
 import { StunnedIndicator } from "./PowerEffects";
+import { useShadowBound } from "@/vfx/shadowMarks";
 import { AimBeam, AimPath, BindRibbons, Glint, RicochetShell, type Vec3 } from "@/vfx/powerLooks";
 
 // Global scale control - adjust this to resize ALL Zoogis uniformly
@@ -316,7 +317,8 @@ function PinpointDragBeam({
   return <AimBeam from={[origin[0], 0.55, origin[2]]} to={to} />;
 }
 
-function TurnStunMarker({ entity }: { entity: { position: [number, number, number]; isStunned: boolean; stunTimer: number } }) {
+function TurnStunMarker({ entity }: { entity: { id: string; position: [number, number, number]; isStunned: boolean; stunTimer: number } }) {
+  const shadow = useShadowBound(entity.id);
   if (!entity.isStunned) return null;
   return (
     <StunnedIndicator
@@ -324,6 +326,7 @@ function TurnStunMarker({ entity }: { entity: { position: [number, number, numbe
       remaining={entity.stunTimer > 0 ? entity.stunTimer : 1}
       duration={0}
       pulse
+      look={shadow ? "shadow" : "shock"}
     />
   );
 }

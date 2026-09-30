@@ -638,3 +638,143 @@ export function stepColdEmbers(pool: SpritePool, elapsed: number, dt: number): v
     pool.rot[i] += pool.spin[i] * dt;
   }
 }
+
+function shadowInk(rand: () => number): [number, number, number] {
+  const roll = rand();
+  if (roll < 0.7) return [0.01, 0.002, 0.024];
+  if (roll < 0.9) return [0.022, 0.006, 0.048];
+  return [0.05, 0.014, 0.09];
+}
+
+/** Dark wisps that collapse toward the caster before the wave leaves. */
+export function seedShadowSuck(pool: SpritePool, rand: () => number, count: number): void {
+  const n = Math.min(pool.capacity, count);
+  for (let i = 0; i < n; i++) {
+    const ang = rand() * Math.PI * 2;
+    const dist = 1.15 + rand() * 1.7;
+    const tangent = (rand() - 0.5) * 1.6;
+    const speed = 4.6 + rand() * 2.6;
+    const [r, g, b] = shadowInk(rand);
+    spawnSprite(pool, {
+      x: Math.cos(ang) * dist,
+      y: 0.18 + rand() * 0.4,
+      z: Math.sin(ang) * dist,
+      vx: -Math.cos(ang) * speed - Math.sin(ang) * tangent,
+      vy: 0.05 + rand() * 0.28,
+      vz: -Math.sin(ang) * speed + Math.cos(ang) * tangent,
+      life: 0.28 + rand() * 0.1,
+      size: 0.85 + rand() * 0.65,
+      grow: 0,
+      spin: (rand() - 0.5) * 1.4,
+      r,
+      g,
+      b,
+      seed: ang + i,
+    });
+  }
+}
+
+export function stepShadowSuck(pool: SpritePool, _elapsed: number, dt: number): void {
+  for (let i = 0; i < pool.capacity; i++) {
+    if (pool.active[i] === 0) continue;
+    pool.life[i] -= dt;
+    const dist = Math.hypot(pool.px[i], pool.pz[i]);
+    if (pool.life[i] <= 0 || dist < 0.12) {
+      killSprite(pool, i);
+      continue;
+    }
+    if (dist > 0.05) {
+      pool.vx[i] += (-pool.px[i] / dist) * 9 * dt;
+      pool.vz[i] += (-pool.pz[i] / dist) * 9 * dt;
+    }
+    pool.px[i] += pool.vx[i] * dt;
+    pool.py[i] = Math.max(0.1, Math.min(0.85, pool.py[i] + pool.vy[i] * dt));
+    pool.pz[i] += pool.vz[i] * dt;
+    pool.rot[i] += pool.spin[i] * dt;
+    const age = 1 - pool.life[i] / pool.maxLife[i];
+    const fadeIn = age < 0.1 ? age / 0.1 : 1;
+    const fadeOut = 1 - smoothstep((age - 0.4) / 0.6);
+    pool.opacity[i] = 0.88 * fadeIn * fadeOut;
+    pool.size[i] = pool.size0[i] * (1 - age * 0.4);
+  }
+}
+
+/**
+ * Ground wave. `grow` stores how far along the radius this puff is meant to
+ * stop. The outer edge of every puff is clamped to `radius`.
+ */
+export function seedShadowWave(
+  pool: SpritePool,
+  radius: number,
+  rand: () => number,
+  count: number,
+  sizeScale = 1,
+): void {
+  const n = Math.min(pool.capacity, count);
+  for (let i = 0; i < n; i++) {
+    const ang = (i / Math.max(1, n)) * Math.PI * 2 + (rand() - 0.5) * 0.55;
+    const band = i / Math.max(1, n);
+    const front = band < 0.4;
+    const targetFrac = front
+      ? 0.94 + rand() * 0.06
+      : band < 0.72
+        ? 0.46 + rand() * 0.3
+        : 0.16 + rand() * 0.24;
+    const size = (front ? 1.55 + rand() * 0.65 : band < 0.72 ? 1.4 + rand() * 0.8 : 1.75 + rand() * 0.85) * sizeScale;
+    const [r, g, b] = shadowInk(rand);
+    spawnSprite(pool, {
+      x: Math.cos(ang) * 0.25,
+      y: 0.16,
+      z: Math.sin(ang) * 0.25,
+      vx: rand() * 10,
+      vy: rand() * 0.08,
+      vz: 0,
+      life: 4,
+      size,
+      grow: Math.min(1, targetFrac),
+      spin: (rand() - 0.5) * 0.55,
+      r,
+      g,
+      b,
+      seed: ang,
+    });
+  }
+}
+
+export const SHADOW_WAVE_START = 0.2;
+export const SHADOW_WAVE_DUR = 0.7;
+
+export function stepShadowWave(pool: SpritePool, radius: number, elapsed: number, dt: number): void {
+  const fadeIn = smoothstep((elapsed - 0.16) / 0.16);
+  const fadeOut = 1 - smoothstep((elapsed - 1.25) / 1.2);
+  for (let i = 0; i < pool.capacity; i++) {
+    if (pool.active[i] === 0) continue;
+    const ang = pool.seed[i];
+    const targetFrac = pool.grow[i];
+    const delay = (1 - targetFrac) * 0.14;
+    const local = smoothstep((elapsed - SHADOW_WAVE_START - delay) / SHADOW_WAVE_DUR);
+    const size = pool.size0[i] * (0.78 + 0.4 * local);
+    const half = size * 0.5;
+    const limit = Math.max(0.2, radius - half);
+    const end = Math.min(radius * targetFrac, limit);
+    const start = 0.22;
+    const dist = start + (end - start) * local;
+    const wobble = Math.sin(elapsed * 1.7 + pool.vx[i]) * 0.14 * (1 - local * 0.35);
+    let x = Math.cos(ang) * dist - Math.sin(ang) * wobble;
+    let z = Math.sin(ang) * dist + Math.cos(ang) * wobble;
+    const radial = Math.hypot(x, z);
+    if (radial > limit) {
+      const scale = limit / radial;
+      x *= scale;
+      z *= scale;
+    }
+    pool.px[i] = x;
+    pool.pz[i] = z;
+    const rise = targetFrac > 0.9 ? Math.sin(Math.min(1, local) * Math.PI) * 0.1 : 0.02;
+    const bob = Math.sin(elapsed * 2.2 + ang * 3) * 0.025;
+    pool.py[i] = 0.32 + rise + bob;
+    pool.size[i] = size;
+    pool.rot[i] += pool.spin[i] * dt;
+    pool.opacity[i] = fadeIn * fadeOut * (0.96 + targetFrac * 0.04);
+  }
+}
