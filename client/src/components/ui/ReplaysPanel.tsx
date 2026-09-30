@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Film, Play, Trash2, Globe, Lock, Clock, Share2, User, ChevronRight, Download } from "lucide-react";
 import { useAuth } from "@/lib/stores/useAuth";
+import { OnlineNotice } from "@/components/ui/OnlineNotice";
 
 interface Replay {
   id: number;
@@ -144,6 +145,8 @@ export function ReplaysPanel({ onClose, onPlayReplay }: ReplaysPanelProps) {
             </button>
           </div>
         </div>
+
+        <OnlineNotice compact className="mx-4 mt-3" />
 
         <div className="flex border-b border-white/10">
           <button

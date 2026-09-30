@@ -1,4 +1,9 @@
 import { getSnowmanPositions } from "./arenaConstants";
+import { arenaScaleFor } from "./arenaScale";
+import { leftNeonOpenEdge, neonCourtLayout, neonPlayHalfX, neonPlayHalfZ, neonRimGapAdjustments } from "./neonCourt";
+import { ORB_DRAW_RADIUS, ZOOGI_DRAW_RADIUS } from "./restHeight";
+import { MARBLE_WIDTH, placeScaledObstacles, type RimGapAdjustment } from "./obstaclePlacement";
+import { BUMPER_RESTITUTION, ROCK_RESTITUTION } from "./simFeel";
 import {
   ARABIAN_RIM,
   GRASS_RIM,
@@ -7,8 +12,6 @@ import {
   rimPosition,
   type RimMark,
 } from "./roundRim";
-import { neonCourtLayout } from "./neonCourt";
-import { BUMPER_RESTITUTION } from "./simFeel";
 
 /**
  * Solid shapes the marble simulation uses.
@@ -20,8 +23,9 @@ import { BUMPER_RESTITUTION } from "./simFeel";
  */
 export const BUMPER_RADIUS = 0.955;
 export const BUMPER_MODEL_URL = "/models/bumber1.glb";
-export const MARBLE_RADIUS = 0.5;
-export const ORB_RADIUS = 0.4;
+/** Hit radius matches the drawn ball, so the mesh rests on the floor and touches when it collides. */
+export const MARBLE_RADIUS = ZOOGI_DRAW_RADIUS;
+export const ORB_RADIUS = ORB_DRAW_RADIUS;
 export const SNOWMAN_RADIUS = 0.55;
 export const REST_SPEED = 0.02;
 
@@ -47,17 +51,103 @@ export const WINTER_STAGE = {
 };
 
 /**
- * cosmos_arena.glb. Scale 1.08. The playable floor ends at the inner face of
- * the lip wall (about 15.6). That wall is drawn only, so the knockoff line is
- * the inner face: a marble is out where the floor visibly ends, not after it
- * has rolled through the wall. Floor mesh is at local y=-0.02.
+ * cosmos_arena.glb floor (polygon56_Arena_Floor). It is an 18-gon, not a
+ * circle: corners every 20°, with a corner on +X, at radius 15.743 around
+ * a centre near (+0.250, -0.024). The flats sit at 15.743 * cos(10°), about
+ * 15.504. cosmosPlayTransform recentres that polygon and keeps the corners
+ * on the 15.6 knockout. The fall check uses the same 18-gon, so a marble
+ * leaves at the lip on the flats as well as the corners.
+ *
+ * polygon30 (Arena Wall Barrier, the curb), polygon67 (Arena Wall), and
+ * polygon72 (Crowd Stands, including its reflection) are pushed out until
+ * their inner faces clear the farthest fall line by one marble radius.
+ * The numbers below are those inner faces after the play transform and
+ * before that push, at arena scale 1. The stands' vertices begin near
+ * 15.04; the inner edges sit further in, about half a marble inside a flat.
  */
+export const COSMOS_FLOOR_MESH = {
+  centerX: 0.25045,
+  centerY: -0.019,
+  centerZ: -0.02365,
+  radius: 15.743,
+};
+
+export const COSMOS_LIP_SIDES = 18;
+/** Inner-face radius of the curb (Arena Wall Barrier) before it is pushed out. */
+export const COSMOS_CURB_INNER = 14.544;
+/** Inner-face radius of the arena wall before it is pushed out. */
+export const COSMOS_WALL_INNER = 14.834;
+/** Inner-face radius of the crowd stands before they are pushed out. */
+export const COSMOS_STANDS_INNER = 14.885;
+
 export const COSMOS_STAGE = {
-  modelScale: 1.08,
-  modelOffsetY: 0.02 * 1.08,
-  floorRadius: 15.2,
+  floorRadius: 15.6,
   knockoffRadius: 15.6,
 };
+
+/** Radius of a regular polygon at `angle`, with a vertex on +X. */
+export function regularPolygonRadius(cornerRadius: number, sides: number, angle: number): number {
+  const sector = (Math.PI * 2) / sides;
+  const half = sector / 2;
+  let wrapped = angle % sector;
+  if (wrapped < 0) wrapped += sector;
+  const fromVertex = Math.min(wrapped, sector - wrapped);
+  return (cornerRadius * Math.cos(half)) / Math.cos(half - fromVertex);
+}
+
+/** Scale and shift that put the floor's corners on the knockout and the centre on the origin. */
+export function cosmosPlayTransform(): { x: number; y: number; z: number; scale: number } {
+  const worldRadius = COSMOS_STAGE.knockoffRadius * arenaScaleFor("space");
+  const scale = worldRadius / COSMOS_FLOOR_MESH.radius;
+  return {
+    x: -scale * COSMOS_FLOOR_MESH.centerX,
+    y: -scale * COSMOS_FLOOR_MESH.centerY,
+    z: -scale * COSMOS_FLOOR_MESH.centerZ,
+    scale,
+  };
+}
+
+/** World lip of the cosmic floor after cosmosPlayTransform. `radius` is a corner; flats are closer. */
+export function cosmosDrawnLip(): {
+  centerX: number;
+  centerZ: number;
+  radius: number;
+  radiusAt: (angle: number) => number;
+} {
+  const placed = cosmosPlayTransform();
+  const radiusAt = (angle: number) =>
+    placed.scale * regularPolygonRadius(COSMOS_FLOOR_MESH.radius, COSMOS_LIP_SIDES, angle);
+  return {
+    centerX: placed.x + placed.scale * COSMOS_FLOOR_MESH.centerX,
+    centerZ: placed.z + placed.scale * COSMOS_FLOOR_MESH.centerZ,
+    radius: radiusAt(0),
+    radiusAt,
+  };
+}
+
+/** Fall line for Cosmic Platform: the same 18-gon the floor lip draws. */
+export function cosmosLipRadius(angle: number): number {
+  return cosmosDrawnLip().radiusAt(angle);
+}
+
+/** "curb" is Arena Wall Barrier. "wall" is Arena Wall, not the barrier. "stands" is Crowd Stands. */
+export function cosmosRingRole(name: string): "curb" | "wall" | "stands" | null {
+  const normalized = name.toLowerCase().replace(/[_]+/g, " ");
+  if (normalized.includes("crowd stands")) return "stands";
+  if (normalized.includes("arena wall barrier")) return "curb";
+  if (normalized.includes("arena wall")) return "wall";
+  return null;
+}
+
+/**
+ * Radial scale that puts an inner face on the farthest fall line plus one
+ * marble radius. 1 means the ring is already clear.
+ */
+export function cosmosRingPush(innerWorld: number): number {
+  const limit = cosmosLipRadius(0) + MARBLE_RADIUS;
+  if (!(innerWorld > 0) || innerWorld >= limit) return 1;
+  return limit / innerWorld;
+}
 
 /**
  * arabian_nights_stage.glb is authored around (-656.5, 556.6, 11). That point
@@ -264,7 +354,7 @@ export interface HoodooDecor {
 const HOODOO_FOOTPRINT = 0.25;
 const HOODOO_BASE_LIFT = 0.367;
 
-export function getHoodooDecor(): HoodooDecor[] {
+function hoodooUnits(): HoodooDecor[] {
   const decor: HoodooDecor[] = [];
   const count = 6;
   for (let i = 0; i < count; i++) {
@@ -284,6 +374,19 @@ export function getHoodooDecor(): HoodooDecor[] {
   return decor;
 }
 
+/** Hoodoo stones keep their size. Only the ring they stand on grows. */
+export function getHoodooDecor(): HoodooDecor[] {
+  const placed = new Map((getMapLayout("lava")?.scenery ?? []).map((solid) => [solid.id, solid]));
+  return hoodooUnits().map((hoodoo) => {
+    const solid = placed.get(hoodoo.id);
+    return {
+      ...hoodoo,
+      position: [solid?.x ?? hoodoo.position[0], hoodoo.position[1], solid?.z ?? hoodoo.position[2]] as [number, number, number],
+      radius: solid?.radius ?? hoodoo.radius,
+    };
+  });
+}
+
 export interface IcePatch {
   id: string;
   x: number;
@@ -292,8 +395,7 @@ export interface IcePatch {
   rotation: number;
 }
 
-/** Drawn ice disks and the slippery patch surface use this one list. */
-export function getIcePatches(): IcePatch[] {
+function icePatchUnits(): IcePatch[] {
   const patches: IcePatch[] = [];
   const patchCount = 4;
   for (let i = 0; i < patchCount; i++) {
@@ -308,6 +410,17 @@ export function getIcePatches(): IcePatch[] {
     });
   }
   return patches;
+}
+
+/** Drawn ice disks and the slippery patch surface use this one list. */
+export function getIcePatches(): IcePatch[] {
+  const scale = arenaScaleFor("ice");
+  return icePatchUnits().map((patch) => ({
+    ...patch,
+    x: patch.x * scale,
+    z: patch.z * scale,
+    radius: patch.radius * scale,
+  }));
 }
 
 const CARDINAL = [0, Math.PI / 2, Math.PI, Math.PI * 1.5];
@@ -406,7 +519,7 @@ const LAYOUTS: Record<string, MapLayout> = {
     "lava",
     18,
     18.6,
-    getHoodooDecor().map((hoodoo) => ({
+    hoodooUnits().map((hoodoo) => ({
       id: hoodoo.id,
       x: hoodoo.position[0],
       z: hoodoo.position[2],
@@ -435,10 +548,75 @@ const LAYOUTS: Record<string, MapLayout> = {
   ),
 };
 
+/**
+ * Spread a layout written in today's units. Obstacle and bumper radii stay
+ * put so the larger floor has more open space. Positions, the floor, the
+ * knockoff line, spawns, and score zones all grow. Circles that belong to
+ * one mesh keep their offsets, and a rim slot a marble almost fits through
+ * is nudged shut or open.
+ */
+export function scaleLayout(layout: MapLayout, scale: number): MapLayout {
+  const knockoffRadius = layout.knockoffRadius * scale;
+  const scenery = placeScaledObstacles(layout.scenery, scale, knockoffRadius, MARBLE_RADIUS * 2).circles;
+  return {
+    ...layout,
+    floorRadius: layout.floorRadius * scale,
+    knockoffRadius,
+    orbRingRadius: layout.orbRingRadius * scale,
+    zones: layout.zones.map((zone) => ({ ...zone, distance: zone.distance * scale })),
+    scenery,
+    bumpers: layout.bumpers.map((bumper) => ({ ...bumper, x: bumper.x * scale, z: bumper.z * scale })),
+  };
+}
+
+export type { RimGapAdjustment };
+
+/** Every read-time rim nudge, including camp props that appear with the winter mesh. */
+export function listRimGapAdjustments(): Array<RimGapAdjustment & { mapId: string }> {
+  const rows: Array<RimGapAdjustment & { mapId: string }> = [];
+  const marble = MARBLE_RADIUS * 2;
+  if (Math.abs(marble - MARBLE_WIDTH) > 1e-9) {
+    throw new Error(`marble width ${marble} drifted from obstacle placement ${MARBLE_WIDTH}`);
+  }
+  for (const mapId of Object.keys(LAYOUTS)) {
+    const layout = LAYOUTS[mapId];
+    const scale = arenaScaleFor(mapId);
+    const placed = placeScaledObstacles(layout.scenery, scale, layout.knockoffRadius * scale, marble);
+    for (const adjustment of placed.adjustments) rows.push({ mapId, ...adjustment });
+  }
+  for (const adjustment of neonRimGapAdjustments()) rows.push({ mapId: "neon", ...adjustment });
+  return rows;
+}
+
+/** Collider meshes inside this map's dress group, and the world nudge applied to each. */
+/**
+ * Code-drawn obstacles (rocks, snowmen, planters, hoodoos, tomb blocks, neon
+ * posts) sit outside any dress group and already use the scaled layout.
+ * Nothing embedded in a stage model is a collider, so there is no counter-scale.
+ */
+export function embeddedObstaclePose(_mapId: string): { meshKeys: string[]; nudges: { meshKey: string; dx: number; dz: number }[] } {
+  return { meshKeys: [], nudges: [] };
+}
+
+/** Floor disk and knockout ring the arena draws. Both match the colliders. */
+export function arenaVisualEdge(mapId: string):
+  | { shape: "circle"; floorRadius: number; knockoffRadius: number }
+  | { shape: "rect"; halfX: number; halfZ: number } {
+  if (mapId === "neon") return { shape: "rect", halfX: neonPlayHalfX(), halfZ: neonPlayHalfZ() };
+  const layout = getMapLayout(mapId);
+  return {
+    shape: "circle",
+    floorRadius: layout?.floorRadius ?? 0,
+    knockoffRadius: layout?.knockoffRadius ?? 0,
+  };
+}
+
 export function getMapLayout(mapId: string | null | undefined): MapLayout | null {
   if (!mapId) return null;
   if (mapId === "neon") return neonCourtLayout();
-  return LAYOUTS[mapId] ?? null;
+  const layout = LAYOUTS[mapId];
+  if (!layout) return null;
+  return scaleLayout(layout, arenaScaleFor(mapId));
 }
 
 export function bumperSolids(bumpers: { id: string; x: number; z: number }[]): SolidCircle[] {
@@ -504,7 +682,8 @@ export function resolveSolidCollision(
   vel: [number, number, number],
   entityRadius: number,
   solids: SolidCircle[],
-  restitution = 0.72,
+  restitution = ROCK_RESTITUTION,
+  keepInsideRadius?: number,
 ): { pos: [number, number, number]; vel: [number, number, number]; hits: string[] } {
   let x = pos[0];
   let z = pos[2];
@@ -542,8 +721,17 @@ export function resolveSolidCollision(
         dz = 0;
         dist = 1;
       }
-      const nx = dx / dist;
-      const nz = dz / dist;
+      let nx = dx / dist;
+      let nz = dz / dist;
+      if (keepInsideRadius !== undefined) {
+        const solidDist = Math.hypot(solid.x, solid.z);
+        const facesOut = nx * solid.x + nz * solid.z > 0;
+        const onRim = solidDist + solid.radius >= keepInsideRadius - entityRadius - 0.05;
+        if (facesOut && onRim && solidDist > 1e-6) {
+          nx = -solid.x / solidDist;
+          nz = -solid.z / solidDist;
+        }
+      }
       const dot = vx * nx + vz * nz;
       const bounce = solid.kind === "bumper" ? Math.max(restitution, BUMPER_RESTITUTION) : restitution;
       if (dot < 0) {
@@ -556,8 +744,19 @@ export function resolveSolidCollision(
         }
       }
       const sep = minDist + 0.04;
-      x = solid.x + nx * sep;
-      z = solid.z + nz * sep;
+      const placedX = solid.x + nx * sep;
+      const placedZ = solid.z + nz * sep;
+      // A rim rock's inward normal used to drop the marble on the far
+      // face, about three units through the rock. Cap that shove.
+      const jump = Math.hypot(placedX - x, placedZ - z);
+      const maxPush = 0.2;
+      if (jump > maxPush) {
+        x += ((placedX - x) / jump) * maxPush;
+        z += ((placedZ - z) / jump) * maxPush;
+      } else {
+        x = placedX;
+        z = placedZ;
+      }
       hits.push(solid.id);
       hitThisPass = true;
     }
@@ -587,6 +786,41 @@ export function countClearLanes(layout: MapLayout, samples = 24): number {
     if (laneIsClear(layout, (i / samples) * Math.PI * 2)) clear++;
   }
   return clear;
+}
+
+/**
+ * True only when the body is past the knockout line on an angle the rim
+ * solids do not cover. Overlapping a meadow rock, or sitting on its outer
+ * face, is not the open edge.
+ */
+export function centerPastOpenEdge(
+  mapId: string | null | undefined,
+  x: number,
+  z: number,
+  knockoffRadius: number,
+  bodyRadius: number,
+  solids: SolidCircle[],
+): boolean {
+  if (mapId === "neon") return leftNeonOpenEdge(x, z, bodyRadius);
+  const angle = Math.atan2(z, x);
+  const lipCorner = mapId === "space" ? cosmosLipRadius(0) : 0;
+  const fallRadius = mapId === "space" && lipCorner > 0
+    ? cosmosLipRadius(angle) * (knockoffRadius / lipCorner)
+    : knockoffRadius;
+  // A hair of float must not drop a marble that is sitting on the lip.
+  if (Math.hypot(x, z) <= fallRadius + 1e-6) return false;
+  const walls = solids.filter((solid) => solid.kind !== "bumper");
+  if (pointInsideSolid(x, z, walls, bodyRadius)) return false;
+  const rimX = Math.cos(angle) * fallRadius;
+  const rimZ = Math.sin(angle) * fallRadius;
+  for (const solid of walls) {
+    const rimClearance = Math.hypot(rimX - solid.x, rimZ - solid.z) - solid.radius;
+    if (rimClearance >= bodyRadius) continue;
+    const bodyGap = Math.hypot(x - solid.x, z - solid.z) - solid.radius;
+    // Still against the wall. Far past it, the body has left the court.
+    if (bodyGap < bodyRadius) return false;
+  }
+  return true;
 }
 
 export function pointInsideSolid(x: number, z: number, solids: SolidCircle[], padding = 0): SolidCircle | null {

@@ -4,7 +4,8 @@ import { useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { useAudio } from "@/lib/stores/useAudio";
-import { getHoodooDecor, type HoodooDecor } from "@/lib/arenaColliders";
+import type { HoodooDecor } from "@/lib/arenaColliders";
+import { hoodoosOnLavaColliders } from "@/lib/lavaHoodooPlacement";
 import { fittedHoodooGeometry } from "./volcanicHoodooFit";
 
 /** Collider radius in the mesh's local space. World radius is this times hoodoo.scale. */
@@ -120,7 +121,7 @@ function HoodooWithFallback({ hoodoo }: { hoodoo: HoodooData }) {
 }
 
 export function DesertHoodoos() {
-  const hoodooData = useMemo<HoodooData[]>(() => getHoodooDecor(), []);
+  const hoodooData = useMemo<HoodooData[]>(() => hoodoosOnLavaColliders(), []);
 
   return (
     <group>
@@ -132,10 +133,8 @@ export function DesertHoodoos() {
 }
 
 export function getHoodooPositions(): { position: [number, number, number]; radius: number }[] {
-  return getHoodooDecor().map((hoodoo) => ({
+  return hoodoosOnLavaColliders().map((hoodoo) => ({
     position: hoodoo.position,
     radius: hoodoo.radius,
   }));
 }
-
-useGLTF.preload("/models/stylized_desert_hoodoo.glb");

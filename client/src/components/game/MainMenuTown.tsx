@@ -223,12 +223,12 @@ export function MainMenuTown({ onNavigate }: MainMenuTownProps) {
                 <div className="flex flex-col gap-3">
                   <button
                     onClick={() => {
-                      onNavigate("enter_battle_stadium");
+                      onNavigate("play");
                     }}
                     className="flex items-center justify-center gap-3 px-8 py-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white text-xl font-bold rounded-full shadow-lg shadow-green-500/40 hover:shadow-green-500/60 transition-all active:scale-95"
                   >
                     <Play size={24} fill="white" />
-                    Enter Battle Stadium
+                    Play
                   </button>
 
                   <button
@@ -239,34 +239,12 @@ export function MainMenuTown({ onNavigate }: MainMenuTownProps) {
                     Multiplayer
                   </button>
 
-                  <button
-                    onClick={() => onNavigate("marble_arena")}
-                    className="flex items-center justify-center gap-3 px-8 py-4 bg-gradient-to-r from-amber-500 to-orange-600 text-white text-xl font-bold rounded-full shadow-lg shadow-amber-500/40 hover:shadow-amber-500/60 transition-all active:scale-95"
-                  >
-                    <Target size={24} />
-                    Marble Arena
-                  </button>
                 </div>
 
-                  <div className="w-full grid grid-cols-2 gap-3 mt-4">
-            <button
-              onClick={() => onNavigate("enter_battle_stadium")}
-              className="bg-gradient-to-br from-orange-500 via-red-500 to-purple-600 rounded-2xl p-4 flex flex-col items-center gap-2 hover:scale-[1.02] transition-all active:scale-95 shadow-lg relative overflow-hidden"
-            >
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.15),transparent_60%)]" />
-              <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center relative">
-                <Flame size={24} className="text-white" />
-              </div>
-              <div className="flex items-center gap-1">
-                <Sparkles size={12} className="text-yellow-300" />
-                <span className="text-yellow-300 text-xs font-bold">NEW</span>
-              </div>
-              <span className="text-white font-bold text-sm">The Ringer Trials</span>
-            </button>
-
+                  <div className="w-full mt-4">
             <button
               onClick={() => onNavigate("create_arena")}
-              className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl p-4 flex flex-col items-center gap-2 hover:scale-[1.02] transition-all active:scale-95 shadow-lg"
+              className="w-full bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl p-4 flex flex-col items-center gap-2 hover:scale-[1.02] transition-all active:scale-95 shadow-lg"
             >
               <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
                 <Book size={24} className="text-white" />

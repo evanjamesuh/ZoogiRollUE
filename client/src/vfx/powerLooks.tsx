@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { InstancedSprites } from "./InstancedSprites";
@@ -17,6 +17,7 @@ import {
   STUN_RIM_FRAG,
 } from "./shaders";
 import { getVfxQuality } from "./quality";
+import { ZOOGI_FX_SCALE } from "@/lib/restHeight";
 import {
   seedBurstSparks,
   seedOzone,
@@ -69,6 +70,7 @@ export function JaggedArc({
   cloth = false,
   endFade = 0,
   hot = true,
+  flicker = 0,
 }: {
   from: Vec3;
   to: Vec3;
@@ -80,26 +82,43 @@ export function JaggedArc({
   cloth?: boolean;
   endFade?: number;
   hot?: boolean;
+  flicker?: number;
 }) {
   const geo = useMemo(() => createRibbonGeometry(ARC_POINTS - 1), []);
   const material = useMemo(() => ribbonMaterial(new THREE.Color(color), cloth, hot && !cloth), [color, cloth, hot]);
   const points = useMemo(() => Array.from({ length: ARC_POINTS }, () => new THREE.Vector3()), []);
   const fromV = useRef(new THREE.Vector3());
   const toV = useRef(new THREE.Vector3());
-  const jitters = useMemo(() => {
-    const rand = mulberry32(seed || 1);
-    return Array.from({ length: ARC_POINTS - 2 }, () => [(rand() - 0.5) * 2, (rand() - 0.5) * 2] as [number, number]);
-  }, [seed]);
+  const jitterSeed = useRef(seed || 1);
+  const flickerClock = useRef(0);
+  const jitters = useRef<[number, number][]>([]);
+  if (jitters.current.length === 0) {
+    const rand = mulberry32(jitterSeed.current);
+    jitters.current = Array.from({ length: ARC_POINTS - 2 }, () => [(rand() - 0.5) * 2, (rand() - 0.5) * 2]);
+  }
 
   useEffect(() => () => {
     geo.dispose();
     material.dispose();
   }, [geo, material]);
 
-  useFrame((state) => {
+  useFrame((state, dt) => {
+    if (flicker > 0) {
+      flickerClock.current += Math.min(dt, 1 / 30);
+      if (flickerClock.current > flicker) {
+        flickerClock.current = 0;
+        jitterSeed.current = (jitterSeed.current + 17) % 9973;
+        const rand = mulberry32(jitterSeed.current || 1);
+        const next = jitters.current;
+        for (let i = 0; i < next.length; i++) {
+          next[i][0] = (rand() - 0.5) * 2;
+          next[i][1] = (rand() - 0.5) * 2;
+        }
+      }
+    }
     fromV.current.set(from[0], from[1], from[2]);
     toV.current.set(to[0], to[1], to[2]);
-    layJagged(fromV.current, toV.current, jitters, points, sag);
+    layJagged(fromV.current, toV.current, jitters.current, points, sag);
     writeRibbon(geo, points, width, state.camera.position);
     material.uniforms.uFade.value = fade;
     material.uniforms.uEndFade.value = endFade;
@@ -183,8 +202,8 @@ function BeamMotes({ from, to }: { from: Vec3; to: Vec3 }) {
 export function AimBeam({ from, to }: { from: Vec3; to: Vec3 }) {
   return (
     <group>
-      <StraightBeam from={from} to={to} width={0.12} color="#b7d7ff" endFade={1} />
-      <StraightBeam from={from} to={to} width={0.035} color="#f7fbff" endFade={1} />
+      <StraightBeam from={from} to={to} width={0.12 * ZOOGI_FX_SCALE} color="#b7d7ff" endFade={1} />
+      <StraightBeam from={from} to={to} width={0.035 * ZOOGI_FX_SCALE} color="#f7fbff" endFade={1} />
       <Glint position={to} size={0.55} color="#eaf6ff" />
       <BeamMotes from={from} to={to} />
     </group>
@@ -209,8 +228,8 @@ export function AimPath({ points }: { points: Vec3[] }) {
   useFrame((state) => {
     const n = Math.min(points.length, buf.length);
     for (let i = 0; i < n; i++) buf[i].set(points[i][0], points[i][1], points[i][2]);
-    writeRibbon(glowGeo, buf, 0.11, state.camera.position);
-    writeRibbon(coreGeo, buf, 0.032, state.camera.position);
+    writeRibbon(glowGeo, buf, 0.11 * ZOOGI_FX_SCALE, state.camera.position);
+    writeRibbon(coreGeo, buf, 0.032 * ZOOGI_FX_SCALE, state.camera.position);
     glow.uniforms.uFade.value = 0.9;
     core.uniforms.uFade.value = 1;
     glow.uniforms.uEndFade.value = 1;
@@ -240,7 +259,7 @@ export function Glint({
   const material = useMemo(() => {
     const mat = new THREE.ShaderMaterial({
       uniforms: {
-        uSize: { value: size },
+        uSize: { value: size * ZOOGI_FX_SCALE },
         uColor: { value: new THREE.Color(color) },
         uTime: { value: 0 },
       },
@@ -314,7 +333,7 @@ export function BindRibbons() {
     for (let i = 0; i < pool.capacity; i++) {
       pool.active[i] = 1;
       pool.opacity[i] = 0.45;
-      pool.size[i] = 0.26;
+      pool.size[i] = 0.26 * ZOOGI_FX_SCALE;
       pool.rot[i] = i;
       pool.seed[i] = i + 1;
     }
@@ -347,7 +366,7 @@ export function BindRibbons() {
       dust.py[i] = 0.06 + (i % 4) * 0.07;
       dust.pz[i] = Math.sin(ang) * reach;
       dust.opacity[i] = 0.38;
-      dust.size[i] = 0.16 + (i % 3) * 0.05;
+      dust.size[i] = (0.16 + (i % 3) * 0.05) * ZOOGI_FX_SCALE;
       dust.active[i] = 1;
     }
   });
@@ -429,15 +448,6 @@ export function BoltDischarge({
 }
 
 function ArcSet({ pairs }: { pairs: Array<[Vec3, Vec3]> }) {
-  const tick = useRef(0);
-  const [generation, setGeneration] = useState(1);
-  useFrame((_, dt) => {
-    tick.current += Math.min(dt, 1 / 30);
-    if (tick.current > 0.09) {
-      tick.current = 0;
-      setGeneration((value) => (value + 1) % 997);
-    }
-  });
   const bolts = pairs.flatMap((pair, i) => {
     const from = pair[0];
     const to = pair[1];
@@ -447,18 +457,18 @@ function ArcSet({ pairs }: { pairs: Array<[Vec3, Vec3]> }) {
       from[2] + (to[2] - from[2]) * t,
     ];
     const forks: Array<{ key: string; from: Vec3; to: Vec3; salt: number }> = [
-      { key: `a${i}`, from: pointAt(0.34, 0.12), to: [pointAt(0.34, 0.12)[0] + 0.55, pointAt(0.34, 0.12)[1] + 0.35, pointAt(0.34, 0.12)[2] - 0.4], salt: 11 },
-      { key: `b${i}`, from: pointAt(0.58, 0.08), to: [pointAt(0.58, 0.08)[0] - 0.48, pointAt(0.58, 0.08)[1] + 0.42, pointAt(0.58, 0.08)[2] + 0.36], salt: 19 },
-      { key: `c${i}`, from: pointAt(0.46, 0.16), to: [pointAt(0.46, 0.16)[0] + 0.22, pointAt(0.46, 0.16)[1] + 0.55, pointAt(0.46, 0.16)[2] + 0.5], salt: 23 },
+      { key: `a${i}`, from: pointAt(0.34, 0.12), to: [pointAt(0.34, 0.12)[0] + 0.55 * ZOOGI_FX_SCALE, pointAt(0.34, 0.12)[1] + 0.35 * ZOOGI_FX_SCALE, pointAt(0.34, 0.12)[2] - 0.4 * ZOOGI_FX_SCALE], salt: 11 },
+      { key: `b${i}`, from: pointAt(0.58, 0.08), to: [pointAt(0.58, 0.08)[0] - 0.48 * ZOOGI_FX_SCALE, pointAt(0.58, 0.08)[1] + 0.42 * ZOOGI_FX_SCALE, pointAt(0.58, 0.08)[2] + 0.36 * ZOOGI_FX_SCALE], salt: 19 },
+      { key: `c${i}`, from: pointAt(0.46, 0.16), to: [pointAt(0.46, 0.16)[0] + 0.22 * ZOOGI_FX_SCALE, pointAt(0.46, 0.16)[1] + 0.55 * ZOOGI_FX_SCALE, pointAt(0.46, 0.16)[2] + 0.5 * ZOOGI_FX_SCALE], salt: 23 },
     ];
     return [
-      { key: `glow${i}`, from, to, width: 0.12, color: "#9ecfff", sag: 0.1, salt: 3, hot: false },
-      { key: `core${i}`, from, to, width: 0.032, color: "#ffffff", sag: 0.1, salt: 3, hot: true },
+      { key: `glow${i}`, from, to, width: 0.12 * ZOOGI_FX_SCALE, color: "#9ecfff", sag: 0.1, salt: 3, hot: false },
+      { key: `core${i}`, from, to, width: 0.032 * ZOOGI_FX_SCALE, color: "#ffffff", sag: 0.1, salt: 3, hot: true },
       ...forks.map((fork) => ({
         key: fork.key,
         from: fork.from,
         to: fork.to,
-        width: 0.045,
+        width: 0.045 * ZOOGI_FX_SCALE,
         color: "#c5e6ff",
         sag: 0.05,
         salt: fork.salt,
@@ -473,7 +483,8 @@ function ArcSet({ pairs }: { pairs: Array<[Vec3, Vec3]> }) {
           key={bolt.key}
           from={bolt.from}
           to={bolt.to}
-          seed={generation * 17 + bolt.salt}
+          seed={17 + bolt.salt}
+          flicker={0.09}
           width={bolt.width}
           color={bolt.color}
           sag={bolt.sag}
@@ -487,10 +498,10 @@ function ArcSet({ pairs }: { pairs: Array<[Vec3, Vec3]> }) {
 export function StunCrawlers() {
   const tick = useRef(0);
   const seed = useRef(2);
-  const [generation, setGeneration] = useState(2);
-  const [ends, setEnds] = useState<[Vec3, Vec3][]>([
+  const ends = useRef<[Vec3, Vec3][]>([
     [[0.2, 0.15, 0.35], [-0.35, 0.7, -0.1]],
     [[-0.3, 0.2, -0.25], [0.25, 0.75, 0.3]],
+    [[0.05, 0.18, 0.1], [0.15, 0.62, -0.35]],
   ]);
   const rim = useMemo(() => {
     const mat = new THREE.ShaderMaterial({
@@ -518,19 +529,19 @@ export function StunCrawlers() {
     if (tick.current > 0.14) {
       tick.current = 0;
       seed.current += 1;
-      const next = seed.current;
-      const rand = mulberry32(next * 19 + 5);
-      setGeneration(next);
-      setEnds([0, 1, 2].map(() => {
+      const rand = mulberry32(seed.current * 19 + 5);
+      for (const pair of ends.current) {
         const a = rand() * Math.PI * 2;
         const b = a + 1.2 + rand();
         const ya = 0.05 + rand() * 0.35;
         const yb = 0.35 + rand() * 0.55;
-        return [
-          [Math.cos(a) * 0.48, ya, Math.sin(a) * 0.48],
-          [Math.cos(b) * 0.5, yb, Math.sin(b) * 0.5],
-        ] as [Vec3, Vec3];
-      }));
+        pair[0][0] = Math.cos(a) * 0.48;
+        pair[0][1] = ya;
+        pair[0][2] = Math.sin(a) * 0.48;
+        pair[1][0] = Math.cos(b) * 0.5;
+        pair[1][1] = yb;
+        pair[1][2] = Math.sin(b) * 0.5;
+      }
     }
   });
 
@@ -539,12 +550,13 @@ export function StunCrawlers() {
       <mesh material={rim} frustumCulled={false}>
         <sphereGeometry args={[0.56, 24, 18]} />
       </mesh>
-      {ends.map((pair, i) => (
+      {ends.current.map((pair, i) => (
         <JaggedArc
           key={i}
           from={pair[0]}
           to={pair[1]}
-          seed={generation * 11 + i}
+          seed={11 + i}
+          flicker={0.14}
           width={0.08}
           color="#f4fbff"
           sag={0.06}
@@ -609,7 +621,7 @@ export function UnlockGlow({
   return (
     <group position={position}>
       <pointLight ref={light} position={[0, 0.7, 0]} color="#ff9a3a" intensity={0} distance={2.2} decay={2} />
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.42, 0]}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.42, 0]} scale={ZOOGI_FX_SCALE}>
         <circleGeometry args={[0.75, 40]} />
         <primitive object={ring} attach="material" />
       </mesh>

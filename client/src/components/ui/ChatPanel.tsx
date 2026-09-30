@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Send, Hash, MessageCircle } from "lucide-react";
 import { useChat } from "@/lib/stores/useChat";
 import { useAuth } from "@/lib/stores/useAuth";
+import { OnlineNotice } from "@/components/ui/OnlineNotice";
+import { useOnlineMessage } from "@/lib/serverStatus";
 
 interface ChatPanelProps {
   isOpen: boolean;
@@ -18,6 +20,7 @@ export function ChatPanel({ isOpen, onClose, directMessageFriendId }: ChatPanelP
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const { user } = useAuth();
+  const onlineMessage = useOnlineMessage();
   const { messages, fetchMessages, fetchDirectMessages, sendMessage } = useChat();
 
   const currentChannel = activeTab === "direct" && directMessageFriendId 
@@ -109,7 +112,9 @@ export function ChatPanel({ isOpen, onClose, directMessageFriendId }: ChatPanelP
           </div>
 
           <div className="flex-1 overflow-y-auto p-3 space-y-2">
-            {currentMessages.length === 0 ? (
+            {onlineMessage ? (
+              <OnlineNotice compact />
+            ) : currentMessages.length === 0 ? (
               <div className="flex items-center justify-center h-full text-gray-500 text-sm">
                 No messages yet. Say hello!
               </div>

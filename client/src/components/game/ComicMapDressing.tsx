@@ -301,9 +301,10 @@ function VolcanicPitModel({ edge }: { edge: number }) {
     const fitted = new THREE.Box3().setFromObject(cloned);
     const center = new THREE.Vector3();
     fitted.getCenter(center);
-    // Nearest face sits a fixed gap past the live knockout line, so the pit
-    // stays outside the ring when that radius changes.
-    const nearZ = -(edge + 4);
+    // Main places the nearest face one fixed gap past the layout knockoff.
+    // That radius is the same number the fall check copies into the store.
+    const knockoff = getMapLayout("lava")?.knockoffRadius ?? edge;
+    const nearZ = -(knockoff + 4);
     cloned.position.set(-center.x, -fitted.min.y, nearZ - fitted.max.z);
   }, [cloned, edge]);
 
