@@ -1,6 +1,7 @@
 import { Canvas, useThree, useFrame } from "@react-three/fiber";
 import { Component, ReactNode, Suspense } from "react";
 import { Arena } from "./Arena";
+import { LaunchPads } from "./LaunchPads";
 import { ColliderDebug } from "./ColliderDebug";
 import { PlayerZoogi, EnemyZoogi, LocalMultiplayerZoogi } from "./Zoogi";
 import { OrbManager } from "./Orb";
@@ -275,6 +276,7 @@ export function Game() {
           <Lights />
           
           <Arena theme={selectedMap || "grass"} />
+          {gameMode !== "map_editor" && <LaunchPads />}
           <ColliderDebug />
           
           <EditorPlacedModels />

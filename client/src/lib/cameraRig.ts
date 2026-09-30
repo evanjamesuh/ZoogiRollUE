@@ -155,6 +155,15 @@ export function clampDistance(distance: number, min = 13.5, max = 34): number {
 }
 
 /**
+ * How far the match camera may sit. Portrait phones need the extra room so
+ * launch pads outside the lip stay in frame. Landscape stays closer.
+ */
+export function matchCameraMax(aspect: number, frameScale = 1): number {
+  const portrait = aspect < 0.9;
+  return (portrait ? 140 : 60) * frameScale;
+}
+
+/**
  * Smooth shake from trauma in 0..1. Trauma 0 is exactly zero.
  * The offset stays inside SHAKE_CAP on each axis. Noise is a sum of sines,
  * not a fresh random value, so it reads as one punch instead of static.

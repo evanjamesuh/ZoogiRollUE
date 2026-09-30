@@ -34,6 +34,7 @@ import { GRASS_STAGE, MARBLE_RADIUS, ORB_RADIUS, arabianPlayTransform, centerPas
 import { resolveNeonRails } from "../neonCourt";
 import { FALL_GRAVITY_STEP, FALL_OUT_Y, ICE_ROLLING_DRAG, LOCKON_LAUNCH_SPEED, MARBLE_RESTITUTION, MAX_PLANAR_SPEED, ORB_BOUNCE_REST, ORB_MASS, ORB_ORB_RESTITUTION, REST_SPEED, ROLLING_DRAG, ZOOGI_MASS } from "../simFeel";
 import { orbDropY, orbsHaveLanded } from "../orbDrop";
+import { launchPadPosition } from "../launchPads";
 import { turnHandoffReady } from "../turnSettle";
 import { circleTimeOfImpact } from "../sweptHit";
 import { ORB_REST_Y, ZOOGI_REST_Y } from "../restHeight";
@@ -451,6 +452,8 @@ interface GameEntity {
   isKnockedOut: boolean;
   /** Left the floor and is falling. The body stays visible until it drops out. */
   offTheFloor?: boolean;
+  /** Sitting on a launch pad outside the floor. Being off the court is not a knockout. */
+  onLaunchPad?: boolean;
   spawnImmunity: boolean; // Immune to score penalties until entering the ring
   spawnPointIndex: number; // Which spawn point this player uses
 }
@@ -1014,6 +1017,7 @@ const createEnemy = (zoogi: Zoogi, position: [number, number, number], spawnPoin
   respawnAt: null,
   respawnPadIndex: null,
   isKnockedOut: false,
+  onLaunchPad: false,
   spawnImmunity: hasSpawnImmunity,
   spawnPointIndex
 });
@@ -1269,7 +1273,8 @@ const initializeGame = (
   
   // Player spawns at spawn point 0 (using zone editor spawn points if available)
   const playerSpawnIndex = 0;
-  const playerSpawnPos = getSpawnPointPosition(playerSpawnIndex, spawnZones, mapTheme);
+  const playerSpawnPos = launchPadPosition(mapTheme, playerSpawnIndex)
+    ?? getSpawnPointPosition(playerSpawnIndex, spawnZones, mapTheme);
   console.log("Player spawn position:", playerSpawnPos[0].toFixed(2), playerSpawnPos[2].toFixed(2), "from layout:", layout?.id ?? "none");
   
   const playerEntity: GameEntity = {
@@ -1315,6 +1320,7 @@ const initializeGame = (
     respawnAt: null,
     respawnPadIndex: null,
     isKnockedOut: false,
+    onLaunchPad: true,
     spawnImmunity: false,
     spawnPointIndex: playerSpawnIndex
   };
@@ -1329,8 +1335,9 @@ const initializeGame = (
   // Each enemy spawns at their own spawn point (using zone editor spawn points if available)
   const enemies = selectedEnemies.map((zoogi, i) => {
     const spawnIndex = i + 1; // Player is at 0, enemies at 1, 2, 3, ...
-    const spawnPos = getSpawnPointPosition(spawnIndex, spawnZones, mapTheme);
-    return createEnemy(zoogi, spawnPos, spawnIndex, false);
+    const spawnPos = launchPadPosition(mapTheme, spawnIndex)
+      ?? getSpawnPointPosition(spawnIndex, spawnZones, mapTheme);
+    return { ...createEnemy(zoogi, spawnPos, spawnIndex, false), onLaunchPad: true };
   });
   
   const orbs = createOrbs(layout?.orbRingRadius ?? 5);
@@ -1541,6 +1548,9 @@ function respawnInsidePlayfield(
   map: string | null | undefined,
   knockoffRadius: number,
 ): [number, number, number] {
+  // A launch pad is outside the lip on purpose. Do not drag it back onto the floor.
+  const pad = launchPadPosition(map, spawnIndex);
+  if (pad) return pad;
   const pos = getSpawnPointPosition(spawnIndex, zones, map ?? undefined);
   const dist = Math.hypot(pos[0], pos[2]);
   const limit = Math.max(3, knockoffRadius - 2.5);
@@ -3236,19 +3246,25 @@ export const useZoogiGame = create<ZoogiGameState>()(
         ...playfieldSettings(roundMap, get().wallSettings, get().backgroundSettings, get().elementTransforms),
         playerEntity: playerEntity ? {
           ...playerEntity,
-          position: getSpawnPointPosition(playerEntity.spawnPointIndex ?? 0, roundZones, roundMap ?? undefined),
+          position: launchPadPosition(roundMap, playerEntity.spawnPointIndex ?? 0)
+            ?? getSpawnPointPosition(playerEntity.spawnPointIndex ?? 0, roundZones, roundMap ?? undefined),
           velocity: [0, 0, 0],
           score: 0,
           isKnockedOut: false,
-          isRespawning: false
+          isRespawning: false,
+          offTheFloor: false,
+          onLaunchPad: true,
         } : null,
         enemies: enemies.map((e, i) => ({
           ...e,
-          position: getSpawnPointPosition(e.spawnPointIndex ?? i + 1, roundZones, roundMap ?? undefined),
+          position: launchPadPosition(roundMap, e.spawnPointIndex ?? i + 1)
+            ?? getSpawnPointPosition(e.spawnPointIndex ?? i + 1, roundZones, roundMap ?? undefined),
           velocity: [0, 0, 0],
           score: 0,
           isKnockedOut: false,
-          isRespawning: false
+          isRespawning: false,
+          offTheFloor: false,
+          onLaunchPad: true,
         }))
       });
       
@@ -3473,11 +3489,12 @@ export const useZoogiGame = create<ZoogiGameState>()(
     
     respawnPlayer: () => {
       const { playerEntity, zoneEditorConfigs } = get();
-      // Respawn at player's assigned spawn point (using zone editor configs if available)
-      const spawnPos = getSpawnPointPosition(playerEntity?.spawnPointIndex ?? 0, zoneEditorConfigs, get().selectedMap ?? undefined);
+      const spawnIndex = playerEntity?.spawnPointIndex ?? 0;
+      const spawnPos = launchPadPosition(get().selectedMap, spawnIndex)
+        ?? getSpawnPointPosition(spawnIndex, zoneEditorConfigs, get().selectedMap ?? undefined);
       set((state) => ({
         playerEntity: state.playerEntity 
-          ? { ...state.playerEntity, position: spawnPos, velocity: [0, 0, 0], spawnImmunity: false, isKnockedOut: false, isRespawning: false } 
+          ? { ...state.playerEntity, position: spawnPos, velocity: [0, 0, 0], spawnImmunity: false, isKnockedOut: false, isRespawning: false, offTheFloor: false, onLaunchPad: true } 
           : null,
         pendingGrenades: state.pendingGrenades.filter(g => g.ownerId !== "player")
       }));
@@ -3506,10 +3523,12 @@ export const useZoogiGame = create<ZoogiGameState>()(
       set((state) => {
         const enemy = state.enemies.find(e => e.id === id);
         // Respawn at enemy's assigned spawn point (using zone editor configs if available)
-        const spawnPos = getSpawnPointPosition(enemy?.spawnPointIndex ?? 0, state.zoneEditorConfigs);
+        const spawnIndex = enemy?.spawnPointIndex ?? 0;
+        const spawnPos = launchPadPosition(state.selectedMap, spawnIndex)
+          ?? getSpawnPointPosition(spawnIndex, state.zoneEditorConfigs);
         return {
           enemies: state.enemies.map(e => 
-            e.id === id ? { ...e, position: spawnPos, velocity: [0, 0, 0], lastHitByPlayer: false, spawnImmunity: false, isKnockedOut: false, isRespawning: false } : e
+            e.id === id ? { ...e, position: spawnPos, velocity: [0, 0, 0], lastHitByPlayer: false, spawnImmunity: false, isKnockedOut: false, isRespawning: false, offTheFloor: false, onLaunchPad: true } : e
           ),
           pendingGrenades: state.pendingGrenades.filter(g => g.ownerId !== id)
         };
@@ -3628,20 +3647,26 @@ export const useZoogiGame = create<ZoogiGameState>()(
       // call leaves it set so the next physics step can try again.
       set({ turnHasLaunched: false });
 
-      const seatOnPad = (entity: GameEntity, spawnIndex: number): GameEntity => ({
-        ...entity,
-        position: respawnInsidePlayfield(
-          spawnIndex,
-          get().zoneEditorConfigs,
-          get().selectedMap,
-          get().wallSettings.knockoffBoundaryRadius ?? 18,
-        ),
-        velocity: [0, 0, 0],
-        isKnockedOut: false,
-        isRespawning: false,
-        respawnAt: null,
-        offTheFloor: false,
-      });
+      const seatOnPad = (entity: GameEntity, spawnIndex: number): GameEntity => {
+        // Everyone else stays where they stopped. Only a knocked-out Zoogi
+        // comes back, and they come back on their own launch pad.
+        if (!(entity.isKnockedOut || entity.isRespawning)) return entity;
+        return {
+          ...entity,
+          position: respawnInsidePlayfield(
+            spawnIndex,
+            get().zoneEditorConfigs,
+            get().selectedMap,
+            get().wallSettings.knockoffBoundaryRadius ?? 18,
+          ),
+          velocity: [0, 0, 0],
+          isKnockedOut: false,
+          isRespawning: false,
+          respawnAt: null,
+          offTheFloor: false,
+          onLaunchPad: true,
+        };
+      };
 
       const { enemies, turnIndex, isPlayerTurn, gameMode, localPlayers, currentLocalPlayerIndex, playerEntity, checkZoneControlActivation, clearScoredZones } = get();
       
@@ -3863,7 +3888,8 @@ export const useZoogiGame = create<ZoogiGameState>()(
       const localZones = zonesFromLayout(selectedMap) ?? get().zoneEditorConfigs;
       // Each local player spawns at their own spawn point on the playfield
       const entities: GameEntity[] = localPlayers.map((player, i) => {
-        const spawnPos = getSpawnPointPosition(i, localZones, selectedMap ?? undefined);
+        const spawnPos = launchPadPosition(selectedMap, i)
+          ?? getSpawnPointPosition(i, localZones, selectedMap ?? undefined);
         return {
           id: `local-player-${player.id}`,
           zoogi: player.zoogi!,
@@ -3907,6 +3933,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
           respawnAt: null,
           respawnPadIndex: null,
           isKnockedOut: false,
+          onLaunchPad: true,
           spawnImmunity: false,
           spawnPointIndex: i
         };
@@ -5875,10 +5902,12 @@ export const useZoogiGame = create<ZoogiGameState>()(
         COLLISION_RADIUS,
         matchSolids,
       );
+      // Rolling onto the floor ends the pad's protection. Sitting on the pad does not.
+      if (player.onLaunchPad && !playerOut) player.onLaunchPad = false;
       // Night Circuit knocks a marble out as soon as it leaves the floor.
       // The other maps still wait for the restriction phase.
       const knockoutLive = isRestricted || state.selectedMap === "neon";
-      if (playerOut && !playerIsInvulnerable && !playerIsRespawning && !playerIsKnockedOut && !playerHasSpawnImmunity && !player.offTheFloor) {
+      if (playerOut && !player.onLaunchPad && !playerIsInvulnerable && !playerIsRespawning && !playerIsKnockedOut && !playerHasSpawnImmunity && !player.offTheFloor) {
         if (knockoutLive) {
           if (gameMode === "local_multiplayer") {
             // Apply penalty to knocked out player (never go below 0)
@@ -5956,6 +5985,8 @@ export const useZoogiGame = create<ZoogiGameState>()(
         player.respawnAt = null;
         player.respawnPadIndex = null;
         player.spawnImmunity = false;
+        player.onLaunchPad = true;
+        player.offTheFloor = false;
         console.log(`Player respawned at spawn point ${player.spawnPointIndex}`);
       }
       
@@ -5979,7 +6010,12 @@ export const useZoogiGame = create<ZoogiGameState>()(
           COLLISION_RADIUS,
           matchSolids,
         );
-        if (enemyOut && knockoutLive && !enemyIsInvulnerable) {
+        const onPad = !!enemy.onLaunchPad && enemyOut;
+        const steppedOff = enemy.onLaunchPad && !enemyOut
+          ? { ...enemy, onLaunchPad: false }
+          : enemy;
+        if (!enemyOut || !knockoutLive || enemyIsInvulnerable || onPad) return steppedOff;
+        {
           const localPlayerIndex = enemyIndex + 1;
 
           if (gameMode === "local_multiplayer") {
@@ -6063,7 +6099,9 @@ export const useZoogiGame = create<ZoogiGameState>()(
             isKnockedOut: false,
             respawnAt: null,
             respawnPadIndex: null,
-            spawnImmunity: false
+            spawnImmunity: false,
+            onLaunchPad: true,
+            offTheFloor: false,
           };
         }
         return enemy;
