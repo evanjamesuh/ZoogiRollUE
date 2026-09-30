@@ -36,6 +36,7 @@ import { FALL_GRAVITY_STEP, FALL_OUT_Y, ICE_ROLLING_DRAG, LOCKON_LAUNCH_SPEED, M
 import { circleTimeOfImpact } from "../sweptHit";
 import { ORB_REST_Y, ZOOGI_REST_Y } from "../restHeight";
 import { motionOnly, overlayList, overlayRecord } from "../simPublish";
+import { bindShadowStun, clearShadowStuns, releaseShadowStun } from "@/vfx/shadowMarks";
 
 export const DEFAULT_BACKGROUND_SETTINGS = {
   distance: 200,
@@ -2551,6 +2552,16 @@ export const useZoogiGame = create<ZoogiGameState>()(
           enemies: s.enemies.map((enemy) => apply(enemy)),
         };
       });
+      const bound: string[] = [];
+      const note = (entity: { id: string; position: [number, number, number]; isStunned: boolean } | null | undefined) => {
+        if (!entity?.isStunned || entity.id === controlledEntity.id) return;
+        const dist = Math.hypot(entity.position[0] - origin[0], entity.position[2] - origin[2]);
+        if (dist < radius && dist > 0.1) bound.push(entity.id);
+      };
+      const after = get();
+      note(after.playerEntity);
+      after.enemies.forEach(note);
+      bindShadowStun(bound);
     },
 
     canUseNightshadeAbility: () => !!get().getCurrentControlledEntity()?.nightshadeAbilityUnlocked,
@@ -2978,6 +2989,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
     },
     
     startGame: () => {
+      clearShadowStuns();
       flashedStarOrbIds.clear();
       const { selectedZoogi, selectedCustomZoogi, gameMode, customArenaId, customArenaDecorations } = get();
       
@@ -3659,6 +3671,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
         const clearSkippedStun = (index: number, entity: GameEntity): GameEntity => {
           if (!skippedStun.has(index)) return entity;
           if (entity.isStunned) useAudio.getState().playStunEnd();
+          releaseShadowStun(entity.id);
           return { ...entity, isStunned: false, stunTimer: 0 };
         };
         
@@ -3702,6 +3715,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
       
       const releaseStun = (entity: GameEntity): GameEntity => {
         if (entity.isStunned) useAudio.getState().playStunEnd();
+        releaseShadowStun(entity.id);
         return {
           ...entity,
           isStunned: false,
@@ -3832,6 +3846,7 @@ export const useZoogiGame = create<ZoogiGameState>()(
     })),
     
     startLocalGame: () => {
+      clearShadowStuns();
       const { localPlayers, selectedMap, customArenaId, customArenaDecorations } = get();
       if (localPlayers.some(p => !p.zoogi)) return;
       

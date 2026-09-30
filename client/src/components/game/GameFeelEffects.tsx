@@ -539,10 +539,11 @@ function larsIsArmedNear(position: [number, number, number]): boolean {
 
 function CartoonStarburstEffect({ starburst }: { starburst: { id: string; position: [number, number, number]; color: string; timestamp: number } }) {
   const color = starburst.color.toLowerCase();
-  const moody = color === "#fde047" || color === "#3b82f6" || color === "#d4c4b0";
+  const moody = color === "#fde047" || color === "#3b82f6" || color === "#d4c4b0" || color === "#b69cff";
   useEffect(() => {
     if (!moody || replacedStarbursts.has(starburst.id)) return;
     replacedStarbursts.add(starburst.id);
+    if (color === "#b69cff") return;
     if (color === "#3b82f6" && !larsIsArmedNear(starburst.position)) {
       emitImpact("spark", starburst.position, sprayDirection(starburst.position));
     } else if (color === "#d4c4b0") {
