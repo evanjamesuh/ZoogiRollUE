@@ -582,7 +582,7 @@ test("an orb is lighter than a Zoogi, so it leaves faster and the shooter keeps 
   assert.ok(orb.velocity[0] > 0, "the orb is pushed forward");
   assert.ok(leave > MOMENTUM_TRANSFER, `orb leave ${leave.toFixed(3)} should beat an equal-mass transfer`);
   assert.ok(kept > SHOOTER_KEEP + 0.05, `shooter kept ${kept.toFixed(3)}`);
-  console.log(`MEASURE orbMass=${ORB_MASS.toFixed(3)} zoogiMass=${ZOOGI_MASS} orbLeave=${leave.toFixed(3)} orbKeep=${kept.toFixed(3)}`);
+  console.log(`MEASURE orbMass=${ORB_MASS.toFixed(3)} zoogiMass=${zoogiMassFromDefense(player.zoogi.stats.defense).toFixed(3)} orbLeave=${leave.toFixed(3)} orbKeep=${kept.toFixed(3)}`);
 });
 
 test("a crossing that endpoints miss still registers, including a full-power shot", async () => {
@@ -627,6 +627,7 @@ test("a crossing that endpoints miss still registers, including a full-power sho
     },
     enemies: [{
       ...enemy,
+      zoogi: player.zoogi,
       position: [gap / 2, ZOOGI_REST_Y, 0],
       velocity: [-MAX_LAUNCH_SPEED, 0, 0],
       arcMovement: null,
