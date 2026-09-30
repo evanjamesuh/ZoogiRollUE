@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { useRef, useMemo, useLayoutEffect, Suspense, Component, ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
-import { useGLTF, useAnimations, Center } from "@react-three/drei";
+import { useGLTF, Center } from "@react-three/drei";
 import { useZoogiGame, CustomArenaDecoration, type MapTheme } from "@/lib/stores/useZoogiGame";
 import { Trees } from "./Trees";
 import { IcePatches } from "./IcePatches";
@@ -9,7 +9,6 @@ import { Clouds } from "./Clouds";
 import { Snowmen } from "./Snowmen";
 import { ArenaWalls } from "./ArenaWalls";
 import { OuterRingWall } from "./OuterRingWall";
-import { ControlPointZones } from "./ControlPointZones";
 import { FloatingAsteroids } from "./FloatingAsteroids";
 import { FallingRocks } from "./FallingRocks";
 import { FlowerPatches } from "./FlowerPatches";
@@ -22,357 +21,97 @@ import { AlienCrystals } from "./AlienCrystals";
 import { DesertHoodoos } from "./DesertHoodoos";
 import { EditorWallBlocks } from "./EditorWallBlocks";
 import { EditorScoringZones } from "./EditorScoringZones";
-import { ScoringZones } from "./ScoringZones";
 import { PinballBumpers } from "./PinballBumpers";
 import { NeonCourtArena } from "./NeonCourtArena";
 import { ARENA_RADIUS } from "@/lib/arenaConstants";
-import { ARABIAN_STAGE, COSMOS_STAGE, GRASS_STAGE, WINTER_STAGE, arabianPlayTransform, getMapLayout, setWinterCampActive } from "@/lib/arenaColliders";
+import { COSMOS_FLOOR_MESH, cosmosPlayTransform, cosmosRingPush, cosmosRingRole, getMapLayout } from "@/lib/arenaColliders";
 import { PharaohTombArena } from "./PharaohTombArena";
 import { ArabianNightDressing, CosmicVoidDressing, VolcanicPitDressing } from "./ComicMapDressing";
+import { ArabianArena, FrozenArena, MeadowArena } from "./RoundMapArenas";
 
 export { ARENA_RADIUS };
 
-function FloatingIslandScene() {
-  const groupRef = useRef<THREE.Group>(null);
-  const { scene, animations } = useGLTF("/models/floating_island_stage.glb");
-  const { actions } = useAnimations(animations, groupRef);
-  const backgroundSettings = useZoogiGame((state) => state.backgroundSettings);
-  const elementTransforms = useZoogiGame((state) => state.elementTransforms);
-  
-  const gameMode = useZoogiGame((state) => state.gameMode);
-  const editing = gameMode === "map_editor";
-  const modelX = editing ? (backgroundSettings.modelPositionX ?? 0) : 0;
-  const modelY = editing ? (backgroundSettings.modelPositionY ?? -0.5) : GRASS_STAGE.modelOffsetY;
-  const modelZ = editing ? (backgroundSettings.modelPositionZ ?? 0) : 0;
-  const modelScale = editing ? (backgroundSettings.modelScale ?? 3) : GRASS_STAGE.modelScale;
-  const arenaRotation = elementTransforms.arenaModelRotation;
-  const modelRotation: [number, number, number] = [
-    arenaRotation?.x ?? 0,
-    arenaRotation?.y ?? 0,
-    arenaRotation?.z ?? 0
-  ];
-  
-  useMemo(() => {
-    if (actions && Object.keys(actions).length > 0) {
-      Object.values(actions).forEach(action => {
-        if (action) {
-          action.play();
-        }
-      });
+/** Scale the curb, wall, and crowd stands out from the floor centre so a marble clears them before it falls. */
+function pushCosmosRings(scene: THREE.Object3D) {
+  const placed = cosmosPlayTransform();
+  scene.updateWorldMatrix(true, true);
+  const sceneToParent = scene.matrixWorld.clone().invert();
+  const center = new THREE.Vector3(COSMOS_FLOOR_MESH.centerX, COSMOS_FLOOR_MESH.centerY, COSMOS_FLOOR_MESH.centerZ);
+  scene.traverse((obj) => {
+    if (!(obj instanceof THREE.Mesh) || !cosmosRingRole(obj.name) || obj.userData.cosmosRingPushed) return;
+    const geometry = obj.geometry.clone();
+    obj.geometry = geometry;
+    const position = geometry.getAttribute("position");
+    const toScene = obj.matrixWorld.clone().premultiply(sceneToParent);
+    const toMesh = toScene.clone().invert();
+    const scenePoints: THREE.Vector3[] = [];
+    const vertex = new THREE.Vector3();
+    for (let i = 0; i < position.count; i++) {
+      scenePoints.push(vertex.fromBufferAttribute(position, i).applyMatrix4(toScene).clone());
     }
-  }, [actions]);
-
-  useMemo(() => {
-    scene.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
+    let inner = Infinity;
+    const consider = (ax: number, az: number, bx: number, bz: number) => {
+      const abx = bx - ax;
+      const abz = bz - az;
+      const len2 = abx * abx + abz * abz;
+      let u = 0;
+      if (len2 > 1e-12) {
+        u = ((center.x - ax) * abx + (center.z - az) * abz) / len2;
+        if (u < 0) u = 0;
+        else if (u > 1) u = 1;
       }
-    });
-  }, [scene]);
-  
-  return (
-    <group ref={groupRef} position={[modelX, modelY, modelZ]} scale={[modelScale, modelScale, modelScale]} rotation={modelRotation}>
-      <primitive object={scene} />
-    </group>
-  );
-}
-
-function ArabianNightsScene() {
-  const groupRef = useRef<THREE.Group>(null);
-  const { scene, animations } = useGLTF("/models/arabian_nights_stage.glb");
-  const { actions } = useAnimations(animations, groupRef);
-  const backgroundSettings = useZoogiGame((state) => state.backgroundSettings);
-  const elementTransforms = useZoogiGame((state) => state.elementTransforms);
-  const gameMode = useZoogiGame((state) => state.gameMode);
-  const editing = gameMode === "map_editor";
-  const placed = arabianPlayTransform();
-
-  const modelX = editing ? (backgroundSettings.modelPositionX ?? 0) : placed.x;
-  const modelY = editing ? (backgroundSettings.modelPositionY ?? -0.5) : placed.y;
-  const modelZ = editing ? (backgroundSettings.modelPositionZ ?? 0) : placed.z;
-  const modelScale = editing ? (backgroundSettings.modelScale ?? ARABIAN_STAGE.modelScale) : placed.scale;
-  const arenaRotation = elementTransforms.arenaModelRotation;
-  const modelRotation: [number, number, number] = editing
-    ? [arenaRotation?.x ?? 0, arenaRotation?.y ?? 0, arenaRotation?.z ?? 0]
-    : [0, 0, 0];
-  
-  useMemo(() => {
-    if (actions && Object.keys(actions).length > 0) {
-      Object.values(actions).forEach(action => {
-        if (action) {
-          action.play();
-        }
-      });
-    }
-  }, [actions]);
-
-  useMemo(() => {
-    scene.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
+      const radius = Math.hypot(ax + abx * u - center.x, az + abz * u - center.z);
+      if (radius < inner) inner = radius;
+    };
+    const index = geometry.getIndex();
+    if (index) {
+      for (let i = 0; i + 2 < index.count; i += 3) {
+        const a = scenePoints[index.getX(i)];
+        const b = scenePoints[index.getX(i + 1)];
+        const c = scenePoints[index.getX(i + 2)];
+        consider(a.x, a.z, b.x, b.z);
+        consider(b.x, b.z, c.x, c.z);
+        consider(c.x, c.z, a.x, a.z);
       }
-    });
-  }, [scene]);
-  
-  return (
-    <group ref={groupRef} position={[modelX, modelY, modelZ]} scale={[modelScale, modelScale, modelScale]} rotation={modelRotation}>
-      <primitive object={scene} />
-    </group>
-  );
-}
-
-interface SkatingPenguinData {
-  obj: THREE.Object3D;
-  baseY: number;
-  posX: number;
-  posZ: number;
-  targetX: number;
-  targetZ: number;
-  facing: number;
-  waddlePhase: number;
-  waiting: boolean;
-  waitTimer: number;
-  jiggle: number;
-  lastHitTime: number;
-}
-
-const SKATE_RADIUS = 12;
-const SKATE_SPEED = 2.0;
-const SKATE_ARRIVE_DIST = 1.0;
-
-function getRandomSkateTarget(): [number, number] {
-  const angle = Math.random() * Math.PI * 2;
-  const dist = 1.0 + Math.random() * (SKATE_RADIUS - 2.0);
-  return [Math.cos(angle) * dist, Math.sin(angle) * dist];
-}
-
-function clampToIce(x: number, z: number): [number, number] {
-  const dist = Math.sqrt(x * x + z * z);
-  if (dist > SKATE_RADIUS) {
-    const scale = SKATE_RADIUS / dist;
-    return [x * scale, z * scale];
-  }
-  return [x, z];
-}
-
-const PENGUIN_STARTS: { x: number; y: number; z: number }[] = [
-  { x: 6.36, y: 4.9, z: 6.36 },
-  { x: -6.36, y: 4.9, z: 6.36 },
-  { x: -6.36, y: 4.9, z: -6.36 },
-  { x: 6.36, y: 4.9, z: -6.36 },
-];
-
-const _winterPenguinSkaters: SkatingPenguinData[] = [];
-let _winterPenguinsReady = false;
-
-function WinterLocationScene() {
-  const groupRef = useRef<THREE.Group>(null);
-  const { scene } = useGLTF("/models/winter_location.glb");
-
-  const spinObjects = useRef<{ obj: THREE.Object3D; baseY: number; phase: number }[]>([]);
-  const swayObjects = useRef<{ obj: THREE.Object3D; baseY: number; baseRotY: number; phase: number }[]>([]);
-
-  useMemo(() => {
-    const spins: { obj: THREE.Object3D; baseY: number; phase: number }[] = [];
-    const sways: { obj: THREE.Object3D; baseY: number; baseRotY: number; phase: number }[] = [];
-    const coinPattern = /^coin_|^ring_001/i;
-    const charPattern = /^snowman_|^characters$/i;
-
-    if (!_winterPenguinsReady) {
-      const foundPenguins: THREE.Object3D[] = [];
-      scene.traverse((child) => {
-        if (child.name && /penguin/i.test(child.name)) {
-          const distFromCenter = Math.sqrt(child.position.x * child.position.x + child.position.z * child.position.z);
-          if (child.position.y < 6 && distFromCenter < 15) {
-            foundPenguins.push(child);
-          }
-        }
-      });
-
-      if (foundPenguins.length >= 4) {
-        _winterPenguinsReady = true;
-        _winterPenguinSkaters.length = 0;
-        for (let i = 0; i < 4; i++) {
-          const node = foundPenguins[i];
-          const start = PENGUIN_STARTS[i];
-          node.position.set(start.x, start.y, start.z);
-          const [tx, tz] = getRandomSkateTarget();
-          _winterPenguinSkaters.push({
-            obj: node,
-            baseY: start.y,
-            posX: start.x,
-            posZ: start.z,
-            targetX: tx,
-            targetZ: tz,
-            facing: (Math.PI / 2) * i,
-            waddlePhase: (Math.PI / 2) * i,
-            waiting: false,
-            waitTimer: 0,
-            jiggle: 0,
-            lastHitTime: 0,
-          });
-        }
-        console.log("[ICE] Initialized 4 skating penguins (module-level)");
+    } else {
+      for (const point of scenePoints) {
+        const radius = Math.hypot(point.x - center.x, point.z - center.z);
+        if (radius < inner) inner = radius;
       }
     }
-
-    scene.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        child.castShadow = true;
-        child.receiveShadow = true;
-        if (child.material) {
-          const materials = Array.isArray(child.material) ? child.material : [child.material];
-          materials.forEach((mat) => {
-            if (mat instanceof THREE.MeshStandardMaterial) {
-              mat.roughness = Math.max(mat.roughness, 0.85);
-              mat.metalness = 0;
-              mat.envMapIntensity = 0;
-              mat.emissive = new THREE.Color(0x000000);
-              mat.emissiveIntensity = 0;
-            }
-          });
-        }
-      }
-
-      if (child.name && coinPattern.test(child.name)) {
-        spins.push({
-          obj: child,
-          baseY: child.position.y,
-          phase: Math.random() * Math.PI * 2,
-        });
-      }
-
-      if (child.name && charPattern.test(child.name)) {
-        sways.push({
-          obj: child,
-          baseY: child.position.y,
-          baseRotY: child.rotation.y,
-          phase: Math.random() * Math.PI * 2,
-        });
-      }
-    });
-
-    spinObjects.current = spins;
-    swayObjects.current = sways;
-  }, [scene]);
-
-  useFrame((state, delta) => {
-    const t = state.clock.elapsedTime;
-
-    spinObjects.current.forEach(({ obj, baseY, phase }) => {
-      obj.rotation.y += 0.03;
-      obj.position.y = baseY + Math.sin(t * 2.0 + phase) * 0.3;
-    });
-
-    swayObjects.current.forEach(({ obj, baseY, baseRotY, phase }) => {
-      obj.position.y = baseY + Math.sin(t * 1.2 + phase) * 0.12;
-      obj.rotation.y = baseRotY + Math.sin(t * 0.5 + phase) * 0.15;
-    });
-
-    const gameState = useZoogiGame.getState();
-    const now = Date.now();
-
-    _winterPenguinSkaters.forEach((p) => {
-      if (p.waiting) {
-        p.waitTimer -= delta;
-        if (p.waitTimer <= 0) {
-          p.waiting = false;
-          const [tx, tz] = getRandomSkateTarget();
-          p.targetX = tx;
-          p.targetZ = tz;
-        }
-      } else {
-        const dx = p.targetX - p.posX;
-        const dz = p.targetZ - p.posZ;
-        const dist = Math.sqrt(dx * dx + dz * dz);
-
-        if (dist < SKATE_ARRIVE_DIST) {
-          p.waiting = true;
-          p.waitTimer = 1.5 + Math.random() * 3.0;
-        } else {
-          const nx = dx / dist;
-          const nz = dz / dist;
-          p.posX += nx * SKATE_SPEED * delta;
-          p.posZ += nz * SKATE_SPEED * delta;
-
-          const [cx, cz] = clampToIce(p.posX, p.posZ);
-          p.posX = cx;
-          p.posZ = cz;
-
-          const targetAngle = Math.atan2(nx, nz);
-          let angleDiff = targetAngle - p.facing;
-          while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-          while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-          p.facing += angleDiff * Math.min(1, delta * 4);
-        }
-      }
-
-      const HIT_R = 2.2;
-      if (now - p.lastHitTime > 500) {
-        let hit = false;
-        const chk = (px: number, pz: number) => {
-          const cdx = px - p.posX;
-          const cdz = pz - p.posZ;
-          return Math.sqrt(cdx * cdx + cdz * cdz) < HIT_R;
-        };
-        if (gameState.playerEntity && chk(gameState.playerEntity.position[0], gameState.playerEntity.position[2])) hit = true;
-        if (!hit) {
-          for (const e of gameState.enemies) {
-            if (chk(e.position[0], e.position[2])) { hit = true; break; }
-          }
-        }
-        if (hit) {
-          p.jiggle = 1.0;
-          p.lastHitTime = now;
-          const [tx, tz] = getRandomSkateTarget();
-          p.targetX = tx;
-          p.targetZ = tz;
-          p.waiting = false;
-        }
-      }
-
-      p.jiggle = Math.max(0, p.jiggle - delta * 3);
-      const jAmt = p.jiggle > 0 ? Math.sin(t * 25) * p.jiggle * 0.12 : 0;
-
-      p.obj.position.x = p.posX;
-      p.obj.position.z = p.posZ;
-      p.obj.position.y = p.baseY;
-      p.obj.rotation.set(jAmt * 0.5, p.facing, jAmt);
-    });
+    const push = cosmosRingPush(inner * placed.scale);
+    obj.userData.cosmosRingPushed = true;
+    if (push === 1) return;
+    for (let i = 0; i < scenePoints.length; i++) {
+      const point = scenePoints[i];
+      point.x = center.x + (point.x - center.x) * push;
+      point.z = center.z + (point.z - center.z) * push;
+      point.applyMatrix4(toMesh);
+      position.setXYZ(i, point.x, point.y, point.z);
+    }
+    position.needsUpdate = true;
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
   });
-
-  const winterScale = WINTER_STAGE.modelScale;
-
-  // Camp solids match this mesh. If the file fails to load, this never runs.
-  useLayoutEffect(() => {
-    setWinterCampActive(true);
-    return () => setWinterCampActive(false);
-  }, []);
-
-  return (
-    <group ref={groupRef} position={[0, WINTER_STAGE.modelOffsetY, 0]} scale={[winterScale, winterScale, winterScale]}>
-      <primitive object={scene} />
-    </group>
-  );
 }
-
-useGLTF.preload("/models/winter_location.glb");
 
 function CosmosArenaModel() {
   const groupRef = useRef<THREE.Group>(null);
   const { scene } = useGLTF("/models/cosmos_arena.glb");
+  useLayoutEffect(() => {
+    pushCosmosRings(scene);
+  }, [scene]);
   const backgroundSettings = useZoogiGame((state) => state.backgroundSettings);
   const elementTransforms = useZoogiGame((state) => state.elementTransforms);
   const gameMode = useZoogiGame((state) => state.gameMode);
   const editing = gameMode === "map_editor";
 
   const arenaOffset = elementTransforms.arenaModelOffset;
-  const modelX = editing ? (backgroundSettings.modelPositionX ?? 0) + arenaOffset.x : 0;
-  const modelY = editing ? (backgroundSettings.modelPositionY ?? -0.5) + arenaOffset.y : COSMOS_STAGE.modelOffsetY;
-  const modelZ = editing ? (backgroundSettings.modelPositionZ ?? 0) + arenaOffset.z : 0;
-  const scale = editing ? (backgroundSettings.modelScale ?? COSMOS_STAGE.modelScale) : COSMOS_STAGE.modelScale;
+  const placed = cosmosPlayTransform();
+  const modelX = editing ? (backgroundSettings.modelPositionX ?? 0) + arenaOffset.x : placed.x;
+  const modelY = editing ? (backgroundSettings.modelPositionY ?? -0.5) + arenaOffset.y : placed.y;
+  const modelZ = editing ? (backgroundSettings.modelPositionZ ?? 0) + arenaOffset.z : placed.z;
+  const scale = editing ? (backgroundSettings.modelScale ?? placed.scale) : placed.scale;
   const modelScale: [number, number, number] = [scale, scale, scale];
   const modelPosition: [number, number, number] = [modelX, modelY, modelZ];
   
@@ -760,8 +499,7 @@ export function Arena({ theme = "grass" }: ArenaProps) {
   const isIceTheme = currentTheme === "ice";
   const layout = getMapLayout(currentTheme);
   const floorRadius = layout?.floorRadius ?? ARENA_RADIUS;
-  // The stand-in disk matches the knockout line, so rolling off what you
-  // see is the same as crossing the scoring ring.
+  // The stand-in disk matches the knockout line. Points come from falling off that edge.
   const standInRadius = layout?.knockoffRadius ?? floorRadius;
   const stageFallback = <PlayfieldDisk radius={standInRadius} color={colors.platform} />;
   
@@ -779,20 +517,8 @@ export function Arena({ theme = "grass" }: ArenaProps) {
       
       {currentTheme === "lava" && <FallingRocks />}
       {currentTheme === "lava" && <DesertHoodoos />}
-      {currentTheme === "grass" && (
-        <MeshyArenaErrorBoundary fallback={stageFallback}>
-          <Suspense fallback={stageFallback}>
-            <FloatingIslandScene />
-          </Suspense>
-        </MeshyArenaErrorBoundary>
-      )}
-      {isIceTheme && (
-        <MeshyArenaErrorBoundary fallback={stageFallback} onError={() => setWinterCampActive(false)}>
-          <Suspense fallback={null}>
-            <WinterLocationScene />
-          </Suspense>
-        </MeshyArenaErrorBoundary>
-      )}
+      {currentTheme === "grass" && <MeadowArena />}
+      {isIceTheme && <FrozenArena />}
       {isIceTheme && <IcePatches />}
       {isIceTheme && <Snowmen />}
       {isIceTheme && <SnowfallEffect />}
@@ -806,13 +532,7 @@ export function Arena({ theme = "grass" }: ArenaProps) {
       )}
       {currentTheme === "space" && <SpaceBackground />}
       {currentTheme === "space" && <CosmicVoidDressing />}
-      {currentTheme === "saturn" && (
-        <MeshyArenaErrorBoundary fallback={stageFallback}>
-          <Suspense fallback={stageFallback}>
-            <ArabianNightsScene />
-          </Suspense>
-        </MeshyArenaErrorBoundary>
-      )}
+      {currentTheme === "saturn" && <ArabianArena />}
       {currentTheme === "saturn" && <ArabianNightDressing />}
       {currentTheme === "tomb" && <PharaohTombArena />}
       {currentTheme === "neon" && <NeonCourtArena />}
@@ -826,37 +546,9 @@ export function Arena({ theme = "grass" }: ArenaProps) {
       
       {/* Walls removed - DestructibleRingWall and OuterRingWall disabled */}
       
-      {currentTheme !== "neon" && (
-        <group 
-          position={[
-            elementTransforms.zonesOffset.x,
-            elementTransforms.zonesOffset.y,
-            elementTransforms.zonesOffset.z
-          ]}
-          rotation={[
-            elementTransforms.zonesRotation?.x ?? 0,
-            elementTransforms.zonesRotation?.y ?? 0,
-            elementTransforms.zonesRotation?.z ?? 0
-          ]}
-        >
-          <ControlPointZones
-            enabled={true}
-            zoneRadius={ARENA_RADIUS + 6}
-            captureSpeed={0.5}
-            scorePerSecond={1}
-          />
-        </group>
-      )}
-      
-      {/* InnerBarrierWalls removed */}
-      
       <PinballBumpers />
       <EditorWallBlocks />
       <EditorScoringZones />
-      
-      {(gameMode === "classic" || gameMode === "ringer_royale" || gameMode === "local_multiplayer" || gameMode === "practice") && (
-        <ScoringZones />
-      )}
       
       {currentTheme !== "neon" && gameMode === "map_editor" && (
         <KnockoffBoundaryRing 
@@ -865,16 +557,6 @@ export function Arena({ theme = "grass" }: ArenaProps) {
           offset={elementTransforms.knockoffBoundaryOffset}
           rotation={elementTransforms.knockoffBoundaryRotation}
           isGameplay={false}
-        />
-      )}
-      
-      {currentTheme !== "neon" && (gameMode === "classic" || gameMode === "ringer_royale" || gameMode === "local_multiplayer" || gameMode === "practice") && (
-        <KnockoffBoundaryRing 
-          radius={wallSettings.knockoffBoundaryRadius ?? 21} 
-          width={wallSettings.knockoffBoundaryWidth ?? 0.5}
-          offset={elementTransforms.knockoffBoundaryOffset}
-          rotation={elementTransforms.knockoffBoundaryRotation}
-          isGameplay={true}
         />
       )}
     </group>

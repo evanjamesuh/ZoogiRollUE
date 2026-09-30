@@ -335,7 +335,7 @@ export function MapSelection() {
   }
 
   return (
-    <div className="absolute inset-0 flex flex-col items-center justify-center p-6 overflow-hidden">
+    <div className="allow-pan-y absolute inset-0 flex flex-col items-center justify-start sm:justify-center p-4 sm:p-6 overflow-y-auto">
       <input
         ref={imageInputRef}
         type="file"
@@ -499,7 +499,7 @@ export function MapSelection() {
       <motion.h1
         initial={{ y: -50, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="text-3xl font-bold text-white mb-1 relative z-10"
+        className="text-2xl sm:text-3xl font-bold text-white mb-1 mt-2 relative z-10"
       >
         Select Arena
       </motion.h1>
@@ -517,7 +517,7 @@ export function MapSelection() {
         initial={{ scale: 0.8, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ delay: 0.3 }}
-        className="w-full max-w-xs h-40 rounded-2xl overflow-hidden mb-4 bg-black/40 relative z-10"
+        className="w-full max-w-xs h-24 landscape:h-16 sm:h-40 rounded-2xl overflow-hidden mb-3 bg-black/40 relative z-10"
         style={{
           boxShadow: selectedMapInfo ? `0 0 40px ${selectedMapInfo.color}40` : 'none'
         }}
@@ -577,7 +577,7 @@ export function MapSelection() {
       </motion.div>
 
       <div 
-        className="flex flex-col max-w-xs w-full relative z-10 max-h-[280px] overflow-y-auto pr-1"
+        className="flex flex-col max-w-xs w-full relative z-10 pr-1"
         style={{ gap: `${devSettings.buttonGap}px` }}
       >
         {MAP_OPTIONS.map((map, index) => {
@@ -595,7 +595,7 @@ export function MapSelection() {
                   : "hover:scale-[1.01]"
               }`}
               style={{
-                height: `${devSettings.buttonHeight}px`,
+                height: `${Math.min(devSettings.buttonHeight, Math.min(window.innerWidth, window.innerHeight) < 500 ? 56 : devSettings.buttonHeight)}px`,
                 borderRadius: `${devSettings.buttonRadius}px`,
                 backgroundColor: backgroundImage ? undefined : map.color,
                 boxShadow: selectedMap === map.id && !selectedCustomArena
@@ -685,13 +685,14 @@ export function MapSelection() {
         </motion.div>
       )}
 
+      <div className="safe-bottom-pad sticky bottom-0 z-20 mt-3 flex w-full max-w-xs flex-col items-center bg-gradient-to-t from-black/85 via-black/70 to-transparent pt-3">
       <motion.button
         initial={{ y: 50, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ delay: 0.5 }}
         onClick={handleStartGame}
         disabled={!selectedMap}
-        className={`mt-8 px-8 py-4 rounded-full text-xl font-bold transition-all duration-300 relative z-10 ${
+        className={`min-h-12 w-full px-8 py-4 rounded-full text-xl font-bold transition-all duration-300 relative z-10 ${
           selectedMap
             ? gameMode === "map_editor"
               ? "bg-gradient-to-r from-violet-500 to-purple-600 text-white hover:scale-105 cursor-pointer"
@@ -707,10 +708,11 @@ export function MapSelection() {
         animate={{ opacity: 1 }}
         transition={{ delay: 0.6 }}
         onClick={handleBack}
-        className="mt-4 text-gray-400 hover:text-white transition-colors relative z-10"
+        className="mt-3 min-h-11 px-4 text-gray-300 hover:text-white transition-colors relative z-10"
       >
         ← Back
       </motion.button>
+      </div>
     </div>
   );
 }

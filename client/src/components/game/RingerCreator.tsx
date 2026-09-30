@@ -432,5 +432,3 @@ export function RingerCreator() {
     </div>
   );
 }
-
-useGLTF.preload("/models/character/body.glb");

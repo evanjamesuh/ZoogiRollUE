@@ -1,3 +1,6 @@
+import { ZOOGI_REST_Y } from "./restHeight";
+import { ICE_RIM } from "./roundRim";
+
 export const ARENA_RADIUS = 18;
 export const WALL_THICKNESS = 1.5;
 
@@ -50,7 +53,7 @@ export function getSpawnPointPosition(
       const zone = spawnZones[spawnIndex % spawnZones.length];
       return [
         Math.cos(zone.angle) * zone.distance,
-        0.5,
+        ZOOGI_REST_Y,
         Math.sin(zone.angle) * zone.distance
       ];
     }
@@ -61,7 +64,7 @@ export function getSpawnPointPosition(
   const angle = SPAWN_POINT_ANGLES[spawnIndex % SPAWN_POINT_ANGLES.length];
   return [
     Math.cos(angle) * spawnRadius,
-    0.5,
+    ZOOGI_REST_Y,
     Math.sin(angle) * spawnRadius
   ];
 }
@@ -84,7 +87,7 @@ export function getGreenPadRespawnPosition(padIndex: number): [number, number, n
   const radius = WALL_OWNERSHIP_GREEN_RESPAWN_RADIUS;
   return [
     Math.cos(angle) * radius,
-    0.5,
+    ZOOGI_REST_Y,
     Math.sin(angle) * radius
   ];
 }
@@ -172,19 +175,14 @@ export function getTreePositions(): { position: [number, number, number]; radius
 }
 
 export function getSnowmanPositions(): { position: [number, number, number]; radius: number }[] {
-  // Four on the open ice near the cardinals (radius 10). The other four used to
-  // sit at radius 16, which is inside the winter camp walls and towers, so they
-  // now stand on open ice between those and the bumpers.
-  return [
-    { position: [9.55, 0, 2.96], radius: 0.55 },
-    { position: [4.23, 0, 7.95], radius: 0.55 },
-    { position: [-2.96, 0, 9.55], radius: 0.55 },
-    { position: [-7.95, 0, 4.23], radius: 0.55 },
-    { position: [-9.55, 0, -2.96], radius: 0.55 },
-    { position: [-4.23, 0, -7.95], radius: 0.55 },
-    { position: [2.96, 0, -9.55], radius: 0.55 },
-    { position: [7.95, 0, -4.23], radius: 0.55 }
-  ];
+  // Six snowmen on the rink rim, off the cardinal lanes. The base sphere is this radius.
+  return ICE_RIM.map((mark) => {
+    const angle = (mark.angleDeg * Math.PI) / 180;
+    return {
+      position: [Math.cos(angle) * mark.distance, 0, Math.sin(angle) * mark.distance],
+      radius: mark.radius,
+    };
+  });
 }
 
 export function getAlienPositions(): { position: [number, number, number]; radius: number }[] {

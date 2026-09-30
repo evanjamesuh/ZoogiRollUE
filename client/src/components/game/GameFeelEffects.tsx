@@ -1,9 +1,11 @@
-import { useRef, useMemo } from "react";
+import { useEffect, useRef, useMemo } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import * as THREE from "three";
 import { useGameFeel } from "@/lib/stores/useGameFeel";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
+import { emitImpact } from "@/vfx/impacts";
+import { ZOOGI_FX_SCALE } from "@/lib/restHeight";
 
 export function HitEffects() {
   const hitEffects = useGameFeel((state) => state.hitEffects);
@@ -92,12 +94,12 @@ function HitParticle({ effect }: HitParticleProps) {
     
     if (particlesRef.current.material instanceof THREE.PointsMaterial) {
       particlesRef.current.material.opacity = 1 - progress;
-      particlesRef.current.material.size = 0.15 * (1 - progress * 0.5);
+      particlesRef.current.material.size = ZOOGI_FX_SCALE * 0.15 * (1 - progress * 0.5);
     }
   });
   
   return (
-    <group ref={groupRef} position={effect.position}>
+    <group ref={groupRef} position={effect.position} scale={ZOOGI_FX_SCALE}>
       <points ref={particlesRef}>
         <bufferGeometry>
           <bufferAttribute
@@ -114,7 +116,7 @@ function HitParticle({ effect }: HitParticleProps) {
           />
         </bufferGeometry>
         <pointsMaterial
-          size={0.15}
+          size={0.15 * ZOOGI_FX_SCALE}
           vertexColors
           transparent
           opacity={1}
@@ -130,6 +132,7 @@ function HitParticle({ effect }: HitParticleProps) {
   );
 }
 
+/** Pop ring for a knockout. The mesh scale is the authored 0.86-era size; the parent group applies ZOOGI_FX_SCALE. */
 function RingExplosion({ timestamp }: { timestamp: number }) {
   const ringRef = useRef<THREE.Mesh>(null);
   
@@ -305,7 +308,7 @@ function FireBurstEffect({ burst }: { burst: { id: string; position: [number, nu
   });
   
   return (
-    <group ref={groupRef} position={burst.position}>
+    <group ref={groupRef} position={burst.position} scale={ZOOGI_FX_SCALE}>
       <mesh ref={coreRef}>
         <sphereGeometry args={[0.5, 16, 16]} />
         <meshBasicMaterial color="#ffffff" transparent opacity={1} />
@@ -331,7 +334,7 @@ function FireBurstEffect({ burst }: { burst: { id: string; position: [number, nu
           />
         </bufferGeometry>
         <pointsMaterial
-          size={0.2}
+          size={0.2 * ZOOGI_FX_SCALE}
           color="#ff4400"
           transparent
           opacity={1}
@@ -350,7 +353,7 @@ function FireBurstEffect({ burst }: { burst: { id: string; position: [number, nu
           />
         </bufferGeometry>
         <pointsMaterial
-          size={0.35}
+          size={0.35 * ZOOGI_FX_SCALE}
           color="#ffaa00"
           transparent
           opacity={0.5}
@@ -482,81 +485,10 @@ export function CartoonExplosions() {
   );
 }
 
-function CartoonExplosionEffect({ explosion }: { explosion: { id: string; position: [number, number, number]; timestamp: number; showBoom: boolean } }) {
-  const groupRef = useRef<THREE.Group>(null);
-  const discRef = useRef<THREE.Mesh>(null);
-  const cracksRef = useRef<THREE.Group>(null);
-  
-  const crackCount = 6;
-  
-  const crackData = useMemo(() => {
-    const data = [];
-    for (let i = 0; i < crackCount; i++) {
-      const angle = (i / crackCount) * Math.PI * 2 + Math.random() * 0.3;
-      data.push({
-        angle,
-        length: 1.5 + Math.random() * 1.0,
-        width: 0.08 + Math.random() * 0.04
-      });
-    }
-    return data;
-  }, []);
-  
-  useFrame(() => {
-    if (!groupRef.current || !discRef.current || !cracksRef.current) return;
-    
-    const elapsed = (Date.now() - explosion.timestamp) / 1000;
-    const duration = 1.0;
-    const progress = Math.min(elapsed / duration, 1);
-    
-    const expandProgress = Math.min(elapsed * 4, 1);
-    const fadeProgress = Math.max(0, (progress - 0.3) / 0.7);
-    
-    const discScale = 2.5 * expandProgress;
-    discRef.current.scale.set(discScale, discScale, 1);
-    
-    if (discRef.current.material instanceof THREE.MeshBasicMaterial) {
-      discRef.current.material.opacity = Math.max(0, 0.7 * (1 - fadeProgress));
-    }
-    
-    cracksRef.current.children.forEach((crack, i) => {
-      const data = crackData[i];
-      const crackExpand = Math.min(elapsed * 5, 1);
-      crack.scale.set(data.width, data.length * crackExpand, 1);
-      
-      if ((crack as THREE.Mesh).material instanceof THREE.MeshBasicMaterial) {
-        ((crack as THREE.Mesh).material as THREE.MeshBasicMaterial).opacity = Math.max(0, 0.9 * (1 - fadeProgress));
-      }
-    });
-  });
-  
-  const floorY = 0.02;
-  
-  return (
-    <group ref={groupRef} position={[explosion.position[0], floorY, explosion.position[2]]}>
-      <mesh ref={discRef} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[1, 16]} />
-        <meshBasicMaterial color="#1a1a1a" transparent opacity={0.7} depthWrite={false} />
-      </mesh>
-      
-      <group ref={cracksRef}>
-        {crackData.map((data, i) => (
-          <mesh 
-            key={i} 
-            rotation={[-Math.PI / 2, 0, data.angle]}
-            position={[
-              Math.cos(data.angle) * data.length * 0.5,
-              0.01,
-              Math.sin(data.angle) * data.length * 0.5
-            ]}
-          >
-            <planeGeometry args={[1, 1]} />
-            <meshBasicMaterial color="#333333" transparent opacity={0.9} depthWrite={false} />
-          </mesh>
-        ))}
-      </group>
-    </group>
-  );
+function CartoonExplosionEffect(_explosion: { explosion: { id: string; position: [number, number, number]; timestamp: number; showBoom: boolean } }) {
+  // The flat scorch disc used to sit under Hotstreak's blast. The volumetric
+  // explosion draws the scorch, smoke, and flash now.
+  return null;
 }
 
 export function CartoonStarbursts() {
@@ -571,7 +503,58 @@ export function CartoonStarbursts() {
   );
 }
 
+const replacedStarbursts = new Set<string>();
+
+function sprayDirection(position: [number, number, number]): [number, number, number] {
+  const state = useZoogiGame.getState();
+  const entities = [state.playerEntity, ...state.enemies];
+  let velocity: [number, number, number] | null = null;
+  let best = 4;
+  for (const entity of entities) {
+    if (!entity) continue;
+    const dx = entity.position[0] - position[0];
+    const dz = entity.position[2] - position[2];
+    const dist = Math.hypot(dx, dz);
+    if (dist < best) {
+      best = dist;
+      velocity = entity.velocity;
+    }
+  }
+  if (!velocity) return [0.25, 0.45, 0.55];
+  const len = Math.hypot(velocity[0], velocity[1], velocity[2]);
+  if (len < 0.05) return [0.35, 0.4, 0.25];
+  return [velocity[0] / len, Math.max(0.2, velocity[1] / len), velocity[2] / len];
+}
+
+function larsIsArmedNear(position: [number, number, number]): boolean {
+  const state = useZoogiGame.getState();
+  const entities = [state.playerEntity, ...state.enemies];
+  return entities.some((entity) => {
+    if (!entity || entity.larsRicochetBoost <= 1) return false;
+    const dx = entity.position[0] - position[0];
+    const dz = entity.position[2] - position[2];
+    return dx * dx + dz * dz < 1.44;
+  });
+}
+
 function CartoonStarburstEffect({ starburst }: { starburst: { id: string; position: [number, number, number]; color: string; timestamp: number } }) {
+  const color = starburst.color.toLowerCase();
+  const moody = color === "#fde047" || color === "#3b82f6" || color === "#d4c4b0" || color === "#b69cff";
+  useEffect(() => {
+    if (!moody || replacedStarbursts.has(starburst.id)) return;
+    replacedStarbursts.add(starburst.id);
+    if (color === "#b69cff") return;
+    if (color === "#3b82f6" && !larsIsArmedNear(starburst.position)) {
+      emitImpact("spark", starburst.position, sprayDirection(starburst.position));
+    } else if (color === "#d4c4b0") {
+      emitImpact("dust", starburst.position);
+    }
+  }, [color, moody, starburst.id, starburst.position]);
+  if (moody) return null;
+  return <LegacyStarburst starburst={starburst} />;
+}
+
+function LegacyStarburst({ starburst }: { starburst: { id: string; position: [number, number, number]; color: string; timestamp: number } }) {
   const groupRef = useRef<THREE.Group>(null);
   const spikesRef = useRef<THREE.Group>(null);
   const coreRef = useRef<THREE.Mesh>(null);

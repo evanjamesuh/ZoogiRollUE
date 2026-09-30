@@ -16,6 +16,7 @@ import { DeveloperMoveControls } from "./DeveloperMoveControls";
 import { Tutorial } from "./Tutorial";
 import { ArcPeakOverlay } from "./ArcPeakOverlay";
 import { HitEffects, ScreenFlash, FireBursts, WallSparks, CartoonExplosions, CartoonStarbursts, CartoonSparks } from "./GameFeelEffects";
+import { ImpactField } from "@/vfx/impacts";
 import { ArcSelector } from "./ArcSelector";
 import { EditorPlacedModels } from "./EditorPlacedModels";
 import { TransformGizmo } from "./TransformGizmo";
@@ -30,6 +31,7 @@ import { ImpactFX } from "./ImpactFX";
 import { useCallback, useEffect, useRef, useMemo, useState } from "react";
 import { triggerArcPeakCameraEffect, triggerArcPeakFreezeOnly, clearArcPeakCameraEffect } from "@/lib/stores/useCameraEffects";
 import { useMapDecorations } from "@/hooks/useMapDecorations";
+import { canvasPixelRatio, isMobileGraphics } from "@/lib/mobileGraphics";
 
 function GradientSky() {
   const meshRef = useRef<THREE.Mesh>(null);
@@ -217,6 +219,10 @@ class OptionalSceneBoundary extends Component<{ children: ReactNode }, { hasErro
 
 export function Game() {
   const { enemies, selectedMap, gameMode, localPlayers } = useZoogiGame();
+  const [graphics] = useState(() => ({
+    mobile: isMobileGraphics(),
+    dpr: canvasPixelRatio(),
+  }));
   
   useMapDecorations();
 
@@ -224,6 +230,7 @@ export function Game() {
   const comicMap = selectedMap === "lava" || selectedMap === "space" || selectedMap === "saturn" || selectedMap === "tomb";
   const background =
     selectedMap === "neon" ? "#070814" :
+    selectedMap === "grass" ? "#7ecbf5" :
     selectedMap === "ice" ? "#87CEEB" :
     selectedMap === "lava" ? "#1a0c18" :
     selectedMap === "space" ? "#070414" :
@@ -234,7 +241,8 @@ export function Game() {
   return (
     <>
       <Canvas
-        shadows
+        shadows={!graphics.mobile}
+        dpr={graphics.dpr}
         camera={{
           position: [0, 25, 30],
           fov: 50,
@@ -242,8 +250,8 @@ export function Game() {
           far: 1000
         }}
         gl={{
-          antialias: true,
-          powerPreference: "default",
+          antialias: false,
+          powerPreference: "high-performance",
           toneMapping: THREE.ACESFilmicToneMapping,
           toneMappingExposure: 1.0,
           outputColorSpace: THREE.SRGBColorSpace
@@ -253,13 +261,14 @@ export function Game() {
         <color attach="background" args={[background]} />
         
         {selectedMap === "ice" && <fog attach="fog" args={['#c8e6f8', 60, 150]} />}
+        {selectedMap === "grass" && <fog attach="fog" args={['#d7ebf8', 58, 390]} />}
         
         <OptionalSceneBoundary>
           <Suspense fallback={null}>
             {selectedMap === "ice" && <GradientSky />}
             {comicMap && <MapAtmosphere map={selectedMap} />}
-            {!comicMap && selectedMap !== "ice" && selectedMap !== "neon" && <Sky sunPosition={meadowSun} />}
-            {!comicMap && selectedMap !== "ice" && selectedMap !== "neon" && <Environment preset="sunset" background={false} />}
+            {!comicMap && selectedMap !== "ice" && selectedMap !== "grass" && selectedMap !== "neon" && <Sky sunPosition={meadowSun} />}
+            {!comicMap && selectedMap !== "ice" && selectedMap !== "grass" && selectedMap !== "neon" && <Environment preset="sunset" background={false} />}
           </Suspense>
         </OptionalSceneBoundary>
 
@@ -321,6 +330,7 @@ export function Game() {
           <CartoonExplosions />
           <CartoonStarbursts />
           <CartoonSparks />
+          <ImpactField />
           
           <ArcSelector />
           

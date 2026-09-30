@@ -1,12 +1,15 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useFrame, useThree } from "@react-three/fiber";
+import { useEffect, useMemo, useState } from "react";
+import { useThree } from "@react-three/fiber";
+import { NightCircuitStadium } from "./NightCircuitStadium";
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { BUMPER_RADIUS } from "@/lib/arenaColliders";
+import { arenaScaleFor } from "@/lib/mapDefaultConfigs";
 import {
   NEON_CORNER_GAP,
   NEON_HALF_X,
   NEON_HALF_Z,
+  neonBumperMarks,
   neonBumpers,
   neonObstacles,
   neonRails,
@@ -201,14 +204,16 @@ function paintCourt(ctx: CanvasRenderingContext2D) {
   ctx.textBaseline = "middle";
   ctx.fillText("ZR", cx + 2, cy + 28);
 
-  for (const post of neonBumpers()) {
+  // The floor texture is scaled with the court. Shrink the mark so its world size stays put.
+  const mark = 1 / arenaScaleFor("neon");
+  for (const post of neonBumperMarks()) {
     const [px, py] = worldToCanvas(post.x, post.z);
-    const g = ctx.createRadialGradient(px, py, 8, px, py, 1.35 * PX);
+    const g = ctx.createRadialGradient(px, py, 8, px, py, 1.35 * mark * PX);
     g.addColorStop(0, "rgba(0,0,0,0.5)");
     g.addColorStop(1, "rgba(0,0,0,0)");
     ctx.fillStyle = g;
     ctx.beginPath();
-    ctx.ellipse(px, py, 1.45 * PX, 1.15 * PX, 0, 0, Math.PI * 2);
+    ctx.ellipse(px, py, 1.45 * mark * PX, 1.15 * mark * PX, 0, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -509,218 +514,6 @@ function KnockoutMouths() {
   );
 }
 
-const STANDS: Array<{ pos: [number, number, number]; size: [number, number, number] }> = [
-  // Near and side lips. The far bowl is its own lit grandstand so it reads in frame.
-  { pos: [0, 0.46, 9.55], size: [15.4, 0.92, 2.15] },
-  { pos: [0, 1.02, 10.9], size: [16.2, 0.55, 1.15] },
-  { pos: [13.2, 0.4, 0], size: [1.65, 0.8, 8.4] },
-  { pos: [-13.2, 0.4, 0], size: [1.65, 0.8, 8.4] },
-  // Outer bowl, visible when the camera opens up on a spread-out rally.
-  { pos: [0, 1.55, -15.4], size: [24, 1.35, 2.6] },
-  { pos: [0, 1.55, 15.4], size: [24, 1.35, 2.6] },
-  { pos: [16.6, 1.15, 0], size: [2.2, 1.15, 16] },
-  { pos: [-16.6, 1.15, 0], size: [2.2, 1.15, 16] },
-];
-
-type CrowdLight = { x: number; y: number; z: number; scale: number; phase: number; color: THREE.Color };
-
-function crowdLights(): CrowdLight[] {
-  const lights: CrowdLight[] = [];
-  const cyan = new THREE.Color("#7ef6ff");
-  const magenta = new THREE.Color("#ff6ad4");
-  const phone = new THREE.Color("#ffe6b0");
-  const row = (z: number, y: number, x0: number, x1: number, step: number) => {
-    let i = 0;
-    for (let x = x0; x <= x1 + 0.001; x += step) {
-      const n = Math.sin(x * 8.3 + z * 5.1);
-      const side = x + n * 0.05;
-      const warm = Math.abs(Math.sin(x * 19.4 + z * 7.2)) > 0.86;
-      const color = warm ? phone : side < 0 ? cyan : magenta;
-      lights.push({
-        x: side,
-        y: y + (Math.cos(x * 5.4 + z) * 0.5 + 0.5) * 0.1,
-        z: z + n * 0.045,
-        scale: 0.62 + (Math.sin(x * 3.1 + i) * 0.5 + 0.5) * 0.7,
-        phase: (i * 1.37 + z * 2.2) % (Math.PI * 2),
-        color,
-      });
-      i += 1;
-    }
-  };
-  // Seats on the far tiers only, above the rail so the court stays clear.
-  row(-9.22, 1.05, -7.6, 7.6, 0.32);
-  row(-9.42, 1.14, -7.3, 7.3, 0.34);
-  row(-9.95, 1.68, -8.1, 8.1, 0.3);
-  row(-10.16, 1.78, -7.8, 7.8, 0.32);
-  row(-10.7, 2.32, -8.3, 8.3, 0.3);
-  row(-10.92, 2.46, -7.6, 7.6, 0.34);
-  return lights;
-}
-
-function CrowdLights() {
-  const meshRef = useRef<THREE.InstancedMesh>(null);
-  const materialRef = useRef<THREE.ShaderMaterial>(null);
-  const spots = useMemo(() => crowdLights(), []);
-
-  useLayoutEffect(() => {
-    const mesh = meshRef.current;
-    if (!mesh) return;
-    const dummy = new THREE.Object3D();
-    const phases = new Float32Array(spots.length);
-    spots.forEach((spot, i) => {
-      dummy.position.set(spot.x, spot.y, spot.z);
-      dummy.scale.setScalar(spot.scale);
-      dummy.updateMatrix();
-      mesh.setMatrixAt(i, dummy.matrix);
-      mesh.setColorAt(i, spot.color);
-      phases[i] = spot.phase;
-    });
-    mesh.instanceMatrix.needsUpdate = true;
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-    mesh.geometry.setAttribute("phase", new THREE.InstancedBufferAttribute(phases, 1));
-  }, [spots]);
-
-  useFrame((state) => {
-    const material = materialRef.current;
-    if (material) material.uniforms.uTime.value = state.clock.elapsedTime;
-  });
-
-  return (
-    <instancedMesh ref={meshRef} args={[undefined, undefined, spots.length]} frustumCulled={false}>
-      <sphereGeometry args={[0.062, 6, 5]} />
-      <shaderMaterial
-        ref={materialRef}
-        toneMapped={false}
-        depthWrite={false}
-        blending={THREE.AdditiveBlending}
-        uniforms={{ uTime: { value: 0 } }}
-        vertexShader={`
-          attribute float phase;
-          varying vec3 vColor;
-          varying float vPhase;
-          void main() {
-            vColor = instanceColor;
-            vPhase = phase;
-            vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(position, 1.0);
-            gl_Position = projectionMatrix * mvPosition;
-          }
-        `}
-        fragmentShader={`
-          uniform float uTime;
-          varying vec3 vColor;
-          varying float vPhase;
-          void main() {
-            float twinkle = 0.72 + 0.28 * sin(uTime * 1.45 + vPhase);
-            gl_FragColor = vec4(vColor * twinkle * 2.05, 1.0);
-          }
-        `}
-      />
-    </instancedMesh>
-  );
-}
-
-function FarBowl({ envMap }: { envMap: THREE.Texture | null }) {
-  const tiers = [
-    { z: -9.22, y: 0.58, h: 0.82, depth: 0.7, width: 16.6 },
-    { z: -10.02, y: 1.16, h: 0.96, depth: 0.78, width: 17.8 },
-    { z: -10.86, y: 1.74, h: 1.08, depth: 0.84, width: 18.8 },
-  ];
-  return (
-    <group>
-      {tiers.map((tier) => {
-        const frontZ = tier.z + tier.depth / 2 - 0.03;
-        const lipY = tier.y + tier.h / 2 + 0.02;
-        const half = tier.width / 2 - 0.12;
-        return (
-          <group key={tier.z}>
-            <mesh position={[0, tier.y, tier.z]} receiveShadow>
-              <boxGeometry args={[tier.width, tier.h, tier.depth]} />
-              <meshStandardMaterial
-                color="#070b16"
-                emissive="#0c1428"
-                emissiveIntensity={0.12}
-                metalness={0.84}
-                roughness={0.18}
-                envMap={envMap ?? undefined}
-                envMapIntensity={0.62}
-              />
-            </mesh>
-            <mesh position={[-half / 2, lipY, frontZ]}>
-              <boxGeometry args={[half, 0.08, 0.1]} />
-              <meshStandardMaterial color="#22e7ff" emissive="#22e7ff" emissiveIntensity={1.9} toneMapped={false} />
-            </mesh>
-            <mesh position={[half / 2, lipY, frontZ]}>
-              <boxGeometry args={[half, 0.08, 0.1]} />
-              <meshStandardMaterial color="#ff2bd6" emissive="#ff2bd6" emissiveIntensity={1.9} toneMapped={false} />
-            </mesh>
-          </group>
-        );
-      })}
-      {[-8.9, 8.9].map((x) => (
-        <group key={`mast-${x}`} position={[x, 0, -10.55]}>
-          <mesh position={[0, 1.65, 0]}>
-            <cylinderGeometry args={[0.08, 0.12, 3.3, 8]} />
-            <meshStandardMaterial color="#121826" metalness={0.82} roughness={0.22} envMap={envMap ?? undefined} envMapIntensity={0.4} />
-          </mesh>
-          <mesh position={[0, 3.2, 0]}>
-            <boxGeometry args={[0.55, 0.12, 0.28]} />
-            <meshStandardMaterial color="#161c2c" metalness={0.78} roughness={0.24} />
-          </mesh>
-          <mesh position={[0, 3.38, 0]}>
-            <sphereGeometry args={[0.16, 10, 8]} />
-            <meshStandardMaterial
-              color="#fff6ea"
-              emissive={x < 0 ? "#22e7ff" : "#ff2bd6"}
-              emissiveIntensity={2.35}
-              toneMapped={false}
-            />
-          </mesh>
-        </group>
-      ))}
-      {[-1, 1].map((sx) => (
-        <group key={`pilaster-${sx}`} position={[sx * 12.55, 0, -5.5]}>
-          <mesh position={[0, 1.2, 0]}>
-            <boxGeometry args={[0.24, 2.4, 0.28]} />
-            <meshStandardMaterial color="#121826" metalness={0.78} roughness={0.24} envMap={envMap ?? undefined} envMapIntensity={0.35} />
-          </mesh>
-          <mesh position={[sx * -0.02, 1.2, 0.16]}>
-            <boxGeometry args={[0.07, 2.1, 0.05]} />
-            <meshStandardMaterial
-              color={sx < 0 ? "#22e7ff" : "#ff2bd6"}
-              emissive={sx < 0 ? "#22e7ff" : "#ff2bd6"}
-              emissiveIntensity={1.95}
-              toneMapped={false}
-            />
-          </mesh>
-        </group>
-      ))}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[-4.3, 0.05, -8.92]}>
-        <planeGeometry args={[8.4, 0.85]} />
-        <meshBasicMaterial color="#22e7ff" transparent opacity={0.28} depthWrite={false} />
-      </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[4.3, 0.05, -8.92]}>
-        <planeGeometry args={[8.4, 0.85]} />
-        <meshBasicMaterial color="#ff2bd6" transparent opacity={0.28} depthWrite={false} />
-      </mesh>
-      <LightRig z={-10.4} y={2.85} />
-      {[-6.2, -2.1, 2.1, 6.2].map((x) => (
-        <mesh key={`beam-${x}`} position={[x, 2.05, -10.15]} rotation={[0.22, 0, 0]}>
-          <coneGeometry args={[0.42, 1.35, 7, 1, true]} />
-          <meshBasicMaterial
-            color={x < 0 ? "#22e7ff" : "#ff2bd6"}
-            transparent
-            opacity={0.07}
-            depthWrite={false}
-            side={THREE.DoubleSide}
-            blending={THREE.AdditiveBlending}
-            toneMapped={false}
-          />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
 function LightRig({ z, y = 6.4 }: { z: number; y?: number }) {
   const sign = z >= 0 ? 1 : -1;
   return (
@@ -777,8 +570,8 @@ export function NeonCourtLights() {
         intensity={0.82}
         color="#e7eefc"
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
         shadow-bias={-0.00035}
         shadow-camera-far={64}
         shadow-camera-left={-20}
@@ -907,10 +700,12 @@ export function NeonCourtArena() {
   const rails = neonRails();
   const posts = neonBumpers();
   const tints = ["#22e7ff", "#ff2bd6", "#b026ff"];
+  const dress = arenaScaleFor("neon");
 
   return (
     <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} receiveShadow>
+      <group scale={dress}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]} receiveShadow>
         <planeGeometry args={[NEON_HALF_X * 2, NEON_HALF_Z * 2]} />
         <meshPhysicalMaterial
           color="#ffffff"
@@ -932,26 +727,6 @@ export function NeonCourtArena() {
 
       <KnockoutMouths />
 
-      {rails.map((rail) => (
-        <Rail key={rail.id} {...rail} />
-      ))}
-
-      {posts.map((post, index) => (
-        post.id.includes("pylon")
-          ? <Pylon key={post.id} x={post.x} z={post.z} tint={post.x < 0 ? "#22e7ff" : "#ff2bd6"} />
-          : <BumperPost key={post.id} x={post.x} z={post.z} tint={tints[index % tints.length]} />
-      ))}
-
-      {neonObstacles().map((box) => (
-        <RaisedBlock
-          key={box.id}
-          {...box}
-          tint={BLOCK_TINT[box.id] ?? "#22e7ff"}
-          height={box.id.startsWith("channel") ? 0.5 : 0.68}
-          panels={panelTexture}
-        />
-      ))}
-
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.16, 0]}>
         <circleGeometry args={[46, 48]} />
         <meshStandardMaterial color="#090b12" roughness={1} metalness={0} />
@@ -961,14 +736,7 @@ export function NeonCourtArena() {
         <meshStandardMaterial color="#1a2233" emissive="#33506a" emissiveIntensity={0.45} roughness={0.6} metalness={0.2} />
       </mesh>
 
-      {STANDS.map((stand) => (
-        <mesh key={stand.pos.join(",")} position={stand.pos} receiveShadow>
-          <boxGeometry args={stand.size} />
-          <meshStandardMaterial color="#0c1018" roughness={0.32} metalness={0.72} />
-        </mesh>
-      ))}
-      <CrowdLights />
-      <FarBowl envMap={envMap} />
+      <NightCircuitStadium envMap={envMap} />
       <ArenaRim />
       <Skyline />
       <LightRig z={12.2} y={5.2} />
@@ -1028,6 +796,27 @@ export function NeonCourtArena() {
           }]}
         />
       </mesh>
+      </group>
+
+      {rails.map((rail) => (
+        <Rail key={rail.id} {...rail} />
+      ))}
+
+      {posts.map((post, index) => (
+        post.id.includes("pylon")
+          ? <Pylon key={post.id} x={post.x} z={post.z} tint={post.x < 0 ? "#22e7ff" : "#ff2bd6"} />
+          : <BumperPost key={post.id} x={post.x} z={post.z} tint={tints[index % tints.length]} />
+      ))}
+
+      {neonObstacles().map((box) => (
+        <RaisedBlock
+          key={box.id}
+          {...box}
+          tint={BLOCK_TINT[box.id] ?? "#22e7ff"}
+          height={box.id.startsWith("channel") ? 0.5 : 0.68}
+          panels={panelTexture}
+        />
+      ))}
     </group>
   );
 }

@@ -4,7 +4,15 @@ import { useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { useAudio } from "@/lib/stores/useAudio";
-import { getHoodooDecor, type HoodooDecor } from "@/lib/arenaColliders";
+import type { HoodooDecor } from "@/lib/arenaColliders";
+import { hoodoosOnLavaColliders } from "@/lib/lavaHoodooPlacement";
+import { fittedHoodooGeometry } from "./volcanicHoodooFit";
+
+/** Collider radius in the mesh's local space. World radius is this times hoodoo.scale. */
+function localColliderRadius(hoodoo: HoodooDecor): number {
+  if (!Number.isFinite(hoodoo.scale) || Math.abs(hoodoo.scale) < 1e-6) return hoodoo.radius;
+  return hoodoo.radius / hoodoo.scale;
+}
 
 type HoodooData = HoodooDecor;
 
@@ -23,7 +31,15 @@ function StylizedHoodoo({ hoodoo }: { hoodoo: HoodooData }) {
   const lastHitTimeRef = useRef(0);
   
   const model = useGLTF("/models/stylized_desert_hoodoo.glb");
-  const clonedScene = useMemo(() => model.scene.clone(), [model.scene]);
+  const localRadius = localColliderRadius(hoodoo);
+  const clonedScene = useMemo(() => {
+    const root = model.scene.clone(true);
+    root.traverse((obj) => {
+      if (!(obj instanceof THREE.Mesh)) return;
+      obj.geometry = fittedHoodooGeometry(obj.geometry, localRadius);
+    });
+    return root;
+  }, [model.scene, localRadius]);
   
   const playerEntity = useZoogiGame(state => state.playerEntity);
   const enemies = useZoogiGame(state => state.enemies);
@@ -80,15 +96,15 @@ function StylizedHoodoo({ hoodoo }: { hoodoo: HoodooData }) {
 }
 
 function FallbackHoodoo({ hoodoo }: { hoodoo: HoodooData }) {
+  // Same local space as the fitted mesh. The group scale brings it up to hoodoo.radius.
+  const height = 0.75;
+  const base = -0.367;
+  const radius = localColliderRadius(hoodoo);
   return (
-    <group position={hoodoo.position} scale={hoodoo.scale}>
-      <mesh position={[0, 0.8, 0]} castShadow>
-        <cylinderGeometry args={[0.3, 0.5, 1.6, 8]} />
-        <meshStandardMaterial color="#CD853F" roughness={0.9} />
-      </mesh>
-      <mesh position={[0, 2.0, 0]} castShadow>
-        <cylinderGeometry args={[0.6, 0.3, 0.8, 8]} />
-        <meshStandardMaterial color="#D2691E" roughness={0.9} />
+    <group position={hoodoo.position} scale={hoodoo.scale} rotation={[0, hoodoo.rotation, 0]}>
+      <mesh position={[0, base + height / 2, 0]} castShadow>
+        <cylinderGeometry args={[radius, radius, height, 12]} />
+        <meshStandardMaterial color="#3a332c" roughness={0.94} />
       </mesh>
     </group>
   );
@@ -105,7 +121,7 @@ function HoodooWithFallback({ hoodoo }: { hoodoo: HoodooData }) {
 }
 
 export function DesertHoodoos() {
-  const hoodooData = useMemo<HoodooData[]>(() => getHoodooDecor(), []);
+  const hoodooData = useMemo<HoodooData[]>(() => hoodoosOnLavaColliders(), []);
 
   return (
     <group>
@@ -117,10 +133,8 @@ export function DesertHoodoos() {
 }
 
 export function getHoodooPositions(): { position: [number, number, number]; radius: number }[] {
-  return getHoodooDecor().map((hoodoo) => ({
+  return hoodoosOnLavaColliders().map((hoodoo) => ({
     position: hoodoo.position,
     radius: hoodoo.radius,
   }));
 }
-
-useGLTF.preload("/models/stylized_desert_hoodoo.glb");

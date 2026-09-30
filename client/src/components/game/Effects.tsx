@@ -4,6 +4,8 @@ import { useFrame } from "@react-three/fiber";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { useGameFeel } from "@/lib/stores/useGameFeel";
 import { WolfCloneLook } from "./PowerEffects";
+import { SmokeBurstField } from "@/vfx/bursts";
+import { ZOOGI_FX_SCALE } from "@/lib/restHeight";
 
 const ZOOGI_COLORS: Record<string, string> = {
   wolfgang: "#6B7280",
@@ -24,41 +26,43 @@ function MotionTrail({ position, velocity, color }: {
   velocity: [number, number, number];
   color: string;
 }) {
-  const trailRef = useRef<TrailPoint[]>([]);
-  const meshRefs = useRef<(THREE.Mesh | null)[]>([]);
   const TRAIL_LENGTH = 12;
   const TRAIL_LIFETIME = 300;
+  const trailRef = useRef<TrailPoint[]>(
+    Array.from({ length: TRAIL_LENGTH }, () => ({ position: [0, 0, 0], timestamp: 0 })),
+  );
+  const trailCursor = useRef(0);
+  const meshRefs = useRef<(THREE.Mesh | null)[]>([]);
   
   useFrame(() => {
     const speed = Math.sqrt(velocity[0] ** 2 + velocity[2] ** 2);
     const now = Date.now();
+    const slots = trailRef.current;
     
     if (speed > 0.05) {
-      trailRef.current.push({ position: [...position], timestamp: now });
+      const slot = slots[trailCursor.current];
+      slot.position[0] = position[0];
+      slot.position[1] = position[1];
+      slot.position[2] = position[2];
+      slot.timestamp = now;
+      trailCursor.current = (trailCursor.current + 1) % TRAIL_LENGTH;
     }
     
-    trailRef.current = trailRef.current.filter(p => now - p.timestamp < TRAIL_LIFETIME);
-    
-    if (trailRef.current.length > TRAIL_LENGTH) {
-      trailRef.current = trailRef.current.slice(-TRAIL_LENGTH);
-    }
-    
-    meshRefs.current.forEach((mesh, i) => {
-      if (mesh) {
-        if (i < trailRef.current.length) {
-          const point = trailRef.current[i];
-          const age = (now - point.timestamp) / TRAIL_LIFETIME;
-          const scale = Math.max(0.1, (1 - age) * 0.4);
-          
-          mesh.visible = true;
-          mesh.position.set(point.position[0], point.position[1], point.position[2]);
-          mesh.scale.setScalar(scale);
-          (mesh.material as THREE.MeshBasicMaterial).opacity = (1 - age) * 0.6;
-        } else {
-          mesh.visible = false;
-        }
+    for (let i = 0; i < TRAIL_LENGTH; i++) {
+      const mesh = meshRefs.current[i];
+      const point = slots[i];
+      if (!mesh) continue;
+      const age = point.timestamp > 0 ? (now - point.timestamp) / TRAIL_LIFETIME : 1;
+      if (age >= 0 && age < 1) {
+        const scale = Math.max(0.1, (1 - age) * 0.4) * ZOOGI_FX_SCALE;
+        mesh.visible = true;
+        mesh.position.set(point.position[0], point.position[1], point.position[2]);
+        mesh.scale.setScalar(scale);
+        (mesh.material as THREE.MeshBasicMaterial).opacity = (1 - age) * 0.6;
+      } else {
+        mesh.visible = false;
       }
-    });
+    }
   });
   
   return (
@@ -487,6 +491,7 @@ export function WolfClones() {
   
   return (
     <>
+      <SmokeBurstField />
       {wolfClones.filter(c => c.isActive).map((clone) => (
         <WolfClone key={clone.id} clone={clone} />
       ))}
@@ -649,7 +654,7 @@ function CollisionBurst({
     const glow = glowScaleRef.current;
     if (lensGroupRef.current) {
       lensGroupRef.current.visible = lens > 0.1;
-      lensGroupRef.current.scale.setScalar(lens);
+      lensGroupRef.current.scale.setScalar(lens * ZOOGI_FX_SCALE);
     }
     const lensOpacity = [0.3, 0.15, 0.4];
     lensMats.current.forEach((mat, i) => {
@@ -657,7 +662,7 @@ function CollisionBurst({
     });
     if (glowMeshRef.current) {
       glowMeshRef.current.visible = glow > 0.1;
-      glowMeshRef.current.scale.setScalar(glow);
+      glowMeshRef.current.scale.setScalar(glow * ZOOGI_FX_SCALE);
     }
     if (glowMatRef.current) glowMatRef.current.opacity = glow * 0.25;
   });
@@ -667,7 +672,7 @@ function CollisionBurst({
 
   return (
     <group>
-      <group ref={lensGroupRef} position={position} scale={initialLens} visible={initialLens > 0.1}>
+      <group ref={lensGroupRef} position={position} scale={initialLens * ZOOGI_FX_SCALE} visible={initialLens > 0.1}>
         <mesh>
           <ringGeometry args={[0.3, 0.5, 32]} />
           <meshBasicMaterial
@@ -700,7 +705,7 @@ function CollisionBurst({
         </mesh>
       </group>
 
-      <mesh ref={glowMeshRef} position={position} scale={initialGlow} visible={initialGlow > 0.1}>
+      <mesh ref={glowMeshRef} position={position} scale={initialGlow * ZOOGI_FX_SCALE} visible={initialGlow > 0.1}>
         <sphereGeometry args={[0.3, 16, 16]} />
         <meshBasicMaterial
           ref={glowMatRef}

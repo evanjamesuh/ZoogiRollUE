@@ -19,8 +19,8 @@ export function Lights() {
           intensity={1.0}
           color="#fff8f0"
           castShadow
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
+          shadow-mapSize-width={1024}
+          shadow-mapSize-height={1024}
           shadow-camera-far={80}
           shadow-camera-left={-30}
           shadow-camera-right={30}
@@ -51,8 +51,8 @@ export function Lights() {
           intensity={1.05}
           color="#ffb070"
           castShadow
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
+          shadow-mapSize-width={1024}
+          shadow-mapSize-height={1024}
           shadow-camera-far={90}
           shadow-camera-left={-36}
           shadow-camera-right={36}
@@ -76,8 +76,8 @@ export function Lights() {
           intensity={0.72}
           color="#d4d0ff"
           castShadow
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
+          shadow-mapSize-width={1024}
+          shadow-mapSize-height={1024}
           shadow-camera-far={80}
           shadow-camera-left={-30}
           shadow-camera-right={30}
@@ -98,8 +98,8 @@ export function Lights() {
           intensity={0.42}
           color="#c4b6ff"
           castShadow
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
+          shadow-mapSize-width={1024}
+          shadow-mapSize-height={1024}
           shadow-camera-far={70}
           shadow-camera-left={-28}
           shadow-camera-right={28}
@@ -121,8 +121,8 @@ export function Lights() {
           intensity={1.2}
           color="#ffd2a8"
           castShadow
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
+          shadow-mapSize-width={1024}
+          shadow-mapSize-height={1024}
           shadow-camera-far={80}
           shadow-camera-left={-32}
           shadow-camera-right={32}
@@ -138,30 +138,31 @@ export function Lights() {
 
   return (
     <>
-      <ambientLight intensity={0.4} color="#f0f4ff" />
+      <ambientLight intensity={0.58} color="#fff4dc" />
 
       <directionalLight
-        position={[10, 15, 10]}
-        intensity={0.8}
-        color="#ffffff"
+        position={[22, 32, 14]}
+        intensity={1.45}
+        color="#ffe6b0"
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-        shadow-camera-far={50}
-        shadow-camera-left={-20}
-        shadow-camera-right={20}
-        shadow-camera-top={20}
-        shadow-camera-bottom={-20}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
+        shadow-camera-far={90}
+        shadow-camera-left={-32}
+        shadow-camera-right={32}
+        shadow-camera-top={32}
+        shadow-camera-bottom={-32}
+        shadow-bias={-0.0004}
       />
 
       <directionalLight
-        position={[-10, 10, -10]}
-        intensity={0.3}
-        color="#d4e8ff"
+        position={[-16, 12, -10]}
+        intensity={0.32}
+        color="#c5e4ff"
       />
 
       <hemisphereLight
-        args={["#87CEEB", "#4a6a3f", 0.2]}
+        args={["#8fd4ff", "#7ea24e", 0.48]}
       />
     </>
   );

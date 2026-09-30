@@ -1,8 +1,6 @@
 import { useEffect, useCallback, useState } from "react";
-import { useZoogiGame, ZOOGI_ROSTER } from "@/lib/stores/useZoogiGame";
+import { useZoogiGame, ZOOGI_ROSTER, type MapTheme } from "@/lib/stores/useZoogiGame";
 import { useAudio } from "@/lib/stores/useAudio";
-import { useGLTF } from "@react-three/drei";
-import * as THREE from "three";
 
 const initAudioOnInteraction = (() => {
   let initialized = false;
@@ -35,8 +33,6 @@ import { ArenaEditor } from "@/components/game/ArenaEditor";
 import { VideoBackground } from "@/components/game/VideoBackground";
 import { FeatureHub } from "@/components/game/FeatureHub";
 import { MusicVisualizer } from "@/components/game/MusicVisualizer";
-import { RingerCreator } from "@/components/game/RingerCreator";
-import { RingerTrials } from "@/components/game/RingerTrials";
 import { VantaDotsBackground } from "@/components/ui/VantaDotsBackground";
 import { PowerPreview } from "@/components/game/PowerPreview";
 import "@fontsource/inter";
@@ -49,34 +45,31 @@ function usePowerPreview(): boolean {
   return enabled;
 }
 
-function RingerTrialsLoading() {
-  const setPhase = useZoogiGame((state) => state.setPhase);
+const PLAY_MAPS: MapTheme[] = ["grass", "ice", "lava", "space", "saturn", "tomb", "neon"];
 
+/** Opens a match directly: /?play=grass&debug=colliders&view=top */
+function usePlayShortcut() {
+  const selectMap = useZoogiGame((state) => state.selectMap);
+  const selectZoogi = useZoogiGame((state) => state.selectZoogi);
+  const startGame = useZoogiGame((state) => state.startGame);
   useEffect(() => {
-    useGLTF.clear("/models/character/body.glb");
-    useGLTF.clear("/models/character/body.glb?t=trials");
-    useGLTF.clear("/models/platforms/underworld.glb");
-    useGLTF.clear("/models/platforms/underworld.glb?t=trials");
-    THREE.Cache.clear();
-
-    const timer = setTimeout(() => {
-      setPhase("ringer_trials");
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, [setPhase]);
-
-  return (
-    <div className="fixed inset-0 bg-black flex items-center justify-center">
-      <div className="text-center">
-        <div className="text-white text-2xl font-bold mb-4">Entering the Underworld...</div>
-        <div className="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto" />
-      </div>
-    </div>
-  );
+    const params = new URLSearchParams(window.location.search);
+    const play = params.get("play");
+    if (!play || !PLAY_MAPS.includes(play as MapTheme)) return;
+    selectZoogi(ZOOGI_ROSTER[0]);
+    selectMap(play as MapTheme);
+    startGame();
+    if (params.get("view") === "top") {
+      window.setTimeout(() => {
+        if (!useZoogiGame.getState().birdsEyeView) useZoogiGame.getState().toggleBirdsEyeView();
+      }, 80);
+    }
+  }, [selectMap, selectZoogi, startGame]);
 }
 
 function App() {
   const powerPreview = usePowerPreview();
+  usePlayShortcut();
   const phase = useZoogiGame((state) => state.phase);
 
   useEffect(() => {
@@ -132,18 +125,18 @@ function App() {
   }, [phase, menuMusic, isMuted, stopMenuMusic]);
 
   const showVideoBackground = ["local_setup", "arena_editor", "feature_hub"].includes(phase);
-  const showVantaBackground = ["menu", "character_selection", "map_selection", "shop", "zoogipedia", "ringer_creator"].includes(phase);
+  const showVantaBackground = ["menu", "character_selection", "map_selection", "shop", "zoogipedia"].includes(phase);
 
   if (powerPreview) {
     return (
-      <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>
+      <div style={{ width: "100%", height: "100%", position: "relative", overflow: "hidden" }}>
         <PowerPreview />
       </div>
     );
   }
 
   return (
-    <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>
+    <div style={{ width: "100%", height: "100%", position: "relative", overflow: "hidden" }}>
       {showVantaBackground && (
         <VantaDotsBackground 
           color="#ff8820"
@@ -186,12 +179,6 @@ function App() {
       )}
       
       {phase === "music_visualizer" && <MusicVisualizer />}
-      
-      {phase === "ringer_creator" && <RingerCreator />}
-      
-      {phase === "ringer_trials_loading" && <RingerTrialsLoading />}
-      
-      {phase === "ringer_trials" && <RingerTrials />}
     </div>
   );
 }

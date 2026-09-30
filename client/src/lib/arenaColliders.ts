@@ -1,73 +1,166 @@
 import { getSnowmanPositions } from "./arenaConstants";
-import { neonCourtLayout } from "./neonCourt";
-import { BUMPER_RESTITUTION } from "./simFeel";
+import { arenaScaleFor } from "./arenaScale";
+import { leftNeonOpenEdge, neonCourtLayout, neonPlayHalfX, neonPlayHalfZ, neonRimGapAdjustments } from "./neonCourt";
+import { ORB_DRAW_RADIUS, ZOOGI_DRAW_RADIUS } from "./restHeight";
+import { MARBLE_WIDTH, placeScaledObstacles, type RimGapAdjustment } from "./obstaclePlacement";
+import { BUMPER_RESTITUTION, ROCK_RESTITUTION } from "./simFeel";
+import {
+  ARABIAN_RIM,
+  GRASS_RIM,
+  ROUND_FLOOR_RADIUS,
+  ROUND_KNOCKOFF_RADIUS,
+  rimPosition,
+  type RimMark,
+} from "./roundRim";
 
 /**
  * Solid shapes the marble simulation uses.
  *
- * Grass numbers were measured from floating_island_stage.glb (local space,
- * including node transforms) and scaled by GRASS_STAGE.modelScale. Rock and
- * bush radii are the horizontal footprint at marble height: the mean of the
- * mesh's X/Z size for rocks, and the narrow half of the canopy for bushes.
- * The old pinball radius (2) was paired with bumper.glb, which is 0.03 wide
- * at the scale it was drawn, so those hits were invisible.
+ * Meadow's six rim solids are the mossy boulders and stumps drawn on the
+ * grass disc. Each radius is that piece's horizontal footprint. The old
+ * pinball radius (2) was paired with bumper.glb, which is 0.03 wide at the
+ * scale it was drawn, so those hits were invisible.
  */
 export const BUMPER_RADIUS = 0.955;
 export const BUMPER_MODEL_URL = "/models/bumber1.glb";
-export const MARBLE_RADIUS = 0.5;
-export const ORB_RADIUS = 0.4;
+/** Hit radius matches the drawn ball, so the mesh rests on the floor and touches when it collides. */
+export const MARBLE_RADIUS = ZOOGI_DRAW_RADIUS;
+export const ORB_RADIUS = ORB_DRAW_RADIUS;
 export const SNOWMAN_RADIUS = 0.55;
 export const REST_SPEED = 0.02;
 
 export const GRASS_STAGE = {
-  /** Central grass disk in the glb is 0.45 wide. Scale 60 makes it radius ~13.5. */
-  modelScale: 60,
-  modelOffsetY: 0,
-  groundRadius: 0.225 * 60,
+  /**
+   * The map editor still stores a stage transform for grass. Meadow no longer
+   * loads a stage model; the disc is drawn in code.
+   */
+  modelScale: 48,
+  modelOffsetY: -2.4,
+  groundRadius: ROUND_FLOOR_RADIUS,
 };
 
 /**
- * winter_location.glb at the transform WinterLocationScene draws.
- * Ground tops sit on y=0. The open rink is inside the camp props (~radius 12);
- * snow past the knockoff is backdrop, same as the grass map's outer islands.
+ * winter_location.glb. Ground tops sit on y=0 at this offset.
+ * Camp, towers, and walls are scenery outside the rink and are not solids.
  */
 export const WINTER_STAGE = {
   modelScale: 0.9,
   modelOffsetY: -4.2,
-  floorRadius: 17.5,
-  knockoffRadius: 18.4,
+  floorRadius: ROUND_FLOOR_RADIUS,
+  knockoffRadius: ROUND_KNOCKOFF_RADIUS,
 };
 
 /**
- * cosmos_arena.glb. Scale 1.08. The playable floor ends at the inner face of
- * the lip wall (about 15.6). That wall is drawn only, so the knockoff line is
- * the inner face: a marble is out where the floor visibly ends, not after it
- * has rolled through the wall. Floor mesh is at local y=-0.02.
+ * cosmos_arena.glb floor (polygon56_Arena_Floor). It is an 18-gon, not a
+ * circle: corners every 20°, with a corner on +X, at radius 15.743 around
+ * a centre near (+0.250, -0.024). The flats sit at 15.743 * cos(10°), about
+ * 15.504. cosmosPlayTransform recentres that polygon and keeps the corners
+ * on the 15.6 knockout. The fall check uses the same 18-gon, so a marble
+ * leaves at the lip on the flats as well as the corners.
+ *
+ * polygon30 (Arena Wall Barrier, the curb), polygon67 (Arena Wall), and
+ * polygon72 (Crowd Stands, including its reflection) are pushed out until
+ * their inner faces clear the farthest fall line by one marble radius.
+ * The numbers below are those inner faces after the play transform and
+ * before that push, at arena scale 1. The stands' vertices begin near
+ * 15.04; the inner edges sit further in, about half a marble inside a flat.
  */
+export const COSMOS_FLOOR_MESH = {
+  centerX: 0.25045,
+  centerY: -0.019,
+  centerZ: -0.02365,
+  radius: 15.743,
+};
+
+export const COSMOS_LIP_SIDES = 18;
+/** Inner-face radius of the curb (Arena Wall Barrier) before it is pushed out. */
+export const COSMOS_CURB_INNER = 14.544;
+/** Inner-face radius of the arena wall before it is pushed out. */
+export const COSMOS_WALL_INNER = 14.834;
+/** Inner-face radius of the crowd stands before they are pushed out. */
+export const COSMOS_STANDS_INNER = 14.885;
+
 export const COSMOS_STAGE = {
-  modelScale: 1.08,
-  modelOffsetY: 0.02 * 1.08,
-  floorRadius: 15.2,
+  floorRadius: 15.6,
   knockoffRadius: 15.6,
 };
 
-/**
- * arabian_nights_stage.glb is authored around (-656.5, 556.6, 11). The anchor
- * puts one courtyard point at the origin and the floor on y=0. The clean plaza
- * (about radius 15.5) sat near (-4, -16). Shifting the stage +4 x and +16 z
- * lands that circle on the origin, so the standard spawns, bumpers, and score
- * zones stay centred on flat plaza inside the knockoff line.
- */
-const ARABIAN_PLAZA_SHIFT: [number, number] = [4, 16];
+/** Radius of a regular polygon at `angle`, with a vertex on +X. */
+export function regularPolygonRadius(cornerRadius: number, sides: number, angle: number): number {
+  const sector = (Math.PI * 2) / sides;
+  const half = sector / 2;
+  let wrapped = angle % sector;
+  if (wrapped < 0) wrapped += sector;
+  const fromVertex = Math.min(wrapped, sector - wrapped);
+  return (cornerRadius * Math.cos(half)) / Math.cos(half - fromVertex);
+}
 
+/** Scale and shift that put the floor's corners on the knockout and the centre on the origin. */
+export function cosmosPlayTransform(): { x: number; y: number; z: number; scale: number } {
+  const worldRadius = COSMOS_STAGE.knockoffRadius * arenaScaleFor("space");
+  const scale = worldRadius / COSMOS_FLOOR_MESH.radius;
+  return {
+    x: -scale * COSMOS_FLOOR_MESH.centerX,
+    y: -scale * COSMOS_FLOOR_MESH.centerY,
+    z: -scale * COSMOS_FLOOR_MESH.centerZ,
+    scale,
+  };
+}
+
+/** World lip of the cosmic floor after cosmosPlayTransform. `radius` is a corner; flats are closer. */
+export function cosmosDrawnLip(): {
+  centerX: number;
+  centerZ: number;
+  radius: number;
+  radiusAt: (angle: number) => number;
+} {
+  const placed = cosmosPlayTransform();
+  const radiusAt = (angle: number) =>
+    placed.scale * regularPolygonRadius(COSMOS_FLOOR_MESH.radius, COSMOS_LIP_SIDES, angle);
+  return {
+    centerX: placed.x + placed.scale * COSMOS_FLOOR_MESH.centerX,
+    centerZ: placed.z + placed.scale * COSMOS_FLOOR_MESH.centerZ,
+    radius: radiusAt(0),
+    radiusAt,
+  };
+}
+
+/** Fall line for Cosmic Platform: the same 18-gon the floor lip draws. */
+export function cosmosLipRadius(angle: number): number {
+  return cosmosDrawnLip().radiusAt(angle);
+}
+
+/** "curb" is Arena Wall Barrier. "wall" is Arena Wall, not the barrier. "stands" is Crowd Stands. */
+export function cosmosRingRole(name: string): "curb" | "wall" | "stands" | null {
+  const normalized = name.toLowerCase().replace(/[_]+/g, " ");
+  if (normalized.includes("crowd stands")) return "stands";
+  if (normalized.includes("arena wall barrier")) return "curb";
+  if (normalized.includes("arena wall")) return "wall";
+  return null;
+}
+
+/**
+ * Radial scale that puts an inner face on the farthest fall line plus one
+ * marble radius. 1 means the ring is already clear.
+ */
+export function cosmosRingPush(innerWorld: number): number {
+  const limit = cosmosLipRadius(0) + MARBLE_RADIUS;
+  if (!(innerWorld > 0) || innerWorld >= limit) return 1;
+  return limit / innerWorld;
+}
+
+/**
+ * arabian_nights_stage.glb is authored around (-656.5, 556.6, 11). That point
+ * is the courtyard. The anchor puts it on the origin and the floor on y=0.
+ * The round tiled plaza is drawn in code. Palace, domes, colonnade, and the
+ * sunken pool stay outside the knockoff line and are not solids.
+ */
 export const ARABIAN_STAGE = {
   modelScale: 0.48,
   floorCenter: [-656.5, 556.6, 11] as [number, number, number],
-  plazaAnchor: [-526.5, 556.6, 11] as [number, number, number],
-  plazaShift: ARABIAN_PLAZA_SHIFT,
   plazaCenter: [0, 0] as [number, number],
-  floorRadius: 15.15,
-  knockoffRadius: 15.5,
+  floorRadius: ROUND_FLOOR_RADIUS,
+  knockoffRadius: ROUND_KNOCKOFF_RADIUS,
 };
 
 /**
@@ -174,9 +267,8 @@ export function getTombBackdrop(): TombPiece[] {
 
 export function arabianPlayTransform(): { x: number; y: number; z: number; scale: number } {
   const scale = ARABIAN_STAGE.modelScale;
-  const [x, y, z] = ARABIAN_STAGE.plazaAnchor;
-  const [shiftX, shiftZ] = ARABIAN_STAGE.plazaShift;
-  return { x: -scale * x + shiftX, y: -scale * y, z: -scale * z + shiftZ, scale };
+  const [x, y, z] = ARABIAN_STAGE.floorCenter;
+  return { x: -scale * x, y: -scale * y, z: -scale * z, scale };
 }
 
 /** Every map's out-line is centred on the origin. Callers must apply this on each map so a previous map cannot leave a leftover shift. */
@@ -212,41 +304,11 @@ export interface MapLayout {
   bumpers: { id: string; x: number; z: number }[];
 }
 
-/**
- * Rim rocks and trees on floating_island_stage.glb at GRASS_STAGE.modelScale.
- * Each big rock is split along its long axis so the circle follows the stone
- * instead of a single disk that was mostly empty air. Tree1's leaves sit above
- * marble height; the collider is the trunk.
- */
-function grassScenery(): SolidCircle[] {
-  const scale = GRASS_STAGE.modelScale;
-  const tree = (id: string, x: number, z: number, radius: number): SolidCircle => ({
-    id,
-    x: x * scale,
-    z: z * scale,
-    radius: radius * scale,
-    kind: "bush",
+function rimScenery(marks: RimMark[], kind: SolidKind): SolidCircle[] {
+  return marks.map((mark) => {
+    const { x, z } = rimPosition(mark);
+    return { id: mark.id, x, z, radius: mark.radius, kind };
   });
-  return [
-    { id: "S_7_rock_a", x: 4.7, z: 13.2, radius: 2.9, kind: "rock" },
-    { id: "S_7_rock_b", x: 9.6, z: 11.2, radius: 2.5, kind: "rock" },
-    { id: "S_6_rock_a", x: -13.7, z: 2.7, radius: 2.8, kind: "rock" },
-    { id: "S_6_rock_b", x: -12.1, z: 7.8, radius: 2.5, kind: "rock" },
-    { id: "S_5_rock_a", x: -10.5, z: -9.9, radius: 2.5, kind: "rock" },
-    { id: "S_5_rock_b", x: -12.8, z: -6.4, radius: 2.3, kind: "rock" },
-    { id: "S_8_rock_a", x: 14.0, z: -3.0, radius: 1.75, kind: "rock" },
-    { id: "S_8_rock_b", x: 14.0, z: 0.1, radius: 1.75, kind: "rock" },
-    { id: "S_8_rock_c", x: 14.0, z: 2.9, radius: 1.45, kind: "rock" },
-    { id: "S_4_rock_a", x: 9.6, z: -9.9, radius: 2.0, kind: "rock" },
-    { id: "S_4_rock_b", x: 11.5, z: -7.4, radius: 2.0, kind: "rock" },
-    { id: "S_1_rock_a", x: -3.2, z: -13.9, radius: 1.6, kind: "rock" },
-    { id: "S_1_rock_b", x: -0.7, z: -13.9, radius: 1.6, kind: "rock" },
-    { id: "S_1_rock_c", x: 1.8, z: -13.9, radius: 1.6, kind: "rock" },
-    { id: "Tree1_Leavs_0", x: 6.6, z: -9.6, radius: 0.35, kind: "bush" },
-    tree("Tree2_Leavs_0", -0.03, 0.2, 0.0385),
-    tree("Tree3_Leavs_0", -0.2, -0.07, 0.0248),
-    tree("Tree8_Leavs_0", 0.16, 0.1, 0.0193),
-  ];
 }
 
 function polar(id: string, angle: number, distance: number): { id: string; x: number; z: number } {
@@ -292,7 +354,7 @@ export interface HoodooDecor {
 const HOODOO_FOOTPRINT = 0.25;
 const HOODOO_BASE_LIFT = 0.367;
 
-export function getHoodooDecor(): HoodooDecor[] {
+function hoodooUnits(): HoodooDecor[] {
   const decor: HoodooDecor[] = [];
   const count = 6;
   for (let i = 0; i < count; i++) {
@@ -312,6 +374,19 @@ export function getHoodooDecor(): HoodooDecor[] {
   return decor;
 }
 
+/** Hoodoo stones keep their size. Only the ring they stand on grows. */
+export function getHoodooDecor(): HoodooDecor[] {
+  const placed = new Map((getMapLayout("lava")?.scenery ?? []).map((solid) => [solid.id, solid]));
+  return hoodooUnits().map((hoodoo) => {
+    const solid = placed.get(hoodoo.id);
+    return {
+      ...hoodoo,
+      position: [solid?.x ?? hoodoo.position[0], hoodoo.position[1], solid?.z ?? hoodoo.position[2]] as [number, number, number],
+      radius: solid?.radius ?? hoodoo.radius,
+    };
+  });
+}
+
 export interface IcePatch {
   id: string;
   x: number;
@@ -320,8 +395,7 @@ export interface IcePatch {
   rotation: number;
 }
 
-/** Drawn ice disks and the slippery patch surface use this one list. */
-export function getIcePatches(): IcePatch[] {
+function icePatchUnits(): IcePatch[] {
   const patches: IcePatch[] = [];
   const patchCount = 4;
   for (let i = 0; i < patchCount; i++) {
@@ -338,6 +412,17 @@ export function getIcePatches(): IcePatch[] {
   return patches;
 }
 
+/** Drawn ice disks and the slippery patch surface use this one list. */
+export function getIcePatches(): IcePatch[] {
+  const scale = arenaScaleFor("ice");
+  return icePatchUnits().map((patch) => ({
+    ...patch,
+    x: patch.x * scale,
+    z: patch.z * scale,
+    radius: patch.radius * scale,
+  }));
+}
+
 const CARDINAL = [0, Math.PI / 2, Math.PI, Math.PI * 1.5];
 const DIAGONAL = [Math.PI / 4, (3 * Math.PI) / 4, (5 * Math.PI) / 4, (7 * Math.PI) / 4];
 
@@ -346,33 +431,10 @@ function flatBumpers(distance: number, angles: number[]): { id: string; x: numbe
 }
 
 /**
- * Camp props in winter_location.glb that rise through marble height.
- * Crates, the barrel, and rails use the mean of the mesh's X/Z half-extents.
- * The three rink towers are about 4.0 across at marble height, so the circle
- * is 2.05. wall-16 is a diagonal bar about 2.2 wide; three circles follow it
- * instead of one disk around the bar's bounding box. Skating penguins are
- * omitted. Stacked crates whose bottoms are above the marble are omitted.
- * Off until the winter mesh mounts, so a missing model leaves no camp walls.
+ * Camp, towers, and walls from winter_location.glb sit outside the rink as
+ * scenery. They are not solids. The flag still tells the collider overlay
+ * that the winter mesh has mounted.
  */
-const ICE_CAMP: SolidCircle[] = [
-  { id: "box-12", x: 12.28, z: -3.39, radius: 0.61, kind: "prop" },
-  { id: "box-13", x: 12.8, z: -2.1, radius: 1.05, kind: "prop" },
-  { id: "box-14", x: -12.37, z: -3.96, radius: 0.61, kind: "prop" },
-  { id: "rail-12", x: 11.67, z: -6.49, radius: 1.19, kind: "prop" },
-  { id: "box-15", x: -12.94, z: -5.22, radius: 1.05, kind: "prop" },
-  { id: "box-16", x: 14.12, z: -1.02, radius: 1.05, kind: "prop" },
-  { id: "barrel-15", x: 15.46, z: -0.3, radius: 0.67, kind: "prop" },
-  { id: "box-17", x: -14.32, z: -6.24, radius: 1.05, kind: "prop" },
-  { id: "wall-16a", x: 10.94, z: 11.5, radius: 1.15, kind: "prop" },
-  { id: "wall-16b", x: 12.64, z: 9.95, radius: 1.15, kind: "prop" },
-  { id: "wall-16c", x: 9.24, z: 13.05, radius: 1.15, kind: "prop" },
-  { id: "rail-16", x: 14.12, z: -8.7, radius: 1.19, kind: "prop" },
-  { id: "box-18", x: -15.48, z: -6.89, radius: 0.6, kind: "prop" },
-  { id: "tower-17a", x: 14.67, z: 8.25, radius: 2.05, kind: "prop" },
-  { id: "tower-17b", x: 7.25, z: 14.99, radius: 2.05, kind: "prop" },
-  { id: "tower-19", x: -4.83, z: 19.01, radius: 2.05, kind: "prop" },
-];
-
 let winterCampActive = false;
 let winterCampVersion = 0;
 const winterCampListeners = new Set<() => void>();
@@ -389,7 +451,7 @@ export function getWinterCampVersion(): number {
   return winterCampVersion;
 }
 
-/** Collider overlay subscribes so camp solids appear when the winter mesh mounts. */
+/** Collider overlay subscribes when the winter mesh mounts. Camp props are not solids. */
 export function subscribeWinterCamp(listener: () => void): () => void {
   winterCampListeners.add(listener);
   return () => winterCampListeners.delete(listener);
@@ -400,9 +462,30 @@ function iceScenery(): SolidCircle[] {
     id: `snowman-${i}`,
     x: snowman.position[0],
     z: snowman.position[2],
-    radius: SNOWMAN_RADIUS,
+    radius: snowman.radius,
     kind: "snowman" as const,
   }));
+}
+
+const ROUND_SPAWN_DISTANCE = 8;
+const ROUND_SCORE_DISTANCE = 9.4;
+const ROUND_SCORE_ANGLES = [45, 135, 225, 315].map((deg) => (deg * Math.PI) / 180);
+const ROUND_BUMPER_DISTANCE = 6.3;
+const ROUND_BUMPER_ANGLES = [22, 112, 202, 292].map((deg) => (deg * Math.PI) / 180);
+
+function roundLayout(id: string, scenery: SolidCircle[]): MapLayout {
+  return {
+    id,
+    floorRadius: ROUND_FLOOR_RADIUS,
+    knockoffRadius: ROUND_KNOCKOFF_RADIUS,
+    orbRingRadius: 4.2,
+    scenery,
+    bumpers: flatBumpers(ROUND_BUMPER_DISTANCE, ROUND_BUMPER_ANGLES),
+    zones: zones(
+      CARDINAL.map((angle) => ({ angle, distance: ROUND_SPAWN_DISTANCE })),
+      ROUND_SCORE_ANGLES.map((angle) => ({ angle, distance: ROUND_SCORE_DISTANCE })),
+    ),
+  };
 }
 
 function buildLayout(
@@ -430,42 +513,13 @@ function buildLayout(
 }
 
 const LAYOUTS: Record<string, MapLayout> = {
-  grass: {
-    id: "grass",
-    floorRadius: GRASS_STAGE.groundRadius,
-    // Grass edge is about 13.2–15 (typically 13.5). 15.5 is just past the outer
-    // lobes, so a marble still on grass is in, and leaving the island is out
-    // without the old flight across empty air out to 19.2.
-    knockoffRadius: 15.5,
-    orbRingRadius: 4.2,
-    scenery: grassScenery(),
-    bumpers: flatBumpers(6.4, DIAGONAL),
-    zones: zones(
-      // South spawn (105°) sits in front of the big tree canopy, which covers
-      // about x -5.7..2.5 and z 7.7..15.9. The four outward-lane counts match.
-      [
-        { angle: (350 * Math.PI) / 180, distance: 8 },
-        { angle: (105 * Math.PI) / 180, distance: 7 },
-        { angle: (190 * Math.PI) / 180, distance: 8 },
-        { angle: (270 * Math.PI) / 180, distance: 8.2 },
-      ],
-      // Radius-4 zones at 9.4 end near 13.4, on the grass (edge ~13.5).
-      [45, 150, 230, 315].map((deg) => ({ angle: (deg * Math.PI) / 180, distance: 9.4 })),
-    ),
-  },
-  ice: buildLayout(
-    "ice",
-    WINTER_STAGE.floorRadius,
-    WINTER_STAGE.knockoffRadius,
-    iceScenery(),
-    6.6,
-    DIAGONAL,
-  ),
+  grass: roundLayout("grass", rimScenery(GRASS_RIM, "rock")),
+  ice: roundLayout("ice", iceScenery()),
   lava: buildLayout(
     "lava",
     18,
     18.6,
-    getHoodooDecor().map((hoodoo) => ({
+    hoodooUnits().map((hoodoo) => ({
       id: hoodoo.id,
       x: hoodoo.position[0],
       z: hoodoo.position[2],
@@ -477,7 +531,7 @@ const LAYOUTS: Record<string, MapLayout> = {
     [55, 115, 210, 300].map((deg) => (deg * Math.PI) / 180),
   ),
   space: buildLayout("space", COSMOS_STAGE.floorRadius, COSMOS_STAGE.knockoffRadius, [], 8.5, DIAGONAL),
-  saturn: buildLayout("saturn", ARABIAN_STAGE.floorRadius, ARABIAN_STAGE.knockoffRadius, [], 8.5, DIAGONAL),
+  saturn: roundLayout("saturn", rimScenery(ARABIAN_RIM, "prop")),
   tomb: buildLayout(
     "tomb",
     TOMB_STAGE.floorRadius,
@@ -494,10 +548,75 @@ const LAYOUTS: Record<string, MapLayout> = {
   ),
 };
 
+/**
+ * Spread a layout written in today's units. Obstacle and bumper radii stay
+ * put so the larger floor has more open space. Positions, the floor, the
+ * knockoff line, spawns, and score zones all grow. Circles that belong to
+ * one mesh keep their offsets, and a rim slot a marble almost fits through
+ * is nudged shut or open.
+ */
+export function scaleLayout(layout: MapLayout, scale: number): MapLayout {
+  const knockoffRadius = layout.knockoffRadius * scale;
+  const scenery = placeScaledObstacles(layout.scenery, scale, knockoffRadius, MARBLE_RADIUS * 2).circles;
+  return {
+    ...layout,
+    floorRadius: layout.floorRadius * scale,
+    knockoffRadius,
+    orbRingRadius: layout.orbRingRadius * scale,
+    zones: layout.zones.map((zone) => ({ ...zone, distance: zone.distance * scale })),
+    scenery,
+    bumpers: layout.bumpers.map((bumper) => ({ ...bumper, x: bumper.x * scale, z: bumper.z * scale })),
+  };
+}
+
+export type { RimGapAdjustment };
+
+/** Every read-time rim nudge, including camp props that appear with the winter mesh. */
+export function listRimGapAdjustments(): Array<RimGapAdjustment & { mapId: string }> {
+  const rows: Array<RimGapAdjustment & { mapId: string }> = [];
+  const marble = MARBLE_RADIUS * 2;
+  if (Math.abs(marble - MARBLE_WIDTH) > 1e-9) {
+    throw new Error(`marble width ${marble} drifted from obstacle placement ${MARBLE_WIDTH}`);
+  }
+  for (const mapId of Object.keys(LAYOUTS)) {
+    const layout = LAYOUTS[mapId];
+    const scale = arenaScaleFor(mapId);
+    const placed = placeScaledObstacles(layout.scenery, scale, layout.knockoffRadius * scale, marble);
+    for (const adjustment of placed.adjustments) rows.push({ mapId, ...adjustment });
+  }
+  for (const adjustment of neonRimGapAdjustments()) rows.push({ mapId: "neon", ...adjustment });
+  return rows;
+}
+
+/** Collider meshes inside this map's dress group, and the world nudge applied to each. */
+/**
+ * Code-drawn obstacles (rocks, snowmen, planters, hoodoos, tomb blocks, neon
+ * posts) sit outside any dress group and already use the scaled layout.
+ * Nothing embedded in a stage model is a collider, so there is no counter-scale.
+ */
+export function embeddedObstaclePose(_mapId: string): { meshKeys: string[]; nudges: { meshKey: string; dx: number; dz: number }[] } {
+  return { meshKeys: [], nudges: [] };
+}
+
+/** Floor disk and knockout ring the arena draws. Both match the colliders. */
+export function arenaVisualEdge(mapId: string):
+  | { shape: "circle"; floorRadius: number; knockoffRadius: number }
+  | { shape: "rect"; halfX: number; halfZ: number } {
+  if (mapId === "neon") return { shape: "rect", halfX: neonPlayHalfX(), halfZ: neonPlayHalfZ() };
+  const layout = getMapLayout(mapId);
+  return {
+    shape: "circle",
+    floorRadius: layout?.floorRadius ?? 0,
+    knockoffRadius: layout?.knockoffRadius ?? 0,
+  };
+}
+
 export function getMapLayout(mapId: string | null | undefined): MapLayout | null {
   if (!mapId) return null;
   if (mapId === "neon") return neonCourtLayout();
-  return LAYOUTS[mapId] ?? null;
+  const layout = LAYOUTS[mapId];
+  if (!layout) return null;
+  return scaleLayout(layout, arenaScaleFor(mapId));
 }
 
 export function bumperSolids(bumpers: { id: string; x: number; z: number }[]): SolidCircle[] {
@@ -538,8 +657,8 @@ export function collectMatchSolids(input: {
   editorModels: EditorProp[];
 }): SolidCircle[] {
   const layout = getMapLayout(input.map);
-  const camp = input.map === "ice" && winterCampActive ? ICE_CAMP : [];
-  const scenery = [...(layout?.scenery ?? []), ...camp];
+  // Camp, towers, and walls are scenery outside the rink and are not solids.
+  const scenery = layout?.scenery ?? [];
   const bumpers: SolidCircle[] = input.bumpers.map((bumper) => ({
     id: bumper.id,
     x: bumper.position[0],
@@ -563,7 +682,8 @@ export function resolveSolidCollision(
   vel: [number, number, number],
   entityRadius: number,
   solids: SolidCircle[],
-  restitution = 0.72,
+  restitution = ROCK_RESTITUTION,
+  keepInsideRadius?: number,
 ): { pos: [number, number, number]; vel: [number, number, number]; hits: string[] } {
   let x = pos[0];
   let z = pos[2];
@@ -601,8 +721,17 @@ export function resolveSolidCollision(
         dz = 0;
         dist = 1;
       }
-      const nx = dx / dist;
-      const nz = dz / dist;
+      let nx = dx / dist;
+      let nz = dz / dist;
+      if (keepInsideRadius !== undefined) {
+        const solidDist = Math.hypot(solid.x, solid.z);
+        const facesOut = nx * solid.x + nz * solid.z > 0;
+        const onRim = solidDist + solid.radius >= keepInsideRadius - entityRadius - 0.05;
+        if (facesOut && onRim && solidDist > 1e-6) {
+          nx = -solid.x / solidDist;
+          nz = -solid.z / solidDist;
+        }
+      }
       const dot = vx * nx + vz * nz;
       const bounce = solid.kind === "bumper" ? Math.max(restitution, BUMPER_RESTITUTION) : restitution;
       if (dot < 0) {
@@ -615,8 +744,19 @@ export function resolveSolidCollision(
         }
       }
       const sep = minDist + 0.04;
-      x = solid.x + nx * sep;
-      z = solid.z + nz * sep;
+      const placedX = solid.x + nx * sep;
+      const placedZ = solid.z + nz * sep;
+      // A rim rock's inward normal used to drop the marble on the far
+      // face, about three units through the rock. Cap that shove.
+      const jump = Math.hypot(placedX - x, placedZ - z);
+      const maxPush = 0.2;
+      if (jump > maxPush) {
+        x += ((placedX - x) / jump) * maxPush;
+        z += ((placedZ - z) / jump) * maxPush;
+      } else {
+        x = placedX;
+        z = placedZ;
+      }
       hits.push(solid.id);
       hitThisPass = true;
     }
@@ -646,6 +786,41 @@ export function countClearLanes(layout: MapLayout, samples = 24): number {
     if (laneIsClear(layout, (i / samples) * Math.PI * 2)) clear++;
   }
   return clear;
+}
+
+/**
+ * True only when the body is past the knockout line on an angle the rim
+ * solids do not cover. Overlapping a meadow rock, or sitting on its outer
+ * face, is not the open edge.
+ */
+export function centerPastOpenEdge(
+  mapId: string | null | undefined,
+  x: number,
+  z: number,
+  knockoffRadius: number,
+  bodyRadius: number,
+  solids: SolidCircle[],
+): boolean {
+  if (mapId === "neon") return leftNeonOpenEdge(x, z, bodyRadius);
+  const angle = Math.atan2(z, x);
+  const lipCorner = mapId === "space" ? cosmosLipRadius(0) : 0;
+  const fallRadius = mapId === "space" && lipCorner > 0
+    ? cosmosLipRadius(angle) * (knockoffRadius / lipCorner)
+    : knockoffRadius;
+  // A hair of float must not drop a marble that is sitting on the lip.
+  if (Math.hypot(x, z) <= fallRadius + 1e-6) return false;
+  const walls = solids.filter((solid) => solid.kind !== "bumper");
+  if (pointInsideSolid(x, z, walls, bodyRadius)) return false;
+  const rimX = Math.cos(angle) * fallRadius;
+  const rimZ = Math.sin(angle) * fallRadius;
+  for (const solid of walls) {
+    const rimClearance = Math.hypot(rimX - solid.x, rimZ - solid.z) - solid.radius;
+    if (rimClearance >= bodyRadius) continue;
+    const bodyGap = Math.hypot(x - solid.x, z - solid.z) - solid.radius;
+    // Still against the wall. Far past it, the body has left the court.
+    if (bodyGap < bodyRadius) return false;
+  }
+  return true;
 }
 
 export function pointInsideSolid(x: number, z: number, solids: SolidCircle[], padding = 0): SolidCircle | null {

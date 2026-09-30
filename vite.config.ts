@@ -7,7 +7,7 @@ import glsl from "vite-plugin-glsl";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     glsl(),
@@ -20,9 +20,10 @@ export default defineConfig({
   },
   root: path.resolve(__dirname, "client"),
   build: {
-    outDir: path.resolve(__dirname, "dist/public"),
+    // The iPhone bundle is separate so `npm run build` still serves the website.
+    outDir: path.resolve(__dirname, mode === "ios" ? "dist/ios" : "dist/public"),
     emptyOutDir: true,
   },
   // Add support for large models and audio files
   assetsInclude: ["**/*.gltf", "**/*.glb", "**/*.mp3", "**/*.ogg", "**/*.wav"],
-});
+}));

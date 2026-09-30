@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useCommunity } from "@/lib/stores/useCommunity";
 import { useAuth } from "@/lib/stores/useAuth";
 import { X, Heart, Download, Map, Plus, Trash2, Share2 } from "lucide-react";
+import { OnlineNotice } from "@/components/ui/OnlineNotice";
 
 interface ArenaShowcaseProps {
   onClose: () => void;
@@ -88,6 +89,8 @@ export function ArenaShowcase({ onClose, onUseArena }: ArenaShowcaseProps) {
             <X className="w-6 h-6 text-white" />
           </button>
         </div>
+
+        <OnlineNotice compact className="mx-4 mt-3" />
 
         <div className="flex items-center gap-2 p-4 border-b border-emerald-500/20">
           <button
