@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import * as THREE from "three";
 import { BUMPER_SCORE, KNOCKOUT_PENALTY, KNOCKOUT_SCORE_ORB, KNOCKOUT_SCORE_PLAYER, ZONE_SCORE_ORB } from "./arenaConstants";
 
@@ -75,6 +76,40 @@ export function decideMatchLoader(input: MatchLoaderSnapshot): MatchLoaderDecisi
     mounted: true,
     shownAt: visibleSince,
   };
+}
+
+/**
+ * drei Html labels (letter badges, Stunned, Slowed, power chips) use a z-index
+ * above any overlay. Keep them out of the tree until the loader has fully gone.
+ */
+export function worldLabelsCovered(phase: MatchLoaderPhase): boolean {
+  return phase !== "gone";
+}
+
+let matchWorldLabelsHidden = false;
+const matchWorldLabelListeners = new Set<(hidden: boolean) => void>();
+
+export function setMatchWorldLabelsHidden(hidden: boolean): void {
+  if (matchWorldLabelsHidden === hidden) return;
+  matchWorldLabelsHidden = hidden;
+  for (const listener of matchWorldLabelListeners) listener(hidden);
+}
+
+export function getMatchWorldLabelsHidden(): boolean {
+  return matchWorldLabelsHidden;
+}
+
+export function subscribeMatchWorldLabels(listener: (hidden: boolean) => void): () => void {
+  matchWorldLabelListeners.add(listener);
+  return () => {
+    matchWorldLabelListeners.delete(listener);
+  };
+}
+
+export function useMatchWorldLabelsHidden(): boolean {
+  const [hidden, setHidden] = useState(getMatchWorldLabelsHidden);
+  useEffect(() => subscribeMatchWorldLabels(setHidden), []);
+  return hidden;
 }
 
 export interface MatchTipSource {

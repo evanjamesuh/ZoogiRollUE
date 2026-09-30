@@ -32,7 +32,7 @@ import { useCallback, useEffect, useRef, useMemo, useState } from "react";
 import { triggerArcPeakCameraEffect, triggerArcPeakFreezeOnly, clearArcPeakCameraEffect } from "@/lib/stores/useCameraEffects";
 import { useMapDecorations } from "@/hooks/useMapDecorations";
 import { canvasPixelRatio, isMobileGraphics } from "@/lib/mobileGraphics";
-import { installSlowLoad, readSlowLoadMs } from "@/lib/matchLoader";
+import { installSlowLoad, readSlowLoadMs, setMatchWorldLabelsHidden } from "@/lib/matchLoader";
 import { MatchLoadingScreen, MatchSceneProbe } from "./MatchLoadingScreen";
 
 function GradientSky() {
@@ -232,8 +232,20 @@ export function Game() {
   }
   const [slowLoadMs] = useState(() => readSlowLoadMs(typeof window === "undefined" ? "" : window.location.search));
   const onScenePainted = useCallback(() => setScenePainted(true), []);
+  const worldLabelsHeld = useRef(false);
+  if (gameMode === "map_editor") {
+    worldLabelsHeld.current = false;
+    setMatchWorldLabelsHidden(false);
+  } else if (!worldLabelsHeld.current) {
+    worldLabelsHeld.current = true;
+    setMatchWorldLabelsHidden(true);
+  }
 
-  useEffect(() => () => releaseSlowLoad.current?.(), []);
+  useEffect(() => () => {
+    releaseSlowLoad.current?.();
+    worldLabelsHeld.current = false;
+    setMatchWorldLabelsHidden(false);
+  }, []);
   
   useMapDecorations();
 

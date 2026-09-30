@@ -6,6 +6,7 @@ import {
   MATCH_LOADER_SHOW_DELAY_MS,
   decideMatchLoader,
   matchLoadingTips,
+  worldLabelsCovered,
 } from "./matchLoader.ts";
 import { BUMPER_SCORE, KNOCKOUT_PENALTY, KNOCKOUT_SCORE_ORB, KNOCKOUT_SCORE_PLAYER, ZONE_SCORE_ORB } from "./arenaConstants.ts";
 
@@ -168,4 +169,24 @@ test("loading tips quote the real scores and powers", () => {
   });
   assert.match(pinpoint[0], /Lock-On/);
   assert.equal(pinpoint[0].includes("unused"), false);
+});
+
+test("in-world labels stay hidden until the loader has fully faded", () => {
+  const shownAt = startedAt + MATCH_LOADER_SHOW_DELAY_MS;
+  const sceneReadyAt = shownAt;
+  const fadeStart = shownAt + MATCH_LOADER_MIN_VISIBLE_MS;
+
+  for (const now of [startedAt, fadeStart, fadeStart + MATCH_LOADER_FADE_MS / 2]) {
+    const decision = decideMatchLoader({ now, startedAt, sceneReadyAt, shownAt });
+    assert.equal(worldLabelsCovered(decision.phase), true, decision.phase);
+  }
+
+  const gone = decideMatchLoader({
+    now: fadeStart + MATCH_LOADER_FADE_MS,
+    startedAt,
+    sceneReadyAt,
+    shownAt,
+  });
+  assert.equal(gone.phase, "gone");
+  assert.equal(worldLabelsCovered(gone.phase), false);
 });

@@ -8,6 +8,8 @@ import { ZoogiPortrait } from "./ZoogiPortrait";
 import {
   decideMatchLoader,
   matchLoadingTips,
+  setMatchWorldLabelsHidden,
+  worldLabelsCovered,
   type MatchLoaderDecision,
 } from "@/lib/matchLoader";
 
@@ -218,6 +220,10 @@ function RotatingTip({ tips }: { tips: string[] }) {
 
 export function MatchLoadingScreen({ scenePainted }: { scenePainted: boolean }) {
   const decision = useMatchLoaderGate(scenePainted);
+  useEffect(() => {
+    setMatchWorldLabelsHidden(worldLabelsCovered(decision.phase));
+  }, [decision.phase]);
+  useEffect(() => () => setMatchWorldLabelsHidden(false), []);
   const { active, progress } = useProgress();
   const { arena, zoogi, thumbnailUrl, isCustom } = useMatchCard();
   const { phone, portrait } = useViewportLayout();
