@@ -31,6 +31,7 @@ import { ImpactFX } from "./ImpactFX";
 import { useCallback, useEffect, useRef, useMemo, useState } from "react";
 import { triggerArcPeakCameraEffect, triggerArcPeakFreezeOnly, clearArcPeakCameraEffect } from "@/lib/stores/useCameraEffects";
 import { useMapDecorations } from "@/hooks/useMapDecorations";
+import { canvasPixelRatio, isMobileGraphics } from "@/lib/mobileGraphics";
 
 function GradientSky() {
   const meshRef = useRef<THREE.Mesh>(null);
@@ -218,6 +219,10 @@ class OptionalSceneBoundary extends Component<{ children: ReactNode }, { hasErro
 
 export function Game() {
   const { enemies, selectedMap, gameMode, localPlayers } = useZoogiGame();
+  const [graphics] = useState(() => ({
+    mobile: isMobileGraphics(),
+    dpr: canvasPixelRatio(),
+  }));
   
   useMapDecorations();
 
@@ -236,7 +241,8 @@ export function Game() {
   return (
     <>
       <Canvas
-        shadows
+        shadows={!graphics.mobile}
+        dpr={graphics.dpr}
         camera={{
           position: [0, 25, 30],
           fov: 50,
@@ -244,8 +250,8 @@ export function Game() {
           far: 1000
         }}
         gl={{
-          antialias: true,
-          powerPreference: "default",
+          antialias: false,
+          powerPreference: "high-performance",
           toneMapping: THREE.ACESFilmicToneMapping,
           toneMappingExposure: 1.0,
           outputColorSpace: THREE.SRGBColorSpace

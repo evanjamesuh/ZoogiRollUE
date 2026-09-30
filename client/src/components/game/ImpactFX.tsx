@@ -2,8 +2,8 @@ import { useMemo, useRef, type MutableRefObject } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
-import { useCameraEffects } from "@/lib/stores/useCameraEffects";
 import { addTrauma } from "@/lib/cameraRig";
+import { ZOOGI_FX_SCALE } from "@/lib/restHeight";
 
 const SPARK_COUNT = 56;
 const SPARK_COLORS = ["#fff4c8", "#7ef6ff", "#ff4ad8", "#d08bff"];
@@ -53,8 +53,6 @@ export function ImpactFX() {
   const color = useRef(new THREE.Color());
   const prev = useRef(new Map<string, { speed: number; vx: number; vz: number; ko: boolean }>());
   const cursor = useRef(0);
-  const lastFreezeAt = useRef(0);
-
   const spawn = (x: number, y: number, z: number, nx: number, nz: number, count: number) => {
     for (let i = 0; i < count; i++) {
       const spark = sparks.current[cursor.current % SPARK_COUNT];
@@ -110,11 +108,6 @@ export function ImpactFX() {
           if (impulse > 1.45) {
             addTrauma(Math.min(0.55, impulse * 0.12));
           }
-          const now = performance.now();
-          if (impulse > 1.85 && now - lastFreezeAt.current > 280) {
-            lastFreezeAt.current = now;
-            useCameraEffects.getState().triggerFreeze(impulse > 2.6 ? 0.06 : 0.04);
-          }
         }
         if (!previous.ko && body.ko) {
           bursts.current.push({
@@ -125,7 +118,6 @@ export function ImpactFX() {
           });
           spawn(body.position[0], body.position[1], body.position[2], 0, 1, 16);
           addTrauma(0.85);
-          useCameraEffects.getState().triggerFreeze(0.12);
         }
       }
       prev.current.set(body.id, { speed, vx: body.velocity[0], vz: body.velocity[2], ko: body.ko });
@@ -192,7 +184,7 @@ function KoBursts({ burstsRef }: { burstsRef: MutableRefObject<Burst[]> }) {
       const t = burst.age / 0.55;
       ring.visible = true;
       ring.position.set(burst.x, 0.08, burst.z);
-      const scale = 0.4 + t * 3.4;
+      const scale = (0.4 + t * 3.4) * ZOOGI_FX_SCALE;
       ring.scale.setScalar(scale);
       const material = ring.material as THREE.MeshBasicMaterial;
       material.opacity = (1 - t) * 0.9;

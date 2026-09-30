@@ -66,7 +66,7 @@ export function particleBudget(): ParticleBudget {
 
 export function bloomParams(level: VfxQuality = quality): BloomParams {
   if (level === "low") {
-    return { intensity: 0.18, levels: 3, resolutionScale: 0.18, radius: 0.32 };
+    return { intensity: 0.24, levels: 3, resolutionScale: 0.2, radius: 0.32 };
   }
   return { intensity: 0.32, levels: 4, resolutionScale: 0.3, radius: 0.42 };
 }

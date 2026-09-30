@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as THREE from "three";
-import { marbleUniformScale, resolveZoogiModel, rollMarble, ZOOGI_MODELS, zoogiModelPreloadUrls } from "./zoogiModels.ts";
+import { fittedBoxSize, fittedUniformScale, marbleUniformScale, resolveZoogiModel, rollMarble, ROSTER_REFERENCE_RADIUS, ZOOGI_MODELS, zoogiModelPreloadUrls } from "./zoogiModels.ts";
+import { ZOOGI_DRAW_RADIUS } from "./restHeight.ts";
 
 function fresh(): THREE.Object3D {
   return new THREE.Object3D();
@@ -67,4 +68,33 @@ test("roster models point at their glb, including lars", () => {
   assert.equal(resolveZoogiModel("brand-new")?.url, "/models/brand-new.glb");
   assert.equal(resolveZoogiModel("custom_4", "https://example.com/a.glb")?.url, "https://example.com/a.glb");
   assert.equal(resolveZoogiModel("custom_4"), null);
+});
+
+test("roster models draw at the fitted bounding box, including Nightshade's pivot fit", () => {
+  const marble = ZOOGI_DRAW_RADIUS;
+  for (const [id, settings] of Object.entries(ZOOGI_MODELS)) {
+    if (settings.fit === "pivot") {
+      const raw = { x: ROSTER_REFERENCE_RADIUS * 2, y: 2.4, z: ROSTER_REFERENCE_RADIUS * 2 };
+      const scale = fittedUniformScale(settings, marble, raw);
+      assert.ok(Math.abs(scale - marble / 0.958) < 1e-9, `${id} scale ${scale}`);
+      const box = fittedBoxSize(settings, marble, raw);
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(raw.x, raw.y, raw.z));
+      mesh.scale.setScalar(scale);
+      const measured = new THREE.Box3().setFromObject(mesh).getSize(new THREE.Vector3());
+      mesh.geometry.dispose();
+      assert.ok(Math.abs(measured.x - box.x) < 1e-6, `${id} box x`);
+      assert.ok(Math.abs(measured.x - marble * 2) < 1e-6, `${id} ball width ${measured.x}`);
+      assert.ok(measured.y > marble * 2, `${id} horns stay taller than the ball`);
+      continue;
+    }
+    const raw = { x: 1.2, y: 1.84, z: 1.5 };
+    const box = fittedBoxSize(settings, marble, raw);
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(raw.x, raw.y, raw.z));
+    mesh.scale.setScalar(fittedUniformScale(settings, marble, raw));
+    const measured = new THREE.Box3().setFromObject(mesh).getSize(new THREE.Vector3());
+    mesh.geometry.dispose();
+    const longest = Math.max(measured.x, measured.y, measured.z);
+    assert.ok(Math.abs(longest - marble * 2) < 1e-6, `${id} longest side ${longest}`);
+    assert.ok(Math.abs(measured.y - box.y) < 1e-6, `${id} box`);
+  }
 });

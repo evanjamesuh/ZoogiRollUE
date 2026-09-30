@@ -19,8 +19,8 @@ export function Lights() {
           intensity={1.0}
           color="#fff8f0"
           castShadow
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
+          shadow-mapSize-width={1024}
+          shadow-mapSize-height={1024}
           shadow-camera-far={80}
           shadow-camera-left={-30}
           shadow-camera-right={30}
@@ -51,8 +51,8 @@ export function Lights() {
           intensity={1.05}
           color="#ffb070"
           castShadow
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
+          shadow-mapSize-width={1024}
+          shadow-mapSize-height={1024}
           shadow-camera-far={90}
           shadow-camera-left={-36}
           shadow-camera-right={36}
@@ -76,8 +76,8 @@ export function Lights() {
           intensity={0.72}
           color="#d4d0ff"
           castShadow
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
+          shadow-mapSize-width={1024}
+          shadow-mapSize-height={1024}
           shadow-camera-far={80}
           shadow-camera-left={-30}
           shadow-camera-right={30}
@@ -98,8 +98,8 @@ export function Lights() {
           intensity={0.42}
           color="#c4b6ff"
           castShadow
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
+          shadow-mapSize-width={1024}
+          shadow-mapSize-height={1024}
           shadow-camera-far={70}
           shadow-camera-left={-28}
           shadow-camera-right={28}
@@ -121,8 +121,8 @@ export function Lights() {
           intensity={1.2}
           color="#ffd2a8"
           castShadow
-          shadow-mapSize-width={2048}
-          shadow-mapSize-height={2048}
+          shadow-mapSize-width={1024}
+          shadow-mapSize-height={1024}
           shadow-camera-far={80}
           shadow-camera-left={-32}
           shadow-camera-right={32}
@@ -145,8 +145,8 @@ export function Lights() {
         intensity={1.45}
         color="#ffe6b0"
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
         shadow-camera-far={90}
         shadow-camera-left={-32}
         shadow-camera-right={32}

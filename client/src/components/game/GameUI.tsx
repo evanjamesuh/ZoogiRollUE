@@ -1,5 +1,5 @@
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
-import { BUMPER_SCORE, KNOCKOUT_PENALTY, KNOCKOUT_SCORE_ORB, KNOCKOUT_SCORE_PLAYER, ZONE_SCORE_ORB } from "@/lib/arenaConstants";
+import { BUMPER_SCORE, KNOCKOUT_PENALTY, KNOCKOUT_SCORE_ORB, KNOCKOUT_SCORE_PLAYER } from "@/lib/arenaConstants";
 import { motion, AnimatePresence } from "framer-motion";
 import { Eye, EyeOff, Home, HelpCircle, Users, User, Zap, Crosshair, Star, Trophy, Coins, Info, X, Phone, Video, Move, Check, ArrowUp, ArrowDown, ArrowLeft, ArrowRight, ChevronUp, ChevronDown, RotateCcw, RotateCw, Minus, Plus, Anchor, Download, ScanEye, Camera, Target, Lock, Flame, Package, MapPin, Palette } from "lucide-react";
 import { moveSelectedElementByArrows, confirmPlacements, rotateSelectedElement, snapToGround, getIncrement, setIncrement } from "./DeveloperMoveControls";
@@ -13,6 +13,7 @@ import { CollisionTuningPanel } from "./CollisionTuningPanel";
 import { AIControlsPanel } from "./AIControlsPanel";
 import { exportAllOffsets } from "@/lib/treeOffsets";
 import { NeonScoreboard } from "./NeonScoreboard";
+import { prefersCompactHud, useViewportLayout } from "@/lib/mobileGraphics";
 import { useAudio } from "@/lib/stores/useAudio";
 import { useProgression } from "@/lib/stores/useProgression";
 import { useEffect, useState, useRef, useCallback, useMemo, PointerEvent as ReactPointerEvent } from "react";
@@ -123,8 +124,9 @@ function useDevTools() {
   return enabled;
 }
 
-function CharacterAbilityButton({ zoogiId, entity }: {
+function CharacterAbilityButton({ zoogiId, entity, compact = false }: {
   zoogiId: string;
+  compact?: boolean;
   entity: {
     id: string;
     wolfgangAbilityUnlocked: boolean;
@@ -161,7 +163,7 @@ function CharacterAbilityButton({ zoogiId, entity }: {
     <button
       onClick={ready ? ability.onClick : undefined}
       disabled={!ready}
-      className={`px-3 py-2 rounded-xl backdrop-blur-sm transition-all flex flex-col items-center min-w-[76px] ${
+      className={`${compact ? "h-11 w-11" : "min-h-12 min-w-[76px] px-3 py-2"} rounded-xl backdrop-blur-sm transition-all flex flex-col items-center justify-center ${
         !ready
           ? "bg-gray-700/80 text-white/50 cursor-not-allowed"
           : ability.active
@@ -169,10 +171,15 @@ function CharacterAbilityButton({ zoogiId, entity }: {
             : "bg-amber-500 text-black hover:bg-amber-400"
       }`}
       title={ready ? getAbilityTriggerText(zoogiId) : "Knock a star orb off the island to unlock"}
+      aria-label={ability.label}
     >
       {ready ? <Zap size={18} /> : <Lock size={18} />}
-      <span className="text-[11px] font-bold leading-tight mt-1">{ability.label}</span>
-      <span className="text-[9px] uppercase tracking-wide">{ready ? "Ready" : "Locked"}</span>
+      {!compact && (
+        <>
+          <span className="text-[11px] font-bold leading-tight mt-1">{ability.label}</span>
+          <span className="text-[9px] uppercase tracking-wide">{ready ? "Ready" : "Locked"}</span>
+        </>
+      )}
     </button>
   );
 }
@@ -182,7 +189,7 @@ function modeRules(gameMode: string): { title: string; blurb: string } {
     return { title: "Ringer Royale", blurb: "Knock opponents out of the ring!" };
   }
   if (gameMode === "practice") {
-    return { title: "Marble Arena", blurb: "Knock orbs and opponents off the island." };
+    return { title: "Practice", blurb: "Knock orbs and opponents off the island." };
   }
   if (gameMode === "local_multiplayer") {
     return { title: "Local Match", blurb: "Take turns. Knock orbs and opponents off the island." };
@@ -367,6 +374,17 @@ function LaunchPadHeightControl() {
 
 export function GameUI() {
   const { playerEntity, enemies, score, orbs, currentRound, maxRounds, playerRoundWins, isPlayerTurn, birdsEyeView, toggleBirdsEyeView, firstPersonView, toggleFirstPersonView, overShoulderView, toggleOverShoulderView, launchPadView, toggleLaunchPadView, setPhase, gameTimer, openTutorial, gameMode, localPlayers, currentLocalPlayerIndex, activateWolfgangAbility, canUseWolfgangAbility, activateHotstreakAbility, canUseHotstreakAbility, activateBoltAbility, canUseBoltAbility, lockOnEnabled, toggleLockOn, sessionId, arcType, setArcType, straightMode, toggleStraightMode, tangentOffset, setTangentOffset, lockOnTargetId, triggerArcLaunch, orbMultiplier, incrementOrbMultiplier, decrementOrbMultiplier, restrictionPhaseActive, restrictionPhaseStartTime } = useZoogiGame();
+  const [matchClock, setMatchClock] = useState(gameTimer);
+  useEffect(() => {
+    setMatchClock(gameTimer);
+  }, [gameTimer]);
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const next = useZoogiGame.getState().gameTimer;
+      setMatchClock((prev) => (Math.abs(prev - next) < 0.2 ? prev : next));
+    }, 250);
+    return () => window.clearInterval(id);
+  }, []);
   const selectedMap = useZoogiGame((state) => state.selectedMap);
   const showCollisionTuningPanel = useZoogiGame((state) => state.showCollisionTuningPanel);
   const setShowCollisionTuningPanel = useZoogiGame((state) => state.setShowCollisionTuningPanel);
@@ -379,7 +397,10 @@ export function GameUI() {
   const [showBirdsEyeTutorial, setShowBirdsEyeTutorial] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const isLocalMultiplayerMode = gameMode === "local_multiplayer";
-  const [showPlayerPanel, setShowPlayerPanel] = useState(true);
+  const [showPlayerPanel, setShowPlayerPanel] = useState(() => !prefersCompactHud());
+  const layout = useViewportLayout();
+  const phoneControls = layout.phone;
+  const phonePortrait = layout.phone && layout.portrait;
   const [showPanelHint, setShowPanelHint] = useState(false);
   const devTools = useDevTools();
   const abilityNotice = useZoogiGame((state) => state.abilityNotice);
@@ -763,10 +784,10 @@ export function GameUI() {
 
   const activeOrbs = orbs.filter(o => o.isActive).length;
   
-  const minutes = Math.floor(gameTimer / 60);
-  const seconds = Math.floor(gameTimer % 60);
+  const minutes = Math.floor(matchClock / 60);
+  const seconds = Math.floor(matchClock % 60);
   const timerDisplay = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-  const timerColor = gameTimer <= 60 ? "text-red-400" : gameTimer <= 180 ? "text-yellow-400" : "text-white";
+  const timerColor = matchClock <= 60 ? "text-red-400" : matchClock <= 180 ? "text-yellow-400" : "text-white";
   
   const wallOwnershipMode = useZoogiGame(state => state.wallOwnershipMode);
   const ownershipScores = useZoogiGame(state => state.ownershipScores);
@@ -896,8 +917,8 @@ export function GameUI() {
         )}
       </AnimatePresence>
       
-      <div className="absolute top-4 sm:top-6 left-2 sm:left-4 right-2 sm:right-4 flex flex-wrap sm:flex-nowrap justify-between items-start gap-2 pointer-events-auto">
-        <div className="bg-black/70 rounded-lg sm:rounded-xl p-2 sm:p-4 backdrop-blur-sm transition-all">
+      <div className={`absolute left-2 sm:left-4 right-2 sm:right-4 flex flex-wrap sm:flex-nowrap justify-between items-start gap-2 pointer-events-none ${selectedMap === "neon" ? "hud-top-neon" : "hud-top"} ${phonePortrait ? "hud-portrait-top" : ""} ${phoneControls && !phonePortrait ? "hud-landscape-inset" : ""}`}>
+        <div className="pointer-events-auto max-w-[70%] bg-black/70 rounded-lg sm:rounded-xl p-2 sm:p-4 backdrop-blur-sm transition-all">
           <div className="flex items-center gap-2 sm:gap-3">
             <div className="relative">
               <div
@@ -930,7 +951,7 @@ export function GameUI() {
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <h3 className="text-white font-bold">{displayEntity.zoogi.name}</h3>
+                <h3 className="text-white font-bold truncate max-w-[34vw] sm:max-w-none">{displayEntity.zoogi.name}</h3>
                 <span className="px-1.5 py-0.5 bg-purple-600/80 rounded text-xs text-white font-bold">Lv.{level}</span>
                 <span className="flex items-center gap-0.5 px-1.5 py-0.5 bg-yellow-600/80 rounded text-xs text-white font-bold">
                   <Coins className="w-3 h-3" />
@@ -1080,7 +1101,7 @@ export function GameUI() {
         </AnimatePresence>
       </div>
 
-      <div className="absolute bottom-2 sm:bottom-4 left-2 sm:left-4 right-2 sm:right-4 flex justify-between items-end gap-2">
+      <div className={`hud-bottom absolute flex justify-between items-end gap-2 pointer-events-none ${phonePortrait ? "hud-bottom-raised" : ""} ${phoneControls && !phonePortrait ? "hud-landscape-inset" : ""}`}>
         <div className="bg-black/70 rounded-lg sm:rounded-xl p-2 sm:p-4 backdrop-blur-sm">
           {isLocalMultiplayer ? (
             <div>
@@ -1146,18 +1167,22 @@ export function GameUI() {
               <p>Orb knock-off: <span className="text-yellow-400">+{KNOCKOUT_SCORE_ORB}</span></p>
               <p>Opponent knock-off: <span className="text-yellow-400">+{KNOCKOUT_SCORE_PLAYER}</span></p>
               <p>Bumper touch: <span className="text-yellow-400">+{BUMPER_SCORE}</span></p>
-              <p>Score zone: <span className="text-yellow-400">+{ZONE_SCORE_ORB}</span></p>
               <p>Fall off the island: <span className="text-red-400">-{KNOCKOUT_PENALTY}</span></p>
             </div>
           </div>
         )}
       </div>
       
-      <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col gap-3 pointer-events-auto">
+      <div className={phonePortrait
+        ? "hud-controls-portrait pointer-events-auto"
+        : phoneControls
+          ? "hud-controls-landscape pointer-events-auto"
+          : "hud-side absolute top-1/2 -translate-y-1/2 flex flex-col gap-3 pointer-events-auto"
+      }>
         {/* Lock-On Control - Moved to top to avoid overlap with player scores */}
         <button
           onClick={toggleLockOn}
-          className={`p-3 rounded-xl backdrop-blur-sm transition-all relative ${
+          className={`min-h-11 min-w-11 p-3 rounded-xl backdrop-blur-sm transition-all relative ${
             lockOnEnabled
               ? "bg-purple-500/80 text-white ring-2 ring-purple-300" 
               : "bg-purple-500/50 text-white/80 hover:bg-purple-500/70"
@@ -1170,7 +1195,7 @@ export function GameUI() {
           )}
         </button>
         
-        <CharacterAbilityButton zoogiId={displayEntity.zoogi.id} entity={displayEntity} />
+        <CharacterAbilityButton zoogiId={displayEntity.zoogi.id} entity={displayEntity} compact={phoneControls} />
         {devTools && (
           <div className="flex flex-col gap-1">
             <button
@@ -1195,7 +1220,10 @@ export function GameUI() {
         
         {/* Orb Multiplier Control */}
         {gameMode === "practice" && (
-          <div className="flex flex-col items-center gap-1 bg-black/70 rounded-xl p-2 backdrop-blur-sm">
+          <div className={phoneControls
+            ? "flex flex-row items-center gap-1 bg-black/70 rounded-xl px-1 h-11"
+            : "flex flex-col items-center gap-1 bg-black/70 rounded-xl p-2 backdrop-blur-sm"
+          }>
             <button
               onClick={incrementOrbMultiplier}
               disabled={orbMultiplier >= 3}

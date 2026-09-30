@@ -402,6 +402,7 @@ export const useCommunity = create<CommunityState>((set, get) => ({
   fetchDailyBonus: async () => {
     try {
       const res = await fetch("/api/daily-bonus");
+      if (!res.ok) return;
       const data = await res.json();
       set({ dailyBonus: data });
     } catch (error) {

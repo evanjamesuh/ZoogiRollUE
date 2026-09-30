@@ -3,8 +3,7 @@ import { useRef, useMemo, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { useAudio } from "@/lib/stores/useAudio";
-import { getSnowmanPositions } from "@/lib/arenaConstants";
-import { SNOWMAN_RADIUS } from "@/lib/arenaColliders";
+import { SNOWMAN_RADIUS, getMapLayout } from "@/lib/arenaColliders";
 import { getElementOffset } from "@/lib/treeOffsets";
 
 interface Snowman {
@@ -18,10 +17,10 @@ export function Snowmen() {
   const selectedMap = useZoogiGame((state) => state.selectedMap) || "ice";
   
   const snowmenData = useMemo<Snowman[]>(() => {
-    const sharedPositions = getSnowmanPositions();
-    return sharedPositions.map((pos, i) => ({
-      id: `snowman-${i}`,
-      position: pos.position,
+    const scenery = getMapLayout("ice")?.scenery.filter((solid) => solid.kind === "snowman") ?? [];
+    return scenery.map((solid, i) => ({
+      id: solid.id,
+      position: [solid.x, 0, solid.z] as [number, number, number],
       originalIndex: i
     }));
   }, []);

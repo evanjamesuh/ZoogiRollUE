@@ -27,10 +27,19 @@ export function InstancedSprites({
   pool,
   mode,
   warm,
+  crest,
+  flat = false,
+  ink = false,
 }: {
   pool: SpritePool;
   mode: SpriteMode;
   warm?: RefObject<number>;
+  /** Lavender only on the wispy fringe of a puff. Other smoke leaves this at 0. */
+  crest?: RefObject<number>;
+  /** Lay the quad on the ground so a low camera still sees the puff. */
+  flat?: boolean;
+  /** Skip the gray floor so the puff can go purple-black. */
+  ink?: boolean;
 }) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const streak = mode === "ember";
@@ -49,8 +58,13 @@ export function InstancedSprites({
 
   const material = useMemo(() => {
     const uniforms: { [key: string]: THREE.IUniform } = {};
+    uniforms.uFlat = { value: flat ? 1 : 0 };
     if (mode === "smoke" || mode === "mist" || mode === "dust") uniforms.uTime = { value: 0 };
-    if (mode === "smoke") uniforms.uWarm = { value: 0 };
+    if (mode === "smoke") {
+      uniforms.uWarm = { value: 0 };
+      uniforms.uCrest = { value: 0 };
+      uniforms.uInk = { value: ink ? 1 : 0 };
+    }
     const mat = new THREE.ShaderMaterial({
       uniforms,
       vertexShader: SPRITE_VERT,
@@ -71,7 +85,7 @@ export function InstancedSprites({
       mat.blending = THREE.NormalBlending;
     }
     return mat;
-  }, [mode]);
+  }, [mode, flat, ink]);
 
   useEffect(() => {
     return () => {
@@ -87,6 +101,8 @@ export function InstancedSprites({
     if (uTime) uTime.value = state.clock.elapsedTime;
     const uWarm = material.uniforms.uWarm;
     if (uWarm) uWarm.value = warm?.current ?? 0;
+    const uCrest = material.uniforms.uCrest;
+    if (uCrest) uCrest.value = crest?.current ?? 0;
     const opacity = geometry.getAttribute("aOpacity") as THREE.InstancedBufferAttribute;
     const spin = geometry.getAttribute("aSpin") as THREE.InstancedBufferAttribute;
     const size = geometry.getAttribute("aSize") as THREE.InstancedBufferAttribute;

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useCommunity } from "@/lib/stores/useCommunity";
 import { useAuth } from "@/lib/stores/useAuth";
 import { X, Users, Crown, Trophy, Plus, LogOut, ChevronRight } from "lucide-react";
+import { OnlineNotice } from "@/components/ui/OnlineNotice";
 
 interface ClansPanelProps {
   onClose: () => void;
@@ -102,6 +103,8 @@ export function ClansPanel({ onClose }: ClansPanelProps) {
             <X className="w-6 h-6 text-white" />
           </button>
         </div>
+
+        <OnlineNotice compact className="mx-4 mt-3" />
 
         <div className="flex items-center gap-2 p-4 border-b border-amber-500/20">
           <button
