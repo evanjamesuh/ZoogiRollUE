@@ -22,6 +22,7 @@ import { EnhancedLeaderboard } from "@/components/ui/EnhancedLeaderboard";
 import { ReplaysPanel } from "@/components/ui/ReplaysPanel";
 import { CustomizationPanel } from "@/components/ui/CustomizationPanel";
 import { MainMenuTown } from "./MainMenuTown";
+import { OnlineNotice } from "@/components/ui/OnlineNotice";
 import useEmblaCarousel from "embla-carousel-react";
 
 interface LeaderboardEntry {
@@ -710,6 +711,7 @@ export function MainMenu() {
                   </button>
 
                   <div className="flex flex-col gap-3">
+                    <OnlineNotice />
                     <p className="text-white/50 text-xs font-semibold uppercase tracking-wider text-center flex items-center justify-center gap-2">
                       <Wifi size={12} />
                       Online
