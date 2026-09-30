@@ -1,5 +1,13 @@
 import type { WallSegmentConfig } from "./stores/useZoogiGame";
 import { getMapLayout } from "./arenaColliders";
+import { ARENA_SCALE_BY_MAP } from "./arenaScale";
+
+export { ARENA_SCALE_BY_MAP, arenaScaleFor } from "./arenaScale";
+
+/** arenaScale for every map. Layout code reads ARENA_SCALE_BY_MAP. */
+export const MAP_ARENA_SCALES: { id: string; arenaScale: number }[] = Object.entries(ARENA_SCALE_BY_MAP).map(
+  ([id, arenaScale]) => ({ id, arenaScale }),
+);
 
 export interface ZoneEditorConfig {
   id: string;
@@ -10,6 +18,8 @@ export interface ZoneEditorConfig {
 }
 
 export interface MapDefaultConfig {
+  /** Playable-area multiplier for this map. See ARENA_SCALE_BY_MAP. */
+  arenaScale?: number;
   wallSettings?: {
     outerWallEnabled?: boolean;
     outerWallRadiusOffset?: number;
@@ -68,6 +78,7 @@ export interface MapDefaultConfig {
 }
 
 export const SPACE_MAP_DEFAULT_CONFIG: MapDefaultConfig = {
+  arenaScale: ARENA_SCALE_BY_MAP.space,
   backgroundSettings: {
     distance: 200,
     yPos: 70,

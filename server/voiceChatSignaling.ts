@@ -16,8 +16,18 @@ interface SignalingMessage {
 
 const rooms: Map<string, VoiceChatRoom> = new Map();
 
+export const VOICE_CHAT_PATH = "/voice-chat";
+
 export function setupVoiceChatSignaling(server: Server) {
-  const wss = new WebSocketServer({ server, path: "/voice-chat" });
+  // noServer: a WebSocketServer built with `{ server, path }` answers every
+  // other upgrade on this HTTP server with 400, which broke Vite's HMR socket
+  // (/vite-hmr) and made the page reload in a loop.
+  const wss = new WebSocketServer({ noServer: true });
+  server.on("upgrade", (req, socket, head) => {
+    const pathname = (req.url ?? "").split("?")[0];
+    if (pathname !== VOICE_CHAT_PATH) return;
+    wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
+  });
 
   wss.on("error", (error: NodeJS.ErrnoException) => {
     if (error.code === "EADDRINUSE") return;

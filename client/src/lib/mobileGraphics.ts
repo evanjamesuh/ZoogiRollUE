@@ -39,5 +39,6 @@ export function isMobileGraphics(): boolean {
 }
 
 export function canvasPixelRatio(): [number, number] {
-  return isMobileGraphics() ? [1, 1.5] : [1, 2];
+  // A 2x buffer plus bloom is a 4k-class fill rate on a 1440p monitor.
+  return isMobileGraphics() ? [1, 1.25] : [1, 1.5];
 }

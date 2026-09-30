@@ -4,6 +4,8 @@ import { motion } from "framer-motion";
 import ReactConfetti from "react-confetti";
 import { useState, useEffect } from "react";
 import { Trophy } from "lucide-react";
+import { OnlineNotice } from "@/components/ui/OnlineNotice";
+import { useOnlineMessage } from "@/lib/serverStatus";
 
 interface LeaderboardEntry {
   id: number;
@@ -30,6 +32,7 @@ export function GameOver() {
   const [submitted, setSubmitted] = useState(false);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const onlineMessage = useOnlineMessage();
 
   useEffect(() => {
     const handleResize = () => {
@@ -164,7 +167,13 @@ export function GameOver() {
           </motion.div>
         )}
 
-        {!submitted && isVictory && (
+        {!submitted && isVictory && onlineMessage && (
+          <div className="mb-6">
+            <OnlineNotice />
+          </div>
+        )}
+
+        {!submitted && isVictory && !onlineMessage && (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -223,7 +232,7 @@ export function GameOver() {
             className="mb-6 bg-black/30 rounded-xl p-4 max-h-48 overflow-y-auto"
           >
             {leaderboard.length === 0 ? (
-              <p className="text-white/50 text-sm">No scores yet. Be the first!</p>
+              onlineMessage ? <OnlineNotice compact /> : <p className="text-white/50 text-sm">No scores yet. Be the first!</p>
             ) : (
               <div className="space-y-2">
                 {leaderboard.map((entry, index) => (

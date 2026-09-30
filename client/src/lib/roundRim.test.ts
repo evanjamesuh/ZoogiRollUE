@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { ARABIAN_RIM, ROUND_KNOCKOFF_RADIUS, rimPosition } from "./roundRim.ts";
 import { BUMPER_RADIUS, MARBLE_RADIUS, getMapLayout } from "./arenaColliders.ts";
+import { arenaScaleFor } from "./arenaScale.ts";
 
 const PLANTER_ANGLES = [22.5, 67.5, 112.5, 157.5, 202.5, 247.5, 292.5, 337.5];
 const PLANTER_DISTANCE = 13;
@@ -19,21 +20,31 @@ test("arabian planters are eight pots at radius 13 on the 22.5 degree lattice", 
 
   const layout = getMapLayout("saturn");
   assert.ok(layout);
+  const scale = arenaScaleFor("saturn");
   const pots = layout.scenery.filter((solid) => solid.kind === "prop");
   assert.equal(pots.length, 8);
-  for (const pot of pots) {
+  const ordered = [...pots].sort((a, b) => Math.atan2(a.z, a.x) - Math.atan2(b.z, b.x));
+  for (const pot of ordered) {
     const mark = ARABIAN_RIM.find((item) => item.id === pot.id);
     assert.ok(mark);
-    const placed = rimPosition(mark);
+    const authored = rimPosition(mark);
+    const distance = Math.hypot(pot.x, pot.z);
     assert.equal(pot.radius, mark.radius);
-    assert.ok(Math.abs(pot.x - placed.x) < 1e-9);
-    assert.ok(Math.abs(pot.z - placed.z) < 1e-9);
-    assert.ok(Math.abs(Math.hypot(pot.x, pot.z) - PLANTER_DISTANCE) < 1e-9);
-    const lane = layout.knockoffRadius - (mark.distance + mark.radius);
+    assert.ok(Math.abs(pot.x - authored.x * scale) < 1e-9, `${pot.id} x moved`);
+    assert.ok(Math.abs(pot.z - authored.z * scale) < 1e-9, `${pot.id} z moved`);
+    assert.ok(Math.abs(distance / scale - PLANTER_DISTANCE) < 1e-9, `${pot.id} authored distance ${distance / scale}`);
+    assert.ok(Math.abs(distance - 13) < 1e-9, `${pot.id} layout distance ${distance}`);
+    const lane = layout.knockoffRadius - distance - pot.radius;
     assert.ok(Math.abs(lane - 1.78) < 1e-9, `${pot.id} lane is ${lane}`);
     assert.ok(lane > MARBLE_RADIUS * 2, `${pot.id} lane is narrower than a marble`);
   }
-  assert.equal(layout.knockoffRadius, ROUND_KNOCKOFF_RADIUS);
+  for (let i = 0; i < ordered.length; i++) {
+    const a = ordered[i];
+    const b = ordered[(i + 1) % ordered.length];
+    const mouth = Math.hypot(a.x - b.x, a.z - b.z) - a.radius - b.radius;
+    assert.ok(mouth > MARBLE_RADIUS * 2, `planter mouth ${mouth} is narrower than a marble`);
+  }
+  assert.equal(layout.knockoffRadius, ROUND_KNOCKOFF_RADIUS * scale);
 });
 
 test("the four arabian spawns are equidistant from the nearest planter", () => {

@@ -1,3 +1,4 @@
+import { ZOOGI_REST_Y } from "./restHeight";
 import { ICE_RIM } from "./roundRim";
 
 export const ARENA_RADIUS = 18;
@@ -52,7 +53,7 @@ export function getSpawnPointPosition(
       const zone = spawnZones[spawnIndex % spawnZones.length];
       return [
         Math.cos(zone.angle) * zone.distance,
-        0.5,
+        ZOOGI_REST_Y,
         Math.sin(zone.angle) * zone.distance
       ];
     }
@@ -63,7 +64,7 @@ export function getSpawnPointPosition(
   const angle = SPAWN_POINT_ANGLES[spawnIndex % SPAWN_POINT_ANGLES.length];
   return [
     Math.cos(angle) * spawnRadius,
-    0.5,
+    ZOOGI_REST_Y,
     Math.sin(angle) * spawnRadius
   ];
 }
@@ -86,7 +87,7 @@ export function getGreenPadRespawnPosition(padIndex: number): [number, number, n
   const radius = WALL_OWNERSHIP_GREEN_RESPAWN_RADIUS;
   return [
     Math.cos(angle) * radius,
-    0.5,
+    ZOOGI_REST_Y,
     Math.sin(angle) * radius
   ];
 }

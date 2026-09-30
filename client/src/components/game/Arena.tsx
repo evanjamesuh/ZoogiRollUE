@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { useRef, useMemo, Suspense, Component, ReactNode } from "react";
+import { useRef, useMemo, useLayoutEffect, Suspense, Component, ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useGLTF, Center } from "@react-three/drei";
 import { useZoogiGame, CustomArenaDecoration, type MapTheme } from "@/lib/stores/useZoogiGame";
@@ -9,7 +9,6 @@ import { Clouds } from "./Clouds";
 import { Snowmen } from "./Snowmen";
 import { ArenaWalls } from "./ArenaWalls";
 import { OuterRingWall } from "./OuterRingWall";
-import { ControlPointZones } from "./ControlPointZones";
 import { FloatingAsteroids } from "./FloatingAsteroids";
 import { FallingRocks } from "./FallingRocks";
 import { FlowerPatches } from "./FlowerPatches";
@@ -22,30 +21,97 @@ import { AlienCrystals } from "./AlienCrystals";
 import { DesertHoodoos } from "./DesertHoodoos";
 import { EditorWallBlocks } from "./EditorWallBlocks";
 import { EditorScoringZones } from "./EditorScoringZones";
-import { ScoringZones } from "./ScoringZones";
 import { PinballBumpers } from "./PinballBumpers";
 import { NeonCourtArena } from "./NeonCourtArena";
 import { ARENA_RADIUS } from "@/lib/arenaConstants";
-import { COSMOS_STAGE, getMapLayout } from "@/lib/arenaColliders";
+import { COSMOS_FLOOR_MESH, cosmosPlayTransform, cosmosRingPush, cosmosRingRole, getMapLayout } from "@/lib/arenaColliders";
 import { PharaohTombArena } from "./PharaohTombArena";
 import { ArabianNightDressing, CosmicVoidDressing, VolcanicPitDressing } from "./ComicMapDressing";
 import { ArabianArena, FrozenArena, MeadowArena } from "./RoundMapArenas";
 
 export { ARENA_RADIUS };
 
+/** Scale the curb, wall, and crowd stands out from the floor centre so a marble clears them before it falls. */
+function pushCosmosRings(scene: THREE.Object3D) {
+  const placed = cosmosPlayTransform();
+  scene.updateWorldMatrix(true, true);
+  const sceneToParent = scene.matrixWorld.clone().invert();
+  const center = new THREE.Vector3(COSMOS_FLOOR_MESH.centerX, COSMOS_FLOOR_MESH.centerY, COSMOS_FLOOR_MESH.centerZ);
+  scene.traverse((obj) => {
+    if (!(obj instanceof THREE.Mesh) || !cosmosRingRole(obj.name) || obj.userData.cosmosRingPushed) return;
+    const geometry = obj.geometry.clone();
+    obj.geometry = geometry;
+    const position = geometry.getAttribute("position");
+    const toScene = obj.matrixWorld.clone().premultiply(sceneToParent);
+    const toMesh = toScene.clone().invert();
+    const scenePoints: THREE.Vector3[] = [];
+    const vertex = new THREE.Vector3();
+    for (let i = 0; i < position.count; i++) {
+      scenePoints.push(vertex.fromBufferAttribute(position, i).applyMatrix4(toScene).clone());
+    }
+    let inner = Infinity;
+    const consider = (ax: number, az: number, bx: number, bz: number) => {
+      const abx = bx - ax;
+      const abz = bz - az;
+      const len2 = abx * abx + abz * abz;
+      let u = 0;
+      if (len2 > 1e-12) {
+        u = ((center.x - ax) * abx + (center.z - az) * abz) / len2;
+        if (u < 0) u = 0;
+        else if (u > 1) u = 1;
+      }
+      const radius = Math.hypot(ax + abx * u - center.x, az + abz * u - center.z);
+      if (radius < inner) inner = radius;
+    };
+    const index = geometry.getIndex();
+    if (index) {
+      for (let i = 0; i + 2 < index.count; i += 3) {
+        const a = scenePoints[index.getX(i)];
+        const b = scenePoints[index.getX(i + 1)];
+        const c = scenePoints[index.getX(i + 2)];
+        consider(a.x, a.z, b.x, b.z);
+        consider(b.x, b.z, c.x, c.z);
+        consider(c.x, c.z, a.x, a.z);
+      }
+    } else {
+      for (const point of scenePoints) {
+        const radius = Math.hypot(point.x - center.x, point.z - center.z);
+        if (radius < inner) inner = radius;
+      }
+    }
+    const push = cosmosRingPush(inner * placed.scale);
+    obj.userData.cosmosRingPushed = true;
+    if (push === 1) return;
+    for (let i = 0; i < scenePoints.length; i++) {
+      const point = scenePoints[i];
+      point.x = center.x + (point.x - center.x) * push;
+      point.z = center.z + (point.z - center.z) * push;
+      point.applyMatrix4(toMesh);
+      position.setXYZ(i, point.x, point.y, point.z);
+    }
+    position.needsUpdate = true;
+    geometry.computeBoundingBox();
+    geometry.computeBoundingSphere();
+  });
+}
+
 function CosmosArenaModel() {
   const groupRef = useRef<THREE.Group>(null);
   const { scene } = useGLTF("/models/cosmos_arena.glb");
+  useLayoutEffect(() => {
+    pushCosmosRings(scene);
+  }, [scene]);
   const backgroundSettings = useZoogiGame((state) => state.backgroundSettings);
   const elementTransforms = useZoogiGame((state) => state.elementTransforms);
   const gameMode = useZoogiGame((state) => state.gameMode);
   const editing = gameMode === "map_editor";
 
   const arenaOffset = elementTransforms.arenaModelOffset;
-  const modelX = editing ? (backgroundSettings.modelPositionX ?? 0) + arenaOffset.x : 0;
-  const modelY = editing ? (backgroundSettings.modelPositionY ?? -0.5) + arenaOffset.y : COSMOS_STAGE.modelOffsetY;
-  const modelZ = editing ? (backgroundSettings.modelPositionZ ?? 0) + arenaOffset.z : 0;
-  const scale = editing ? (backgroundSettings.modelScale ?? COSMOS_STAGE.modelScale) : COSMOS_STAGE.modelScale;
+  const placed = cosmosPlayTransform();
+  const modelX = editing ? (backgroundSettings.modelPositionX ?? 0) + arenaOffset.x : placed.x;
+  const modelY = editing ? (backgroundSettings.modelPositionY ?? -0.5) + arenaOffset.y : placed.y;
+  const modelZ = editing ? (backgroundSettings.modelPositionZ ?? 0) + arenaOffset.z : placed.z;
+  const scale = editing ? (backgroundSettings.modelScale ?? placed.scale) : placed.scale;
   const modelScale: [number, number, number] = [scale, scale, scale];
   const modelPosition: [number, number, number] = [modelX, modelY, modelZ];
   
@@ -433,8 +499,7 @@ export function Arena({ theme = "grass" }: ArenaProps) {
   const isIceTheme = currentTheme === "ice";
   const layout = getMapLayout(currentTheme);
   const floorRadius = layout?.floorRadius ?? ARENA_RADIUS;
-  // The stand-in disk matches the knockout line, so rolling off what you
-  // see is the same as crossing the scoring ring.
+  // The stand-in disk matches the knockout line. Points come from falling off that edge.
   const standInRadius = layout?.knockoffRadius ?? floorRadius;
   const stageFallback = <PlayfieldDisk radius={standInRadius} color={colors.platform} />;
   
@@ -481,37 +546,9 @@ export function Arena({ theme = "grass" }: ArenaProps) {
       
       {/* Walls removed - DestructibleRingWall and OuterRingWall disabled */}
       
-      {currentTheme !== "neon" && (
-        <group 
-          position={[
-            elementTransforms.zonesOffset.x,
-            elementTransforms.zonesOffset.y,
-            elementTransforms.zonesOffset.z
-          ]}
-          rotation={[
-            elementTransforms.zonesRotation?.x ?? 0,
-            elementTransforms.zonesRotation?.y ?? 0,
-            elementTransforms.zonesRotation?.z ?? 0
-          ]}
-        >
-          <ControlPointZones
-            enabled={true}
-            zoneRadius={ARENA_RADIUS + 6}
-            captureSpeed={0.5}
-            scorePerSecond={1}
-          />
-        </group>
-      )}
-      
-      {/* InnerBarrierWalls removed */}
-      
       <PinballBumpers />
       <EditorWallBlocks />
       <EditorScoringZones />
-      
-      {(gameMode === "classic" || gameMode === "ringer_royale" || gameMode === "local_multiplayer" || gameMode === "practice") && (
-        <ScoringZones />
-      )}
       
       {currentTheme !== "neon" && gameMode === "map_editor" && (
         <KnockoffBoundaryRing 
@@ -520,16 +557,6 @@ export function Arena({ theme = "grass" }: ArenaProps) {
           offset={elementTransforms.knockoffBoundaryOffset}
           rotation={elementTransforms.knockoffBoundaryRotation}
           isGameplay={false}
-        />
-      )}
-      
-      {currentTheme !== "neon" && (gameMode === "classic" || gameMode === "ringer_royale" || gameMode === "local_multiplayer" || gameMode === "practice") && (
-        <KnockoffBoundaryRing 
-          radius={wallSettings.knockoffBoundaryRadius ?? 21} 
-          width={wallSettings.knockoffBoundaryWidth ?? 0.5}
-          offset={elementTransforms.knockoffBoundaryOffset}
-          rotation={elementTransforms.knockoffBoundaryRotation}
-          isGameplay={true}
         />
       )}
     </group>
