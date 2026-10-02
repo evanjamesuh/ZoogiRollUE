@@ -1,22 +1,24 @@
 import { Component, ReactNode, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, useGLTF } from "@react-three/drei";
-import { BookOpen, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight, List, Loader2 } from "lucide-react";
 import * as THREE from "three";
 import {
+  COMIC_CHAPTERS,
+  COMIC_PAGE_COUNT,
   COMIC_VIEW_EXPOSURE,
-  INTRO_COMIC_PAGE_COUNT,
+  comicChapterForPage,
+  comicChapterTitle,
   comicCommandForKey,
   comicCommandForSwipe,
   comicCommandForTap,
+  comicPanelUrl,
   comicPanelUrlsToKeep,
-  introComicPanelUrl,
-  introComicTitle,
   missingComicPanelMessage,
   prepareComicPanel,
   stepComicPage,
 } from "@/lib/comicPanels";
-import { retainComicPanel, syncComicPanelCache } from "@/lib/comicPanelCache";
+import { retainComicPanel, syncComicPanelCache, warmComicPanel } from "@/lib/comicPanelCache";
 
 interface ComicViewerProps {
   onBack: () => void;
@@ -25,7 +27,8 @@ interface ComicViewerProps {
 type ManualCamera = THREE.PerspectiveCamera & { manual?: boolean };
 
 function ComicPanelStage({ page, onReady }: { page: number; onReady: (page: number) => void }) {
-  const url = introComicPanelUrl(page);
+  const url = comicPanelUrl(page);
+  if (!url) throw new Error(missingComicPanelMessage(page));
   const gltf = useGLTF(url);
   const prepared = useMemo(() => prepareComicPanel(gltf.scene, page), [gltf.scene, page]);
   const set = useThree((state) => state.set);
@@ -98,7 +101,7 @@ class PanelErrorBoundary extends Component<PanelErrorBoundaryProps, PanelErrorBo
   }
 
   componentDidCatch(error: Error) {
-    console.error("Comic panel failed to load:", introComicPanelUrl(this.props.page), error);
+    console.error("Comic panel failed to load:", comicPanelUrl(this.props.page), error);
   }
 
   render() {
@@ -112,7 +115,7 @@ function MissingPanel({ page }: { page: number }) {
     <div className="flex flex-1 items-center justify-center px-6 py-10">
       <div className="max-w-md text-center">
         <p className="text-lg font-semibold text-white">
-          Panel {page}, {introComicTitle(page)}, couldn’t be loaded
+          Panel {page}, {comicChapterTitle(page)}, couldn’t be loaded
         </p>
         <p className="mt-3 text-sm leading-relaxed text-white/75">{missingComicPanelMessage(page)}</p>
       </div>
@@ -171,18 +174,26 @@ function ComicFrame({ children }: { children: ReactNode }) {
 export function ComicViewer({ onBack }: ComicViewerProps) {
   const [page, setPage] = useState(1);
   const [readyPage, setReadyPage] = useState(0);
+  const [chaptersOpen, setChaptersOpen] = useState(false);
   const frameRef = useRef<HTMLDivElement>(null);
   const onBackRef = useRef(onBack);
   onBackRef.current = onBack;
   const markReady = useCallback((shownPage: number) => setReadyPage(shownPage), []);
+  const chapter = comicChapterForPage(page);
 
   const go = (delta: number) => setPage((current) => stepComicPage(current, delta));
 
+  const jumpToChapter = (startPage: number) => {
+    setPage(stepComicPage(startPage, 0));
+    setChaptersOpen(false);
+  };
+
   useEffect(() => {
     const keep = comicPanelUrlsToKeep(page);
-    const next = keep[1];
-    if (next) {
-      Promise.resolve(useGLTF.preload(next)).catch(() => {
+    const current = comicPanelUrl(page);
+    for (const url of keep) {
+      if (url === current) continue;
+      warmComicPanel(url).catch(() => {
         // Reaching that page shows the missing-file message.
       });
     }
@@ -261,23 +272,61 @@ export function ComicViewer({ onBack }: ComicViewerProps) {
       style={{ touchAction: "none" }}
       data-testid="comic-viewer"
     >
-      <div className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 py-3">
-        <div>
-          <button
-            type="button"
-            onClick={onBack}
-            data-testid="comic-back"
-            className="flex items-center gap-1 rounded-full bg-white/10 px-3 py-2 text-sm font-medium hover:bg-white/20"
+      <div className="shrink-0 px-3 pb-2 pt-3">
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+          <div>
+            <button
+              type="button"
+              onClick={onBack}
+              data-testid="comic-back"
+              className="flex items-center gap-1 rounded-full bg-white/10 px-3 py-2 text-sm font-medium hover:bg-white/20"
+            >
+              <ChevronLeft size={18} />
+              Back
+            </button>
+          </div>
+          <div className="flex items-center gap-2 rounded-full bg-white/10 px-3 py-2 sm:px-4">
+            <BookOpen size={16} className="text-cyan-300" />
+            <span className="text-sm font-bold">3D Comic</span>
+          </div>
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => setChaptersOpen((open) => !open)}
+              aria-expanded={chaptersOpen}
+              aria-label="Chapters"
+              data-testid="comic-chapters"
+              className="flex items-center gap-1 rounded-full bg-white/10 px-3 py-2 text-sm font-medium hover:bg-white/20"
+            >
+              <List size={18} />
+              <span className="hidden sm:inline">Chapters</span>
+            </button>
+          </div>
+        </div>
+        {chaptersOpen && (
+          <div
+            data-testid="comic-chapter-list"
+            className="mx-auto mt-2 flex max-h-40 w-full max-w-sm flex-col gap-1 overflow-y-auto pb-1"
           >
-            <ChevronLeft size={18} />
-            Back
-          </button>
-        </div>
-        <div className="flex items-center gap-2 rounded-full bg-white/10 px-4 py-2">
-          <BookOpen size={16} className="text-cyan-300" />
-          <span className="text-sm font-bold">3D Comic</span>
-        </div>
-        <div />
+            {COMIC_CHAPTERS.map((entry) => {
+              const selected = entry.id === chapter?.id;
+              return (
+                <button
+                  key={entry.id}
+                  type="button"
+                  data-testid={`comic-chapter-${entry.id}`}
+                  onClick={() => jumpToChapter(entry.startPage)}
+                  className={`flex items-center justify-between gap-3 rounded-full px-4 py-2 text-left text-sm hover:bg-white/20 ${selected ? "bg-white/20 font-semibold" : "bg-white/10"}`}
+                >
+                  <span className="truncate">{entry.title}</span>
+                  <span className="shrink-0 text-xs text-white/55">
+                    {entry.startPage}–{entry.endPage}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <PanelErrorBoundary key={page} page={page}>
@@ -327,17 +376,19 @@ export function ComicViewer({ onBack }: ComicViewerProps) {
           </button>
           <div
             data-testid="comic-page"
-            className="min-w-[9.5rem] rounded-full bg-white/10 px-4 py-2 text-center"
+            className="min-w-[9.5rem] max-w-[12.5rem] rounded-full bg-white/10 px-4 py-2 text-center"
           >
             <div className="text-sm font-semibold">
-              {page} / {INTRO_COMIC_PAGE_COUNT}
+              {page} / {COMIC_PAGE_COUNT}
             </div>
-            <div className="text-xs text-white/70">{introComicTitle(page)}</div>
+            <div data-testid="comic-chapter-title" className="truncate text-xs text-white/70">
+              {comicChapterTitle(page)}
+            </div>
           </div>
           <button
             type="button"
             onClick={() => go(1)}
-            disabled={page === INTRO_COMIC_PAGE_COUNT}
+            disabled={page === COMIC_PAGE_COUNT}
             data-testid="comic-next"
             aria-label="Next panel"
             className="rounded-full bg-white/10 p-3 hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-40"

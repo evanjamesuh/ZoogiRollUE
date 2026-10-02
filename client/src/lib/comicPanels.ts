@@ -1,11 +1,13 @@
 import * as THREE from "three";
+import { COMIC_MANIFEST } from "./comicManifest";
 
 /**
  * The intro comic is eight glTF panels exported by the Spiraloid 3DComic
  * Toolkit. The toolkit numbers panels from 0, so panel 1 is panel01.glb and
- * its camera node is Camera.0000.
+ * its camera node is Camera.0000. Later panels keep that same global index.
  */
-export const INTRO_COMIC_PAGE_COUNT = 8;
+export const INTRO_COMIC_PAGE_COUNT =
+  COMIC_MANIFEST.find((chapter) => chapter.id === "intro")?.panels.length ?? 0;
 
 export const INTRO_COMIC_TITLES = [
   "The bright world",
@@ -25,7 +27,65 @@ export const COMIC_AMBIENT_NAME = "ComicAmbient";
 
 const LETTERING_PREFIXES = ["Balloon_", "Caption_", "Letter_", "Logo_", "Gutter_"];
 
+export interface ComicPageRef {
+  page: number;
+  file: string;
+  chapterId: string;
+  chapterTitle: string;
+}
+
+export interface ComicChapterInfo {
+  id: string;
+  title: string;
+  startPage: number;
+  endPage: number;
+}
+
+const COMIC_PAGES: ComicPageRef[] = [];
+
+for (const chapter of COMIC_MANIFEST) {
+  for (const file of chapter.panels) {
+    COMIC_PAGES.push({
+      page: COMIC_PAGES.length + 1,
+      file,
+      chapterId: chapter.id,
+      chapterTitle: chapter.title,
+    });
+  }
+}
+
+export const COMIC_PAGE_COUNT = COMIC_PAGES.length;
+
+export const COMIC_CHAPTERS: readonly ComicChapterInfo[] = COMIC_MANIFEST.map((chapter) => {
+  const pages = COMIC_PAGES.filter((page) => page.chapterId === chapter.id);
+  return {
+    id: chapter.id,
+    title: chapter.title,
+    startPage: pages[0]?.page ?? 1,
+    endPage: pages[pages.length - 1]?.page ?? 1,
+  };
+});
+
+export function comicPages(): readonly ComicPageRef[] {
+  return COMIC_PAGES;
+}
+
+export function comicChapterForPage(page: number): ComicChapterInfo | undefined {
+  return COMIC_CHAPTERS.find((chapter) => page >= chapter.startPage && page <= chapter.endPage);
+}
+
+export function comicChapterTitle(page: number): string {
+  return comicChapterForPage(page)?.title ?? `Panel ${page}`;
+}
+
+/** Public URL for a page in the manifest. Undefined when the page is not listed. */
+export function comicPanelUrl(page: number): string | undefined {
+  return COMIC_PAGES[page - 1]?.file;
+}
+
 export function introComicPanelUrl(page: number): string {
+  const listed = comicPanelUrl(page);
+  if (listed?.startsWith("/comics/intro/")) return listed;
   const index = String(page).padStart(2, "0");
   return `/comics/intro/panel${index}.glb`;
 }
@@ -47,16 +107,29 @@ export function introComicTitle(page: number): string {
 }
 
 export function missingComicPanelMessage(page: number): string {
-  return `The file ${introComicPanelUrl(page)} is missing or could not be read. It belongs in client/public/comics/intro/.`;
+  const url = comicPanelUrl(page) ?? introComicPanelUrl(page);
+  const folder = url.slice(0, url.lastIndexOf("/"));
+  return `The file ${url} is missing or could not be read. It belongs in client/public${folder}/.`;
 }
 
-export function stepComicPage(page: number, delta: number, count = INTRO_COMIC_PAGE_COUNT): number {
+export function stepComicPage(page: number, delta: number, count = COMIC_PAGE_COUNT): number {
   return Math.min(count, Math.max(1, page + delta));
 }
 
-export function comicPanelUrlsToKeep(page: number, count = INTRO_COMIC_PAGE_COUNT): string[] {
-  const urls = [introComicPanelUrl(page)];
-  if (page < count) urls.push(introComicPanelUrl(page + 1));
+/**
+ * The panel on screen, plus the next one and the previous one.
+ * Never a whole chapter — later books are far too big to hold at once.
+ */
+export function comicPanelUrlsToKeep(page: number, count = COMIC_PAGE_COUNT): string[] {
+  const urls: string[] = [];
+  const add = (candidate: number) => {
+    if (candidate < 1 || candidate > count) return;
+    const url = comicPanelUrl(candidate);
+    if (url) urls.push(url);
+  };
+  add(page - 1);
+  add(page);
+  add(page + 1);
   return urls;
 }
 
