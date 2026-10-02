@@ -12,7 +12,7 @@ import { marbleIsShown } from "@/lib/marblePresence";
 import { ZOOGI_DRAW_RADIUS, ZOOGI_FX_SCALE } from "@/lib/restHeight";
 import { arenaScaleFor } from "@/lib/mapDefaultConfigs";
 import { getMapLayout } from "@/lib/arenaColliders";
-import { AI_LAUNCH_DELAY, launchPlanarVelocity, launchSpeedForPull, MAX_LAUNCH_SPEED } from "@/lib/simFeel";
+import { AI_LAUNCH_DELAY, FULL_PULL_DISTANCE, launchPlanarVelocity, launchSpeedForPull, MAX_LAUNCH_SPEED, SLINGSHOT_PULL } from "@/lib/simFeel";
 import { triggerLaunchCameraEffect, clearAimCameraEffect } from "@/lib/stores/useCameraEffects";
 import { getSkinEffect, getRainbowColor } from "@/lib/skinEffects";
 import { StunnedIndicator } from "./PowerEffects";
@@ -52,6 +52,28 @@ const ZOOGI_MATERIAL_STYLES: Record<string, {
 };
 
 const DEFAULT_MATERIAL_STYLE = { clearcoat: 1.0, clearcoatRoughness: 0.1, metalness: 0.8, roughness: 0.2, reflectivity: 0.9, sheen: 0.3, sheenRoughness: 0.2 };
+
+/** World-unit drag where the slingshot rise starts (80% of a full pull). */
+const SLINGSHOT_DRAG = FULL_PULL_DISTANCE * SLINGSHOT_PULL;
+const AIM_ARROW_CAP = 8;
+const SLINGSHOT_ARROW_EXTRA = 3;
+const SLINGSHOT_COLOR = "#C026D3";
+
+function aimPowerCue(dragPower: number): { label: string; color: string } {
+  if (dragPower >= SLINGSHOT_DRAG) return { label: "SLINGSHOT", color: SLINGSHOT_COLOR };
+  if (dragPower < 2) return { label: "LOW", color: "#22C55E" };
+  if (dragPower < 4) return { label: "MEDIUM", color: "#EAB308" };
+  return { label: "HIGH", color: "#EF4444" };
+}
+
+/** Everyday arrows stop at a fixed length. They keep growing across the last 3 world units. */
+function aimArrowLength(dragDistance: number, multiplier: number): number {
+  const drag = Math.min(Math.max(dragDistance, 0), FULL_PULL_DISTANCE);
+  const base = Math.min(drag * multiplier, AIM_ARROW_CAP);
+  if (drag <= SLINGSHOT_DRAG) return base;
+  const t = (drag - SLINGSHOT_DRAG) / (FULL_PULL_DISTANCE - SLINGSHOT_DRAG);
+  return base + t * SLINGSHOT_ARROW_EXTRA;
+}
 
 class ZoogiModelErrorBoundary extends Component<{ children: ReactNode; fallback: ReactNode }, { failed: boolean }> {
   state = { failed: false };
@@ -719,9 +741,9 @@ export function PlayerZoogi() {
   const launchDz = effectiveLaunchDz;
   const launchMultiplier = 2;
   
-  const dragPower = Math.min(effectiveDist, 15);
-  const powerLevel = dragPower < 2 ? "LOW" : dragPower < 4 ? "MEDIUM" : "HIGH";
-  const powerColor = dragPower < 2 ? "#22C55E" : dragPower < 4 ? "#EAB308" : "#EF4444";
+  const dragPower = Math.min(effectiveDist, FULL_PULL_DISTANCE);
+  const powerCue = aimPowerCue(dragPower);
+  const arrowColor = powerCue.label === "SLINGSHOT" ? SLINGSHOT_COLOR : "#3B82F6";
   
   const zoogiColor = ZOOGI_TRAJECTORY_COLORS[playerEntity.zoogi.id] || playerEntity.zoogi.color;
   
@@ -926,8 +948,7 @@ export function PlayerZoogi() {
         <>
           {/* Dynamic transparent blue arrow trajectory indicator */}
           {(() => {
-            const rawLength = Math.sqrt(launchDx * launchDx + launchDz * launchDz) * launchMultiplier;
-            const arrowLength = Math.min(rawLength, 8);
+            const arrowLength = aimArrowLength(dragPower, launchMultiplier);
             const arrowRotation = Math.atan2(launchDz, launchDx);
             const shaftLength = arrowLength * 0.7;
             const headSize = Math.min(0.5 * ZOOGI_FX_SCALE, arrowLength * 0.15);
@@ -936,18 +957,18 @@ export function PlayerZoogi() {
               <group position={[pos[0], 0.15, pos[2]]} rotation={[0, -arrowRotation + Math.PI / 2, 0]}>
                 <mesh position={[0, 0, shaftLength / 2]} rotation={[-Math.PI / 2, 0, 0]}>
                   <planeGeometry args={[0.25 * ZOOGI_FX_SCALE, shaftLength]} />
-                  <meshBasicMaterial color="#3B82F6" transparent opacity={0.4} side={THREE.DoubleSide} />
+                  <meshBasicMaterial color={arrowColor} transparent opacity={0.4} side={THREE.DoubleSide} />
                 </mesh>
                 <mesh position={[0, 0, shaftLength + headSize / 2]} rotation={[Math.PI / 2, 0, 0]}>
                   <coneGeometry args={[headSize, headSize * 1.5, 3]} />
-                  <meshBasicMaterial color="#3B82F6" transparent opacity={0.5} />
+                  <meshBasicMaterial color={arrowColor} transparent opacity={0.5} />
                 </mesh>
               </group>
             ) : null;
           })()}
           <mesh position={[pos[0], 0.1, pos[2]]} rotation={[-Math.PI / 2, 0, 0]} scale={ZOOGI_FX_SCALE}>
             <ringGeometry args={[0.6, 0.8, 32]} />
-            <meshBasicMaterial color="#3B82F6" transparent opacity={0.5} />
+            <meshBasicMaterial color={arrowColor} transparent opacity={0.5} />
           </mesh>
           {dragPower > 0.1 && (
             <Html
@@ -957,7 +978,7 @@ export function PlayerZoogi() {
             >
               <div
                 style={{
-                  backgroundColor: powerColor,
+                  backgroundColor: powerCue.color,
                   color: 'white',
                   padding: '4px 12px',
                   borderRadius: '4px',
@@ -967,7 +988,7 @@ export function PlayerZoogi() {
                   whiteSpace: 'nowrap'
                 }}
               >
-                {powerLevel}
+                {powerCue.label}
               </div>
             </Html>
           )}
@@ -1301,20 +1322,18 @@ export function EnemyZoogi({ entityId }: { entityId: string }) {
             }
           }
           
-          // AGGRESSIVE AI - use high power for all targets
+          // Everyday shots stay under the 80% slingshot rise. Only a target
+          // already at the edge gets the upper band, so an 80–95% nudge
+          // does not turn into a fly-off.
           let powerLevel: number;
           if (targetIsPlayer && targetNearEdge) {
-            // Maximum power to knock player off edge!
-            powerLevel = 0.95 + Math.random() * 0.05;
-          } else if (targetIsPlayer) {
-            // High power to push player toward edge
-            powerLevel = 0.85 + Math.random() * 0.15;
-          } else if (targetNearEdge) {
-            // Maximum power for orbs near edge - knock them off!
             powerLevel = 0.9 + Math.random() * 0.1;
+          } else if (targetIsPlayer) {
+            powerLevel = 0.62 + Math.random() * 0.14;
+          } else if (targetNearEdge) {
+            powerLevel = 0.88 + Math.random() * 0.12;
           } else {
-            // High power for orbs - push them toward edge
-            powerLevel = 0.8 + Math.random() * 0.15;
+            powerLevel = 0.6 + Math.random() * 0.16;
           }
           
           // A long shot adds a little pull, not a flat speed bonus that skips the curve.
@@ -1642,8 +1661,9 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
   const launchDz = effectiveLaunchDz;
   const launchMultiplier = isPinpoint ? 4 : 2;
   const effectiveDist = Math.sqrt(launchDx * launchDx + launchDz * launchDz);
-  const dragPower = Math.min(effectiveDist, 15);
-  const powerColor = dragPower < 2 ? "#22C55E" : dragPower < 4 ? "#EAB308" : "#EF4444";
+  const dragPower = Math.min(effectiveDist, FULL_PULL_DISTANCE);
+  const powerCue = aimPowerCue(dragPower);
+  const arrowColor = powerCue.label === "SLINGSHOT" ? SLINGSHOT_COLOR : "#3B82F6";
   const zoogiColor = ZOOGI_TRAJECTORY_COLORS[entity.zoogi.id] || entity.zoogi.color;
   
   const showArcTrajectoryLocal = arcType !== null && lockOnEnabled && lockOnTargetId;
@@ -1840,10 +1860,8 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
 
       {isMyTurn && isDragging && !isPinpoint && (
         <>
-          {/* Dynamic transparent blue arrow */}
           {(() => {
-            const rawLength = Math.sqrt(launchDx * launchDx + launchDz * launchDz) * launchMultiplier;
-            const arrowLength = Math.min(rawLength, 8);
+            const arrowLength = aimArrowLength(dragPower, launchMultiplier);
             const arrowRotation = Math.atan2(launchDz, launchDx);
             const shaftLength = arrowLength * 0.7;
             const headSize = Math.min(0.5 * ZOOGI_FX_SCALE, arrowLength * 0.15);
@@ -1852,19 +1870,41 @@ export function LocalMultiplayerZoogi({ playerIndex }: { playerIndex: number }) 
               <group position={[pos[0], 0.15, pos[2]]} rotation={[0, -arrowRotation + Math.PI / 2, 0]}>
                 <mesh position={[0, 0, shaftLength / 2]} rotation={[-Math.PI / 2, 0, 0]}>
                   <planeGeometry args={[0.25 * ZOOGI_FX_SCALE, shaftLength]} />
-                  <meshBasicMaterial color="#3B82F6" transparent opacity={0.4} side={THREE.DoubleSide} />
+                  <meshBasicMaterial color={arrowColor} transparent opacity={0.4} side={THREE.DoubleSide} />
                 </mesh>
                 <mesh position={[0, 0, shaftLength + headSize / 2]} rotation={[Math.PI / 2, 0, 0]}>
                   <coneGeometry args={[headSize, headSize * 1.5, 3]} />
-                  <meshBasicMaterial color="#3B82F6" transparent opacity={0.5} />
+                  <meshBasicMaterial color={arrowColor} transparent opacity={0.5} />
                 </mesh>
               </group>
             ) : null;
           })()}
           <mesh position={[pos[0], 0.1, pos[2]]} rotation={[-Math.PI / 2, 0, 0]} scale={ZOOGI_FX_SCALE}>
             <ringGeometry args={[0.6, 0.8, 32]} />
-            <meshBasicMaterial color="#3B82F6" transparent opacity={0.5} />
+            <meshBasicMaterial color={arrowColor} transparent opacity={0.5} />
           </mesh>
+          {dragPower > 0.1 && (
+            <Html
+              position={[pos[0] + launchDx * 0.5, 1.5, pos[2] + launchDz * 0.5]}
+              center
+              style={{ pointerEvents: "none" }}
+            >
+              <div
+                style={{
+                  backgroundColor: powerCue.color,
+                  color: "white",
+                  padding: "4px 12px",
+                  borderRadius: "4px",
+                  fontWeight: "bold",
+                  fontSize: "14px",
+                  textShadow: "0 1px 2px rgba(0,0,0,0.5)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {powerCue.label}
+              </div>
+            </Html>
+          )}
         </>
       )}
 
