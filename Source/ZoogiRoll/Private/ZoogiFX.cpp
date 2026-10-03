@@ -4,6 +4,43 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
+#include "NiagaraComponent.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
+
+void AZoogiFX::Niagara(UWorld* World, const TCHAR* SystemName, const FVector& Location, const FRotator& Rotation, float Scale)
+{
+	static const bool bDisabled = FParse::Param(FCommandLine::Get(), TEXT("ZoogiNoNiagara"));
+	if (!World || bDisabled || World->GetNetMode() == NM_DedicatedServer) return;
+	static TMap<FName, TWeakObjectPtr<UNiagaraSystem>> Cache;
+	const FName Key(SystemName);
+	UNiagaraSystem* Sys = Cache.FindRef(Key).Get();
+	if (!Sys)
+	{
+		const FString Path = FString::Printf(TEXT("/Game/FX/%s.%s"), SystemName, SystemName);
+		Sys = LoadObject<UNiagaraSystem>(nullptr, *Path, nullptr, LOAD_NoWarn);
+		if (!Sys) return;
+		Cache.Add(Key, Sys);
+	}
+	UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, Sys, Location, Rotation, FVector(Scale), true, true, ENCPoolMethod::AutoRelease);
+}
+
+const TCHAR* AZoogiFX::PowerBurst(EZoogiPower Power)
+{
+	switch (Power)
+	{
+	case EZoogiPower::WolfPack: return TEXT("NS_Burst_White");
+	case EZoogiPower::Explosion: return TEXT("NS_Explosion");
+	case EZoogiPower::Ricochet: return TEXT("NS_Burst_Green");
+	case EZoogiPower::LockOn: return TEXT("NS_Burst_Red");
+	case EZoogiPower::StaticShock: return TEXT("NS_Burst_Yellow");
+	case EZoogiPower::BandageBind: return TEXT("NS_Burst_Gold");
+	case EZoogiPower::ShadowStun: return TEXT("NS_Burst_Purple");
+	}
+	return TEXT("NS_Burst_White");
+}
 
 AZoogiFX::AZoogiFX()
 {

@@ -244,6 +244,13 @@ void AZoogiBall::OnSphereHit(UPrimitiveComponent* HitComp, AActor* OtherActor, U
 		LastImpactFx = Now;
 		const float R = FMath::Clamp(45.f + NormalImpulse.Size() * 0.004f, 50.f, 150.f);
 		AZoogiFX::Spawn(GetWorld(), Hit.ImpactPoint, FLinearColor(0.85f, 0.95f, 1.f), R, 0.25f, false, 10.f);
+		const FVector N = FVector(Hit.ImpactNormal.X, Hit.ImpactNormal.Y, 0.f).GetSafeNormal();
+		if (!N.IsNearlyZero())
+		{
+			// Two spark sprays, one off each marble.
+			AZoogiFX::Niagara(GetWorld(), TEXT("NS_Sparks"), Hit.ImpactPoint, FRotationMatrix::MakeFromX(N).Rotator(), 1.f);
+			AZoogiFX::Niagara(GetWorld(), TEXT("NS_Sparks"), Hit.ImpactPoint, FRotationMatrix::MakeFromX(-N).Rotator(), 1.f);
+		}
 		ZoogiUtil::PlaySfx(this, TEXT("Clack"), FMath::Clamp(NormalImpulse.Size() / 15000.f, 0.25f, 1.f), FMath::FRandRange(0.9f, 1.15f) * (Cast<AZoogiOrb>(OtherActor) ? 1.25f : 1.f));
 	}
 	const int32 Credit = (PlayerIndex == Shooter) ? PlayerIndex : LastHitPlayer;

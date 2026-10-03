@@ -384,9 +384,14 @@ bool AZoogiGameMode::AllAtRest() const
 	return true;
 }
 
-static FVector EdgePoint(const FVector& L)
+static FVector EdgePoint(const FVector& L, const AZoogiArena* Arena)
 {
 	FVector2D P(L.X, L.Y);
+	if (Arena && Arena->IsNeon())
+	{
+		// Rectangular court: clamp onto the rails' inner box.
+		return FVector(FMath::Clamp(P.X, -1140.f, 1140.f), FMath::Clamp(P.Y, -740.f, 740.f), 120.f);
+	}
 	if (P.Size() < 1.f) P = FVector2D(1, 0);
 	P = P.GetSafeNormal() * (ZoogiConst::KnockoffRadius - 60.f);
 	return FVector(P.X, P.Y, 120.f);
@@ -402,7 +407,8 @@ void AZoogiGameMode::CheckKnockoffs()
 		{
 			const int32 Scorer = Balls.IsValidIndex(O->LastHitBy) ? O->LastHitBy : ActivePlayer;
 			O->SetOut();
-			AZoogiFX::Spawn(GetWorld(), EdgePoint(L), O->bStar ? FLinearColor(1.f, 0.75f, 0.2f) : FLinearColor(0.5f, 0.85f, 1.f), 160.f, 0.6f, false, 7.f);
+			AZoogiFX::Spawn(GetWorld(), EdgePoint(L, Arena), O->bStar ? FLinearColor(1.f, 0.75f, 0.2f) : FLinearColor(0.5f, 0.85f, 1.f), 160.f, 0.6f, false, 7.f);
+			AZoogiFX::Niagara(GetWorld(), O->bStar ? TEXT("NS_Burst_Gold") : TEXT("NS_Burst_Blue"), EdgePoint(L, Arena));
 			if (Balls.IsValidIndex(Scorer))
 			{
 				const int32 Pts = O->bStar ? 2 * ZoogiConst::ScoreOrb : ZoogiConst::ScoreOrb;
@@ -412,7 +418,7 @@ void AZoogiGameMode::CheckKnockoffs()
 				UE_LOG(LogZoogi, Log, TEXT("%s off the edge -> P%d +%d (score %d)"), O->bStar ? TEXT("Star orb") : TEXT("Orb"), Scorer + 1, Pts, Balls[Scorer]->Score);
 				ZoogiUtil::PlaySfx(this, TEXT("Score"), O->bStar ? 0.9f : 0.6f, O->bStar ? 1.25f : 1.f);
 				AddPopup(O->bStar ? FString::Printf(TEXT("+%d STAR  +1 POWER  P%d"), Pts, Scorer + 1) : FString::Printf(TEXT("+%d ORB  P%d"), Pts, Scorer + 1),
-					EdgePoint(L), O->bStar ? FLinearColor(1.f, 0.8f, 0.3f) : ZoogiUtil::PlayerColor(Scorer));
+					EdgePoint(L, Arena), O->bStar ? FLinearColor(1.f, 0.8f, 0.3f) : ZoogiUtil::PlayerColor(Scorer));
 			}
 		}
 	}
@@ -422,18 +428,19 @@ void AZoogiGameMode::CheckKnockoffs()
 		const FVector L = B->BallLocation();
 		if (L.Z < ZoogiConst::FallOutZ || FVector2D(L.X, L.Y).Size() > 8000.f)
 		{
-			AZoogiFX::Spawn(GetWorld(), EdgePoint(L), FLinearColor(1.f, 0.3f, 0.25f), 220.f, 0.7f, false, 7.f);
+			AZoogiFX::Spawn(GetWorld(), EdgePoint(L, Arena), FLinearColor(1.f, 0.3f, 0.25f), 220.f, 0.7f, false, 7.f);
+			AZoogiFX::Niagara(GetWorld(), TEXT("NS_Burst_Red"), EdgePoint(L, Arena), FRotator::ZeroRotator, 1.4f);
 			B->SetOut();
 			ZoogiUtil::PlaySfx(this, TEXT("Fall"), 0.7f);
 			B->Score = FMath::Max(0, B->Score - ZoogiConst::PenaltyFall);
 			UE_LOG(LogZoogi, Log, TEXT("P%d fell off (last hit by %s)"), B->PlayerIndex + 1, B->LastHitPlayer >= 0 ? *FString::Printf(TEXT("P%d"), B->LastHitPlayer + 1) : TEXT("nobody"));
-			AddPopup(FString::Printf(TEXT("-%d FELL OFF  P%d"), ZoogiConst::PenaltyFall, B->PlayerIndex + 1), EdgePoint(L), FLinearColor(1.f, 0.3f, 0.25f));
+			AddPopup(FString::Printf(TEXT("-%d FELL OFF  P%d"), ZoogiConst::PenaltyFall, B->PlayerIndex + 1), EdgePoint(L, Arena), FLinearColor(1.f, 0.3f, 0.25f));
 			if (Balls.IsValidIndex(B->LastHitPlayer) && B->LastHitPlayer != B->PlayerIndex)
 			{
 				AZoogiBall* A = Balls[B->LastHitPlayer];
 				A->Score += ZoogiConst::ScorePlayer;
 				A->KnockOuts++;
-				AddPopup(FString::Printf(TEXT("+%d KNOCKOUT  P%d"), ZoogiConst::ScorePlayer, A->PlayerIndex + 1), EdgePoint(L) + FVector(0, 0, 90.f), ZoogiUtil::PlayerColor(A->PlayerIndex));
+				AddPopup(FString::Printf(TEXT("+%d KNOCKOUT  P%d"), ZoogiConst::ScorePlayer, A->PlayerIndex + 1), EdgePoint(L, Arena) + FVector(0, 0, 90.f), ZoogiUtil::PlayerColor(A->PlayerIndex));
 			}
 		}
 	}
