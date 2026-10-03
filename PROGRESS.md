@@ -161,7 +161,18 @@ CPU players use powers too (about half the time they have a charge).
         player colour, with STUN / BOUND state) float over each Zoogi outside the Draw and Battle close-ups.
   - [x] KNOCKOUT! callout: big centre text in the attacker's colour with "ATTACKER > VICTIM", a shockwave ring at
         the edge and a camera kick.
-  - [ ] Balance sample 2 (running, 3 rounds, balanced picks) to check the fixes.
+  - [x] Balance sample 2 (5:38-6:10 PM, packaged, 20 four-CPU power-test matches, 3 rounds, 11-12 matches per Zoogi,
+        `bal2_*.log`): avg score / win rate (25% = even): Hotstreak 144 / 50%, Pinpoint 114 / 32%, Lars 100 / 33%,
+        Nightshade 100 / 27%, Bolt 71 / 23%, Wolfgang 64 / 5%, Wraps 10 / 4%. The Lars fix worked (9 -> 100 avg).
+        Power use across the sample: 9 explosions (avg 2.9 pushed), 17 shadow stuns, 11 wolf packs,
+        22 ricochets from 15 powered Lars shots, 4 binds from 16 powered Wraps shots, 6 Bolt stuns from 13; 39 knockouts vs 7 self-falls.
+  - [x] Balance pass 3: Hotstreak explosion radius 390 -> 360; Wraps' bind also yanks the victim 25% harder (the CPU's
+        knock-off maths accounts for it; menu text updated: "Curse enemies on contact: they take the hit 25% harder and
+        their next 2 shots are weak"); wolf clones 1650 -> 1750 cm/s (sample-2 Wolfgang slump is partly noise).
+        Sample 3 (`bal3_*.log`, same schedule) started 6:14 PM on the packaged build to check it.
+  - [x] Results screen: dimmed backdrop, place numbers, Zoogi portraits, WINNER badge, colour-coded rows.
+  - [x] Packaged exe rebuilt 6:12 PM (everything above, including balance pass 3). Smoke-tested: a full
+        packaged 4-CPU Night Circuit match ran to the results screen with cooked portraits (`shots/pkg5`).
 
 ## Command-line switches (for testing)
 `-ZoogiAuto` (all CPU, start at once), `-ZoogiPlayers=N`, `-ZoogiArena=0..6` (0 Meadow, 1 Frozen, 2 Volcanic, 3 Cosmic, 4 Arabian, 5 Tomb, 6 Night Circuit), `-ZoogiRounds=N`,
@@ -185,6 +196,7 @@ CPU players use powers too (about half the time they have a charge).
 * CPU players are simple (pick one of the 3 best orb/rival shots, aim error from Control stat).
 * Sound has not been listened to on the PC (all automated runs use -NoSound so nothing played while
   Evan was working). Music volume is 0.35; tune in `AZoogiGameMode::PlayMusic`.
-* Power balance: second pass from 7 four-CPU power-test matches (`FinalScores:` log line); still a small sample.
+* Power balance: tuned from two 20-match all-CPU samples (`FinalScores:` log line); CPU-only data, and 2-3 shots per
+  Zoogi per match make single matches noisy. Wraps is still the weakest; Hotstreak the strongest.
   Radii/speeds at the top of `ZoogiPowers.cpp`.
 * Island edge collision is the engine cylinder's convex hull (a many-sided polygon close to r=15.5).
