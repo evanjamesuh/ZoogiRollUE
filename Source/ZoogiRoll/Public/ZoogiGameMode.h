@@ -20,6 +20,34 @@ enum class EZoogiPhase : uint8
 	GameOver
 };
 
+/** Duel-style turn stages, each with its own camera profile (see ZoogiPlayerController.cpp, ZoogiCamTune). */
+UENUM(BlueprintType)
+enum class EZoogiStage : uint8
+{
+	Draw,     // hero shot introduction of the active Zoogi
+	Standby,  // calm overview; a click soft-locks a target
+	Main,     // tactical over-the-shoulder; lock / switch / Tab-cycle targets, Space commits
+	Battle,   // dramatic lock-on cinematic, short hold, then the shot fires
+	End       // follow the shot, then aerial resolution while everything settles
+};
+
+/** Stage timings (seconds). */
+namespace ZoogiStageTune
+{
+	constexpr float DrawHuman = 1.4f;
+	constexpr float DrawCPU = 1.0f;
+	constexpr float StandbyMin = 0.9f;      // human: earliest Standby -> Main after a soft lock
+	constexpr float StandbyMax = 2.6f;      // human: Standby -> Main even without a target
+	constexpr float SoftLockBeat = 0.45f;   // soft lock shows this long before Main swings in
+	constexpr float CPUStandby = 0.8f;
+	constexpr float CPULockAt = 0.25f;      // CPU locks this long into Main
+	constexpr float CPUMain = 1.1f;
+	constexpr float BattleSwing = 0.85f;    // cinematic lock-on swing
+	constexpr float BattleHold = 0.5f;
+	constexpr float CPUBattleHold = 0.3f;
+	constexpr float LockImpactSpeed = 650.f; // cm/s the shot still has when it reaches the target (plus 0.25 x distance)
+}
+
 USTRUCT(BlueprintType)
 struct FZoogiPlayerSetup
 {
@@ -95,6 +123,30 @@ public:
 	float AimFraction() const;
 	void RotateAim(float DeltaYaw);
 
+	// ---- targeting + turn stages (ZoogiTargeting.cpp)
+	UPROPERTY(BlueprintReadOnly) EZoogiStage Stage = EZoogiStage::Draw;
+	float StageTime = 0.f;
+	/** Locked target (rival Zoogi or orb). Soft = picked during Standby (ring only, camera stays wide). */
+	TWeakObjectPtr<AActor> TargetLock;
+	bool bSoftLock = false;
+	float LockTime = 0.f;
+	int32 LockSerial = 0;
+	void SetStage(EZoogiStage S);
+	static const TCHAR* StageName(EZoogiStage S);
+	bool IsValidTarget(const AActor* A) const;
+	/** Live targets for the active Zoogi, nearest first. */
+	TArray<AActor*> TargetCandidates() const;
+	void LockOn(AActor* Target, bool bSoft);
+	void ClearLock();
+	void CycleLock(bool bSoft);
+	/** Space / click on the locked target during Main: start the Battle stage. */
+	bool CommitLock();
+	/** Shot straight at the locked target: speed scales with distance (capped at full power). */
+	FVector2D LockShotVelocity(float& OutFraction, float& OutImpactSpeed) const;
+	FString TargetName(const AActor* A) const;
+	float StageDuration() const;
+	bool AllAtRestPublic() const { return AllAtRest(); }
+
 	// ---- powers (ZoogiPowers.cpp)
 	/** An armed power (Ricochet, Lock-On, Static Shock, Bandage Bind) fires with the next shot. */
 	UPROPERTY(BlueprintReadOnly) bool bPowerArmed = false;
@@ -145,6 +197,10 @@ protected:
 
 	// CPU
 	void PlanCPUShot();
+	void TickStages(float Dt);
+	void UpdateLockAim();
+	void FireLockedShot();
+	TWeakObjectPtr<AActor> CPULock;
 	bool bCPUPlanned = false;
 	FVector CPUTargetPull = FVector::ZeroVector;
 	float CPUStartDelay = 1.7f;

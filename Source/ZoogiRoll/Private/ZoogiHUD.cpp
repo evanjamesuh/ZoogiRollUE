@@ -5,6 +5,7 @@
 #include "ZoogiTypes.h"
 #include "ZoogiArena.h"
 #include "ZoogiMenuWidget.h"
+#include "ZoogiOrb.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Engine/Canvas.h"
@@ -162,7 +163,7 @@ void AZoogiHUD::DrawMenu(AZoogiGameMode* G)
 	}
 
 	Button(TEXT("START MATCH"), W * 0.5f - 200.f * U, 890.f * U, 400.f * U, 80.f * U, "Start", 0, FLinearColor(1.f, 0.75f, 0.2f), true);
-	Text(TEXT("LMB: pull back and release to shoot   SPACE/E: Zoogi power   A/D or RMB-drag: turn   Esc: menu"), W * 0.5f, 1000.f * U, FLinearColor(0.8f, 0.85f, 0.95f), 0.45f, true, false);
+	Text(TEXT("LMB: target   Tab: cycle   SPACE: fire   E/Q: Zoogi power   Esc: clear / menu"), W * 0.5f, 1000.f * U, FLinearColor(0.8f, 0.85f, 0.95f), 0.45f, true, false);
 	Button(TEXT("QUIT"), W - 160.f * U, 30.f * U, 130.f * U, 50.f * U, "Quit", 0, FLinearColor(0.9f, 0.3f, 0.3f));
 }
 
@@ -210,10 +211,15 @@ void AZoogiHUD::DrawMatch(AZoogiGameMode* G)
 			if (A > 0.f)
 			{
 				const FString T = FString::Printf(TEXT("%s'S TURN"), *G->Banner.ToUpper());
-				Text(T, W * 0.5f, 90.f * U, FLinearColor(PC.R, PC.G, PC.B, A), 1.1f, true);
+				Text(T, W * 0.5f, 122.f * U, FLinearColor(PC.R, PC.G, PC.B, A), 1.1f, true);
 			}
-			const FString Status = G->Phase == EZoogiPhase::Rolling ? TEXT("rolling...") :
-				(B->bCPU ? TEXT("CPU is aiming") : TEXT("Drag back and release to shoot"));
+			FString Status;
+			if (G->Phase == EZoogiPhase::Rolling) Status = TEXT("rolling...");
+			else if (B->bCPU) Status = G->TargetLock.IsValid() ? FString::Printf(TEXT("CPU is targeting %s"), *G->TargetName(G->TargetLock.Get())) : TEXT("CPU is choosing a target");
+			else if (G->Stage == EZoogiStage::Draw) Status = TEXT("Get ready...");
+			else if (G->Stage == EZoogiStage::Battle) Status = TEXT("LOCKED - firing!");
+			else if (G->TargetLock.IsValid() && !G->bSoftLock) Status = TEXT("SPACE or click the target again to fire   -   Tab: next target   -   RMB / Esc: clear");
+			else Status = TEXT("Click an enemy or orb to target - Space to fire   (E / Q: power)");
 			Text(Status, W * 0.5f, H - 70.f * U, FLinearColor(0.85f, 0.9f, 1.f), 0.5f, true, false);
 		}
 	}
@@ -222,7 +228,8 @@ void AZoogiHUD::DrawMatch(AZoogiGameMode* G)
 	DrawPower(G);
 	DrawPopups(G);
 
-	Text(TEXT("LMB drag: shoot   SPACE/E: power   A/D, RMB drag: turn   Esc: menu   Ctrl+R: restart"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.75f, 0.85f, 0.85f), 0.38f, false, false);
+	DrawStages(G);
+	Text(TEXT("LMB: target   Tab: cycle targets   SPACE: fire   E / Q: power   RMB / Esc: clear target (Esc again: menu)   Ctrl+R: restart"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.75f, 0.85f, 0.85f), 0.38f, false, false);
 	Button(TEXT("MENU"), W - 150.f * U, 24.f * U, 126.f * U, 46.f * U, "Menu", 0, GOrbBlue);
 }
 
@@ -236,14 +243,18 @@ void AZoogiHUD::DrawAim(AZoogiGameMode* G)
 	const FLinearColor PC = ZoogiUtil::PlayerColor(B->PlayerIndex);
 	const FVector Start = B->BallLocation() - FVector(0, 0, ZoogiConst::ZoogiRadius - 4.f);
 
-	// Rubber band from the marble back to the pull point.
+	// Aim line from the shooter to the locked target.
+	if (AActor* TL = (G->TargetLock.IsValid() && !G->bSoftLock) ? G->TargetLock.Get() : nullptr)
 	{
-		const FVector BandEnd = Start - G->AimPull;
-		const FVector S0 = Project(Start, true), S1 = Project(BandEnd, true);
+		const FVector TP = Cast<AZoogiOrb>(TL) ? Cast<AZoogiOrb>(TL)->OrbLocation() : (Cast<AZoogiBall>(TL) ? Cast<AZoogiBall>(TL)->BallLocation() : TL->GetActorLocation());
+		const FVector S0 = Project(B->BallLocation(), true), S1 = Project(TP, true);
 		if (S0.Z > 0.f && S1.Z > 0.f)
 		{
-			DrawLine(S0.X, S0.Y, S1.X, S1.Y, FLinearColor(1.f, 1.f, 1.f, 0.55f), 3.f * U);
-			DrawRect(FLinearColor(1, 1, 1, 0.8f), S1.X - 6.f * U, S1.Y - 6.f * U, 12.f * U, 12.f * U);
+			const bool bBattle = G->Stage == EZoogiStage::Battle;
+			const float Pulse = 0.65f + 0.35f * FMath::Sin(Time * (bBattle ? 18.f : 8.f));
+			const FLinearColor LC = bBattle ? FLinearColor(1.f, 0.35f, 0.2f, 0.9f * Pulse) : FLinearColor(PC.R, PC.G, PC.B, 0.8f * Pulse);
+			DrawLine(S0.X, S0.Y, S1.X, S1.Y, FLinearColor(0.f, 0.f, 0.f, 0.35f), 7.f * U);
+			DrawLine(S0.X, S0.Y, S1.X, S1.Y, LC, 3.5f * U);
 		}
 	}
 
@@ -297,8 +308,8 @@ void AZoogiHUD::DrawAim(AZoogiGameMode* G)
 	Panel(BX, BY, BW, BH, FLinearColor(0.1f, 0.12f, 0.2f, 0.9f));
 	Panel(BX, BY, BW * Frac, BH, Fill);
 	Panel(BX + BW * ZoogiConst::SlingshotPull, BY - 4.f * U, 3.f * U, BH + 8.f * U, FLinearColor::White);
-	const FString Label = Frac > ZoogiConst::SlingshotPull ? FString::Printf(TEXT("SLINGSHOT!  %d%%   %.0f u/s"), FMath::RoundToInt(Frac * 100.f), Speed / 100.f)
-		: FString::Printf(TEXT("POWER %d%%   %.0f u/s"), FMath::RoundToInt(Frac * 100.f), Speed / 100.f);
+	const FString Label = Frac > ZoogiConst::SlingshotPull ? FString::Printf(TEXT("SHOT POWER %d%% (MAX)   %.0f u/s"), FMath::RoundToInt(Frac * 100.f), Speed / 100.f)
+		: FString::Printf(TEXT("SHOT POWER %d%%   %.0f u/s"), FMath::RoundToInt(Frac * 100.f), Speed / 100.f);
 	Text(Label, W * 0.5f, BY - 30.f * U, FLinearColor::White, 0.45f, true);
 }
 
@@ -322,7 +333,7 @@ void AZoogiHUD::DrawPower(AZoogiGameMode* G)
 	if (bArmed) Hint = TEXT("ARMED - fires with your shot");
 	else if (G->bPowerUsed) Hint = TEXT("used this turn");
 	else if (B->Charges <= 0) Hint = TEXT("no charges - knock off a gold star orb");
-	else if (bCan) Hint = B->bCPU ? TEXT("CPU may use it") : TEXT("press SPACE / E or click");
+	else if (bCan) Hint = B->bCPU ? TEXT("CPU may use it") : TEXT("press E / Q or click");
 	else Hint = ZoogiUtil::IsArmedPower(B->Def.PowerKind) ? TEXT("arm it while aiming") : TEXT("use it while rolling");
 	Text(Hint, X + 24.f * U, Y + 50.f * U, FLinearColor(0.8f, 0.85f, 0.95f), 0.4f, false, false);
 	if (!B->bCPU && bCan)
@@ -372,4 +383,70 @@ void AZoogiHUD::DrawResults(AZoogiGameMode* G)
 	Y += 20.f * U;
 	Button(TEXT("REMATCH"), W * 0.5f - 300.f * U, Y, 280.f * U, 70.f * U, "Rematch", 0, FLinearColor(1.f, 0.75f, 0.2f), true);
 	Button(TEXT("MENU"), W * 0.5f + 20.f * U, Y, 280.f * U, 70.f * U, "Menu", 0, GOrbBlue);
+}
+
+void AZoogiHUD::DrawStages(AZoogiGameMode* G)
+{
+	if (G->Phase != EZoogiPhase::Aiming && G->Phase != EZoogiPhase::Rolling) return;
+	const float W = Canvas->ClipX, H = Canvas->ClipY;
+	AZoogiBall* B = G->GetActiveBall();
+	const FLinearColor PC = B ? ZoogiUtil::PlayerColor(B->PlayerIndex) : GOrbBlue;
+
+	// Phase tracker: DRAW > STANDBY > MAIN > BATTLE > END.
+	const int32 N = 5;
+	const float BW = 128.f * U, BH = 30.f * U, Gap = 8.f * U;
+	const float X0 = W * 0.5f - (N * BW + (N - 1) * Gap) * 0.5f, Y = 74.f * U;
+	const int32 Cur = (int32)G->Stage;
+	for (int32 i = 0; i < N; ++i)
+	{
+		const float X = X0 + i * (BW + Gap);
+		const bool bNow = i == Cur, bDone = i < Cur;
+		const FLinearColor Bg = bNow ? FLinearColor(PC.R * 0.75f, PC.G * 0.75f, PC.B * 0.75f, 0.92f) : FLinearColor(0.03f, 0.04f, 0.1f, bDone ? 0.75f : 0.55f);
+		Panel(X, Y, BW, BH, Bg);
+		if (bNow) Panel(X, Y + BH - 3.f * U, BW, 3.f * U, FLinearColor::White);
+		const FString L = AZoogiGameMode::StageName((EZoogiStage)i);
+		Text(L, X + BW * 0.5f, Y + 4.f * U, bNow ? FLinearColor::White : FLinearColor(0.6f, 0.66f, 0.8f, bDone ? 0.9f : 0.6f), 0.34f, true, false);
+	}
+
+	// Big phase banner on every stage change.
+	const float A = FMath::Clamp(1.f - (G->StageTime - 0.55f) / 0.45f, 0.f, 1.f) * FMath::Clamp(G->StageTime / 0.12f, 0.f, 1.f);
+	if (A > 0.f && G->Phase != EZoogiPhase::GameOver)
+	{
+		static const TCHAR* Subs[] = { TEXT("hero introduction"), TEXT("pick a target"), TEXT("lock on and plan"), TEXT("lock-on - fire!"), TEXT("resolution") };
+		const float Pop = 1.f + 0.25f * FMath::Clamp(1.f - G->StageTime / 0.15f, 0.f, 1.f);
+		const FString T = FString::Printf(TEXT("%s PHASE"), AZoogiGameMode::StageName(G->Stage));
+		Text(T, W * 0.5f, H * 0.24f, FLinearColor(1.f, 0.95f, 0.85f, A), 1.5f * Pop, true);
+		Text(Subs[FMath::Clamp(Cur, 0, 4)], W * 0.5f, H * 0.24f + 92.f * U, FLinearColor(0.85f, 0.9f, 1.f, A * 0.9f), 0.5f, true, false);
+	}
+
+	// Target panel (locked target): name, distance, estimated hit power.
+	AActor* T = G->TargetLock.Get();
+	if (T && B && G->Phase == EZoogiPhase::Aiming)
+	{
+		const FVector TP = Cast<AZoogiOrb>(T) ? Cast<AZoogiOrb>(T)->OrbLocation() : (Cast<AZoogiBall>(T) ? Cast<AZoogiBall>(T)->BallLocation() : T->GetActorLocation());
+		const float Dist = FVector::Dist2D(TP, B->BallLocation());
+		float Frac = 0.f, Impact = 0.f;
+		G->LockShotVelocity(Frac, Impact);
+		const float PW = 470.f * U, PH = 104.f * U;
+		const float PX = W - PW - 24.f * U, PY = 90.f * U;
+		const bool bBattle = G->Stage == EZoogiStage::Battle;
+		const FLinearColor Acc = bBattle ? FLinearColor(1.f, 0.35f, 0.2f) : (G->bSoftLock ? FLinearColor(0.7f, 0.8f, 0.95f) : PC);
+		Panel(PX, PY, PW, PH, GPanel);
+		Panel(PX, PY, 8.f * U, PH, Acc);
+		Text(G->bSoftLock ? TEXT("TARGET (soft)") : (bBattle ? TEXT("LOCKED - FIRING") : TEXT("TARGET LOCKED")), PX + 24.f * U, PY + 8.f * U, Acc, 0.36f, false, false);
+		Text(G->TargetName(T), PX + 24.f * U, PY + 30.f * U, FLinearColor::White, 0.62f);
+		Text(FString::Printf(TEXT("%.1f m    shot %d%%    hit %.1f m/s"), Dist / 100.f, FMath::RoundToInt(Frac * 100.f), Impact / 100.f), PX + 24.f * U, PY + 72.f * U, FLinearColor(0.85f, 0.9f, 1.f), 0.4f, false, false);
+	}
+	// Hover tooltip.
+	if (const AZoogiPlayerController* ZPC = Cast<AZoogiPlayerController>(PlayerOwner))
+	{
+		if (AActor* Hv = ZPC->GetHoverTarget())
+		{
+			if (Hv != T)
+			{
+				const FVector2D M = ZPC->GetCursor();
+				Text(G->TargetName(Hv), M.X + 22.f * U, M.Y - 34.f * U, FLinearColor(0.9f, 0.97f, 1.f), 0.42f, false, false);
+			}
+		}
+	}
 }

@@ -15,16 +15,27 @@ The web game at `C:\dev\ZoogiRollUE` is read-only reference and is never modifie
 4. Or play the packaged build (no editor needed): `C:\dev\ZoogiRollUnreal\Packaged\Windows\ZoogiRoll.exe`
    (rebuild it with `powershell -File C:\dev\ZoogiRollUnreal\Scripts\package.ps1`, ~2-4 min).
 
-### Controls
+### Controls (lock-on targeting, since 4:20 PM Oct 3 — the drag-back slingshot was removed)
 * Menu (UMG, `ZoogiMenuWidget.cpp`): pick 2-4 players, each player's Zoogi (< >) on its card (power,
   stat bars, mass), HUMAN/CPU, rounds and one of 7 arenas, then START MATCH. (`-ZoogiCanvasMenu` = old canvas menu.)
-* Your turn: **press the left mouse button anywhere, pull back (toward the camera), release** — the
-  Zoogi shoots the opposite way. The dotted line is the predicted roll (red past the edge), the bar is
-  power; past the white tick (80%) the shot ramps into a full slingshot.
-* **A / D**, arrow keys, or **right-mouse drag** turn the aim heading before you pull.
-  Right-click during a pull cancels it.
-* **SPACE / E / Q** (or the POWER button, bottom right): use your Zoogi's power (see below).
-* **Esc**: cancel pull / back to menu. **Ctrl+R**: restart the match.
+* Every turn runs through five stages, shown in the phase tracker at the top with a banner on each change:
+  **DRAW** (hero shot of the active Zoogi) -> **STANDBY** (calm overview; click a target = soft lock) ->
+  **MAIN** (tactical over-the-shoulder; lock / switch targets) -> **BATTLE** (cinematic lock-on, ~0.5 s hold,
+  then the shot fires) -> **END** (follow cam, then a near top-down aerial while everything settles).
+* **Left-click an enemy Zoogi or an orb** to lock on (hover shows a soft ring + name). Locked target gets a
+  glowing ground ring, rotating reticle brackets, a highlight shell and a bobbing marker; the aim line,
+  predicted roll and shot power show, and the target panel (top right) gives name, distance, shot % and hit speed.
+* **Tab** cycles targets (nearest first). **Click another target** to switch. **RMB or Esc** clears the lock
+  (Esc with no lock = back to menu).
+* **SPACE** (or clicking the locked target again) fires: the shot goes straight at the target, power scales with
+  distance (closer = softer, farther = harder, capped at the old max power).
+* **E / Q** (or the POWER button, bottom right): use your Zoogi's power (SPACE now fires).
+* **Ctrl+R**: restart the match. A/D turning was dropped (no free camera while targeting).
+* Camera profiles per stage are one table, `ZoogiCamTune` at the top of `ZoogiPlayerController.cpp`
+  (pitch, boom, FOV, Dutch tilt, lag, yaw spring, vignette, DOF, grade) plus Battle extras (arc swing with
+  dip + overshoot, FOV punch-in, shake, 0.6x slow-mo dip while everything is at rest, punch-out on fire).
+  Stage timings: `ZoogiStageTune` in `ZoogiGameMode.h`. A sphere probe on the camera channel keeps the camera
+  out of walls and props (decorative props block only the camera channel).
 
 ### Zoogi powers
 Every Zoogi starts with 1 power charge (max 3). The three **gold star orbs** are worth 100 and give
@@ -92,7 +103,11 @@ CPU players use powers too (about half the time they have a charge).
   - [x] Proper UMG main menu built in C++ (`UZoogiMenuWidget`, no Blueprint asset): title, players/rounds,
     one card per player with Zoogi, power description and stat bars, arena grid, START / QUIT.
   - [x] Fixed: in-match MENU / REMATCH / POWER buttons were swallowed by a misplaced `else` in `MenuAction`.
-  - [ ] Niagara VFX for powers and hits (currently `AZoogiFX` mesh effects), polish.
+  - [x] Niagara VFX: engine templates duplicated into `/Game/FX`, rescaled and recoloured by
+    `Scripts/make_niagara.py` via `UZoogiFXLibrary` (sparks on hits, coloured bursts for knock-offs and powers,
+    explosion for Hotstreak), layered on the `AZoogiFX` glows.
+  - [x] RPG lock-on targeting + per-stage duel cameras (replaces drag-to-shoot), CPU uses the same flow.
+  - [ ] More polish.
 
 ## Command-line switches (for testing)
 `-ZoogiAuto` (all CPU, start at once), `-ZoogiPlayers=N`, `-ZoogiArena=0..6` (0 Meadow, 1 Frozen, 2 Volcanic, 3 Cosmic, 4 Arabian, 5 Tomb, 6 Night Circuit), `-ZoogiRounds=N`,

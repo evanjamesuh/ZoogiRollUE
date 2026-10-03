@@ -233,7 +233,23 @@ void AZoogiArena::Build(EZoogiArena InTheme)
 	default: BuildMeadow(); break;
 	}
 	BuildPads();
-	UE_LOG(LogZoogi, Log, TEXT("Built arena %s with %d components"), *ZoogiUtil::ArenaName(InTheme), Built.Num());
+	// Camera collision: decorative props near the court (trees, torches, pots, domes...) block only the
+	// camera probe channel so the action camera never clips through them. Physics is unaffected.
+	int32 CamBlockers = 0;
+	for (UActorComponent* C : Built)
+	{
+		UStaticMeshComponent* M = Cast<UStaticMeshComponent>(C);
+		if (!M || Cast<UInstancedStaticMeshComponent>(M) || M->GetCollisionEnabled() != ECollisionEnabled::NoCollision) continue;
+		const FBoxSphereBounds Bd = M->Bounds;
+		const FVector O = Bd.Origin;
+		if (Bd.SphereRadius > 900.f || Bd.SphereRadius < 25.f || FVector2D(O.X, O.Y).Size() > 4000.f || O.Z > 2000.f || O.Z < -1500.f) continue;
+		if (FVector2D(O.X, O.Y).Size() < 400.f && Bd.SphereRadius > 300.f) continue; // centre-court pieces
+		M->SetCollisionResponseToAllChannels(ECR_Ignore);
+		M->SetCollisionResponseToChannel(ECC_Camera, ECR_Block);
+		M->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		++CamBlockers;
+	}
+	UE_LOG(LogZoogi, Log, TEXT("Built arena %s with %d components (%d camera blockers)"), *ZoogiUtil::ArenaName(InTheme), Built.Num(), CamBlockers);
 }
 
 void AZoogiArena::SetupSky(EZoogiArena InTheme)

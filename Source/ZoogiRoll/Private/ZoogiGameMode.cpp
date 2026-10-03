@@ -130,6 +130,8 @@ void AZoogiGameMode::MenuAction(FName Action, int32 Index)
 void AZoogiGameMode::ClearMatch()
 {
 	EndPowers();
+	TargetLock.Reset();
+	bSoftLock = false;
 	for (AZoogiBall* B : Balls) if (B) B->Destroy();
 	for (AZoogiOrb* O : Orbs) if (O) O->Destroy();
 	Balls.Reset();
@@ -251,6 +253,8 @@ void AZoogiGameMode::BeginTurn(int32 PlayerIdx)
 		Ball->AimYaw = FRotator(FVector(-L.X, -L.Y, 0.f).Rotation()).Yaw;
 	}
 	if (Ball->bCPU) PlanCPUShot();
+	ClearLock();
+	SetStage(EZoogiStage::Draw);
 
 	Banner = FString::Printf(TEXT("P%d  %s%s"), PlayerIdx + 1, *Ball->Def.Name, Ball->bCPU ? TEXT("  (CPU)") : TEXT(""));
 	ZoogiUtil::PlaySfx(this, TEXT("Turn"), 0.45f);
@@ -500,6 +504,7 @@ bool AZoogiGameMode::ReleaseAim()
 		AddPopup(TEXT("BOUND - WEAK SHOT"), Ball->BallLocation() + FVector(0, 0, 120.f), FLinearColor(0.9f, 0.78f, 0.55f));
 	}
 	FireShot(V);
+	SetStage(EZoogiStage::End);
 	return true;
 }
 
@@ -540,14 +545,14 @@ void AZoogiGameMode::PlanCPUShot()
 	const FVector2D B(Me->BallLocation());
 	const float Decel = Arena->GetRollingDecel();
 
-	struct FCand { FVector2D P; float Value; float TargetMass; float Radius; };
+	struct FCand { FVector2D P; float Value; float TargetMass; float Radius; AActor* Actor; };
 	TArray<FCand> Cands;
-	for (AZoogiOrb* O : Orbs) if (O && !O->bOut) Cands.Add({ FVector2D(O->OrbLocation()), 50.f, ZoogiConst::OrbMassRatio, ZoogiConst::OrbRadius });
+	for (AZoogiOrb* O : Orbs) if (O && !O->bOut) Cands.Add({ FVector2D(O->OrbLocation()), 50.f, ZoogiConst::OrbMassRatio, ZoogiConst::OrbRadius, O });
 	// Decide on the power first: rival-hunting powers make rivals more attractive targets.
 	bCPUUsePower = Me->Charges > 0 && (bPowerTest || FMath::FRand() < 0.55f);
 	const EZoogiPower MyPower = Me->Def.PowerKind;
 	const bool bHuntRivals = bCPUUsePower && (MyPower == EZoogiPower::ShadowStun || MyPower == EZoogiPower::StaticShock || MyPower == EZoogiPower::BandageBind);
-	for (AZoogiBall* Other : Balls) if (Other && Other != Me && !Other->bOut) Cands.Add({ FVector2D(Other->BallLocation()), bHuntRivals ? 140.f : 40.f, Other->Def.MassRatio(), ZoogiConst::ZoogiRadius });
+	for (AZoogiBall* Other : Balls) if (Other && Other != Me && !Other->bOut) Cands.Add({ FVector2D(Other->BallLocation()), bHuntRivals ? 140.f : 40.f, Other->Def.MassRatio(), ZoogiConst::ZoogiRadius, Other });
 
 	auto Blocked = [&](const FVector2D& From, const FVector2D& To, const FVector2D& Ignore)
 	{
@@ -567,7 +572,7 @@ void AZoogiGameMode::PlanCPUShot()
 		return false;
 	};
 
-	struct FPlan { float Cost; FVector2D Dir; float Frac; };
+	struct FPlan { float Cost; FVector2D Dir; float Frac; AActor* Actor; };
 	TArray<FPlan> Plans;
 	FVector2D BestDir(-B.GetSafeNormal());
 	float BestFrac = 0.45f;
@@ -593,7 +598,7 @@ void AZoogiGameMode::PlanCPUShot()
 			const float V0 = FMath::Sqrt(VIn * VIn + 2.f * Decel * Gap);
 			BestFrac = FMath::Clamp(InvertLaunch(V0), 0.3f, 0.97f);
 		}
-		Plans.Add({ BestCost, BestDir, BestFrac });
+		Plans.Add({ BestCost, BestDir, BestFrac, C.Actor });
 	}
 	// Pick one of the three cheapest shots so CPU players vary their targets.
 	Plans.Sort([](const FPlan& A, const FPlan& Bp) { return A.Cost < Bp.Cost; });
@@ -602,6 +607,7 @@ void AZoogiGameMode::PlanCPUShot()
 		const FPlan& Pick = Plans[FMath::RandRange(0, FMath::Min(2, Plans.Num() - 1))];
 		BestDir = Pick.Dir;
 		BestFrac = Pick.Frac;
+		CPULock = Pick.Actor;
 	}
 	// Imperfect aim: less control = more error (ZoogiStats.control).
 	const float ErrDeg = FMath::FRandRange(-1.f, 1.f) * (100.f - Me->Def.Control) / 12.f;
@@ -675,32 +681,20 @@ void AZoogiGameMode::Tick(float DeltaSeconds)
 	case EZoogiPhase::Aiming:
 	{
 		AZoogiBall* Ball = GetActiveBall();
-		if (Ball && !Ball->bCPU && bAimActive && AimFraction() > 0.6f) TakeShot(FString::Printf(TEXT("human_drag_round%d"), RoundNumber));
-		if (Ball && Ball->bCPU && bCPUPlanned)
-		{
-			CPUPowerTick();
-			if (PhaseTime > 1.55f && ShotsFired < 3) TakeShot(FString::Printf(TEXT("aimpose_shot%d"), ShotsFired + 1));
-			// CPU: let the camera swoop in, draw the slingshot back over ~1.1 s, release.
-			const float DrawTime = 1.1f;
-			const float T = (PhaseTime - CPUStartDelay) / DrawTime;
-			if (T > 0.f)
-			{
-				const float E = FMath::InterpEaseOut(0.f, 1.f, FMath::Min(T, 1.f), 2.f);
-				SetAim(true, CPUTargetPull * E);
-				if (T > 0.85f && ShotsFired < 6) TakeShot(FString::Printf(TEXT("aim_shot%d"), ShotsFired + 1));
-				if (T >= 1.15f) ReleaseAim();
-			}
-		}
+		if (Ball && Ball->bCPU && bCPUPlanned) CPUPowerTick();
+		TickStages(Dt);
 		break;
 	}
 	case EZoogiPhase::Rolling:
 	{
+		StageTime += Dt;
 		TickPowers(Dt);
 		CPUPowerTick();
 		CheckKnockoffs();
 		if (ShotClock >= 0.f)
 		{
 			ShotClock += Dt;
+			if (ShotsFired <= 4 && StageTime > 2.8f) TakeShot(FString::Printf(TEXT("s%d_6_end_aerial"), ShotsFired));
 			if (ShotsFired <= 6 && ShotClock > 0.9f) TakeShot(FString::Printf(TEXT("follow_shot%d"), ShotsFired));
 			if (ShotsFired <= 3 && ShotClock > 3.2f) TakeShot(FString::Printf(TEXT("follow_late_shot%d"), ShotsFired));
 		}

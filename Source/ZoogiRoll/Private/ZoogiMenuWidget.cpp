@@ -295,7 +295,7 @@ void UZoogiMenuWidget::BuildContents()
 	// Start.
 	UButton* Start = MakeButton(nullptr, TEXT("START MATCH"), "Start", 0, GGold, true, 420.f, 78.f, 34);
 	if (UVerticalBoxSlot* VS = Main->AddChildToVerticalBox(Start->GetParent())) { VS->SetHorizontalAlignment(HAlign_Center); VS->SetPadding(FMargin(0.f, 0.f, 0.f, 12.f)); }
-	UTextBlock* Hint = MakeText(nullptr, TEXT("LMB: pull back and release to shoot     SPACE / E: Zoogi power     A / D or RMB-drag: turn     Esc: menu"), 16, GInk, false);
+	UTextBlock* Hint = MakeText(nullptr, TEXT("Click an enemy or orb to lock on  -  Tab: cycle targets  -  SPACE: fire  -  E / Q: Zoogi power  -  RMB / Esc: clear lock"), 16, GInk, false);
 	if (UVerticalBoxSlot* VS = Main->AddChildToVerticalBox(Hint)) VS->SetHorizontalAlignment(HAlign_Center);
 
 	// Quit, top right.
