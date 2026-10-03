@@ -12,6 +12,8 @@ The web game at `C:\dev\ZoogiRollUE` is read-only reference and is never modifie
    "New Editor Window (PIE)" both work.
 3. Or run it standalone without the editor UI:
    `"C:\Program Files\Epic Games\UE_5.6\Engine\Binaries\Win64\UnrealEditor.exe" C:\dev\ZoogiRollUnreal\ZoogiRoll.uproject -game -windowed -ResX=1600 -ResY=900`
+4. Or play the packaged build (no editor needed): `C:\dev\ZoogiRollUnreal\Packaged\Windows\ZoogiRoll.exe`
+   (rebuild it with `powershell -File C:\dev\ZoogiRollUnreal\Scripts\package.ps1`, ~2-4 min).
 
 ### Controls
 * Menu: pick 2-4 players, each player's Zoogi (< >), HUMAN/CPU, rounds and arena, then START MATCH.
@@ -20,7 +22,22 @@ The web game at `C:\dev\ZoogiRollUE` is read-only reference and is never modifie
   power; past the white tick (80%) the shot ramps into a full slingshot.
 * **A / D**, arrow keys, or **right-mouse drag** turn the aim heading before you pull.
   Right-click during a pull cancels it.
+* **SPACE / E / Q** (or the POWER button, bottom right): use your Zoogi's power (see below).
 * **Esc**: cancel pull / back to menu. **Ctrl+R**: restart the match.
+
+### Zoogi powers
+Every Zoogi starts with 1 power charge (max 3). The three **gold star orbs** are worth 100 and give
+the scorer +1 charge. One power per turn. Charges show as `***` in the scoreboard and power panel.
+| Zoogi | Power | How it works |
+|---|---|---|
+| Wolfgang | Wolf Pack | While rolling: 3 ghost wolves spawn and chase the nearest orbs/rivals for ~3 s (credit goes to you). |
+| Hotstreak | Instant Explosion | While aiming or rolling: blast (r 4.5 u) pushes every orb and rival away from you. |
+| Lars | Ricochet | Arm while aiming: after each of your next 2 hits you bounce toward the nearest target. |
+| Pinpoint | Laser Trajectory | Arm while aiming: your shot snaps onto the orb/rival nearest your aim (within 35 deg); laser + LOCKED reticle. |
+| Bolt | Static Shock | Arm while aiming: this shot phases through rivals and stuns them (they skip their next turn). |
+| Wraps | Bandage Bind | Arm while aiming: rivals you touch are slowed and their next shot is 35% weaker. |
+| Nightshade | Shadow Stun | While aiming or rolling: shadow pulse (r 5.2 u) freezes nearby rivals and they skip their next turn. |
+CPU players use powers too (about half the time they have a charge).
 
 ### Rules (ported from useZoogiGame.tsx / simFeel.ts / arenaConstants.ts)
 * Hotseat turns, 2-4 local players (any mix of human and CPU). A turn passes when every marble and
@@ -57,18 +74,30 @@ The web game at `C:\dev\ZoogiRollUE` is read-only reference and is never modifie
   and saves screenshots on gameplay events. `-ZoogiHumanTest` drives P1 with a scripted virtual
   mouse through the same drag code (verified: 679 cm ground pull -> 90% shot). Screenshots are
   mirrored to the box at `/workspace/zoogi-unreal/shots/`.
-- [ ] **5. More** — arenas (Frozen Ring / Volcanic Pit / Cosmic Platform are selectable, built in
-  code, first pass), Zoogi powers, polish.
+- [x] **4b. Packaged build** — `Scripts/package.ps1` (BuildCookRun, Development, ~2 min) ->
+  `Packaged\Windows\ZoogiRoll.exe` (~0.9 GB). Verified with a 4-CPU auto match (screenshots `shots/pkg1`).
+- [~] **5. More** (in progress)
+  - [x] All 7 Zoogi powers + gold star orbs/charges + CPU power use + HUD power panel (`ZoogiPowers.cpp`).
+  - [x] Additive FX material `M_ZoogiFX` (`Scripts/make_fx.py`) for shockwaves, rings, sparks, clones.
+  - [x] Impact sparks on hard hits, knock-off bursts.
+  - [x] Frozen Ring, Volcanic Pit, Cosmic Platform verified in-game (selectable in the menu).
+  - [x] Audio: Evan's menu/match music from the web game + original synthesized SFX
+    (launch, clack, score, fall, explosion, zap, arm, turn, win) in `/Game/Audio` (`Scripts/import_audio.py`).
+  - [ ] Arabian Nights / Night Circuit / Pharaoh's Tomb arenas, more polish (Niagara, UMG menu).
 
 ## Command-line switches (for testing)
 `-ZoogiAuto` (all CPU, start at once), `-ZoogiPlayers=N`, `-ZoogiArena=0..3`, `-ZoogiRounds=N`,
-`-ZoogiShots=<dir>` (event screenshots), `-ZoogiQuit=<sec>`, `-ZoogiMenuShot`, `-ZoogiHumanTest`.
+`-ZoogiShots=<dir>` (event screenshots), `-ZoogiQuit=<sec>`, `-ZoogiMenuShot`, `-ZoogiHumanTest`,
+`-ZoogiPowerTest` (3 charges each, CPUs always use powers), `-ZoogiPicks=4,5,6,0` (roster index per slot:
+0 Wolfgang, 1 Hotstreak, 2 Lars, 3 Pinpoint, 4 Bolt, 5 Wraps, 6 Nightshade).
 
 ## Scripts
 * `Scripts/build.ps1` — compile the editor target (log: `Saved/Logs/build.log`).
 * `Scripts/run_python.ps1 -Script Scripts\setup_content.py` — headless import/material setup.
 * `Scripts/run_demo.ps1` — scripted demo run + screenshots.
 * `Scripts/glb_unwebp.py` — strip EXT_texture_webp from a GLB (run with Python + Pillow).
+* `Scripts/make_fx.py`, `Scripts/import_audio.py` — FX material / audio import (headless).
+* `Scripts/package.ps1` — packaged Win64 build into `Packaged/`.
 
 ## Known issues / notes
 * Real-mouse play has not been exercised by a person yet (the scripted virtual mouse uses the
@@ -76,5 +105,7 @@ The web game at `C:\dev\ZoogiRollUE` is read-only reference and is never modifie
 * The PC had ~300 MB free RAM during builds (another UE editor with 5.5 GB was open), so UBT
   falls back to 1 compile action; builds still take ~1 min.
 * CPU players are simple (pick one of the 3 best orb/rival shots, aim error from Control stat).
-* No sound yet. No Zoogi powers yet (abilities are shown in the menu only).
+* Sound has not been listened to on the PC (all automated runs use -NoSound so nothing played while
+  Evan was working). Music volume is 0.35; tune in `AZoogiGameMode::PlayMusic`.
+* Power balance is a first pass (radii/speeds at the top of `ZoogiPowers.cpp`).
 * Island edge collision is the engine cylinder's convex hull (a many-sided polygon close to r=15.5).

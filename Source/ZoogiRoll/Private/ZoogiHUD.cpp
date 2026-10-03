@@ -94,7 +94,7 @@ void AZoogiHUD::DrawMenu(AZoogiGameMode* G)
 	Panel(0, 0, W, H, FLinearColor(0.f, 0.02f, 0.06f, 0.35f));
 	const float Pulse = 0.5f + 0.5f * FMath::Sin(Time * 2.f);
 	Text(TEXT("ZOOGI ROLL"), W * 0.5f, 70.f * U, FLinearColor::LerpUsingHSV(GOrbBlue, FLinearColor::White, Pulse * 0.4f), 3.2f, true);
-	Text(TEXT("pull back - shoot - knock orbs and rivals off the edge"), W * 0.5f, 190.f * U, FLinearColor(0.85f, 0.9f, 1.f), 0.7f, true, true);
+	Text(TEXT("pull back - shoot - knock orbs and rivals off the edge - gold stars give power charges"), W * 0.5f, 190.f * U, FLinearColor(0.85f, 0.9f, 1.f), 0.7f, true, true);
 
 	const float PW = 980.f * U;
 	const float X0 = (W - PW) * 0.5f;
@@ -138,7 +138,7 @@ void AZoogiHUD::DrawMenu(AZoogiGameMode* G)
 	}
 
 	Button(TEXT("START MATCH"), W * 0.5f - 200.f * U, 890.f * U, 400.f * U, 80.f * U, "Start", 0, FLinearColor(1.f, 0.75f, 0.2f), true);
-	Text(TEXT("LMB: pull back from anywhere and release to shoot   A/D or RMB-drag: turn   Esc: menu"), W * 0.5f, 1000.f * U, FLinearColor(0.8f, 0.85f, 0.95f), 0.45f, true, false);
+	Text(TEXT("LMB: pull back and release to shoot   SPACE/E: Zoogi power   A/D or RMB-drag: turn   Esc: menu"), W * 0.5f, 1000.f * U, FLinearColor(0.8f, 0.85f, 0.95f), 0.45f, true, false);
 	Button(TEXT("QUIT"), W - 160.f * U, 30.f * U, 130.f * U, 50.f * U, "Quit", 0, FLinearColor(0.9f, 0.3f, 0.3f));
 }
 
@@ -157,7 +157,12 @@ void AZoogiHUD::DrawScoreboard(AZoogiGameMode* G)
 		if (bActive) Panel(X + 6.f * U, Y, 388.f * U, RowH - 6.f * U, PC * FLinearColor(1, 1, 1, 0.25f));
 		Panel(X + 6.f * U, Y, 8.f * U, RowH - 6.f * U, PC);
 		Text(FString::Printf(TEXT("P%d %s%s"), B->PlayerIndex + 1, *B->Def.Name, B->bCPU ? TEXT(" (CPU)") : TEXT("")), X + 26.f * U, Y + 4.f * U, bActive ? FLinearColor::White : FLinearColor(0.8f, 0.85f, 0.95f), 0.55f);
-		Text(FString::Printf(TEXT("orbs %d  KOs %d%s"), B->OrbsScored, B->KnockOuts, B->bOut ? TEXT("  OUT") : TEXT("")), X + 26.f * U, Y + 32.f * U, FLinearColor(0.65f, 0.72f, 0.85f), 0.38f, false, false);
+		FString Status = FString::Printf(TEXT("orbs %d  KOs %d  "), B->OrbsScored, B->KnockOuts);
+		for (int32 c = 0; c < 3; ++c) Status += c < B->Charges ? TEXT("*") : TEXT("-");
+		if (B->bOut) Status += TEXT("  OUT");
+		if (B->StunTurns > 0) Status += TEXT("  STUNNED");
+		if (B->BoundShots > 0) Status += TEXT("  BOUND");
+		Text(Status, X + 26.f * U, Y + 32.f * U, (B->StunTurns > 0 || B->BoundShots > 0) ? FLinearColor(0.85f, 0.7f, 1.f) : FLinearColor(0.65f, 0.72f, 0.85f), 0.38f, false, false);
 		Text(FString::FromInt(B->Score), X + 380.f * U - TextSize(FString::FromInt(B->Score), 0.75f).X, Y + 6.f * U, PC + FLinearColor(0.2f, 0.2f, 0.2f, 0.f), 0.75f);
 		Y += RowH;
 	}
@@ -190,9 +195,10 @@ void AZoogiHUD::DrawMatch(AZoogiGameMode* G)
 	}
 
 	if (G->Phase == EZoogiPhase::Aiming) DrawAim(G);
+	DrawPower(G);
 	DrawPopups(G);
 
-	Text(TEXT("LMB drag: shoot   A/D, RMB drag: turn   Esc: menu   Ctrl+R: restart"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.75f, 0.85f, 0.85f), 0.38f, false, false);
+	Text(TEXT("LMB drag: shoot   SPACE/E: power   A/D, RMB drag: turn   Esc: menu   Ctrl+R: restart"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.75f, 0.85f, 0.85f), 0.38f, false, false);
 	Button(TEXT("MENU"), W - 150.f * U, 24.f * U, 126.f * U, 46.f * U, "Menu", 0, GOrbBlue);
 }
 
@@ -202,7 +208,7 @@ void AZoogiHUD::DrawAim(AZoogiGameMode* G)
 	if (!B || !G->bAimActive) return;
 	const float W = Canvas->ClipX, H = Canvas->ClipY;
 	float Frac = 0.f;
-	const FVector2D V = AZoogiGameMode::PullToVelocity(G->AimPull, Frac);
+	const FVector2D V = AZoogiGameMode::PullToVelocity(G->GetEffectivePull(), Frac);
 	const FLinearColor PC = ZoogiUtil::PlayerColor(B->PlayerIndex);
 	const FVector Start = B->BallLocation() - FVector(0, 0, ZoogiConst::ZoogiRadius - 4.f);
 
@@ -214,6 +220,26 @@ void AZoogiHUD::DrawAim(AZoogiGameMode* G)
 		{
 			DrawLine(S0.X, S0.Y, S1.X, S1.Y, FLinearColor(1.f, 1.f, 1.f, 0.55f), 3.f * U);
 			DrawRect(FLinearColor(1, 1, 1, 0.8f), S1.X - 6.f * U, S1.Y - 6.f * U, 12.f * U, 12.f * U);
+		}
+	}
+
+	// Pinpoint lock-on: laser to the target and a reticle.
+	if (AActor* LockT = G->GetLockTarget())
+	{
+		const FVector TL = LockT->GetActorLocation();
+		const FVector S0 = Project(Start + FVector(0, 0, 30.f), true), S1 = Project(TL, true);
+		if (S0.Z > 0.f && S1.Z > 0.f)
+		{
+			const float Pulse = 0.6f + 0.4f * FMath::Sin(Time * 12.f);
+			DrawLine(S0.X, S0.Y, S1.X, S1.Y, FLinearColor(0.85f, 0.4f, 1.f, 0.9f * Pulse), 4.f * U);
+			const float R = 34.f * U;
+			for (int32 k = 0; k < 4; ++k)
+			{
+				const float A = Time * 2.f + k * UE_HALF_PI;
+				const FVector2D D(FMath::Cos(A), FMath::Sin(A));
+				DrawLine(S1.X + D.X * R, S1.Y + D.Y * R, S1.X + D.X * R * 0.45f, S1.Y + D.Y * R * 0.45f, FLinearColor(1.f, 0.5f, 1.f), 4.f * U);
+			}
+			Text(TEXT("LOCKED"), S1.X, S1.Y - 70.f * U, FLinearColor(0.95f, 0.6f, 1.f), 0.45f, true);
 		}
 	}
 
@@ -250,6 +276,36 @@ void AZoogiHUD::DrawAim(AZoogiGameMode* G)
 	const FString Label = Frac > ZoogiConst::SlingshotPull ? FString::Printf(TEXT("SLINGSHOT!  %d%%   %.0f u/s"), FMath::RoundToInt(Frac * 100.f), Speed / 100.f)
 		: FString::Printf(TEXT("POWER %d%%   %.0f u/s"), FMath::RoundToInt(Frac * 100.f), Speed / 100.f);
 	Text(Label, W * 0.5f, BY - 30.f * U, FLinearColor::White, 0.45f, true);
+}
+
+void AZoogiHUD::DrawPower(AZoogiGameMode* G)
+{
+	AZoogiBall* B = G->GetActiveBall();
+	if (!B || G->Phase == EZoogiPhase::GameOver) return;
+	const float W = Canvas->ClipX, H = Canvas->ClipY;
+	const float PW = 420.f * U, PH = 128.f * U;
+	const float X = W - PW - 24.f * U, Y = H - PH - 70.f * U;
+	const bool bCan = G->CanUsePower();
+	const bool bArmed = G->bPowerArmed;
+	const FLinearColor Accent = bArmed ? FLinearColor(1.f, 0.8f, 0.2f) : (bCan ? GOrbBlue : FLinearColor(0.35f, 0.38f, 0.45f));
+	Panel(X, Y, PW, PH, GPanel);
+	Panel(X, Y, 8.f * U, PH, Accent);
+	Text(B->Def.Ability.ToUpper(), X + 24.f * U, Y + 10.f * U, Accent + FLinearColor(0.15f, 0.15f, 0.15f, 0.f), 0.6f);
+	FString Charges;
+	for (int32 c = 0; c < 3; ++c) Charges += c < B->Charges ? TEXT("*") : TEXT("-");
+	Text(Charges, X + PW - 24.f * U - TextSize(Charges, 0.7f).X, Y + 6.f * U, FLinearColor(1.f, 0.8f, 0.3f), 0.7f);
+	FString Hint;
+	if (bArmed) Hint = TEXT("ARMED - fires with your shot");
+	else if (G->bPowerUsed) Hint = TEXT("used this turn");
+	else if (B->Charges <= 0) Hint = TEXT("no charges - knock off a gold star orb");
+	else if (bCan) Hint = B->bCPU ? TEXT("CPU may use it") : TEXT("press SPACE / E or click");
+	else Hint = ZoogiUtil::IsArmedPower(B->Def.PowerKind) ? TEXT("arm it while aiming") : TEXT("use it while rolling");
+	Text(Hint, X + 24.f * U, Y + 50.f * U, FLinearColor(0.8f, 0.85f, 0.95f), 0.4f, false, false);
+	if (!B->bCPU && bCan)
+	{
+		Button(bArmed ? TEXT("DISARM") : TEXT("POWER"), X + 24.f * U, Y + PH - 46.f * U, 160.f * U, 38.f * U, "Power", 0, Accent, bArmed);
+	}
+	Text(B->Def.AbilityDesc, X + 200.f * U, Y + PH - 40.f * U, FLinearColor(0.6f, 0.65f, 0.75f), 0.3f, false, false);
 }
 
 void AZoogiHUD::DrawPopups(AZoogiGameMode* G)

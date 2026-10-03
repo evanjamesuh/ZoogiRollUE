@@ -50,12 +50,29 @@ public:
 	UPROPERTY(BlueprintReadOnly) int32 OrbsScored = 0;
 	float RollingDecel = ZoogiConst::RollingDecel;
 
+	// ---- powers
+	/** Power charges (start with 1, star orbs give more, max 3). */
+	UPROPERTY(BlueprintReadOnly) int32 Charges = 1;
+	/** Turns to skip (Static Shock / Shadow Stun). */
+	UPROPERTY(BlueprintReadOnly) int32 StunTurns = 0;
+	/** Wraps' Bandage Bind: the next shot is weaker. */
+	UPROPERTY(BlueprintReadOnly) int32 BoundShots = 0;
+	UPROPERTY(BlueprintReadOnly) bool bPhasing = false;
+	/** Bolt: pass through other Zoogis (they overlap instead of colliding). */
+	void SetPhasing(bool bOn);
+	/** Sets the planar velocity directly (power effects). */
+	void SetPlanarVelocity(const FVector& V, float Up = 0.f);
+	float StatusTime = 0.f;
+	float LastImpactFx = -10.f;
+
 	virtual void Tick(float DeltaSeconds) override;
 
 protected:
 	virtual void BeginPlay() override;
 	void FitVisual();
 
+	UFUNCTION()
+	void OnSphereOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
 	UFUNCTION()
 	void OnSphereHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
 

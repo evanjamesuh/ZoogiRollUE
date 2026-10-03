@@ -3,6 +3,8 @@
 #include "ZoogiBall.h"
 #include "ZoogiOrb.h"
 #include "ZoogiArena.h"
+#include "ZoogiClone.h"
+#include "ZoogiFX.h"
 #include "ZoogiPhysics.h"
 #include "ZoogiPlayerController.h"
 #include "ZoogiHUD.h"
@@ -14,6 +16,8 @@
 #include "Misc/Paths.h"
 #include "HAL/FileManager.h"
 #include "UnrealClient.h"
+#include "Components/AudioComponent.h"
+#include "Sound/SoundBase.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
 
 AZoogiGameMode::AZoogiGameMode()
@@ -42,6 +46,7 @@ void AZoogiGameMode::BeginPlay()
 
 	const TCHAR* Cmd = FCommandLine::Get();
 	bAuto = FParse::Param(Cmd, TEXT("ZoogiAuto"));
+	bPowerTest = FParse::Param(Cmd, TEXT("ZoogiPowerTest"));
 	bMenuShot = FParse::Param(Cmd, TEXT("ZoogiMenuShot"));
 	FParse::Value(Cmd, TEXT("ZoogiShots="), ShotDir);
 	FParse::Value(Cmd, TEXT("ZoogiQuit="), QuitAfter);
@@ -52,11 +57,20 @@ void AZoogiGameMode::BeginPlay()
 	int32 Rounds = 0;
 	if (FParse::Value(Cmd, TEXT("ZoogiRounds="), Rounds)) MenuRounds = FMath::Clamp(Rounds, 1, 30);
 	if (!ShotDir.IsEmpty()) IFileManager::Get().MakeDirectory(*ShotDir, true);
+	// -ZoogiPicks=4,5,6,0 : roster index per player slot (automated tests of specific Zoogis).
+	FString Picks;
+	if (FParse::Value(Cmd, TEXT("ZoogiPicks="), Picks, false))
+	{
+		TArray<FString> Parts;
+		Picks.ParseIntoArray(Parts, TEXT(","));
+		for (int32 i = 0; i < Parts.Num() && i < MenuPlayers.Num(); ++i) MenuPlayers[i].ZoogiIndex = FMath::Clamp(FCString::Atoi(*Parts[i]), 0, ZoogiUtil::Roster().Num() - 1);
+	}
 
 	Arena = GetWorld()->SpawnActor<AZoogiArena>(AZoogiArena::StaticClass(), FTransform::Identity);
 	Arena->Build(MenuArena);
 	SpawnOrbs();
 	Phase = EZoogiPhase::Menu;
+	PlayMusic(TEXT("MenuMusic"));
 
 	if (bAuto)
 	{
@@ -105,6 +119,8 @@ void AZoogiGameMode::MenuAction(FName Action, int32 Index)
 	}
 	else if (Action == "Rounds") MenuRounds = FMath::Clamp(Index, 1, 30);
 	else if (Action == "Start") StartMatch();
+	if (Action != "Start" && Action != "Quit") ZoogiUtil::PlaySfx(this, TEXT("HitClick"), 0.8f);
+	else if (Action == "Power") TryPower();
 	else if (Action == "Menu") ReturnToMenu();
 	else if (Action == "Rematch") StartMatch();
 	else if (Action == "Quit") UKismetSystemLibrary::QuitGame(this, GetWorld()->GetFirstPlayerController(), EQuitPreference::Quit, false);
@@ -112,6 +128,7 @@ void AZoogiGameMode::MenuAction(FName Action, int32 Index)
 
 void AZoogiGameMode::ClearMatch()
 {
+	EndPowers();
 	for (AZoogiBall* B : Balls) if (B) B->Destroy();
 	for (AZoogiOrb* O : Orbs) if (O) O->Destroy();
 	Balls.Reset();
@@ -133,6 +150,7 @@ void AZoogiGameMode::SpawnOrbs()
 		if (O)
 		{
 			O->InitOrb(OrbPM, Decel);
+			if (i % 5 == 0) O->MakeStar(); // three gold star orbs: double points + a power charge
 			Orbs.Add(O);
 		}
 	}
@@ -166,12 +184,14 @@ void AZoogiGameMode::StartMatch()
 		B->SpawnLocation = L;
 		B->SpawnYaw = Yaw;
 		B->AimYaw = Yaw;
+		if (bPowerTest) B->Charges = 3;
 		Balls.Add(B);
 	}
 	RoundNumber = 1;
 	WinnerIndex = -1;
 	ShotsFired = 0;
 	UE_LOG(LogZoogi, Log, TEXT("Match started: %d players on %s"), Balls.Num(), *ZoogiUtil::ArenaName(MenuArena));
+	PlayMusic(TEXT("MatchMusic"));
 	BeginTurn(0);
 }
 
@@ -181,6 +201,7 @@ void AZoogiGameMode::ReturnToMenu()
 	SpawnOrbs();
 	Phase = EZoogiPhase::Menu;
 	PhaseTime = 0.f;
+	PlayMusic(TEXT("MenuMusic"));
 	if (AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PC->OnMenu();
 }
 
@@ -195,6 +216,7 @@ void AZoogiGameMode::BeginTurn(int32 PlayerIdx)
 	bAimActive = false;
 	AimPull = FVector::ZeroVector;
 	bCPUPlanned = false;
+	EndPowers();
 
 	for (AZoogiBall* B : Balls) { B->LastHitPlayer = -1; B->SetActiveTurn(false); }
 	for (AZoogiOrb* O : Orbs) if (O) O->LastHitBy = -1;
@@ -213,6 +235,7 @@ void AZoogiGameMode::BeginTurn(int32 PlayerIdx)
 	if (Ball->bCPU) PlanCPUShot();
 
 	Banner = FString::Printf(TEXT("P%d  %s%s"), PlayerIdx + 1, *Ball->Def.Name, Ball->bCPU ? TEXT("  (CPU)") : TEXT(""));
+	ZoogiUtil::PlaySfx(this, TEXT("Turn"), 0.45f);
 	BannerTime = 0.f;
 	if (AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PC->OnTurnStarted(Ball);
 }
@@ -226,21 +249,35 @@ void AZoogiGameMode::EndTurn()
 		UE_LOG(LogZoogi, Log, TEXT("Turn end: P%d travelled %.0f cm (shot %.0f cm/s), %s, orbs left %d, %.1fs"), ActivePlayer + 1,
 			Shooter->bOut ? -1.f : FVector::Dist2D(Shooter->BallLocation(), ShotStart), ShotSpeed, Shooter->bOut ? TEXT("OUT") : TEXT("on court"), OrbsLeft(), PhaseTime);
 	}
+	EndPowers();
 	for (AZoogiBall* B : Balls) if (B->bOut) RespawnBall(B);
 	if (OrbsLeft() == 0)
 	{
 		FinishGame();
 		return;
 	}
-	int32 Next = (ActivePlayer + 1) % FMath::Max(1, Balls.Num());
-	if (Next == 0)
+	int32 Next = ActivePlayer;
+	for (int32 Guard = 0; Guard <= Balls.Num(); ++Guard)
 	{
-		++RoundNumber;
-		if (RoundNumber > MenuRounds)
+		Next = (Next + 1) % FMath::Max(1, Balls.Num());
+		if (Next == 0)
 		{
-			FinishGame();
-			return;
+			++RoundNumber;
+			if (RoundNumber > MenuRounds)
+			{
+				FinishGame();
+				return;
+			}
 		}
+		AZoogiBall* NB = Balls[Next];
+		if (NB && NB->StunTurns > 0 && Guard < Balls.Num() - 1)
+		{
+			NB->StunTurns--;
+			UE_LOG(LogZoogi, Log, TEXT("P%d is stunned and skips this turn"), Next + 1);
+			AddPopup(FString::Printf(TEXT("P%d STUNNED - SKIPS TURN"), Next + 1), NB->BallLocation() + FVector(0, 0, 120.f), FLinearColor(0.7f, 0.4f, 1.f));
+			continue;
+		}
+		break;
 	}
 	BeginTurn(Next);
 }
@@ -270,6 +307,7 @@ void AZoogiGameMode::FinishGame()
 	}
 	BannerTime = 0.f;
 	UE_LOG(LogZoogi, Log, TEXT("Game over: %s"), *Banner);
+	ZoogiUtil::PlaySfx(this, TEXT("Win"), 0.8f);
 	if (AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PC->OnGameOver(GetActiveBall());
 }
 
@@ -323,6 +361,8 @@ bool AZoogiGameMode::AllAtRest() const
 {
 	for (const AZoogiBall* B : Balls) if (B && !B->IsAtRest()) return false;
 	for (const AZoogiOrb* O : Orbs) if (O && !O->IsAtRest()) return false;
+	for (const AZoogiClone* C : Clones) if (IsValid(C)) return false;
+	if (RicochetTimer >= 0.f) return false;
 	return true;
 }
 
@@ -344,12 +384,17 @@ void AZoogiGameMode::CheckKnockoffs()
 		{
 			const int32 Scorer = Balls.IsValidIndex(O->LastHitBy) ? O->LastHitBy : ActivePlayer;
 			O->SetOut();
+			AZoogiFX::Spawn(GetWorld(), EdgePoint(L), O->bStar ? FLinearColor(1.f, 0.75f, 0.2f) : FLinearColor(0.5f, 0.85f, 1.f), 160.f, 0.6f, false, 7.f);
 			if (Balls.IsValidIndex(Scorer))
 			{
-				Balls[Scorer]->Score += ZoogiConst::ScoreOrb;
+				const int32 Pts = O->bStar ? 2 * ZoogiConst::ScoreOrb : ZoogiConst::ScoreOrb;
+				Balls[Scorer]->Score += Pts;
 				Balls[Scorer]->OrbsScored++;
-				UE_LOG(LogZoogi, Log, TEXT("Orb off the edge -> P%d +%d (score %d)"), Scorer + 1, ZoogiConst::ScoreOrb, Balls[Scorer]->Score);
-				AddPopup(FString::Printf(TEXT("+%d ORB  P%d"), ZoogiConst::ScoreOrb, Scorer + 1), EdgePoint(L), ZoogiUtil::PlayerColor(Scorer));
+				if (O->bStar) Balls[Scorer]->Charges = FMath::Min(3, Balls[Scorer]->Charges + 1);
+				UE_LOG(LogZoogi, Log, TEXT("%s off the edge -> P%d +%d (score %d)"), O->bStar ? TEXT("Star orb") : TEXT("Orb"), Scorer + 1, Pts, Balls[Scorer]->Score);
+				ZoogiUtil::PlaySfx(this, TEXT("Score"), O->bStar ? 0.9f : 0.6f, O->bStar ? 1.25f : 1.f);
+				AddPopup(O->bStar ? FString::Printf(TEXT("+%d STAR  +1 POWER  P%d"), Pts, Scorer + 1) : FString::Printf(TEXT("+%d ORB  P%d"), Pts, Scorer + 1),
+					EdgePoint(L), O->bStar ? FLinearColor(1.f, 0.8f, 0.3f) : ZoogiUtil::PlayerColor(Scorer));
 			}
 		}
 	}
@@ -359,9 +404,11 @@ void AZoogiGameMode::CheckKnockoffs()
 		const FVector L = B->BallLocation();
 		if (L.Z < ZoogiConst::FallOutZ || FVector2D(L.X, L.Y).Size() > 8000.f)
 		{
+			AZoogiFX::Spawn(GetWorld(), EdgePoint(L), FLinearColor(1.f, 0.3f, 0.25f), 220.f, 0.7f, false, 7.f);
 			B->SetOut();
+			ZoogiUtil::PlaySfx(this, TEXT("Fall"), 0.7f);
 			B->Score = FMath::Max(0, B->Score - ZoogiConst::PenaltyFall);
-			UE_LOG(LogZoogi, Log, TEXT("P%d fell off (hit by P%d)"), B->PlayerIndex + 1, B->LastHitPlayer + 1);
+			UE_LOG(LogZoogi, Log, TEXT("P%d fell off (last hit by %s)"), B->PlayerIndex + 1, B->LastHitPlayer >= 0 ? *FString::Printf(TEXT("P%d"), B->LastHitPlayer + 1) : TEXT("nobody"));
 			AddPopup(FString::Printf(TEXT("-%d FELL OFF  P%d"), ZoogiConst::PenaltyFall, B->PlayerIndex + 1), EdgePoint(L), FLinearColor(1.f, 0.3f, 0.25f));
 			if (Balls.IsValidIndex(B->LastHitPlayer) && B->LastHitPlayer != B->PlayerIndex)
 			{
@@ -416,9 +463,17 @@ bool AZoogiGameMode::ReleaseAim()
 		return false;
 	}
 	float Frac = 0.f;
-	const FVector2D V = PullToVelocity(AimPull, Frac);
+	FVector2D V = PullToVelocity(GetEffectivePull(), Frac);
 	bAimActive = false;
 	if (V.IsNearlyZero()) return false;
+	AZoogiBall* Ball = GetActiveBall();
+	if (Ball && Ball->BoundShots > 0)
+	{
+		// Bandage Bind: this shot comes out weaker.
+		Ball->BoundShots--;
+		V *= 0.65f;
+		AddPopup(TEXT("BOUND - WEAK SHOT"), Ball->BallLocation() + FVector(0, 0, 120.f), FLinearColor(0.9f, 0.78f, 0.55f));
+	}
 	FireShot(V);
 	return true;
 }
@@ -428,6 +483,8 @@ void AZoogiGameMode::FireShot(const FVector2D& Velocity)
 	AZoogiBall* Ball = GetActiveBall();
 	if (!Ball) return;
 	Ball->Launch(Velocity);
+	ZoogiUtil::PlaySfx(this, TEXT("Launch"), FMath::Clamp(Velocity.Size() / 2500.f, 0.3f, 1.f), FMath::Lerp(0.85f, 1.2f, FMath::Clamp(Velocity.Size() / 3600.f, 0.f, 1.f)));
+	OnArmedShot(Ball);
 	Phase = EZoogiPhase::Rolling;
 	PhaseTime = 0.f;
 	SettleTimer = 0.f;
@@ -462,7 +519,11 @@ void AZoogiGameMode::PlanCPUShot()
 	struct FCand { FVector2D P; float Value; float TargetMass; float Radius; };
 	TArray<FCand> Cands;
 	for (AZoogiOrb* O : Orbs) if (O && !O->bOut) Cands.Add({ FVector2D(O->OrbLocation()), 50.f, ZoogiConst::OrbMassRatio, ZoogiConst::OrbRadius });
-	for (AZoogiBall* Other : Balls) if (Other && Other != Me && !Other->bOut) Cands.Add({ FVector2D(Other->BallLocation()), 40.f, Other->Def.MassRatio(), ZoogiConst::ZoogiRadius });
+	// Decide on the power first: rival-hunting powers make rivals more attractive targets.
+	bCPUUsePower = Me->Charges > 0 && (bPowerTest || FMath::FRand() < 0.55f);
+	const EZoogiPower MyPower = Me->Def.PowerKind;
+	const bool bHuntRivals = bCPUUsePower && (MyPower == EZoogiPower::ShadowStun || MyPower == EZoogiPower::StaticShock || MyPower == EZoogiPower::BandageBind);
+	for (AZoogiBall* Other : Balls) if (Other && Other != Me && !Other->bOut) Cands.Add({ FVector2D(Other->BallLocation()), bHuntRivals ? 140.f : 40.f, Other->Def.MassRatio(), ZoogiConst::ZoogiRadius });
 
 	auto Blocked = [&](const FVector2D& From, const FVector2D& To, const FVector2D& Ignore)
 	{
@@ -541,9 +602,34 @@ void AZoogiGameMode::TakeShot(const FString& Name)
 	UE_LOG(LogZoogi, Log, TEXT("Screenshot requested: %s"), *Path);
 }
 
+void AZoogiGameMode::PlayMusic(const TCHAR* Name)
+{
+	if (CurrentMusic == Name) return;
+	CurrentMusic = Name;
+	if (MusicComp) { MusicComp->FadeOut(1.0f, 0.f); MusicComp = nullptr; }
+	USoundBase* S = ZoogiUtil::LoadSound(Name);
+	UE_LOG(LogZoogi, Log, TEXT("Music: %s (%s)"), Name, S ? TEXT("loaded") : TEXT("missing"));
+	if (S)
+	{
+		MusicComp = UGameplayStatics::CreateSound2D(this, S, 0.35f, 1.f, 0.f, nullptr, false, false);
+		if (MusicComp) MusicComp->FadeIn(1.5f, 0.35f);
+	}
+}
+
+void AZoogiGameMode::TakeShotDelayed(const FString& Name, float Delay)
+{
+	if (ShotDir.IsEmpty() || ShotsTaken.Contains(Name)) return;
+	DelayedShots.Add(Name, Delay);
+}
+
 void AZoogiGameMode::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	for (auto It = DelayedShots.CreateIterator(); It; ++It)
+	{
+		It.Value() -= DeltaSeconds;
+		if (It.Value() <= 0.f) { TakeShot(It.Key()); It.RemoveCurrent(); }
+	}
 	const float Dt = FMath::Min(DeltaSeconds, 0.05f);
 	Clock += DeltaSeconds;
 	PhaseTime += Dt;
@@ -570,6 +656,7 @@ void AZoogiGameMode::Tick(float DeltaSeconds)
 		if (Ball && !Ball->bCPU && bAimActive && AimFraction() > 0.6f) TakeShot(FString::Printf(TEXT("human_drag_round%d"), RoundNumber));
 		if (Ball && Ball->bCPU && bCPUPlanned)
 		{
+			CPUPowerTick();
 			if (PhaseTime > 1.55f && ShotsFired < 3) TakeShot(FString::Printf(TEXT("aimpose_shot%d"), ShotsFired + 1));
 			// CPU: let the camera swoop in, draw the slingshot back over ~1.1 s, release.
 			const float DrawTime = 1.1f;
@@ -586,6 +673,8 @@ void AZoogiGameMode::Tick(float DeltaSeconds)
 	}
 	case EZoogiPhase::Rolling:
 	{
+		TickPowers(Dt);
+		CPUPowerTick();
 		CheckKnockoffs();
 		if (ShotClock >= 0.f)
 		{

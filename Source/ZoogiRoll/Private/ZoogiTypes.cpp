@@ -1,4 +1,7 @@
 #include "ZoogiTypes.h"
+#include "Kismet/GameplayStatics.h"
+#include "Sound/SoundBase.h"
+#include "UObject/StrongObjectPtr.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "Engine/StaticMesh.h"
@@ -38,21 +41,23 @@ static TArray<FZoogiDef> BuildRoster()
 		return D;
 	};
 	TArray<FZoogiDef> R;
+	auto P = [&R](EZoogiPower Pw) { R.Last().PowerKind = Pw; };
 	R.Add(Make("wolfgang", TEXT("Wolfgang"), TEXT("Wolf"), TEXT("#6B7280"), TEXT("#9CA3AF"), TEXT("Wolf Pack"),
-		TEXT("While moving, send three clones that chase the nearest orb or opponent"), 85, 60, 50, 75));
+		TEXT("While moving, send three clones that chase the nearest orb or opponent"), 85, 60, 50, 75)); P(EZoogiPower::WolfPack);
 	R.Add(Make("hotstreak", TEXT("Hotstreak"), TEXT("Lava"), TEXT("#EF4444"), TEXT("#F97316"), TEXT("Instant Explosion"),
-		TEXT("Create a fiery explosion around you"), 55, 90, 70, 45));
+		TEXT("Create a fiery explosion around you"), 55, 90, 70, 45)); P(EZoogiPower::Explosion);
 	R.Add(Make("lars", TEXT("Lars"), TEXT("Bouncer"), TEXT("#3B82F6"), TEXT("#93C5FD"), TEXT("Ricochet"),
-		TEXT("Ricochets toward the nearest target after a hit"), 70, 75, 60, 80));
+		TEXT("Ricochets toward the nearest target after a hit"), 70, 75, 60, 80)); P(EZoogiPower::Ricochet);
 	R.Add(Make("pinpoint", TEXT("Pinpoint"), TEXT("Precision"), TEXT("#8B5CF6"), TEXT("#A78BFA"), TEXT("Laser Trajectory"),
-		TEXT("Lock on to an orb or enemy, then drag to set power - the shot auto-aims"), 60, 65, 45, 95));
+		TEXT("Lock on to an orb or enemy, then drag to set power - the shot auto-aims"), 60, 65, 45, 95)); P(EZoogiPower::LockOn);
 	R.Add(Make("bolt", TEXT("Bolt"), TEXT("Electric"), TEXT("#FBBF24"), TEXT("#FDE047"), TEXT("Static Shock"),
-		TEXT("Phase through enemies and stun them"), 80, 55, 40, 70));
+		TEXT("Phase through enemies and stun them"), 80, 55, 40, 70)); P(EZoogiPower::StaticShock);
 	R.Add(Make("wraps", TEXT("Wraps"), TEXT("Mummy"), TEXT("#8B7355"), TEXT("#D4C4B0"), TEXT("Bandage Bind"),
-		TEXT("Slow enemies on contact with ancient curses"), 50, 70, 85, 65));
+		TEXT("Slow enemies on contact with ancient curses"), 50, 70, 85, 65)); P(EZoogiPower::BandageBind);
 	FZoogiDef N = Make("nightshade", TEXT("Nightshade"), TEXT("Shadow"), TEXT("#6B46C1"), TEXT("#9F7AEA"), TEXT("Shadow Stun"),
 		TEXT("A short shadow pulse that freezes nearby opponents and skips their next turn"), 62, 68, 64, 84);
 	N.bPivotFit = true;
+	N.PowerKind = EZoogiPower::ShadowStun;
 	R.Add(N);
 	return R;
 }
@@ -140,6 +145,35 @@ UMaterialInstanceDynamic* ZoogiUtil::GroundMID(UObject* Outer, const FLinearColo
 	MID->SetScalarParameterValue(TEXT("NoiseScale"), NoiseScale);
 	MID->SetScalarParameterValue(TEXT("Roughness"), Roughness);
 	return MID;
+}
+
+UMaterialInstanceDynamic* ZoogiUtil::FxMID(UObject* Outer, const FLinearColor& Color, float Strength)
+{
+	UMaterialInterface* Base = LoadMat(TEXT("/Game/Materials/M_ZoogiFX.M_ZoogiFX"));
+	if (!Base) return GlowMID(Outer, Color, Strength);
+	UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(Base, Outer);
+	MID->SetVectorParameterValue(TEXT("Color"), Color);
+	MID->SetScalarParameterValue(TEXT("Strength"), Strength);
+	return MID;
+}
+
+bool ZoogiUtil::IsArmedPower(EZoogiPower Power)
+{
+	return Power == EZoogiPower::Ricochet || Power == EZoogiPower::LockOn || Power == EZoogiPower::StaticShock || Power == EZoogiPower::BandageBind;
+}
+
+USoundBase* ZoogiUtil::LoadSound(const TCHAR* Name)
+{
+	static TMap<FString, TStrongObjectPtr<USoundBase>> Cache;
+	if (TStrongObjectPtr<USoundBase>* Found = Cache.Find(Name)) return Found->Get();
+	USoundBase* S = LoadObject<USoundBase>(nullptr, *FString::Printf(TEXT("/Game/Audio/S_%s.S_%s"), Name, Name), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	Cache.Add(Name, TStrongObjectPtr<USoundBase>(S));
+	return S;
+}
+
+void ZoogiUtil::PlaySfx(const UObject* WorldContext, const TCHAR* Name, float Volume, float Pitch)
+{
+	if (USoundBase* S = LoadSound(Name)) UGameplayStatics::PlaySound2D(WorldContext, S, Volume, Pitch);
 }
 
 UStaticMesh* ZoogiUtil::BasicShape(const TCHAR* Name)

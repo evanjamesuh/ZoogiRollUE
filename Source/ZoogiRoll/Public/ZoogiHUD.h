@@ -30,6 +30,7 @@ protected:
 	void DrawScoreboard(AZoogiGameMode* G);
 	void DrawAim(AZoogiGameMode* G);
 	void DrawPopups(AZoogiGameMode* G);
+	void DrawPower(AZoogiGameMode* G);
 	void DrawResults(AZoogiGameMode* G);
 
 	void Panel(float X, float Y, float W, float H, const FLinearColor& C);

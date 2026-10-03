@@ -3,6 +3,7 @@
 #include "ZoogiPhysics.h"
 #include "ZoogiOrb.h"
 #include "ZoogiGameMode.h"
+#include "ZoogiFX.h"
 #include "Engine/World.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -21,6 +22,9 @@ AZoogiBall::AZoogiBall()
 	Sphere = CreateDefaultSubobject<USphereComponent>(TEXT("Sphere"));
 	Sphere->InitSphereRadius(ZoogiConst::ZoogiRadius);
 	Sphere->SetCollisionProfileName(TEXT("PhysicsActor"));
+	// Zoogis live on the Pawn channel so Bolt can phase through them while still hitting orbs.
+	Sphere->SetCollisionObjectType(ECC_Pawn);
+	Sphere->SetGenerateOverlapEvents(true);
 	Sphere->SetSimulatePhysics(true);
 	Sphere->SetNotifyRigidBodyCollision(true);
 	Sphere->BodyInstance.bUseCCD = true;
@@ -54,6 +58,32 @@ void AZoogiBall::BeginPlay()
 {
 	Super::BeginPlay();
 	Sphere->OnComponentHit.AddDynamic(this, &AZoogiBall::OnSphereHit);
+	Sphere->OnComponentBeginOverlap.AddDynamic(this, &AZoogiBall::OnSphereOverlap);
+}
+
+void AZoogiBall::SetPhasing(bool bOn)
+{
+	bPhasing = bOn;
+	Sphere->SetCollisionResponseToChannel(ECC_Pawn, bOn ? ECR_Overlap : ECR_Block);
+	Visual->SetRenderCustomDepth(bOn);
+}
+
+void AZoogiBall::SetPlanarVelocity(const FVector& V, float Up)
+{
+	if (bOut) return;
+	Sphere->WakeRigidBody();
+	const FVector Cur = Sphere->GetPhysicsLinearVelocity();
+	Sphere->SetPhysicsLinearVelocity(FVector(V.X, V.Y, Up != 0.f ? Up : Cur.Z));
+	const FVector P(V.X, V.Y, 0.f);
+	Sphere->SetPhysicsAngularVelocityInRadians(FVector::CrossProduct(FVector::UpVector, P) / ZoogiConst::ZoogiRadius);
+}
+
+void AZoogiBall::OnSphereOverlap(UPrimitiveComponent* OverlappedComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	if (!bPhasing) return;
+	AZoogiBall* Other = Cast<AZoogiBall>(OtherActor);
+	AZoogiGameMode* G = GetWorld() ? GetWorld()->GetAuthGameMode<AZoogiGameMode>() : nullptr;
+	if (Other && G && !Other->bOut) G->OnShooterContact(this, Other);
 }
 
 void AZoogiBall::InitZoogi(const FZoogiDef& InDef, int32 InPlayerIndex, bool bInCPU, UPhysicalMaterial* PhysMat, float InRollingDecel)
@@ -183,8 +213,19 @@ void AZoogiBall::Tick(float DeltaSeconds)
 	// Keep the ring flat on the floor under the marble.
 	Ring->SetWorldLocation(BallLocation() - FVector(0, 0, ZoogiConst::ZoogiRadius - 1.5f));
 	TurnLight->SetWorldLocation(BallLocation() + FVector(0, 0, 120.f));
+	StatusTime += DeltaSeconds;
+	if (!bActiveTurn && RingMID && (StunTurns > 0 || BoundShots > 0))
+	{
+		RingMID->SetVectorParameterValue(TEXT("Color"), StunTurns > 0 ? FLinearColor(0.7f, 0.3f, 1.f) : FLinearColor(0.85f, 0.7f, 0.45f));
+		RingMID->SetScalarParameterValue(TEXT("Strength"), 3.f + 2.5f * FMath::Sin(StatusTime * 9.f));
+	}
+	else if (RingMID && !bActiveTurn)
+	{
+		RingMID->SetVectorParameterValue(TEXT("Color"), ZoogiUtil::PlayerColor(PlayerIndex));
+	}
 	if (bActiveTurn && RingMID)
 	{
+		RingMID->SetVectorParameterValue(TEXT("Color"), bPhasing ? FLinearColor(1.f, 0.9f, 0.2f) : ZoogiUtil::PlayerColor(PlayerIndex));
 		RingPulse += DeltaSeconds;
 		RingMID->SetScalarParameterValue(TEXT("Strength"), 4.f + 3.f * FMath::Sin(RingPulse * 4.f));
 	}
@@ -193,8 +234,18 @@ void AZoogiBall::Tick(float DeltaSeconds)
 void AZoogiBall::OnSphereHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
 {
 	// Knock-off credit goes to the shooter, also through chains (shooter -> Zoogi -> orb).
-	const AZoogiGameMode* G = GetWorld() ? GetWorld()->GetAuthGameMode<AZoogiGameMode>() : nullptr;
+	AZoogiGameMode* G = GetWorld() ? GetWorld()->GetAuthGameMode<AZoogiGameMode>() : nullptr;
 	const int32 Shooter = G ? G->ActivePlayer : -1;
+	if (G && PlayerIndex == Shooter && (Cast<AZoogiBall>(OtherActor) || Cast<AZoogiOrb>(OtherActor))) G->OnShooterContact(this, OtherActor);
+	// Impact spark on hard hits between marbles/orbs.
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+	if ((Cast<AZoogiBall>(OtherActor) || Cast<AZoogiOrb>(OtherActor)) && NormalImpulse.Size() > 3500.f && Now - LastImpactFx > 0.15f)
+	{
+		LastImpactFx = Now;
+		const float R = FMath::Clamp(45.f + NormalImpulse.Size() * 0.004f, 50.f, 150.f);
+		AZoogiFX::Spawn(GetWorld(), Hit.ImpactPoint, FLinearColor(0.85f, 0.95f, 1.f), R, 0.25f, false, 10.f);
+		ZoogiUtil::PlaySfx(this, TEXT("Clack"), FMath::Clamp(NormalImpulse.Size() / 15000.f, 0.25f, 1.f), FMath::FRandRange(0.9f, 1.15f) * (Cast<AZoogiOrb>(OtherActor) ? 1.25f : 1.f));
+	}
 	const int32 Credit = (PlayerIndex == Shooter) ? PlayerIndex : LastHitPlayer;
 	if (AZoogiBall* Other = Cast<AZoogiBall>(OtherActor))
 	{

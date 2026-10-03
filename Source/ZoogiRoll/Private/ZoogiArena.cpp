@@ -219,6 +219,8 @@ void AZoogiArena::SetupSky(EZoogiArena InTheme)
 	Fog->SetVolumetricFog(false);
 	Clouds->SetVisibility(true);
 	Atmosphere->SetVisibility(true);
+	Atmosphere->SetRayleighScatteringScale(0.0331f);
+	Atmosphere->SetMieScatteringScale(0.003996f);
 
 	switch (InTheme)
 	{
@@ -226,9 +228,9 @@ void AZoogiArena::SetupSky(EZoogiArena InTheme)
 		Sun->SetRelativeRotation(FRotator(-28.f, 60.f, 0.f));
 		Sun->SetIntensity(7.f);
 		Sun->SetLightColor(FLinearColor(0.85f, 0.92f, 1.f));
-		Fog->SetFogDensity(0.03f);
-		Fog->SetFogInscatteringColor(FLinearColor(0.55f, 0.7f, 0.9f));
-		P.AutoExposureBias = 0.6f;
+		Fog->SetFogDensity(0.012f);
+		Fog->SetFogInscatteringColor(FLinearColor(0.35f, 0.5f, 0.75f));
+		P.AutoExposureBias = -0.6f;
 		P.ColorSaturation = FVector4(0.95f, 1.f, 1.08f, 1.f);
 		break;
 	case EZoogiArena::Volcanic:
@@ -247,7 +249,9 @@ void AZoogiArena::SetupSky(EZoogiArena InTheme)
 		Sun->SetLightColor(FLinearColor(0.8f, 0.8f, 1.f));
 		Fog->SetFogDensity(0.0f);
 		Clouds->SetVisibility(false);
-		Atmosphere->SetVisibility(false);
+		// Keep the atmosphere (the real-time sky light capture needs one) but make it black space.
+		Atmosphere->SetRayleighScatteringScale(0.f);
+		Atmosphere->SetMieScatteringScale(0.f);
 		P.AutoExposureBias = 1.2f;
 		P.ColorSaturation = FVector4(1.f, 1.f, 1.1f, 1.f);
 		break;
@@ -442,7 +446,7 @@ void AZoogiArena::BuildCosmic()
 	for (int32 i = 0; i < 1500; ++i)
 	{
 		const FVector Dir = Rng.VRand();
-		Stars->AddInstance(FTransform(FRotator::ZeroRotator, Dir * Rng.FRandRange(60000.f, 90000.f), FVector(Rng.FRandRange(0.6f, 2.2f))));
+		Stars->AddInstance(FTransform(FRotator::ZeroRotator, Dir * Rng.FRandRange(60000.f, 90000.f), FVector(Rng.FRandRange(2.5f, 7.f))));
 	}
 	Built.Add(Stars);
 	UStaticMesh* Crystal = ZoogiUtil::LoadMesh(TEXT("/Game/Env/AlienCrystal/SM_AlienCrystal.SM_AlienCrystal"));

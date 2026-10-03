@@ -69,6 +69,7 @@ void AZoogiPlayerController::BeginPlay()
 	}
 	Pitch = 38.f;
 	Dist = 3600.f;
+	bPowerTest = FParse::Param(FCommandLine::Get(), TEXT("ZoogiPowerTest"));
 	bHumanTest = FParse::Param(FCommandLine::Get(), TEXT("ZoogiHumanTest"));
 }
 
@@ -205,6 +206,21 @@ void AZoogiPlayerController::HandleInput(float Dt)
 		return;
 	}
 	if (WasInputKeyJustPressed(EKeys::R) && IsInputKeyDown(EKeys::LeftControl)) { G->StartMatch(); return; }
+
+	// Power: SPACE / E / Q (or the HUD button) for the human whose turn it is, while aiming or rolling.
+	if (AZoogiBall* Active = G->GetActiveBall())
+	{
+		if (!Active->bCPU && (WasInputKeyJustPressed(EKeys::SpaceBar) || WasInputKeyJustPressed(EKeys::E) || WasInputKeyJustPressed(EKeys::Q)))
+		{
+			G->TryPower();
+		}
+		// Automated test: the simulated human uses its power each turn it can.
+		if (bHumanTest && bPowerTest && !Active->bCPU && Active->Charges > 0 && G->CanUsePower() && !G->bPowerArmed)
+		{
+			const bool bArmed = ZoogiUtil::IsArmedPower(Active->Def.PowerKind);
+			if ((bArmed && G->Phase == EZoogiPhase::Aiming && SimClock > 1.f) || (!bArmed && G->Phase == EZoogiPhase::Rolling && G->PhaseTime > 0.4f)) G->TryPower();
+		}
+	}
 
 	if (!G->IsHumanAiming())
 	{

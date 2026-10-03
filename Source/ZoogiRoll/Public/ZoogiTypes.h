@@ -17,6 +17,19 @@ enum class EZoogiArena : uint8
 	MAX UMETA(Hidden)
 };
 
+/** Zoogi powers (ZOOGI_ROSTER abilities). */
+UENUM(BlueprintType)
+enum class EZoogiPower : uint8
+{
+	WolfPack,     // Wolfgang: three clones chase the nearest orb or rival
+	Explosion,    // Hotstreak: fiery blast pushes everything nearby away
+	Ricochet,     // Lars: after the next hit, bounce toward the nearest target
+	LockOn,       // Pinpoint: the shot snaps onto the target in the pull direction
+	StaticShock,  // Bolt: phase through rivals this shot and stun them
+	BandageBind,  // Wraps: rivals you touch are slowed and bound (weaker next shot)
+	ShadowStun    // Nightshade: shadow pulse freezes nearby rivals, they skip a turn
+};
+
 /** One playable Zoogi. Stats and abilities are ported from ZOOGI_ROSTER in useZoogiGame.tsx. */
 USTRUCT(BlueprintType)
 struct FZoogiDef
@@ -36,6 +49,7 @@ struct FZoogiDef
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) int32 Control = 60;
 	/** Nightshade: keep the file pivot (ball centre) instead of fitting the bounds (horns stick out). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) bool bPivotFit = false;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) EZoogiPower PowerKind = EZoogiPower::Explosion;
 	/** Extra yaw (degrees) so the face looks along the aim. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) float ModelYaw = 0.f;
 
@@ -91,6 +105,15 @@ namespace ZoogiUtil
 	ZOOGIROLL_API UMaterialInstanceDynamic* GlowMID(UObject* Outer, const FLinearColor& Color, float Strength);
 	/** MID of /Game/Materials/M_ZoogiGround: two colours blended by world-space noise. */
 	ZOOGIROLL_API UMaterialInstanceDynamic* GroundMID(UObject* Outer, const FLinearColor& A, const FLinearColor& B, float NoiseScale = 0.002f, float Roughness = 0.9f);
+
+	/** MID of /Game/Materials/M_ZoogiFX: additive unlit glow for power effects (falls back to GlowMID). */
+	ZOOGIROLL_API UMaterialInstanceDynamic* FxMID(UObject* Outer, const FLinearColor& Color, float Strength);
+	/** True if the power is armed before/while shooting rather than fired instantly. */
+	ZOOGIROLL_API bool IsArmedPower(EZoogiPower Power);
+
+	/** Plays /Game/Audio/S_<Name> as a 2D sound (no-op if missing or with -NoSound). */
+	ZOOGIROLL_API void PlaySfx(const UObject* WorldContext, const TCHAR* Name, float Volume = 1.f, float Pitch = 1.f);
+	ZOOGIROLL_API class USoundBase* LoadSound(const TCHAR* Name);
 
 	ZOOGIROLL_API UStaticMesh* BasicShape(const TCHAR* Name); // Sphere, Cube, Cylinder, Cone, Plane
 	ZOOGIROLL_API UStaticMesh* LoadMesh(const FString& Path);

@@ -66,6 +66,7 @@ protected:
 
 	// -ZoogiHumanTest: a scripted "virtual mouse" drives the exact same drag code on P1's turn.
 	bool bHumanTest = false;
+	bool bPowerTest = false;
 	bool bSimDown = false;
 	bool bSimPrevDown = false;
 	FVector2D SimMouse = FVector2D::ZeroVector;

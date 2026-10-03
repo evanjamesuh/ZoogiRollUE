@@ -8,6 +8,7 @@
 class AZoogiBall;
 class AZoogiOrb;
 class AZoogiArena;
+class AZoogiClone;
 class UPhysicalMaterial;
 
 UENUM(BlueprintType)
@@ -92,9 +93,26 @@ public:
 	float AimFraction() const;
 	void RotateAim(float DeltaYaw);
 
+	// ---- powers (ZoogiPowers.cpp)
+	/** An armed power (Ricochet, Lock-On, Static Shock, Bandage Bind) fires with the next shot. */
+	UPROPERTY(BlueprintReadOnly) bool bPowerArmed = false;
+	UPROPERTY(BlueprintReadOnly) bool bPowerUsed = false;
+	bool CanUsePower() const;
+	/** SPACE / E / HUD button: arm, disarm or fire the active Zoogi's power. Returns true if something happened. */
+	bool TryPower();
+	/** Aim pull after Lock-On snapping (what the shot will really use). */
+	FVector GetEffectivePull() const;
+	/** Lock-On target for the current pull, if any. */
+	AActor* GetLockTarget() const;
+	/** The active shooter touched something (hit or Bolt overlap). */
+	void OnShooterContact(AZoogiBall* Shooter, AActor* Other);
+	UPROPERTY() TArray<TObjectPtr<AZoogiClone>> Clones;
+
 	// ---- automation / screenshots (command line: -ZoogiAuto -ZoogiPlayers=4 -ZoogiArena=1 -ZoogiShots=<dir> -ZoogiQuit=<sec> -ZoogiMenuShot)
 	FString ShotDir;
 	void TakeShot(const FString& Name);
+	void TakeShotDelayed(const FString& Name, float Delay);
+	TMap<FString, float> DelayedShots;
 
 protected:
 	void BeginTurn(int32 PlayerIdx);
@@ -109,6 +127,19 @@ protected:
 	void FireShot(const FVector2D& Velocity);
 	void FinishGame();
 
+	// powers
+	void FireInstantPower(AZoogiBall* Ball);
+	void OnArmedShot(AZoogiBall* Ball);
+	void TickPowers(float Dt);
+	void EndPowers();
+	void CPUPowerTick();
+	TArray<AActor*> LiveTargets(const AZoogiBall* Except) const;
+	int32 RicochetsLeft = 0;
+	float RicochetTimer = -1.f;
+	TWeakObjectPtr<AActor> RicochetFrom;
+	TSet<TWeakObjectPtr<AActor>> PowerTouched;
+	bool bCPUUsePower = false;
+
 	// CPU
 	void PlanCPUShot();
 	bool bCPUPlanned = false;
@@ -117,11 +148,17 @@ protected:
 	FVector ShotStart = FVector::ZeroVector;
 	float ShotSpeed = 0.f;
 
+	// audio
+	void PlayMusic(const TCHAR* Name);
+	UPROPERTY() TObjectPtr<class UAudioComponent> MusicComp;
+	FString CurrentMusic;
+
 	UPROPERTY() TObjectPtr<UPhysicalMaterial> BallPM;
 	UPROPERTY() TObjectPtr<UPhysicalMaterial> OrbPM;
 
 	// automation
 	bool bAuto = false;
+	bool bPowerTest = false;
 	bool bMenuShot = false;
 	float QuitAfter = 0.f;
 	float Clock = 0.f;

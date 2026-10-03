@@ -28,6 +28,9 @@ public:
 	bool IsAtRest() const;
 	FVector OrbLocation() const;
 
+	/** Gold star orb: worth double and gives the scorer a power charge. */
+	void MakeStar();
+	UPROPERTY(BlueprintReadOnly) bool bStar = false;
 	UPROPERTY(BlueprintReadOnly) bool bOut = false;
 	UPROPERTY(BlueprintReadOnly) int32 LastHitBy = -1;
 	float RollingDecel = 450.f;

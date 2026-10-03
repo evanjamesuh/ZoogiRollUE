@@ -83,6 +83,16 @@ void AZoogiOrb::InitOrb(UPhysicalMaterial* PhysMat, float InRollingDecel)
 	}
 }
 
+void AZoogiOrb::MakeStar()
+{
+	bStar = true;
+	const FLinearColor Gold(1.f, 0.72f, 0.12f);
+	Visual->SetMaterial(0, ZoogiUtil::GlowMID(this, Gold, 0.9f));
+	for (int32 i = 0; i < Core->GetNumMaterials(); ++i) Core->SetMaterial(i, ZoogiUtil::GlowMID(this, FLinearColor(1.f, 0.45f, 0.02f), 3.f));
+	Glow->SetLightColor(Gold);
+	Glow->SetAttenuationRadius(320.f);
+}
+
 void AZoogiOrb::SetOut()
 {
 	bOut = true;
@@ -109,7 +119,7 @@ void AZoogiOrb::Tick(float DeltaSeconds)
 	if (bOut) return;
 	ZoogiPhysics::ApplyRolling(Sphere, ZoogiConst::OrbRadius, RollingDecel, DeltaSeconds, ZoogiConst::FullLaunchSpeed);
 	Phase += DeltaSeconds;
-	Glow->SetIntensity(7.f + 2.5f * FMath::Sin(Phase * 2.2f));
+	Glow->SetIntensity((bStar ? 12.f : 7.f) + (bStar ? 5.f : 2.5f) * FMath::Sin(Phase * (bStar ? 4.f : 2.2f)));
 }
 
 void AZoogiOrb::OnSphereHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
