@@ -205,6 +205,7 @@ protected:
 	FVector CPUTargetPull = FVector::ZeroVector;
 	float CPUStartDelay = 1.7f;
 	int32 CPUExplPrevN = 0;      // CPU Hotstreak: most targets seen inside the blast this roll
+	double HardQuitAt = 0.0;     // automation: forced exit time if QuitGame didn't finish
 	FVector ShotStart = FVector::ZeroVector;
 	float ShotSpeed = 0.f;
 

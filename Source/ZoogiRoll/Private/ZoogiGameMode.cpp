@@ -697,7 +697,16 @@ void AZoogiGameMode::Tick(float DeltaSeconds)
 	if (QuitAfter > 0.f && Clock > QuitAfter)
 	{
 		QuitAfter = 0.f;
+		UE_LOG(LogZoogi, Log, TEXT("ZoogiQuit reached (%.0f s), quitting"), Clock);
 		UKismetSystemLibrary::QuitGame(this, GetWorld()->GetFirstPlayerController(), EQuitPreference::Quit, false);
+		HardQuitAt = FPlatformTime::Seconds() + 5.0;
+	}
+	// Automation safety net: if the polite quit didn't take, force the exit.
+	if (HardQuitAt > 0.0 && FPlatformTime::Seconds() > HardQuitAt)
+	{
+		HardQuitAt = 0.0;
+		UE_LOG(LogZoogi, Warning, TEXT("Quit did not complete, forcing exit"));
+		FPlatformMisc::RequestExit(false);
 	}
 
 	switch (Phase)
@@ -736,9 +745,11 @@ void AZoogiGameMode::Tick(float DeltaSeconds)
 	}
 	case EZoogiPhase::GameOver:
 		if (PhaseTime > 1.5f) TakeShot(TEXT("gameover"));
-		if (bAuto && !ShotDir.IsEmpty() && PhaseTime > 4.f)
+		if (bAuto && PhaseTime > 4.f && HardQuitAt <= 0.0)
 		{
+			UE_LOG(LogZoogi, Log, TEXT("Auto match over, quitting"));
 			UKismetSystemLibrary::QuitGame(this, GetWorld()->GetFirstPlayerController(), EQuitPreference::Quit, false);
+			HardQuitAt = FPlatformTime::Seconds() + 5.0;
 		}
 		break;
 	default:

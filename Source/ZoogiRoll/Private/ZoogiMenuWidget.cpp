@@ -5,6 +5,8 @@
 #include "Components/Border.h"
 #include "Components/Button.h"
 #include "Components/HorizontalBox.h"
+#include "Components/Image.h"
+#include "Engine/Texture2D.h"
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/Overlay.h"
 #include "Components/OverlaySlot.h"
@@ -159,16 +161,39 @@ void UZoogiMenuWidget::BuildPlayerCard(UHorizontalBox* Row, int32 i)
 	if (UVerticalBoxSlot* VS = V->AddChildToVerticalBox(Pick)) { VS->SetPadding(FMargin(0.f, 10.f)); VS->SetHorizontalAlignment(HAlign_Center); }
 	UButton* Prev = MakeButton(Pick, TEXT("<"), "ZoogiPrev", i, PC, false, 46.f, 46.f, 24);
 	if (UHorizontalBoxSlot* HS = Cast<UHorizontalBoxSlot>(Prev->GetParent()->Slot)) HS->SetVerticalAlignment(VAlign_Center);
+	// Portrait: an in-game hero shot of the Zoogi (Art/Portraits -> /Game/UI/Portraits), framed in its colours.
+	// Falls back to the coloured initial if the texture is missing.
+	const float PortraitSize = 132.f;
 	USizeBox* OrbBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
-	OrbBox->SetWidthOverride(104.f);
-	OrbBox->SetHeightOverride(104.f);
-	UBorder* Orb = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
-	Orb->SetBrush(Rounded(D.Color, 52.f, Lighten(D.Secondary, 0.2f), 6.f));
-	Orb->SetHorizontalAlignment(HAlign_Center);
-	Orb->SetVerticalAlignment(VAlign_Center);
-	UTextBlock* Initial = MakeText(nullptr, D.Name.Left(1), 44, FLinearColor::White);
-	Orb->SetContent(Initial);
-	OrbBox->AddChild(Orb);
+	OrbBox->SetWidthOverride(PortraitSize);
+	OrbBox->SetHeightOverride(PortraitSize);
+	const FString TexPath = FString::Printf(TEXT("/Game/UI/Portraits/T_Portrait_%s.T_Portrait_%s"), *D.Id.ToString(), *D.Id.ToString());
+	if (UTexture2D* Tex = LoadObject<UTexture2D>(nullptr, *TexPath, nullptr, LOAD_NoWarn | LOAD_Quiet))
+	{
+		UBorder* Frame = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+		Frame->SetBrush(Rounded(Lighten(D.Color, 0.15f), 22.f, Lighten(D.Secondary, 0.3f), 3.f));
+		Frame->SetPadding(FMargin(4.f));
+		UImage* Img = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
+		FSlateBrush B;
+		B.SetResourceObject(Tex);
+		B.ImageSize = FVector2D(PortraitSize - 8.f, PortraitSize - 8.f);
+		B.DrawAs = ESlateBrushDrawType::RoundedBox;
+		B.OutlineSettings = FSlateBrushOutlineSettings(FVector4(18.f, 18.f, 18.f, 18.f), FSlateColor(FLinearColor::Transparent), 0.f);
+		B.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
+		Img->SetBrush(B);
+		Frame->SetContent(Img);
+		OrbBox->AddChild(Frame);
+	}
+	else
+	{
+		UBorder* Orb = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+		Orb->SetBrush(Rounded(D.Color, PortraitSize * 0.5f, Lighten(D.Secondary, 0.2f), 6.f));
+		Orb->SetHorizontalAlignment(HAlign_Center);
+		Orb->SetVerticalAlignment(VAlign_Center);
+		UTextBlock* Initial = MakeText(nullptr, D.Name.Left(1), 52, FLinearColor::White);
+		Orb->SetContent(Initial);
+		OrbBox->AddChild(Orb);
+	}
 	if (UHorizontalBoxSlot* HS = Pick->AddChildToHorizontalBox(OrbBox)) HS->SetPadding(FMargin(22.f, 0.f));
 	UButton* Next = MakeButton(Pick, TEXT(">"), "ZoogiNext", i, PC, false, 46.f, 46.f, 24);
 	if (UHorizontalBoxSlot* HS = Cast<UHorizontalBoxSlot>(Next->GetParent()->Slot)) HS->SetVerticalAlignment(VAlign_Center);
@@ -242,7 +267,7 @@ void UZoogiMenuWidget::BuildContents()
 		Title->SetFont(F);
 	}
 	if (UVerticalBoxSlot* VS = Main->AddChildToVerticalBox(Title)) VS->SetHorizontalAlignment(HAlign_Center);
-	UTextBlock* Sub = MakeText(nullptr, TEXT("pull back  -  shoot  -  knock orbs and rivals off the edge  -  gold stars charge your power"), 18, GInk, false);
+	UTextBlock* Sub = MakeText(nullptr, TEXT("lock on  -  fire  -  knock orbs and rivals off the edge  -  gold stars charge your power"), 18, GInk, false);
 	if (UVerticalBoxSlot* VS = Main->AddChildToVerticalBox(Sub)) { VS->SetHorizontalAlignment(HAlign_Center); VS->SetPadding(FMargin(0.f, 0.f, 0.f, 18.f)); }
 
 	// Players + rounds.

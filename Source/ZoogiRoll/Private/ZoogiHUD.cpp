@@ -82,6 +82,8 @@ void AZoogiHUD::DrawHUD()
 	if (!G || !Canvas) return;
 	U = Canvas->ClipY / 1080.f;
 	Time += GetWorld()->GetDeltaSeconds();
+	static const bool bNoHUD = FParse::Param(FCommandLine::Get(), TEXT("ZoogiNoHUD")); // clean captures (portraits)
+	if (bNoHUD && G->Phase != EZoogiPhase::Menu) return;
 
 	if (CanvasMenuMode < 0) CanvasMenuMode = FParse::Param(FCommandLine::Get(), TEXT("ZoogiCanvasMenu")) ? 1 : 0;
 	if (G->Phase == EZoogiPhase::Menu)

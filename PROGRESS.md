@@ -136,6 +136,12 @@ CPU players use powers too (about half the time they have a charge).
   - [x] Battle framing guard (5:00 PM): the camera tilts so the shooter's bottom stays within 62% of the half-height
         below centre (clear of the letterbox / bottom HUD) and the target's top within 62% above (below the top HUD);
         long locks rise +10 deg and pull back 30%, and the FOV widens (up to 92) when both can't fit. Letterbox 7.5%.
+  - [x] CPU power timing: armed powers arm once the target is locked in Main (visible before Battle), Wolf Pack
+        releases while fast with 2+ targets near, Hotstreak blows at the crowd peak / with a rival near the rim.
+  - [x] Automation quits reliably (auto match over -> quit, plus a forced exit 5 s after ZoogiQuit if needed).
+  - [x] Menu portraits: each player card shows an in-game hero shot of its Zoogi (captured with `-ZoogiNoHUD`
+        on the Draw camera, cropped, in `Art/Portraits`, imported by `Scripts/import_portraits.py` to
+        `/Game/UI/Portraits`, cooked via DirectoriesToAlwaysCook). Menu subtitle no longer says "pull back".
   - [ ] More polish.
 
 ## Command-line switches (for testing)
