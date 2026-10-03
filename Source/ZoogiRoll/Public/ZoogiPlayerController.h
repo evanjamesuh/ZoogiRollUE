@@ -30,6 +30,8 @@ public:
 	void OnGameOver(AZoogiBall* Winner);
 	void OnMenu();
 	void OnStageChanged(EZoogiStage Stage);
+	/** First contact of a shot: brief hit-stop, shake and FOV punch scaled by Strength (0..1). */
+	void OnImpact(float Strength);
 
 	AActor* GetHoverTarget() const { return HoverTarget.Get(); }
 	FVector2D GetCursor() const;
@@ -68,7 +70,8 @@ protected:
 	FCamPose BlendFrom;
 	int32 CurProfile = -1;
 	float ProfileAge = 10.f;
-	float FrameFix = 0.f;          // Battle framing guard tilt (deg)
+	float FrameFix = 0.f;
+	float ImpactAge = 10.f, ImpactStrength = 0.f;          // Battle framing guard tilt (deg)
 	int32 SeenLockSerial = -1;
 	float SwingAge = 10.f;         // time since the last lock / switch swing started
 	bool bWhip = false;

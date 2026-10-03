@@ -142,6 +142,9 @@ CPU players use powers too (about half the time they have a charge).
   - [x] Menu portraits: each player card shows an in-game hero shot of its Zoogi (captured with `-ZoogiNoHUD`
         on the Draw camera, cropped, in `Art/Portraits`, imported by `Scripts/import_portraits.py` to
         `/Game/UI/Portraits`, cooked via DirectoriesToAlwaysCook). Menu subtitle no longer says "pull back".
+  - [x] Impact juice: the first contact of every shot gets a white flash + a ground ring in the shooter's colour,
+        a short hit-stop (0.08x time for up to 0.09 s real time), camera shake and FOV punch scaled by shot speed,
+        and a "SMASH!" popup on hard hits. The rolling shooter leaves a lightless ring trail in its player colour.
   - [ ] More polish.
 
 ## Command-line switches (for testing)

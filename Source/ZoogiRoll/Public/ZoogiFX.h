@@ -20,6 +20,8 @@ public:
 
 	/** Spawns an effect. Radius is the final radius in cm. bRing = flat shockwave ring instead of a sphere. */
 	static AZoogiFX* Spawn(UWorld* World, const FVector& Location, const FLinearColor& Color, float Radius, float Duration, bool bRing = false, float Strength = 6.f, AActor* FollowActor = nullptr);
+	/** Cheap ground puff with no light (used for the rolling shooter's trail). */
+	static AZoogiFX* SpawnTrail(UWorld* World, const FVector& Location, const FLinearColor& Color, float Radius, float Duration, float Strength);
 
 	/** Spawns /Game/FX/<SystemName> (Niagara, auto-destroys). No-op if missing or with -ZoogiNoNiagara. */
 	static void Niagara(UWorld* World, const TCHAR* SystemName, const FVector& Location, const FRotator& Rotation = FRotator::ZeroRotator, float Scale = 1.f);

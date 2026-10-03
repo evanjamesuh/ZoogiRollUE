@@ -81,6 +81,18 @@ AZoogiFX* AZoogiFX::Spawn(UWorld* World, const FVector& Location, const FLinearC
 	return FX;
 }
 
+AZoogiFX* AZoogiFX::SpawnTrail(UWorld* World, const FVector& Location, const FLinearColor& Color, float Radius, float Duration, float Strength)
+{
+	AZoogiFX* FX = Spawn(World, Location, Color, Radius, Duration, true, Strength);
+	if (FX)
+	{
+		FX->BaseLight = 0.f;
+		FX->Flash->SetIntensity(0.f);
+		FX->Flash->SetVisibility(false);
+	}
+	return FX;
+}
+
 void AZoogiFX::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);

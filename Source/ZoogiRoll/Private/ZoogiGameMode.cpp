@@ -521,6 +521,7 @@ void AZoogiGameMode::FireShot(const FVector2D& Velocity)
 	ZoogiUtil::PlaySfx(this, TEXT("Launch"), FMath::Clamp(Velocity.Size() / 2500.f, 0.3f, 1.f), FMath::Lerp(0.85f, 1.2f, FMath::Clamp(Velocity.Size() / 3600.f, 0.f, 1.f)));
 	OnArmedShot(Ball);
 	Phase = EZoogiPhase::Rolling;
+	bShotImpacted = false;
 	PhaseTime = 0.f;
 	SettleTimer = 0.f;
 	ShotsFired++;

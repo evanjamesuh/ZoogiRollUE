@@ -223,6 +223,20 @@ void AZoogiBall::Tick(float DeltaSeconds)
 	{
 		RingMID->SetVectorParameterValue(TEXT("Color"), ZoogiUtil::PlayerColor(PlayerIndex));
 	}
+	// Shot trail: lightless ground puffs in the player colour while this Zoogi is the rolling shooter.
+	if (bActiveTurn && !bOut)
+	{
+		AZoogiGameMode* GM = GetWorld()->GetAuthGameMode<AZoogiGameMode>();
+		const float Spd = PlanarSpeed();
+		TrailClock += DeltaSeconds;
+		if (GM && GM->Phase == EZoogiPhase::Rolling && Spd > 250.f && TrailClock > 0.04f)
+		{
+			TrailClock = 0.f;
+			const FVector L = BallLocation() - FVector(0, 0, ZoogiConst::ZoogiRadius - 3.f);
+			const float K = FMath::Clamp(Spd / 2000.f, 0.f, 1.f);
+			AZoogiFX::SpawnTrail(GetWorld(), L, ZoogiUtil::PlayerColor(PlayerIndex), 26.f + 22.f * K, 0.55f, 3.f + 4.f * K);
+		}
+	}
 	if (bActiveTurn && RingMID)
 	{
 		RingMID->SetVectorParameterValue(TEXT("Color"), bPhasing ? FLinearColor(1.f, 0.9f, 0.2f) : ZoogiUtil::PlayerColor(PlayerIndex));

@@ -40,6 +40,7 @@ public:
 	UPROPERTY(BlueprintReadOnly) int32 PlayerIndex = 0;
 	UPROPERTY(BlueprintReadOnly) bool bCPU = false;
 	UPROPERTY(BlueprintReadOnly) int32 Score = 0;
+	float TrailClock = 0.f;
 	UPROPERTY(BlueprintReadOnly) bool bOut = false;
 	UPROPERTY(BlueprintReadOnly) int32 LastHitPlayer = -1;
 	UPROPERTY(BlueprintReadOnly) FVector SpawnLocation = FVector::ZeroVector;

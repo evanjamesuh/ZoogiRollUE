@@ -1,5 +1,6 @@
 // Zoogi powers (abilities from ZOOGI_ROSTER), implemented on AZoogiGameMode.
 #include "ZoogiGameMode.h"
+#include "ZoogiPlayerController.h"
 #include "ZoogiRoll.h"
 #include "ZoogiBall.h"
 #include "ZoogiOrb.h"
@@ -241,6 +242,18 @@ void AZoogiGameMode::OnArmedShot(AZoogiBall* Ball)
 
 void AZoogiGameMode::OnShooterContact(AZoogiBall* Shooter, AActor* Other)
 {
+	// First contact of the shot: impact flash in the shooter's colour, hit-stop and camera kick.
+	if (Phase == EZoogiPhase::Rolling && Shooter && Other && !bShotImpacted)
+	{
+		bShotImpacted = true;
+		const float S = FMath::Clamp((ShotSpeed - 500.f) / 2200.f, 0.2f, 1.f);
+		const FVector Mid = (Shooter->BallLocation() + ActorPos(Other)) * 0.5f;
+		const FLinearColor PC = ZoogiUtil::PlayerColor(Shooter->PlayerIndex);
+		AZoogiFX::Spawn(GetWorld(), Mid, FLinearColor(1.f, 0.97f, 0.9f), 90.f + 90.f * S, 0.22f, false, 14.f);
+		AZoogiFX::Spawn(GetWorld(), Mid - FVector(0, 0, ZoogiConst::ZoogiRadius - 4.f), PC, 150.f + 150.f * S, 0.45f, true, 10.f);
+		if (S > 0.6f) AddPopup(TEXT("SMASH!"), Mid + FVector(0, 0, 150.f), PC);
+		if (AZoogiPlayerController* PCtl = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PCtl->OnImpact(S);
+	}
 	if (Phase != EZoogiPhase::Rolling || !Shooter || !Other || !bPowerUsed) return;
 	const EZoogiPower P = Shooter->Def.PowerKind;
 	AZoogiBall* OtherBall = Cast<AZoogiBall>(Other);

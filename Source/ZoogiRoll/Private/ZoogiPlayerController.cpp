@@ -84,6 +84,12 @@ namespace ZoogiCamTune
 	constexpr float ShakeDecay = 6.f;
 	constexpr float SlowMoScale = 0.6f;       // only while everything is at rest (no effect on physics outcomes)
 	constexpr float SlowMoTime = 0.25f;
+	// Impact (first contact of a shot).
+	constexpr float HitStopScale = 0.08f;
+	constexpr float HitStopTime = 0.09f;      // real seconds at full strength
+	constexpr float ImpactShakeDeg = 1.4f;
+	constexpr float ImpactShakeDecay = 7.f;
+	constexpr float ImpactFovPunch = 5.f;
 	// Fire / follow.
 	constexpr float FireFovKick = 12.f;       // punch-out on release
 	constexpr float FireKickDecay = 3.5f;
@@ -243,6 +249,17 @@ void AZoogiPlayerController::EndSlowMo()
 		UGameplayStatics::SetGlobalTimeDilation(this, 1.f);
 		SlowMoUntil = 0.0;
 	}
+}
+
+void AZoogiPlayerController::OnImpact(float Strength)
+{
+	using namespace ZoogiCamTune;
+	if (bMenuCam) return;
+	ImpactAge = 0.f;
+	ImpactStrength = FMath::Clamp(Strength, 0.f, 1.f);
+	// Hit-stop: a few frames of near-freeze (uniform time scale, so the physics outcome is the same).
+	UGameplayStatics::SetGlobalTimeDilation(this, HitStopScale);
+	SlowMoUntil = GetWorld()->GetRealTimeSeconds() + HitStopTime * (0.5f + 0.5f * ImpactStrength);
 }
 
 void AZoogiPlayerController::OnShotFired(AZoogiBall* Ball)
@@ -484,6 +501,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	SwingAge += Dt;
 	LockPunchAge += Dt;
 	FireKickAge += Dt;
+	ImpactAge += Dt;
 
 	int32 PIdx = PMain;
 	float WantFov = -1.f;
@@ -715,7 +733,14 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		Rot.Pitch += A * FMath::Sin(LockPunchAge * 47.f);
 		Rot.Yaw += A * FMath::Sin(LockPunchAge * 31.f + 1.3f);
 	}
+	if (ImpactAge < 1.5f)
+	{
+		const float A = ImpactShakeDeg * ImpactStrength * FMath::Exp(-ImpactShakeDecay * ImpactAge);
+		Rot.Pitch += A * FMath::Sin(ImpactAge * 53.f);
+		Rot.Yaw += A * FMath::Sin(ImpactAge * 37.f + 0.7f);
+	}
 	float FinalFov = Fov;
+	if (ImpactAge < 0.3f) FinalFov -= ImpactFovPunch * ImpactStrength * FMath::Sin(PI * ImpactAge / 0.3f);
 	if (LockPunchAge < LockFovPunchTime) FinalFov -= LockFovPunch * FMath::Sin(PI * LockPunchAge / LockFovPunchTime);
 	if (FireKickAge < 2.f) FinalFov += FireFovKick * FMath::Exp(-FireKickDecay * FireKickAge) * FMath::Min(1.f, FireKickAge * 12.f);
 	Cam->SetActorLocation(Loc);
