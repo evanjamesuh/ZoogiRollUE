@@ -121,6 +121,18 @@ CPU players use powers too (about half the time they have a charge).
         with no lock; Battle keeps the shooter in frame on long locks; darker Arabian sand.
   - [x] Battle letterbox bars slide in (the power meter and controls line hide under them); Night Circuit End aerial
         squares up to the rectangular court and sits closer so it fills the frame.
+  - [x] Polish queue pass 1 (4:35-5:00 PM):
+        - Lock-on/camera blends: Main and Battle blend in with an ease-out (respond immediately), the mood shots
+          (Draw / Standby / End) ease in and out; lock-in brackets swing in with a half turn, shell and light flash.
+        - CPU: rejects shots that can't knock the target off from there, avoids shots where it would follow
+          the target off the edge, never picks a clearly worse shot just for variety, spends charges more when
+          it has 2+, keeps rival-only powers for rival shots, and caps Bolt's phasing shot short of the edge.
+        - Audio: per-asset loudness trims from measured source loudness (Score +7.6 dB, HitClick +5 dB, Fall -4.4 dB,
+          Arm/Zap -2 dB) in `ZoogiUtil::PlaySfx`; still not listened to.
+        - Balance: Hotstreak explosion radius 450 -> 390 and push 650+1500k -> 600+1400k; Bolt stun push 450 -> 680; Lars ricochet speed 900-1400 -> 1050-1700; Pinpoint's power reworked
+          for lock-on (the locked shot hits 30% harder, since everyone gets a perfect lock line now).
+        - Fixed: Meadow grass/flower and star-field ISMs fell back to the default material (the shared materials
+          lacked the instanced-mesh usage flag); `Scripts/fix_material_usage.py` sets it.
   - [ ] More polish.
 
 ## Command-line switches (for testing)
@@ -145,5 +157,6 @@ CPU players use powers too (about half the time they have a charge).
 * CPU players are simple (pick one of the 3 best orb/rival shots, aim error from Control stat).
 * Sound has not been listened to on the PC (all automated runs use -NoSound so nothing played while
   Evan was working). Music volume is 0.35; tune in `AZoogiGameMode::PlayMusic`.
-* Power balance is a first pass (radii/speeds at the top of `ZoogiPowers.cpp`).
+* Power balance: second pass from 7 four-CPU power-test matches (`FinalScores:` log line); still a small sample.
+  Radii/speeds at the top of `ZoogiPowers.cpp`.
 * Island edge collision is the engine cylinder's convex hull (a many-sided polygon close to r=15.5).

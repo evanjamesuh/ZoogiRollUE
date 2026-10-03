@@ -49,7 +49,7 @@ static TArray<FZoogiDef> BuildRoster()
 	R.Add(Make("lars", TEXT("Lars"), TEXT("Bouncer"), TEXT("#3B82F6"), TEXT("#93C5FD"), TEXT("Ricochet"),
 		TEXT("Ricochets toward the nearest target after a hit"), 70, 75, 60, 80)); P(EZoogiPower::Ricochet);
 	R.Add(Make("pinpoint", TEXT("Pinpoint"), TEXT("Precision"), TEXT("#8B5CF6"), TEXT("#A78BFA"), TEXT("Laser Trajectory"),
-		TEXT("Lock on to an orb or enemy, then drag to set power - the shot auto-aims"), 60, 65, 45, 95)); P(EZoogiPower::LockOn);
+		TEXT("Laser-guided strike: the locked shot hits 30% harder"), 60, 65, 45, 95)); P(EZoogiPower::LockOn);
 	R.Add(Make("bolt", TEXT("Bolt"), TEXT("Electric"), TEXT("#FBBF24"), TEXT("#FDE047"), TEXT("Static Shock"),
 		TEXT("Phase through enemies and stun them"), 80, 55, 40, 70)); P(EZoogiPower::StaticShock);
 	R.Add(Make("wraps", TEXT("Wraps"), TEXT("Mummy"), TEXT("#8B7355"), TEXT("#D4C4B0"), TEXT("Bandage Bind"),

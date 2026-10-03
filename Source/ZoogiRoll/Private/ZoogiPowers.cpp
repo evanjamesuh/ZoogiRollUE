@@ -12,11 +12,13 @@
 
 namespace
 {
-	constexpr float ExplosionRadius = 450.f;
+	constexpr float ExplosionRadius = 390.f;   // balance Oct 3: 450 -> 390 (Hotstreak won 4 and tied 1 of the 5 power-test matches it was in)
 	constexpr float ShadowRadius = 520.f;
 	constexpr float LockOnCone = 35.f;
 	constexpr float LockOnRange = 2600.f;
 	constexpr float BindShotScale = 0.65f;
+	// Everyone gets a perfect lock-on line now, so Pinpoint's power also makes the locked shot hit harder.
+	constexpr float PinpointPowerBoost = 1.3f;
 	constexpr int32 MaxCharges = 3;
 
 	FLinearColor PowerColor(EZoogiPower P)
@@ -122,7 +124,7 @@ void AZoogiGameMode::FireInstantPower(AZoogiBall* Ball)
 			if (Dist > ExplosionRadius + ZoogiConst::ZoogiRadius) continue;
 			const float K = 1.f - FMath::Clamp(Dist / (ExplosionRadius + ZoogiConst::ZoogiRadius), 0.f, 1.f);
 			const FVector Dir = FVector(D.X, D.Y, 0.f).GetSafeNormal(UE_SMALL_NUMBER, FVector(1, 0, 0));
-			PushActor(T, Dir * (650.f + 1500.f * K), 220.f + 200.f * K, Ball->PlayerIndex);
+			PushActor(T, Dir * (600.f + 1400.f * K), 220.f + 200.f * K, Ball->PlayerIndex);
 			++N;
 		}
 		UE_LOG(LogZoogi, Log, TEXT("P%d Hotstreak explosion pushed %d"), Ball->PlayerIndex + 1, N);
@@ -208,7 +210,8 @@ FVector AZoogiGameMode::GetEffectivePull() const
 	if (AActor* T = GetLockTarget())
 	{
 		const FVector To = ActorPos(T) - GetActiveBall()->BallLocation();
-		return FVector(To.X, To.Y, 0.f).GetSafeNormal() * FVector2D(AimPull.X, AimPull.Y).Size();
+		const float Len = FMath::Min(FVector2D(AimPull.X, AimPull.Y).Size() * PinpointPowerBoost, ZoogiConst::FullPull / ZoogiConst::DragScale);
+		return FVector(To.X, To.Y, 0.f).GetSafeNormal() * Len;
 	}
 	return AimPull;
 }
@@ -260,7 +263,7 @@ void AZoogiGameMode::OnShooterContact(AZoogiBall* Shooter, AActor* Other)
 			const FVector V = Shooter->GetBallVelocity();
 			FVector Side = FVector::CrossProduct(FVector::UpVector, FVector(V.X, V.Y, 0.f).GetSafeNormal());
 			if (FVector::DotProduct(Side, D) < 0.f) Side = -Side;
-			OtherBall->SetPlanarVelocity(Side * 450.f + FVector(V.X, V.Y, 0.f) * 0.2f, 150.f);
+			OtherBall->SetPlanarVelocity(Side * 680.f + FVector(V.X, V.Y, 0.f) * 0.3f, 150.f); // balance: 450 -> 680 (Bolt scored 0 in 5 matches)
 			AZoogiFX::Spawn(GetWorld(), OtherBall->BallLocation(), PowerColor(P), 140.f, 0.5f, false, 9.f, OtherBall);
 			AZoogiFX::Niagara(GetWorld(), TEXT("NS_Burst_Yellow"), OtherBall->BallLocation());
 			AddPopup(TEXT("STUNNED"), OtherBall->BallLocation() + FVector(0, 0, 110.f), PowerColor(P));
@@ -312,7 +315,7 @@ void AZoogiGameMode::TickPowers(float Dt)
 			if (Best)
 			{
 				const FVector Dir = (ActorPos(Best) - L).GetSafeNormal2D();
-				const float Speed = FMath::Min(FMath::Max3(Ball->PlanarSpeed(), ShotSpeed * 0.6f, 900.f), 1400.f);
+				const float Speed = FMath::Min(FMath::Max3(Ball->PlanarSpeed(), ShotSpeed * 0.7f, 1050.f), 1700.f); // balance: Lars ricochets hit harder
 				Ball->SetPlanarVelocity(Dir * Speed);
 				AZoogiFX::Spawn(GetWorld(), L, PowerColor(EZoogiPower::Ricochet), 120.f, 0.4f, false, 8.f);
 				AZoogiFX::Niagara(GetWorld(), TEXT("NS_Burst_Green"), L, FRotator::ZeroRotator, 0.8f);

@@ -96,8 +96,9 @@ void AZoogiTargetMarker::Tick(float DeltaSeconds)
 	{
 		UStaticMeshComponent* K = Ticks[i];
 		K->SetVisibility(bLock);
-		const float A = FMath::DegreesToRadians(Age * 90.f + i * 90.f);
-		const float KR = RingR + 26.f;
+		// Brackets swing in from wide with an extra half turn as the lock lands, then idle-rotate.
+		const float A = FMath::DegreesToRadians(Age * 90.f + i * 90.f + (1.f - In) * 180.f);
+		const float KR = RingR + 26.f + (1.f - In) * 90.f;
 		K->SetRelativeLocation(FVector(FMath::Cos(A) * KR, FMath::Sin(A) * KR, 6.f));
 		K->SetRelativeRotation(FRotator(0.f, FMath::RadiansToDegrees(A), 0.f));
 		K->SetRelativeScale3D(FVector(0.34f, 0.08f, 0.06f));
@@ -106,12 +107,12 @@ void AZoogiTargetMarker::Tick(float DeltaSeconds)
 	Shell->SetVisibility(bLock || bSoft);
 	Shell->SetRelativeLocation(FVector(0.f, 0.f, R - 3.f));
 	Shell->SetRelativeScale3D(FVector((R + 9.f + 4.f * Pulse) / 50.f));
-	if (MIDs.IsValidIndex(6)) MIDs[6]->SetScalarParameterValue(TEXT("Strength"), bLock ? 1.2f + 0.8f * Pulse : 0.8f);
+	if (MIDs.IsValidIndex(6)) MIDs[6]->SetScalarParameterValue(TEXT("Strength"), (bLock ? 1.2f + 0.8f * Pulse : 0.8f) + (1.f - In) * 3.f); // flash on lock
 	// Bobbing arrow above.
 	Arrow->SetVisibility(bLock);
 	Arrow->SetRelativeLocation(FVector(0.f, 0.f, 2.f * R + 95.f + 22.f * FMath::Sin(Age * 3.5f)));
 	Arrow->SetRelativeRotation(FRotator(180.f, Age * 120.f, 0.f));
 	Arrow->SetRelativeScale3D(FVector(0.42f, 0.42f, 0.55f));
 	Glow->SetRelativeLocation(FVector(0.f, 0.f, 60.f));
-	Glow->SetIntensity(bLock ? 60.f + 30.f * Pulse : (bSoft ? 25.f : 0.f));
+	Glow->SetIntensity((bLock ? 60.f + 30.f * Pulse : (bSoft ? 25.f : 0.f)) * (1.f + (1.f - In) * 1.5f));
 }

@@ -625,6 +625,13 @@ void AZoogiGameMode::PlanCPUShot()
 		// Rival-only powers: don't waste a charge if the best shot ended up being an orb.
 		if (bHuntRivals && !bPowerTest && !Cast<AZoogiBall>(Pick.Actor)) bCPUUsePower = false;
 	}
+	// Bolt phases through Zoogis while powered, so the shot won't stop on a rival: keep it short of the edge.
+	if (bCPUUsePower && MyPower == EZoogiPower::StaticShock)
+	{
+		const float Run = Arena->DistanceToEdge(B, BestDir);
+		const float Safe = FMath::Sqrt(2.f * Decel * FMath::Max(0.f, Run - 180.f));
+		BestFrac = FMath::Min(BestFrac, FMath::Max(0.2f, InvertLaunch(Safe)));
+	}
 	// Imperfect aim: less control = more error (ZoogiStats.control).
 	const float ErrDeg = FMath::FRandRange(-1.f, 1.f) * (100.f - Me->Def.Control) / 12.f;
 	BestDir = BestDir.GetRotated(ErrDeg);

@@ -96,6 +96,9 @@ namespace ZoogiCamTune
 	inline FVector Damp(const FVector& X, const FVector& Target, float Lambda, float Dt) { return X + (Target - X) * (1.f - FMath::Exp(-Lambda * Dt)); }
 	inline FLinearColor Damp(const FLinearColor& X, const FLinearColor& Target, float Lambda, float Dt) { return X + (Target - X) * (1.f - FMath::Exp(-Lambda * Dt)); }
 	inline float SmoothStep(float T) { T = FMath::Clamp(T, 0.f, 1.f); return T * T * (3.f - 2.f * T); }
+	inline float EaseOut3(float T) { T = 1.f - FMath::Clamp(T, 0.f, 1.f); return 1.f - T * T * T; }
+	// Phase blend curve: Main and Battle answer the player immediately (ease-out), the mood shots ease in and out.
+	inline float BlendCurve(int32 Profile, float T) { return (Profile == PMain || Profile == PBattle) ? EaseOut3(T) : SmoothStep(T); }
 }
 
 namespace
@@ -607,7 +610,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	if (bBlending && PIdx != PBattle)
 	{
 		// Battle keeps its spring arc swing; every other profile eases in on the clock.
-		const float A = SmoothStep(ProfileAge / P.Blend);
+		const float A = BlendCurve(PIdx, ProfileAge / P.Blend);
 		Yaw = FRotator::NormalizeAxis(BlendFrom.Yaw + FRotator::NormalizeAxis(WantYaw - BlendFrom.Yaw) * A);
 		YawVel = 0.f;
 	}
@@ -629,7 +632,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	}
 	if (bBlending)
 	{
-		const float A = SmoothStep(ProfileAge / P.Blend);
+		const float A = BlendCurve(PIdx, ProfileAge / P.Blend);
 		Pitch = FMath::Lerp(BlendFrom.Pitch, WantPitch, A);
 		Dist = FMath::Lerp(BlendFrom.Dist, WantDist, A);
 		Dutch = FMath::Lerp(BlendFrom.Dutch, P.Dutch, A);
