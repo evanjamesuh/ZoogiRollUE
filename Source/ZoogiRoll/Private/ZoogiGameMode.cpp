@@ -119,11 +119,12 @@ void AZoogiGameMode::MenuAction(FName Action, int32 Index)
 	}
 	else if (Action == "Rounds") MenuRounds = FMath::Clamp(Index, 1, 30);
 	else if (Action == "Start") StartMatch();
-	if (Action != "Start" && Action != "Quit") ZoogiUtil::PlaySfx(this, TEXT("HitClick"), 0.8f);
 	else if (Action == "Power") TryPower();
 	else if (Action == "Menu") ReturnToMenu();
 	else if (Action == "Rematch") StartMatch();
 	else if (Action == "Quit") UKismetSystemLibrary::QuitGame(this, GetWorld()->GetFirstPlayerController(), EQuitPreference::Quit, false);
+	if (Action != "Start" && Action != "Quit" && Action != "Power") ZoogiUtil::PlaySfx(this, TEXT("HitClick"), 0.8f);
+	MenuRevision++;
 }
 
 void AZoogiGameMode::ClearMatch()
@@ -138,6 +139,20 @@ void AZoogiGameMode::ClearMatch()
 	AimPull = FVector::ZeroVector;
 }
 
+bool AZoogiGameMode::OrbSpot(FVector& L) const
+{
+	if (!Arena) return true;
+	// Nudge orbs off solid court pieces (Night Circuit pads and posts).
+	const FVector2D P(L.X, L.Y);
+	const FVector2D Dir = P.IsNearlyZero() ? FVector2D(1.f, 0.f) : P.GetSafeNormal();
+	for (float Off : { 0.f, 70.f, -70.f, 140.f, -140.f, 210.f, -210.f })
+	{
+		const FVector2D Q = P + Dir * Off;
+		if (Arena->IsSpotClear(Q, ZoogiConst::OrbRadius) && !Arena->IsOffCourt(Q + Dir * 100.f)) { L.X = Q.X; L.Y = Q.Y; return true; }
+	}
+	return false;
+}
+
 void AZoogiGameMode::SpawnOrbs()
 {
 	const float Decel = Arena ? Arena->GetRollingDecel() : ZoogiConst::RollingDecel;
@@ -145,7 +160,8 @@ void AZoogiGameMode::SpawnOrbs()
 	for (int32 i = 0; i < ZoogiConst::OrbCount; ++i)
 	{
 		const float A = (float)i / ZoogiConst::OrbCount * 2.f * PI;
-		const FVector L(FMath::Cos(A) * ZoogiConst::OrbRingRadius, FMath::Sin(A) * ZoogiConst::OrbRingRadius, ZoogiConst::OrbRadius + 1.f);
+		FVector L(FMath::Cos(A) * ZoogiConst::OrbRingRadius, FMath::Sin(A) * ZoogiConst::OrbRingRadius, ZoogiConst::OrbRadius + 1.f);
+		if (!OrbSpot(L)) continue;
 		AZoogiOrb* O = GetWorld()->SpawnActor<AZoogiOrb>(AZoogiOrb::StaticClass(), FTransform(L));
 		if (O)
 		{
@@ -157,7 +173,9 @@ void AZoogiGameMode::SpawnOrbs()
 	for (int32 i = 0; i < 3; ++i)
 	{
 		const float A = i * 2.f * PI / 3.f + PI / 6.f;
-		const FVector L(FMath::Cos(A) * 90.f, FMath::Sin(A) * 90.f, ZoogiConst::OrbRadius + 1.f);
+		FVector L(FMath::Cos(A) * 90.f, FMath::Sin(A) * 90.f, ZoogiConst::OrbRadius + 1.f);
+		if (Arena && Arena->IsNeon()) L = FVector(-200.f + i * 200.f, 0.f, L.Z); // between the centre channels
+		if (!OrbSpot(L)) continue;
 		AZoogiOrb* O = GetWorld()->SpawnActor<AZoogiOrb>(AZoogiOrb::StaticClass(), FTransform(L));
 		if (O)
 		{
@@ -514,7 +532,6 @@ void AZoogiGameMode::PlanCPUShot()
 	if (!Me) return;
 	const FVector2D B(Me->BallLocation());
 	const float Decel = Arena->GetRollingDecel();
-	const float R = ZoogiConst::KnockoffRadius;
 
 	struct FCand { FVector2D P; float Value; float TargetMass; float Radius; };
 	TArray<FCand> Cands;
@@ -554,9 +571,7 @@ void AZoogiGameMode::PlanCPUShot()
 		const float Dist = D.Size();
 		if (Dist < 1.f) continue;
 		const FVector2D Dir = D / Dist;
-		const float PD = FVector2D::DotProduct(C.P, Dir);
-		const float Disc = PD * PD - (C.P.SizeSquared() - R * R);
-		const float Edge = -PD + FMath::Sqrt(FMath::Max(0.f, Disc));
+		const float Edge = Arena->DistanceToEdge(C.P, Dir);
 		float Cost = Dist * 0.5f + Edge - C.Value * 6.f;
 		if (Blocked(B, C.P, C.P)) Cost += 1500.f;
 		if (Cost < BestCost)

@@ -4,6 +4,9 @@
 #include "ZoogiPlayerController.h"
 #include "ZoogiTypes.h"
 #include "ZoogiArena.h"
+#include "ZoogiMenuWidget.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
@@ -79,11 +82,31 @@ void AZoogiHUD::DrawHUD()
 	U = Canvas->ClipY / 1080.f;
 	Time += GetWorld()->GetDeltaSeconds();
 
+	if (CanvasMenuMode < 0) CanvasMenuMode = FParse::Param(FCommandLine::Get(), TEXT("ZoogiCanvasMenu")) ? 1 : 0;
 	if (G->Phase == EZoogiPhase::Menu)
 	{
+		if (CanvasMenuMode == 0 && PlayerOwner)
+		{
+			if (!MenuWidget)
+			{
+				MenuWidget = CreateWidget<UZoogiMenuWidget>(PlayerOwner, UZoogiMenuWidget::StaticClass());
+				if (MenuWidget) MenuWidget->AddToViewport(10);
+			}
+			if (MenuWidget)
+			{
+				if (MenuWidget->GetVisibility() != ESlateVisibility::SelfHitTestInvisible)
+				{
+					MenuWidget->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+					MenuWidget->MarkDirty();
+				}
+				MenuWidget->Refresh(GetWorld()->GetDeltaSeconds());
+				return;
+			}
+		}
 		DrawMenu(G);
 		return;
 	}
+	if (MenuWidget && MenuWidget->GetVisibility() != ESlateVisibility::Collapsed) MenuWidget->SetVisibility(ESlateVisibility::Collapsed);
 	DrawMatch(G);
 	if (G->Phase == EZoogiPhase::GameOver) DrawResults(G);
 }
@@ -134,7 +157,8 @@ void AZoogiHUD::DrawMenu(AZoogiGameMode* G)
 	Text(TEXT("ARENA"), X0 + 30.f * U, Y + 10.f * U, FLinearColor(0.7f, 0.8f, 1.f), 0.6f);
 	for (int32 a = 0; a < (int32)EZoogiArena::MAX; ++a)
 	{
-		Button(ZoogiUtil::ArenaName((EZoogiArena)a), X0 + 160.f * U + a * 200.f * U, Y, 190.f * U, 52.f * U, "Arena", a, FLinearColor(0.4f, 0.9f, 0.4f), G->MenuArena == (EZoogiArena)a);
+		const int32 Col = a % 3, Row = a / 3;
+		Button(ZoogiUtil::ArenaName((EZoogiArena)a), X0 + 160.f * U + Col * 268.f * U, Y + Row * 60.f * U, 258.f * U, 52.f * U, "Arena", a, FLinearColor(0.4f, 0.9f, 0.4f), G->MenuArena == (EZoogiArena)a);
 	}
 
 	Button(TEXT("START MATCH"), W * 0.5f - 200.f * U, 890.f * U, 400.f * U, 80.f * U, "Start", 0, FLinearColor(1.f, 0.75f, 0.2f), true);
@@ -254,7 +278,7 @@ void AZoogiHUD::DrawAim(AZoogiGameMode* G)
 	{
 		const float D = Stop * i / Dots;
 		const FVector P = Start + Dir * D;
-		const bool bOff = FVector2D(P.X, P.Y).Size() > ZoogiConst::KnockoffRadius;
+		const bool bOff = G->Arena ? G->Arena->IsOffCourt(FVector2D(P.X, P.Y)) : FVector2D(P.X, P.Y).Size() > ZoogiConst::KnockoffRadius;
 		const FVector S = Project(P, true);
 		if (S.Z <= 0.f) continue;
 		const float T = (float)i / Dots;

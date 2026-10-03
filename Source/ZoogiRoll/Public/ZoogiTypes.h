@@ -14,6 +14,9 @@ enum class EZoogiArena : uint8
 	Frozen,
 	Volcanic,
 	Cosmic,
+	Arabian,
+	Tomb,
+	Neon,
 	MAX UMETA(Hidden)
 };
 

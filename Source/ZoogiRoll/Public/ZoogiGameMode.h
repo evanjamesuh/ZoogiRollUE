@@ -60,6 +60,8 @@ public:
 	UPROPERTY(BlueprintReadOnly) TArray<FZoogiPlayerSetup> MenuPlayers;
 	UPROPERTY(BlueprintReadOnly) EZoogiArena MenuArena = EZoogiArena::Meadow;
 	UPROPERTY(BlueprintReadOnly) int32 MenuRounds = 8;
+	/** Bumped on every menu change so the UMG menu knows to refresh. */
+	int32 MenuRevision = 0;
 	void MenuAction(FName Action, int32 Index);
 	void StartMatch();
 	void ReturnToMenu();
@@ -121,6 +123,7 @@ protected:
 	bool AllAtRest() const;
 	void ClearMatch();
 	void SpawnOrbs();
+	bool OrbSpot(FVector& L) const;
 	void RespawnBall(AZoogiBall* Ball);
 	FVector FindFreeSpot(const FVector& Desired) const;
 	void AddPopup(const FString& Text, const FVector& World, const FLinearColor& Color);

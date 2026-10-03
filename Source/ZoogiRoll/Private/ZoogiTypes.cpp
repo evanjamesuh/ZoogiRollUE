@@ -96,6 +96,9 @@ FString ZoogiUtil::ArenaName(EZoogiArena Arena)
 	case EZoogiArena::Frozen: return TEXT("Frozen Ring");
 	case EZoogiArena::Volcanic: return TEXT("Volcanic Pit");
 	case EZoogiArena::Cosmic: return TEXT("Cosmic Platform");
+	case EZoogiArena::Arabian: return TEXT("Arabian Nights");
+	case EZoogiArena::Tomb: return TEXT("Pharaoh's Tomb");
+	case EZoogiArena::Neon: return TEXT("Night Circuit");
 	default: return TEXT("Arena");
 	}
 }

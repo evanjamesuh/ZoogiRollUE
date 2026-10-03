@@ -37,6 +37,13 @@ public:
 	FVector GetSpawnPoint(int32 PlayerIndex) const;
 	float GetSpawnYaw(int32 PlayerIndex) const;
 	float GetKnockoffRadius() const { return ZoogiConst::KnockoffRadius; }
+	/** True past the knockout line (circle, or the Night Circuit rectangle). */
+	bool IsOffCourt(const FVector2D& P) const;
+	/** False if a ball of this radius would overlap a solid court piece (Night Circuit pads/posts). */
+	bool IsSpotClear(const FVector2D& P, float Radius) const;
+	/** Distance from P along Dir to the knockout line. */
+	float DistanceToEdge(const FVector2D& P, const FVector2D& Dir) const;
+	bool IsNeon() const { return Theme == EZoogiArena::Neon; }
 
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> Root;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UDirectionalLightComponent> Sun;
@@ -54,6 +61,17 @@ protected:
 	void BuildFrozen();
 	void BuildVolcanic();
 	void BuildCosmic();
+	void BuildArabian();
+	void BuildTomb();
+	void BuildNeon();
+	/** Axis-aligned box (min/max XY in cm, height) with optional collision. */
+	UStaticMeshComponent* AddBox(const FVector2D& Min, const FVector2D& Max, float Bottom, float Top, UMaterialInterface* Mat, bool bCollide);
+	TArray<FBox2D> SolidBoxes;
+	TArray<FVector2D> SolidPosts;
+	void AddStars(int32 Count, float SizeMin, float SizeMax, const FLinearColor& Color, int32 Seed);
+	class UPointLightComponent* AddPointLight(const FVector& Location, const FLinearColor& Color, float Candelas, float Radius);
+	/** Solid round bumper: invisible collider cylinder + visual mesh scaled to the footprint. */
+	void AddBumper(const FVector2D& XY, float Radius, float Height, UStaticMesh* Mesh, UMaterialInterface* Mat, const FVector& VisualScale, float VisualZ, float Restitution);
 
 	/** Floating island: top disc, rim band and a craggy underside. */
 	void BuildIsland(const FLinearColor& TopA, const FLinearColor& TopB, const FLinearColor& Band, const FLinearColor& RockA, const FLinearColor& RockB, float FloorFriction);

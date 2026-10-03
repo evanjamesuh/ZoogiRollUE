@@ -16,7 +16,8 @@ The web game at `C:\dev\ZoogiRollUE` is read-only reference and is never modifie
    (rebuild it with `powershell -File C:\dev\ZoogiRollUnreal\Scripts\package.ps1`, ~2-4 min).
 
 ### Controls
-* Menu: pick 2-4 players, each player's Zoogi (< >), HUMAN/CPU, rounds and arena, then START MATCH.
+* Menu (UMG, `ZoogiMenuWidget.cpp`): pick 2-4 players, each player's Zoogi (< >) on its card (power,
+  stat bars, mass), HUMAN/CPU, rounds and one of 7 arenas, then START MATCH. (`-ZoogiCanvasMenu` = old canvas menu.)
 * Your turn: **press the left mouse button anywhere, pull back (toward the camera), release** — the
   Zoogi shoots the opposite way. The dotted line is the predicted roll (red past the edge), the bar is
   power; past the white tick (80%) the shot ramps into a full slingshot.
@@ -83,12 +84,20 @@ CPU players use powers too (about half the time they have a charge).
   - [x] Frozen Ring, Volcanic Pit, Cosmic Platform verified in-game (selectable in the menu).
   - [x] Audio: Evan's menu/match music from the web game + original synthesized SFX
     (launch, clack, score, fall, explosion, zap, arm, turn, win) in `/Game/Audio` (`Scripts/import_audio.py`).
-  - [ ] Arabian Nights / Night Circuit / Pharaoh's Tomb arenas, more polish (Niagara, UMG menu).
+  - [x] Arabian Nights (desert island, palace islets with domes/minarets, lanterns, crescent moon),
+    Pharaoh's Tomb (sandstone court, obelisks, torches, sarcophagus islets) and Night Circuit
+    (rectangular 24x16 m neon court with rails, corner mouths, solid pads/posts, centre channels,
+    synthwave skyline) — all 7 web arenas now selectable. Night Circuit uses arena-shape queries
+    (`IsOffCourt`, `DistanceToEdge`, `IsSpotClear`) for orbs, CPU aim and the trajectory line.
+  - [x] Proper UMG main menu built in C++ (`UZoogiMenuWidget`, no Blueprint asset): title, players/rounds,
+    one card per player with Zoogi, power description and stat bars, arena grid, START / QUIT.
+  - [x] Fixed: in-match MENU / REMATCH / POWER buttons were swallowed by a misplaced `else` in `MenuAction`.
+  - [ ] Niagara VFX for powers and hits (currently `AZoogiFX` mesh effects), polish.
 
 ## Command-line switches (for testing)
-`-ZoogiAuto` (all CPU, start at once), `-ZoogiPlayers=N`, `-ZoogiArena=0..3`, `-ZoogiRounds=N`,
+`-ZoogiAuto` (all CPU, start at once), `-ZoogiPlayers=N`, `-ZoogiArena=0..6` (0 Meadow, 1 Frozen, 2 Volcanic, 3 Cosmic, 4 Arabian, 5 Tomb, 6 Night Circuit), `-ZoogiRounds=N`,
 `-ZoogiShots=<dir>` (event screenshots), `-ZoogiQuit=<sec>`, `-ZoogiMenuShot`, `-ZoogiHumanTest`,
-`-ZoogiPowerTest` (3 charges each, CPUs always use powers), `-ZoogiPicks=4,5,6,0` (roster index per slot:
+`-ZoogiCanvasMenu`, `-ZoogiPowerTest` (3 charges each, CPUs always use powers), `-ZoogiPicks=4,5,6,0` (roster index per slot:
 0 Wolfgang, 1 Hotstreak, 2 Lars, 3 Pinpoint, 4 Bolt, 5 Wraps, 6 Nightshade).
 
 ## Scripts
