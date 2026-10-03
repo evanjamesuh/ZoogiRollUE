@@ -63,6 +63,11 @@ protected:
 	float MenuOrbit = 0.f;
 	float DrawBaseYaw = 0.f;
 	float StandbyYaw = 0.f;
+	// Phase-to-phase blend: pose snapshot taken when the camera profile changes.
+	struct FCamPose { float Yaw = 0.f, Pitch = 0.f, Dist = 0.f, Fov = 90.f, Dutch = 0.f; FVector Pivot = FVector::ZeroVector, Look = FVector::ZeroVector; };
+	FCamPose BlendFrom;
+	int32 CurProfile = -1;
+	float ProfileAge = 10.f;
 	int32 SeenLockSerial = -1;
 	float SwingAge = 10.f;         // time since the last lock / switch swing started
 	bool bWhip = false;

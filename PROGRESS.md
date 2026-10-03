@@ -36,6 +36,17 @@ The web game at `C:\dev\ZoogiRollUE` is read-only reference and is never modifie
   dip + overshoot, FOV punch-in, shake, 0.6x slow-mo dip while everything is at rest, punch-out on fire).
   Stage timings: `ZoogiStageTune` in `ZoogiGameMode.h`. A sphere probe on the camera channel keeps the camera
   out of walls and props (decorative props block only the camera channel).
+* Per-phase cameras (4:05 PM spec, each with its own look). Every profile change eases in on the clock over its
+  `BlendIn` column (0.4-0.6 s); after that the profile's own lags handle tracking:
+  1. DRAW hero shot: pitch 7, close boom, push-in plus a 40 deg orbit sweep, FOV 102, warm grade, light DOF.
+  2. STANDBY calm overview: pitch 66, far boom, slow 5 deg/s drift around the arena centre, neutral soft grade, no shake.
+     A click here is a soft lock (ring and highlight only, the camera stays wide).
+  3. MAIN tactical over-the-shoulder: pitch 37, medium boom, aimed down the shooter-to-target line, or toward the
+     arena centre with no lock. Responsive, with a medium swing on lock and a whip-pan on switch. Clean grade.
+  4. BATTLE dramatic lock-on: pitch 24, arc swing, FOV punch, 4 deg Dutch, shake, DOF, vignette, contrasty grade,
+     0.5 s hold (CPU 0.3 s), fire, then the follow cam. Long-range locks pull the look point back so the shooter stays in frame.
+  5. END aerial resolution: follow the shot 1.4 s, then pull up to pitch 83 over the whole arena with a slow settle,
+     a cooler, desaturated grade and score popups.
 
 ### Zoogi powers
 Every Zoogi starts with 1 power charge (max 3). The three **gold star orbs** are worth 100 and give
@@ -107,6 +118,8 @@ CPU players use powers too (about half the time they have a charge).
     `Scripts/make_niagara.py` via `UZoogiFXLibrary` (sparks on hits, coloured bursts for knock-offs and powers,
     explosion for Hotstreak), layered on the `AZoogiFX` glows.
   - [x] RPG lock-on targeting + per-stage duel cameras (replaces drag-to-shoot), CPU uses the same flow.
+  - [x] Per-phase camera profiles with time-based 0.4-0.6 s blends between phases; Main aims at the arena centre
+        with no lock; Battle keeps the shooter in frame on long locks; darker Arabian sand.
   - [ ] More polish.
 
 ## Command-line switches (for testing)

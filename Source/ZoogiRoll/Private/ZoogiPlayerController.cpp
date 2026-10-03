@@ -37,19 +37,20 @@ namespace ZoogiCamTune
 		float Saturation;
 		float Contrast;
 		FLinearColor Gain; // colour grade lift (warm / neutral / cool)
+		float Blend;      // seconds to blend INTO this profile from whatever was before
 	};
 
 	enum EProfile { PDraw, PStandby, PMain, PBattle, PEnd, PFollow, PMenu, PCount };
 
 	static const FProfile Profiles[PCount] = {
-		// Name       Pitch  Dist   FOV   Dutch PosLag Blend YawW  Zeta  Vign  DOF   Sat   Contr  Gain
-		{ TEXT("Draw"),     8.f,  400.f, 100.f, 0.f, 5.f,  6.f,  5.f, 1.0f, 0.40f, 0.35f, 1.08f, 1.03f, FLinearColor(1.10f, 1.00f, 0.88f) }, // hero shot, warm
-		{ TEXT("Standby"), 65.f, 3500.f, 80.f, 0.f, 2.f,  5.f,  3.f, 1.0f, 0.25f, 0.0f,  0.95f, 1.00f, FLinearColor(1.00f, 1.00f, 1.00f) }, // calm overview
-		{ TEXT("Main"),    36.f, 1200.f, 85.f, 0.f, 9.f,  7.f,  9.f, 0.85f, 0.20f, 0.0f, 1.00f, 1.02f, FLinearColor(1.00f, 1.00f, 1.00f) }, // tactical OTS
-		{ TEXT("Battle"),  24.f,  680.f, 72.f, 4.f, 10.f, 7.f,  7.5f, 0.55f, 0.70f, 1.0f, 1.20f, 1.12f, FLinearColor(1.05f, 0.99f, 0.96f) }, // dramatic lock-on
-		{ TEXT("End"),     83.f, 4300.f, 75.f, 0.f, 1.5f, 1.6f, 3.f, 1.0f, 0.20f, 0.0f,  0.80f, 1.00f, FLinearColor(0.92f, 0.98f, 1.08f) }, // aerial resolution, cool
-		{ TEXT("Follow"),  55.f, 2400.f, 90.f, 0.f, 2.5f, 3.f,  3.f, 1.0f, 0.25f, 0.0f,  1.05f, 1.02f, FLinearColor(1.00f, 1.00f, 1.00f) }, // shot follow
-		{ TEXT("Menu"),    38.f, 3600.f, 90.f, 0.f, 2.f,  1.f,  2.f, 1.0f, 0.20f, 0.0f,  1.00f, 1.00f, FLinearColor(1.00f, 1.00f, 1.00f) },
+		// Name       Pitch  Dist   FOV   Dutch PosLag Blend YawW  Zeta  Vign  DOF   Sat   Contr  Gain                                 BlendIn
+		{ TEXT("Draw"),     7.f,  420.f, 102.f, 0.f, 5.f,  6.f,  5.f, 1.0f, 0.40f, 0.40f, 1.10f, 1.04f, FLinearColor(1.12f, 1.00f, 0.86f), 0.55f }, // (1) hero shot: low side, warm rim lift, wide
+		{ TEXT("Standby"), 66.f, 3500.f, 78.f, 0.f, 2.f,  5.f,  3.f, 1.0f, 0.22f, 0.0f,  0.94f, 0.98f, FLinearColor(1.00f, 1.00f, 1.00f), 0.55f }, // (2) calm overview: high, far, neutral soft
+		{ TEXT("Main"),    37.f, 1150.f, 84.f, 0.f, 9.f,  7.f,  9.f, 0.85f, 0.15f, 0.0f, 1.00f, 1.02f, FLinearColor(1.00f, 1.00f, 1.00f), 0.45f }, // (3) tactical OTS: clean, readable
+		{ TEXT("Battle"),  24.f,  680.f, 72.f, 4.f, 10.f, 7.f,  7.5f, 0.55f, 0.70f, 1.0f, 1.20f, 1.12f, FLinearColor(1.05f, 0.99f, 0.96f), 0.50f }, // (4) dramatic lock-on
+		{ TEXT("End"),     83.f, 4300.f, 74.f, 0.f, 1.5f, 1.6f, 3.f, 1.0f, 0.18f, 0.0f,  0.78f, 1.00f, FLinearColor(0.90f, 0.97f, 1.10f), 0.60f }, // (5) aerial resolution: top-down, cool, desaturated
+		{ TEXT("Follow"),  55.f, 2400.f, 90.f, 0.f, 2.5f, 3.f,  3.f, 1.0f, 0.25f, 0.0f,  1.05f, 1.02f, FLinearColor(1.00f, 1.00f, 1.00f), 0.40f }, // shot follow (first part of End)
+		{ TEXT("Menu"),    38.f, 3600.f, 90.f, 0.f, 2.f,  1.f,  2.f, 1.0f, 0.20f, 0.0f,  1.00f, 1.00f, FLinearColor(1.00f, 1.00f, 1.00f), 0.60f },
 	};
 
 	// Draw hero shot: side angle, push-in and orbit sweep.
@@ -60,14 +61,16 @@ namespace ZoogiCamTune
 	constexpr float StandbyDrift = 5.f;       // deg/s orbit around the arena centre
 	// Main.
 	constexpr float MainLookBias = 0.45f;     // look point between shooter (0) and target (1)
+	constexpr float MainCentreBias = 0.35f;   // no lock: look this far from the shooter toward the arena centre
 	constexpr float WhipFreq = 16.f;          // target switch whip-pan spring
 	constexpr float WhipZeta = 0.7f;
 	constexpr float WhipTime = 0.35f;
 	// Battle cinematic.
-	constexpr float BattleLookBias = 0.82f;   // target big and centred, shooter as a shoulder silhouette
+	constexpr float BattleLookBias = 0.72f;   // target big and centred, shooter as a shoulder silhouette
+	constexpr float BattleLookBiasFar = 0.5f; // long-range locks: keep the shooter in frame
 	constexpr float ShoulderOffset = 150.f;   // cm to the side of the shooter
 	constexpr float BattleFovFrame = 650.f;   // FOV narrows so ~6.5 m around the target fills the frame...
-	constexpr float BattleFovMin = 42.f;      // ...but never tighter than this
+	constexpr float BattleFovMin = 52.f;      // ...but never tighter than this
 	constexpr float SwingDip = 0.25f;         // boom shortens mid-swing
 	constexpr float SwingPitchDip = 7.f;      // and drops lower mid-swing
 	constexpr float LockFovPunch = 8.f;       // degrees of punch-in at the lock moment
@@ -452,6 +455,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		Cam->SetActorRotation((Look - Loc).Rotation());
 		Cam->GetCameraComponent()->SetFieldOfView(Fov);
 		ApplyPostProcess(Dt, PMenu, FVector::Dist(Loc, Look));
+		CurProfile = PMenu;
 		return;
 	}
 
@@ -513,8 +517,10 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		}
 		else
 		{
-			WantYaw = Shooter ? Shooter->AimYaw : Yaw; // toward the arena centre
-			WantLook = SL + FRotator(0.f, WantYaw, 0.f).Vector() * 400.f;
+			// No lock: aim from the shooter toward the arena centre.
+			const FVector2D ToC(-SL.X, -SL.Y);
+			WantYaw = ToC.Size() > 150.f ? FMath::RadiansToDegrees(FMath::Atan2(ToC.Y, ToC.X)) : (Shooter ? Shooter->AimYaw : Yaw);
+			WantLook = (ToC.Size() > 150.f ? FMath::Lerp(SL, FVector(0, 0, SL.Z), MainCentreBias) : SL + FRotator(0.f, WantYaw, 0.f).Vector() * 400.f) + FVector(0, 0, 20.f);
 		}
 		break;
 	}
@@ -531,7 +537,10 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		WantYaw = FMath::RadiansToDegrees(FMath::Atan2(Dir2.Y, Dir2.X));
 		const FVector Right = FVector::CrossProduct(FVector::UpVector, Dir2);
 		WantPivot = SL + Right * ShoulderOffset;
-		WantLook = Lock ? FMath::Lerp(SL, TL, BattleLookBias) + FVector(0, 0, 15.f) : SL + Dir2 * 700.f;
+		// Long shots: pull the look point back toward the shooter so the shooter's shoulder stays in frame.
+		const float LockDist = Lock ? FVector::Dist2D(SL, TL) : 0.f;
+		const float Bias = FMath::Lerp(BattleLookBias, BattleLookBiasFar, FMath::Clamp((LockDist - 700.f) / 1400.f, 0.f, 1.f));
+		WantLook = Lock ? FMath::Lerp(SL, TL, Bias) + FVector(0, 0, 15.f) : SL + Dir2 * 700.f;
 		if (Lock)
 		{
 			const float CamToTarget = FVector::Dist2D(SL, TL) + Profiles[PBattle].Dist;
@@ -572,10 +581,30 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	}
 
 	const FProfile& P = Profiles[PIdx];
+	// Profile change: snapshot the current pose and blend to the new profile over P.Blend seconds
+	// (time-based ease, so every phase change lands in ~0.4-0.6 s regardless of the profile's tracking lags).
+	if (PIdx != CurProfile)
+	{
+		CurProfile = PIdx;
+		ProfileAge = 0.f;
+		BlendFrom.Yaw = Yaw; BlendFrom.Pitch = Pitch; BlendFrom.Dist = Dist; BlendFrom.Fov = Fov; BlendFrom.Dutch = Dutch; BlendFrom.Pivot = Pivot; BlendFrom.Look = Look;
+	}
+	ProfileAge += Dt;
+	const float WantPitch = P.Pitch + PitchOff;
+	const float WantDist = P.Dist * DistMul;
+	const float WantFovF = WantFov > 0.f ? WantFov : P.Fov;
+	const bool bBlending = ProfileAge < P.Blend;
 	// Yaw: spring (underdamped in Battle = arc sweep with overshoot and settle; whip on switches).
 	float W = P.YawFreq, Z = P.YawZeta;
 	if (G->Stage == EZoogiStage::Main && bWhip && SwingAge < WhipTime) { W = WhipFreq; Z = WhipZeta; }
-	if (PIdx == PFollow || PIdx == PEnd)
+	if (bBlending && PIdx != PBattle)
+	{
+		// Battle keeps its spring arc swing; every other profile eases in on the clock.
+		const float A = SmoothStep(ProfileAge / P.Blend);
+		Yaw = FRotator::NormalizeAxis(BlendFrom.Yaw + FRotator::NormalizeAxis(WantYaw - BlendFrom.Yaw) * A);
+		YawVel = 0.f;
+	}
+	else if (PIdx == PFollow || PIdx == PEnd)
 	{
 		Yaw = FRotator::NormalizeAxis(WantYaw);
 		YawVel = 0.f;
@@ -591,12 +620,25 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 			Yaw = FRotator::NormalizeAxis(Yaw + YawVel * H);
 		}
 	}
-	Pitch = Damp(Pitch, P.Pitch + PitchOff, P.BlendLag, Dt);
-	Dist = Damp(Dist, P.Dist * DistMul, P.BlendLag, Dt);
-	Dutch = Damp(Dutch, P.Dutch, P.BlendLag, Dt);
-	Fov = Damp(Fov, WantFov > 0.f ? WantFov : P.Fov, P.BlendLag, Dt);
-	Pivot = Damp(Pivot, WantPivot, P.PosLag, Dt);
-	Look = Damp(Look, WantLook, P.PosLag, Dt);
+	if (bBlending)
+	{
+		const float A = SmoothStep(ProfileAge / P.Blend);
+		Pitch = FMath::Lerp(BlendFrom.Pitch, WantPitch, A);
+		Dist = FMath::Lerp(BlendFrom.Dist, WantDist, A);
+		Dutch = FMath::Lerp(BlendFrom.Dutch, P.Dutch, A);
+		Fov = FMath::Lerp(BlendFrom.Fov, WantFovF, A);
+		Pivot = FMath::Lerp(BlendFrom.Pivot, WantPivot, A);
+		Look = FMath::Lerp(BlendFrom.Look, WantLook, A);
+	}
+	else
+	{
+		Pitch = Damp(Pitch, WantPitch, P.BlendLag, Dt);
+		Dist = Damp(Dist, WantDist, P.BlendLag, Dt);
+		Dutch = Damp(Dutch, P.Dutch, P.BlendLag, Dt);
+		Fov = Damp(Fov, WantFovF, P.BlendLag, Dt);
+		Pivot = Damp(Pivot, WantPivot, P.PosLag, Dt);
+		Look = Damp(Look, WantLook, P.PosLag, Dt);
+	}
 
 	const FRotator Heading(0.f, Yaw, 0.f);
 	const float Pr = FMath::DegreesToRadians(Pitch);

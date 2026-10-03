@@ -615,7 +615,7 @@ void AZoogiArena::AddBumper(const FVector2D& XY, float Radius, float Height, USt
 void AZoogiArena::BuildArabian()
 {
 	// RoundIsland kind="saturn": warm sand floor, glowing gold lip, dark underside.
-	BuildIsland(ZoogiUtil::Hex(TEXT("#E8C99A")), ZoogiUtil::Hex(TEXT("#D6B07A")), ZoogiUtil::Hex(TEXT("#C4A074")),
+	BuildIsland(ZoogiUtil::Hex(TEXT("#C49E6A")), ZoogiUtil::Hex(TEXT("#B08756")), ZoogiUtil::Hex(TEXT("#9E784C")),
 		ZoogiUtil::Hex(TEXT("#1A120C")), ZoogiUtil::Hex(TEXT("#2E2016")), 0.3f);
 	AddCylinder(FVector2D::ZeroVector, ZoogiConst::KnockoffRadius + 12.f, 18.f, -3.f, ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#FFB03A")), 3.f), false)->SetCastShadow(false);
 	RockPM = ZoogiPhysics::MakeMaterial(this, 0.3f, 0.5f, false);
