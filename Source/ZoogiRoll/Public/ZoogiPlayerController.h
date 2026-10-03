@@ -68,6 +68,7 @@ protected:
 	FCamPose BlendFrom;
 	int32 CurProfile = -1;
 	float ProfileAge = 10.f;
+	float FrameFix = 0.f;          // Battle framing guard tilt (deg)
 	int32 SeenLockSerial = -1;
 	float SwingAge = 10.f;         // time since the last lock / switch swing started
 	bool bWhip = false;

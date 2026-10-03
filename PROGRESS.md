@@ -133,6 +133,9 @@ CPU players use powers too (about half the time they have a charge).
           for lock-on (the locked shot hits 30% harder, since everyone gets a perfect lock line now).
         - Fixed: Meadow grass/flower and star-field ISMs fell back to the default material (the shared materials
           lacked the instanced-mesh usage flag); `Scripts/fix_material_usage.py` sets it.
+  - [x] Battle framing guard (5:00 PM): the camera tilts so the shooter's bottom stays within 62% of the half-height
+        below centre (clear of the letterbox / bottom HUD) and the target's top within 62% above (below the top HUD);
+        long locks rise +10 deg and pull back 30%, and the FOV widens (up to 92) when both can't fit. Letterbox 7.5%.
   - [ ] More polish.
 
 ## Command-line switches (for testing)

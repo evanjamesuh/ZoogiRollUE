@@ -69,6 +69,11 @@ namespace ZoogiCamTune
 	constexpr float BattleLookBias = 0.72f;   // target big and centred, shooter as a shoulder silhouette
 	constexpr float BattleLookBiasFar = 0.5f; // long-range locks: keep the shooter in frame
 	constexpr float ShoulderOffset = 150.f;   // cm to the side of the shooter
+	constexpr float BattleFarPitch = 10.f;    // extra pitch for long locks
+	constexpr float BattleFarDist = 0.3f;     // extra boom for long locks
+	constexpr float BattleShooterMaxDrop = 0.62f;
+	constexpr float BattleTargetMaxRise = 0.62f;  // target top stays within 62% of the half-height above centre (below the top HUD)
+	constexpr float BattleFovMax = 92.f;          // FOV may widen up to this to fit both // shooter's bottom stays within 55% of the half-height below centre (clear of the letterbox + HUD)
 	constexpr float BattleFovFrame = 650.f;   // FOV narrows so ~6.5 m around the target fills the frame...
 	constexpr float BattleFovMin = 52.f;      // ...but never tighter than this
 	constexpr float SwingDip = 0.25f;         // boom shortens mid-swing
@@ -543,12 +548,30 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		WantPivot = SL + Right * ShoulderOffset;
 		// Long shots: pull the look point back toward the shooter so the shooter's shoulder stays in frame.
 		const float LockDist = Lock ? FVector::Dist2D(SL, TL) : 0.f;
-		const float Bias = FMath::Lerp(BattleLookBias, BattleLookBiasFar, FMath::Clamp((LockDist - 700.f) / 1400.f, 0.f, 1.f));
+		const float Far = FMath::Clamp((LockDist - 700.f) / 1400.f, 0.f, 1.f);
+		const float Bias = FMath::Lerp(BattleLookBias, BattleLookBiasFar, Far);
+		// Long locks: rise and pull back a little so the shooter and a distant target both read.
+		PitchOff += BattleFarPitch * Far;
+		DistMul *= 1.f + BattleFarDist * Far;
 		WantLook = Lock ? FMath::Lerp(SL, TL, Bias) + FVector(0, 0, 15.f) : SL + Dir2 * 700.f;
 		if (Lock)
 		{
 			const float CamToTarget = FVector::Dist2D(SL, TL) + Profiles[PBattle].Dist;
 			WantFov = FMath::Clamp(2.f * FMath::RadiansToDegrees(FMath::Atan2(BattleFovFrame, CamToTarget)), BattleFovMin, Profiles[PBattle].Fov);
+			// Widen if the shooter (bottom) and the target (top) can't both fit inside the HUD-safe band.
+			int32 VX = 16, VY = 9;
+			GetViewportSize(VX, VY);
+			const float Aspect = VY > 0 ? (float)VX / (float)VY : 16.f / 9.f;
+			const FVector CL = Cam->GetActorLocation();
+			const float SP = (SL - FVector(0, 0, ZoogiConst::ZoogiRadius) - CL).Rotation().Pitch;
+			const float TP = (TL + FVector(0, 0, 2.f * ZoogiConst::ZoogiRadius) - CL).Rotation().Pitch;
+			const float Span = TP - SP;
+			if (Span > 0.f)
+			{
+				const float VNeed = Span / (BattleShooterMaxDrop + BattleTargetMaxRise);
+				const float HNeed = 2.f * FMath::RadiansToDegrees(FMath::Atan(FMath::Tan(FMath::DegreesToRadians(VNeed)) * Aspect));
+				WantFov = FMath::Max(WantFov, FMath::Min(HNeed, BattleFovMax));
+			}
 		}
 		break;
 	}
@@ -657,6 +680,34 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 
 	FRotator Rot = (Look - Loc).Rotation();
 	Rot.Roll = Dutch;
+	// Battle framing guard: keep the shooter's silhouette above the letterbox / bottom HUD band by tilting
+	// down just enough, without pushing the target out of the top of the frame.
+	{
+		float Want = 0.f;
+		if (PIdx == PBattle && Shooter)
+		{
+			int32 VX = 16, VY = 9;
+			GetViewportSize(VX, VY);
+			const float Aspect = VY > 0 ? (float)VX / (float)VY : 16.f / 9.f;
+			const float VHalf = FMath::RadiansToDegrees(FMath::Atan(FMath::Tan(FMath::DegreesToRadians(Fov * 0.5f)) / Aspect));
+			const float ShooterLow = (SL - FVector(0, 0, ZoogiConst::ZoogiRadius) - Loc).Rotation().Pitch;
+			const float Rel = ShooterLow - Rot.Pitch; // negative = below the centre line
+			const float Limit = -VHalf * BattleShooterMaxDrop;
+			if (Rel < Limit)
+			{
+				Want = Rel - Limit; // negative: tilt down by this much
+				if (Lock)
+				{
+					// Don't let the target's top leave the frame.
+					const float TargetTop = (TL + FVector(0, 0, 2.f * ZoogiConst::ZoogiRadius) - Loc).Rotation().Pitch - Rot.Pitch;
+					const float Room = VHalf * BattleTargetMaxRise - TargetTop; // stay below the top HUD band // how far we can tilt down before the target exits
+					Want = FMath::Max(Want, -FMath::Max(Room, 0.f));
+				}
+			}
+		}
+		FrameFix = Damp(FrameFix, Want, 10.f, Dt);
+		Rot.Pitch += FrameFix;
+	}
 	// Lock impulse shake (Battle).
 	if (LockPunchAge < 2.f)
 	{

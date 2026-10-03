@@ -202,7 +202,7 @@ void AZoogiHUD::DrawMatch(AZoogiGameMode* G)
 	Letterbox = FMath::FInterpTo(Letterbox, bBattle ? 1.f : 0.f, Dt, bBattle ? 7.f : 4.f);
 	if (Letterbox > 0.01f)
 	{
-		const float BarH = H * 0.085f * Letterbox;
+		const float BarH = H * 0.075f * Letterbox;
 		DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.92f), 0.f, 0.f, W, BarH);
 		DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.92f), 0.f, H - BarH, W, BarH);
 	}
