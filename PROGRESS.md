@@ -145,7 +145,23 @@ CPU players use powers too (about half the time they have a charge).
   - [x] Impact juice: the first contact of every shot gets a white flash + a ground ring in the shooter's colour,
         a short hit-stop (0.08x time for up to 0.09 s real time), camera shake and FOV punch scaled by shot speed,
         and a "SMASH!" popup on hard hits. The rolling shooter leaves a lightless ring trail in its player colour.
-  - [ ] More polish.
+  - [x] Event feed under the scoreboard (newest 5, fade after ~6 s): knockouts with names and +100/-75, orb and
+        gold-star knock-offs, rolled-off-the-edge, stunned/skips turn. Popups that spawn at the same spot
+        (KNOCKOUT + FELL OFF) now stack instead of overprinting.
+  - [x] Balance sample 1 (5:12-5:35 PM, packaged build, 20 four-CPU power-test matches, 2 rounds, `bal_*.log`):
+        avg score / win share: Hotstreak 108 / 50%, Wolfgang 83 / 52%, Pinpoint 60 / 35%, Bolt 32 / 15%,
+        Nightshade 27 / 18%, Lars 9 / 2%, Wraps 0 / 0% (9 matches). Causes found in the logs:
+        Wraps' bind damped the victim's knock velocity by 45% (so its powered hits could never knock anyone off), and
+        Lars' ricochet bounced toward the nearest target (usually centre orbs). Fixes: the bind keeps full hit force and
+        the weak-shot curse lasts 2 shots; Lars ricochets toward the target easiest to knock off (close + near the edge
+        on the bounce line) at the speed needed (1050-1900 cm/s); Hotstreak push 600+1400k -> 550+1300k; wolf clones
+        1800 -> 1650 cm/s; the CPU's rival-hunt bias for rival powers 140 -> 100.
+  - [x] HUD readability: all HUD text is drawn with a Slate font sized to the final pixel size (crisp at 1080p
+        instead of upscaled bitmap glyphs), headings in Roboto Bold, ~10% larger. Player tags (P1..P4 pill in the
+        player colour, with STUN / BOUND state) float over each Zoogi outside the Draw and Battle close-ups.
+  - [x] KNOCKOUT! callout: big centre text in the attacker's colour with "ATTACKER > VICTIM", a shockwave ring at
+        the edge and a camera kick.
+  - [ ] Balance sample 2 (running, 3 rounds, balanced picks) to check the fixes.
 
 ## Command-line switches (for testing)
 `-ZoogiAuto` (all CPU, start at once), `-ZoogiPlayers=N`, `-ZoogiArena=0..6` (0 Meadow, 1 Frozen, 2 Volcanic, 3 Cosmic, 4 Arabian, 5 Tomb, 6 Night Circuit), `-ZoogiRounds=N`,
