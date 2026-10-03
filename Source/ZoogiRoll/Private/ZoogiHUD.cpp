@@ -13,19 +13,38 @@
 #include "Engine/Font.h"
 #include "Engine/World.h"
 #include "CanvasItem.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Fonts/FontMeasure.h"
+#include "Rendering/SlateRenderer.h"
 
 static const FLinearColor GPanel(0.02f, 0.03f, 0.08f, 0.72f);
 static const FLinearColor GOrbBlue(0.53f, 0.81f, 0.92f, 1.f);
 // Engine fonts are small at 1080p; scale everything up so labels read at a glance.
-static float TextMul(bool bBig) { return bBig ? 1.6f : 2.1f; }
+static float TextMul(bool bBig) { return bBig ? 1.75f : 2.3f; }
 
 void AZoogiHUD::Panel(float X, float Y, float W, float H, const FLinearColor& C)
 {
 	DrawRect(C, X, Y, W, H);
 }
 
+// Crisp text: draw with a Slate font sized to the final pixel size instead of scaling up the small legacy glyph bitmaps
+// (which looked soft at 1080p). Big labels use Roboto Bold.
+static FSlateFontInfo HudFont(float FinalScale, bool bBig)
+{
+	UFont* F = bBig ? GEngine->GetLargeFont() : GEngine->GetMediumFont();
+	FSlateFontInfo Fi = F->GetLegacySlateFontInfo();
+	Fi.Size = FMath::Max(6.f, FMath::RoundToFloat(Fi.Size * FinalScale));
+	if (bBig) Fi.TypefaceFontName = FName(TEXT("Bold"));
+	return Fi;
+}
+
 FVector2D AZoogiHUD::TextSize(const FString& S, float Scale, bool bBig)
 {
+	if (FSlateApplication::IsInitialized())
+	{
+		const TSharedRef<FSlateFontMeasure> M = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+		return M->Measure(S, HudFont(Scale * U * TextMul(bBig), bBig));
+	}
 	float W = 0.f, H = 0.f;
 	GetTextSize(S, W, H, bBig ? GEngine->GetLargeFont() : GEngine->GetMediumFont(), Scale * U * TextMul(bBig));
 	return FVector2D(W, H);
@@ -33,11 +52,9 @@ FVector2D AZoogiHUD::TextSize(const FString& S, float Scale, bool bBig)
 
 void AZoogiHUD::Text(const FString& S, float X, float Y, const FLinearColor& C, float Scale, bool bCenter, bool bBig)
 {
-	UFont* F = bBig ? GEngine->GetLargeFont() : GEngine->GetMediumFont();
 	if (bCenter) X -= TextSize(S, Scale, bBig).X * 0.5f;
-	FCanvasTextItem Item(FVector2D(X, Y), FText::FromString(S), F, C);
-	Item.Scale = FVector2D(Scale * U * TextMul(bBig));
-	Item.EnableShadow(FLinearColor(0, 0, 0, 0.8f), FVector2D(2.f * U, 2.f * U));
+	FCanvasTextItem Item(FVector2D(X, Y), FText::FromString(S), HudFont(Scale * U * TextMul(bBig), bBig), C);
+	Item.EnableShadow(FLinearColor(0, 0, 0, 0.85f * C.A), FVector2D(2.f * U, 2.f * U));
 	Canvas->DrawItem(Item);
 }
 
@@ -249,6 +266,30 @@ void AZoogiHUD::DrawMatch(AZoogiGameMode* G)
 		}
 	}
 
+	// Player tags: a small pill in the player's colour over each Zoogi so it's always clear who is who
+	// (skipped during the hero intro and the letterboxed Battle close-up).
+	if (G->Stage != EZoogiStage::Draw && G->Stage != EZoogiStage::Battle && G->Phase != EZoogiPhase::GameOver)
+	{
+		for (AZoogiBall* Bt : G->Balls)
+		{
+			if (!Bt || Bt->bOut) continue;
+			const FVector S = Project(Bt->BallLocation() + FVector(0, 0, ZoogiConst::ZoogiRadius + 70.f), true);
+			if (S.Z <= 0.f) continue;
+			const FLinearColor PC = ZoogiUtil::PlayerColor(Bt->PlayerIndex);
+			FString Tag = FString::Printf(TEXT("P%d"), Bt->PlayerIndex + 1);
+			if (Bt->StunTurns > 0) Tag += TEXT("  STUN");
+			else if (Bt->BoundShots > 0) Tag += TEXT("  BOUND");
+			const bool bActive = Bt == G->GetActiveBall();
+			const float Sc = bActive ? 0.8f : 0.66f;
+			const FVector2D TS = TextSize(Tag, Sc, true);
+			const float PadX = 8.f * U, PadY = 2.f * U;
+			const float X0 = S.X - TS.X * 0.5f - PadX, Y0 = S.Y - TS.Y - PadY * 2.f;
+			Panel(X0, Y0, TS.X + PadX * 2.f, TS.Y + PadY * 2.f, FLinearColor(PC.R * 0.35f, PC.G * 0.35f, PC.B * 0.35f, 0.8f));
+			Panel(X0, Y0 + TS.Y + PadY * 2.f - 3.f * U, TS.X + PadX * 2.f, 3.f * U, PC);
+			Text(Tag, S.X, Y0 + PadY, FLinearColor(1.f, 1.f, 1.f, 0.95f), Sc, true, true);
+		}
+	}
+
 	if (G->Phase == EZoogiPhase::Aiming) DrawAim(G);
 	DrawPower(G);
 	DrawPopups(G);
@@ -444,7 +485,7 @@ void AZoogiHUD::DrawStages(AZoogiGameMode* G)
 		Panel(X, Y, BW, BH, Bg);
 		if (bNow) Panel(X, Y + BH - 3.f * U, BW, 3.f * U, FLinearColor::White);
 		const FString L = AZoogiGameMode::StageName((EZoogiStage)i);
-		Text(L, X + BW * 0.5f, Y + 4.f * U, bNow ? FLinearColor::White : FLinearColor(0.6f, 0.66f, 0.8f, bDone ? 0.9f : 0.6f), 0.34f, true, false);
+		Text(L, X + BW * 0.5f, Y + 4.f * U, bNow ? FLinearColor::White : FLinearColor(0.6f, 0.66f, 0.8f, bDone ? 0.9f : 0.6f), 0.38f, true, false);
 	}
 
 	// Big phase banner on every stage change.
