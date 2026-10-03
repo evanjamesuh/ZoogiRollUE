@@ -6,6 +6,10 @@ import { useAudio } from "@/lib/stores/useAudio";
 import { SNOWMAN_RADIUS, getMapLayout } from "@/lib/arenaColliders";
 import { getElementOffset } from "@/lib/treeOffsets";
 
+const scarfMaterial = new THREE.MeshStandardMaterial({ color: "#e23b4a", roughness: 0.55 });
+const coalMaterial = new THREE.MeshStandardMaterial({ color: "#161616", roughness: 0.45 });
+const twigMaterial = new THREE.MeshStandardMaterial({ color: "#6a4328", roughness: 0.8 });
+
 interface Snowman {
   id: string;
   position: [number, number, number];
@@ -129,6 +133,28 @@ function SnowmanMesh({ snowman }: { snowman: Snowman }) {
       <mesh position={[0, 1.5, 0.24]} rotation={[Math.PI / 2, 0, 0]}>
         <coneGeometry args={[0.05, 0.2, 8]} />
         <meshStandardMaterial color="#FF6600" />
+      </mesh>
+
+      <mesh position={[0, 1.32, 0]} rotation={[0.2, 0.4, 0]} material={scarfMaterial}>
+        <torusGeometry args={[0.27, 0.055, 6, 12]} />
+      </mesh>
+      <mesh position={[0.16, 1.16, 0.2]} rotation={[0.5, 0.2, 0.6]} material={scarfMaterial}>
+        <boxGeometry args={[0.07, 0.24, 0.04]} />
+      </mesh>
+      {[
+        [1.24, 0.3],
+        [1.08, 0.33],
+        [0.94, 0.3],
+      ].map(([y, z]) => (
+        <mesh key={y} position={[0, y, z]} material={coalMaterial}>
+          <sphereGeometry args={[0.045, 6, 6]} />
+        </mesh>
+      ))}
+      <mesh position={[0.46, 1.12, 0]} rotation={[0, 0, Math.PI / 2.6]} material={twigMaterial}>
+        <cylinderGeometry args={[0.028, 0.028, 0.42, 5]} />
+      </mesh>
+      <mesh position={[-0.46, 1.12, 0]} rotation={[0, 0, -Math.PI / 2.6]} material={twigMaterial}>
+        <cylinderGeometry args={[0.028, 0.028, 0.42, 5]} />
       </mesh>
       
       <mesh position={[0, 1.85, 0]}>

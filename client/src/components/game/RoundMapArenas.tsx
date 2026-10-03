@@ -13,6 +13,7 @@ import {
 import { GRASS_RIM, ROUND_FLOOR_RADIUS, ROUND_KNOCKOFF_RADIUS, type RimMark } from "@/lib/roundRim";
 import { RING_VISUAL_LIMIT, ringPieceAction, type Aabb } from "@/lib/ringPlacement";
 import { MEADOW_BACKDROP_RADIUS, MEADOW_GROUND_RADIUS, MEADOW_GROUND_Y, forestTopY, meadowForestPieces, type ForestPiece } from "@/lib/meadowDressing";
+import { FrozenRinkMarkings } from "./FrozenRinkMarkings";
 
 const EDGE = ROUND_KNOCKOFF_RADIUS;
 const RIM_INNER = 14.7;
@@ -551,33 +552,6 @@ function MeadowBackdrop() {
   );
 }
 
-function SnowLip() {
-  const snow = useMemo(() => paintedTexture(snowDraw, 2, 1), []);
-  const banks = useMemo(() => {
-    const rand = seeded(15);
-    return Array.from({ length: 18 }, (_, i) => {
-      const angle = (i / 18) * Math.PI * 2 + 0.15;
-      const dist = 16.7 + (i % 3) * 0.35;
-      return {
-        id: `snowbank-${i}`,
-        x: Math.cos(angle) * dist,
-        z: Math.sin(angle) * dist,
-        s: 0.7 + rand() * 0.45,
-      };
-    });
-  }, []);
-  return (
-    <group>
-      {banks.map((bank) => (
-        <mesh key={bank.id} position={[bank.x, bank.s * 0.35, bank.z]} scale={[bank.s, bank.s * 0.55, bank.s]} castShadow receiveShadow>
-          <sphereGeometry args={[1, 16, 12]} />
-          <meshStandardMaterial map={snow} color="#ffffff" roughness={0.95} />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
 function ArabianPlanters() {
   const pots = useMemo(() => sceneryOf("saturn").filter((solid) => solid.kind === "prop"), []);
   return (
@@ -949,7 +923,7 @@ export function FrozenArena() {
   return (
     <group>
       <RoundIsland kind="ice" lip="#f4fbff" underside="#16324a" sideColor="#eef7ff" />
-      <SnowLip />
+      <FrozenRinkMarkings />
       <StageBoundary>
         <RingStage
           url="/models/winter_location.glb"
