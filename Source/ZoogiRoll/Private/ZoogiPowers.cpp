@@ -125,7 +125,7 @@ void AZoogiGameMode::FireInstantPower(AZoogiBall* Ball)
 			if (Dist > ExplosionRadius + ZoogiConst::ZoogiRadius) continue;
 			const float K = 1.f - FMath::Clamp(Dist / (ExplosionRadius + ZoogiConst::ZoogiRadius), 0.f, 1.f);
 			const FVector Dir = FVector(D.X, D.Y, 0.f).GetSafeNormal(UE_SMALL_NUMBER, FVector(1, 0, 0));
-			PushActor(T, Dir * (600.f + 1400.f * K), 220.f + 200.f * K, Ball->PlayerIndex);
+			PushActor(T, Dir * (550.f + 1300.f * K), 220.f + 200.f * K, Ball->PlayerIndex); // balance Oct 3 (20-match sample): 600+1400k -> 550+1300k, Hotstreak won 50%
 			++N;
 		}
 		UE_LOG(LogZoogi, Log, TEXT("P%d Hotstreak explosion pushed %d"), Ball->PlayerIndex + 1, N);
@@ -169,7 +169,7 @@ void AZoogiGameMode::FireInstantPower(AZoogiBall* Ball)
 			AZoogiClone* Cl = GetWorld()->SpawnActor<AZoogiClone>(AZoogiClone::StaticClass(), FTransform(Fwd.Rotation(), SpawnL), SP);
 			if (!Cl) continue;
 			AActor* T = Targets.IsValidIndex(i) ? Targets[i] : (Targets.Num() ? Targets[0] : nullptr);
-			Cl->InitClone(Wolf, T, Ball->PlayerIndex, 1800.f);
+			Cl->InitClone(Wolf, T, Ball->PlayerIndex, 1650.f); // balance Oct 3: 1800 -> 1650 (Wolfgang won 52% of its sample matches)
 			Cl->Sphere->SetPhysicsLinearVelocity(Fwd * 900.f + Offsets[i].GetSafeNormal() * 400.f);
 			Clones.Add(Cl);
 			AZoogiFX::Spawn(GetWorld(), SpawnL, C, 90.f, 0.4f, false, 6.f);
@@ -288,9 +288,9 @@ void AZoogiGameMode::OnShooterContact(AZoogiBall* Shooter, AActor* Other)
 		if (OtherBall && !PowerTouched.Contains(OtherBall))
 		{
 			PowerTouched.Add(OtherBall);
-			OtherBall->BoundShots = 1;
-			const FVector V = OtherBall->GetBallVelocity();
-			OtherBall->SetPlanarVelocity(FVector(V.X, V.Y, 0.f) * 0.55f);
+			// Balance Oct 3: the bind used to damp the victim's knock velocity by 45%, which made Wraps' powered hits unable to knock anyone off
+			// (Wraps scored 0 in all 9 sample matches). Now the hit keeps its full force and the curse lasts two shots.
+			OtherBall->BoundShots = 2;
 			AZoogiFX::Spawn(GetWorld(), OtherBall->BallLocation(), PowerColor(P), 120.f, 0.7f, true, 6.f, OtherBall);
 			AZoogiFX::Niagara(GetWorld(), TEXT("NS_Burst_Gold"), OtherBall->BallLocation(), FRotator::ZeroRotator, 0.8f);
 			AddPopup(TEXT("BOUND"), OtherBall->BallLocation() + FVector(0, 0, 110.f), PowerColor(P));
@@ -312,23 +312,36 @@ void AZoogiGameMode::TickPowers(float Dt)
 		RicochetTimer -= Dt;
 		if (RicochetTimer < 0.f)
 		{
-			// Bounce toward the nearest other target, keeping most of the shot's energy.
+			// Bounce toward the target that is easiest to knock off from here (close, and near the edge along the bounce line),
+			// rather than simply the nearest one (that kept Lars juggling centre orbs: 9 avg points in the 20-match sample).
 			const FVector L = Ball->BallLocation();
+			const float Decel = Arena ? Arena->GetRollingDecel() : 600.f;
 			AActor* Best = nullptr;
 			float BestD = TNumericLimits<float>::Max();
+			float BestNeed = 1050.f;
 			for (AActor* T : LiveTargets(Ball))
 			{
 				if (T == RicochetFrom.Get()) continue;
 				const FVector TP = ActorPos(T);
 				const float D = FVector::Dist2D(TP, L);
-				// Avoid bouncing straight at targets on the rim (Lars would follow them off the edge).
-				const float Cost = D + (FVector2D(TP.X, TP.Y).Size() > 1150.f ? 900.f : 0.f);
-				if (D < 2200.f && Cost < BestD) { BestD = Cost; Best = T; }
+				if (D > 2200.f || D < 1.f) continue;
+				const FVector2D Dir2 = FVector2D(TP - L).GetSafeNormal();
+				const float Edge = Arena ? Arena->DistanceToEdge(FVector2D(TP), Dir2) : 1000.f;
+				// Too close to the rim on this line and Lars would follow it off.
+				const float Cost = D * 0.6f + Edge + (Edge < 160.f ? 700.f : 0.f) + (Cast<AZoogiBall>(T) ? -150.f : 0.f);
+				if (Cost < BestD)
+				{
+					BestD = Cost; Best = T;
+					const float TM = Cast<AZoogiBall>(T) ? Cast<AZoogiBall>(T)->Def.MassRatio() : ZoogiConst::OrbMassRatio;
+					const float Transfer = 1.7f * Ball->Def.MassRatio() / (Ball->Def.MassRatio() + TM);
+					const float VIn = FMath::Sqrt(2.f * Decel * (Edge + 200.f)) / FMath::Max(Transfer, 0.3f);
+					BestNeed = FMath::Sqrt(VIn * VIn + 2.f * Decel * FMath::Max(0.f, D - 2.f * ZoogiConst::ZoogiRadius));
+				}
 			}
 			if (Best)
 			{
 				const FVector Dir = (ActorPos(Best) - L).GetSafeNormal2D();
-				const float Speed = FMath::Min(FMath::Max3(Ball->PlanarSpeed(), ShotSpeed * 0.7f, 1050.f), 1700.f); // balance: Lars ricochets hit harder
+				const float Speed = FMath::Clamp(FMath::Max3(Ball->PlanarSpeed(), ShotSpeed * 0.6f, BestNeed), 1050.f, 1900.f);
 				Ball->SetPlanarVelocity(Dir * Speed);
 				AZoogiFX::Spawn(GetWorld(), L, PowerColor(EZoogiPower::Ricochet), 120.f, 0.4f, false, 8.f);
 				AZoogiFX::Niagara(GetWorld(), TEXT("NS_Burst_Green"), L, FRotator::ZeroRotator, 0.8f);
