@@ -174,9 +174,33 @@ USoundBase* ZoogiUtil::LoadSound(const TCHAR* Name)
 	return S;
 }
 
+namespace
+{
+	// Per-asset loudness trim, measured from the source WAVs (active RMS, Oct 3): brings every SFX to about
+	// -14 dBFS before the call-site volume so call sites only express importance. Music plays at 0.35 (~-23 dB),
+	// so key events (score, knock-off, win) sit ~6-9 dB above the music and UI ticks just above it.
+	float SfxTrim(const TCHAR* Name)
+	{
+		static const TMap<FString, float> Trim = {
+			{ TEXT("Score"), 2.4f },     // -22.6 dB source, quiet chime: +7.6 dB
+			{ TEXT("HitClick"), 1.8f },  // -21.8 dB short tick: +5 dB
+			{ TEXT("Clack"), 1.25f },    // -18.7 dB transient
+			{ TEXT("Fall"), 0.6f },      // -7.4 dB, loudest asset: -4.4 dB
+			{ TEXT("Arm"), 0.8f },       // -10.2 dB
+			{ TEXT("Zap"), 0.8f },       // -10.1 dB
+			{ TEXT("Win"), 0.9f },
+			{ TEXT("Turn"), 1.0f },
+			{ TEXT("Launch"), 1.0f },
+			{ TEXT("Explosion"), 1.0f },
+		};
+		const float* T = Trim.Find(Name);
+		return T ? *T : 1.f;
+	}
+}
+
 void ZoogiUtil::PlaySfx(const UObject* WorldContext, const TCHAR* Name, float Volume, float Pitch)
 {
-	if (USoundBase* S = LoadSound(Name)) UGameplayStatics::PlaySound2D(WorldContext, S, Volume, Pitch);
+	if (USoundBase* S = LoadSound(Name)) UGameplayStatics::PlaySound2D(WorldContext, S, FMath::Min(Volume * SfxTrim(Name), 3.f), Pitch);
 }
 
 UStaticMesh* ZoogiUtil::BasicShape(const TCHAR* Name)

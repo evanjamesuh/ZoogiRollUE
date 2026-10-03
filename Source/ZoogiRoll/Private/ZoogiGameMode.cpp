@@ -329,6 +329,11 @@ void AZoogiGameMode::FinishGame()
 	}
 	BannerTime = 0.f;
 	UE_LOG(LogZoogi, Log, TEXT("Game over: %s"), *Banner);
+	{
+		FString Final;
+		for (AZoogiBall* B : Balls) if (B) Final += FString::Printf(TEXT("%s=%d "), *B->Def.Name, B->Score);
+		UE_LOG(LogZoogi, Log, TEXT("FinalScores: %s"), *Final);
+	}
 	ZoogiUtil::PlaySfx(this, TEXT("Win"), 0.8f);
 	if (AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PC->OnGameOver(GetActiveBall());
 }
@@ -420,7 +425,7 @@ void AZoogiGameMode::CheckKnockoffs()
 				Balls[Scorer]->OrbsScored++;
 				if (O->bStar) Balls[Scorer]->Charges = FMath::Min(3, Balls[Scorer]->Charges + 1);
 				UE_LOG(LogZoogi, Log, TEXT("%s off the edge -> P%d +%d (score %d)"), O->bStar ? TEXT("Star orb") : TEXT("Orb"), Scorer + 1, Pts, Balls[Scorer]->Score);
-				ZoogiUtil::PlaySfx(this, TEXT("Score"), O->bStar ? 0.9f : 0.6f, O->bStar ? 1.25f : 1.f);
+				ZoogiUtil::PlaySfx(this, TEXT("Score"), O->bStar ? 1.f : 0.85f, O->bStar ? 1.25f : 1.f);
 				AddPopup(O->bStar ? FString::Printf(TEXT("+%d STAR  +1 POWER  P%d"), Pts, Scorer + 1) : FString::Printf(TEXT("+%d ORB  P%d"), Pts, Scorer + 1),
 					EdgePoint(L, Arena), O->bStar ? FLinearColor(1.f, 0.8f, 0.3f) : ZoogiUtil::PlayerColor(Scorer));
 			}
@@ -549,7 +554,8 @@ void AZoogiGameMode::PlanCPUShot()
 	TArray<FCand> Cands;
 	for (AZoogiOrb* O : Orbs) if (O && !O->bOut) Cands.Add({ FVector2D(O->OrbLocation()), 50.f, ZoogiConst::OrbMassRatio, ZoogiConst::OrbRadius, O });
 	// Decide on the power first: rival-hunting powers make rivals more attractive targets.
-	bCPUUsePower = Me->Charges > 0 && (bPowerTest || FMath::FRand() < 0.55f);
+	// More charges banked = more willing to spend one.
+	bCPUUsePower = Me->Charges > 0 && (bPowerTest || FMath::FRand() < (Me->Charges >= 2 ? 0.8f : 0.5f));
 	const EZoogiPower MyPower = Me->Def.PowerKind;
 	const bool bHuntRivals = bCPUUsePower && (MyPower == EZoogiPower::ShadowStun || MyPower == EZoogiPower::StaticShock || MyPower == EZoogiPower::BandageBind);
 	for (AZoogiBall* Other : Balls) if (Other && Other != Me && !Other->bOut) Cands.Add({ FVector2D(Other->BallLocation()), bHuntRivals ? 140.f : 40.f, Other->Def.MassRatio(), ZoogiConst::ZoogiRadius, Other });
@@ -576,9 +582,10 @@ void AZoogiGameMode::PlanCPUShot()
 	TArray<FPlan> Plans;
 	FVector2D BestDir(-B.GetSafeNormal());
 	float BestFrac = 0.45f;
+	const float M1 = Me->Def.MassRatio();
+	const float VMax = ZoogiConst::LaunchSpeedForPull(1.f);
 	for (const FCand& C : Cands)
 	{
-		float BestCost = TNumericLimits<float>::Max();
 		const FVector2D D = C.P - B;
 		const float Dist = D.Size();
 		if (Dist < 1.f) continue;
@@ -586,28 +593,37 @@ void AZoogiGameMode::PlanCPUShot()
 		const float Edge = Arena->DistanceToEdge(C.P, Dir);
 		float Cost = Dist * 0.5f + Edge - C.Value * 6.f;
 		if (Blocked(B, C.P, C.P)) Cost += 1500.f;
-		if (Cost < BestCost)
-		{
-			BestCost = Cost;
-			BestDir = Dir;
-			const float Need = FMath::Sqrt(2.f * Decel * (Edge + 250.f));
-			const float M1 = Me->Def.MassRatio();
-			const float Transfer = (1.f + 0.7f) * M1 / (M1 + C.TargetMass);
-			const float VIn = Need / FMath::Max(Transfer, 0.3f);
-			const float Gap = FMath::Max(0.f, Dist - ZoogiConst::ZoogiRadius - C.Radius);
-			const float V0 = FMath::Sqrt(VIn * VIn + 2.f * Decel * Gap);
-			BestFrac = FMath::Clamp(InvertLaunch(V0), 0.3f, 0.97f);
-		}
-		Plans.Add({ BestCost, BestDir, BestFrac, C.Actor });
+		// Power needed to push the target ~2.5 m past the edge (1D collision, restitution ~0.7).
+		const float Need = FMath::Sqrt(2.f * Decel * (Edge + 250.f));
+		const float Transfer = (1.f + 0.7f) * M1 / (M1 + C.TargetMass);
+		const float VIn = Need / FMath::Max(Transfer, 0.3f);
+		const float Gap = FMath::Max(0.f, Dist - ZoogiConst::ZoogiRadius - C.Radius);
+		const float V0 = FMath::Sqrt(VIn * VIn + 2.f * Decel * Gap);
+		if (V0 > VMax) Cost += 300.f + (V0 - VMax) * 0.5f; // can't knock it off from here: less attractive
+		const float Frac = FMath::Clamp(InvertLaunch(FMath::Min(V0, VMax)), 0.3f, 0.97f);
+		// Self knock-off risk: the shooter keeps rolling after the hit (heavier shooter / lighter target = more).
+		const float VLaunch = ZoogiConst::LaunchSpeedForPull(Frac);
+		const float VHit = FMath::Sqrt(FMath::Max(0.f, VLaunch * VLaunch - 2.f * Decel * Gap));
+		const float VAfter = FMath::Max(0.f, VHit * (M1 - 0.7f * C.TargetMass) / (M1 + C.TargetMass));
+		const float Coast = VAfter * VAfter / (2.f * Decel);
+		const FVector2D Contact = C.P - Dir * (ZoogiConst::ZoogiRadius + C.Radius);
+		const float MyEdge = Arena->DistanceToEdge(Contact, Dir);
+		if (Coast > MyEdge - 80.f) Cost += 900.f; // would follow the target off the edge (-75 and a wasted turn)
+		Plans.Add({ Cost, Dir, Frac, C.Actor });
 	}
 	// Pick one of the three cheapest shots so CPU players vary their targets.
 	Plans.Sort([](const FPlan& A, const FPlan& Bp) { return A.Cost < Bp.Cost; });
 	if (Plans.Num() > 0)
 	{
-		const FPlan& Pick = Plans[FMath::RandRange(0, FMath::Min(2, Plans.Num() - 1))];
+		// Vary among the three cheapest, but never pick a clearly worse (blocked / risky) shot for variety's sake.
+		int32 NPick = 1;
+		while (NPick < FMath::Min(3, Plans.Num()) && Plans[NPick].Cost < Plans[0].Cost + 350.f) ++NPick;
+		const FPlan& Pick = Plans[FMath::RandRange(0, NPick - 1)];
 		BestDir = Pick.Dir;
 		BestFrac = Pick.Frac;
 		CPULock = Pick.Actor;
+		// Rival-only powers: don't waste a charge if the best shot ended up being an orb.
+		if (bHuntRivals && !bPowerTest && !Cast<AZoogiBall>(Pick.Actor)) bCPUUsePower = false;
 	}
 	// Imperfect aim: less control = more error (ZoogiStats.control).
 	const float ErrDeg = FMath::FRandRange(-1.f, 1.f) * (100.f - Me->Def.Control) / 12.f;
@@ -616,6 +632,7 @@ void AZoogiGameMode::PlanCPUShot()
 	const float PullLen = BestFrac * ZoogiConst::FullPull / ZoogiConst::DragScale;
 	CPUTargetPull = FVector(BestDir.X, BestDir.Y, 0.f) * PullLen;
 	Me->AimYaw = FVector(BestDir.X, BestDir.Y, 0.f).Rotation().Yaw;
+	UE_LOG(LogZoogi, Log, TEXT("CPU P%d plans %s at %.0f%% (power %s)"), ActivePlayer + 1, CPULock.IsValid() ? *TargetName(CPULock.Get()) : TEXT("-"), BestFrac * 100.f, bCPUUsePower ? TEXT("yes") : TEXT("no"));
 	bCPUPlanned = true;
 }
 
