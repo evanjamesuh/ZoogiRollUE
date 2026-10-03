@@ -45,6 +45,8 @@ namespace ZoogiStageTune
 	constexpr float BattleSwing = 0.85f;    // cinematic lock-on swing
 	constexpr float BattleHold = 0.5f;
 	constexpr float CPUBattleHold = 0.3f;
+	constexpr float LongLockDist = 1100.f;  // locks farther than this get the two-beat Battle camera
+	constexpr float TargetBeat = 0.55f;     // beat 1: tight on the target, then whip back to the shooter
 	constexpr float LockImpactSpeed = 650.f; // cm/s the shot still has when it reaches the target (plus 0.25 x distance)
 }
 
@@ -159,6 +161,9 @@ public:
 	FVector2D LockShotVelocity(float& OutFraction, float& OutImpactSpeed) const;
 	FString TargetName(const AActor* A) const;
 	float StageDuration() const;
+	/** Long lock: the Battle stage opens with a close-up on the target (two-beat camera) and runs TargetBeat longer. */
+	bool IsLongLock() const;
+	float BattleDuration() const;
 	bool AllAtRestPublic() const { return AllAtRest(); }
 
 	// ---- powers (ZoogiPowers.cpp)

@@ -52,9 +52,27 @@ float AZoogiGameMode::StageDuration() const
 	case EZoogiStage::Draw: return bCPU ? DrawCPU : DrawHuman;
 	case EZoogiStage::Standby: return bCPU ? CPUStandby : StandbyMax;
 	case EZoogiStage::Main: return bCPU ? CPUMain : 0.f;
-	case EZoogiStage::Battle: return BattleSwing + (bCPU ? CPUBattleHold : BattleHold);
+	case EZoogiStage::Battle: return BattleDuration();
 	default: return 0.f;
 	}
+}
+
+bool AZoogiGameMode::IsLongLock() const
+{
+	const AZoogiBall* B = GetActiveBall();
+	AActor* T = TargetLock.Get();
+	if (!B || !T || bSoftLock) return false;
+	const AZoogiBall* TB = Cast<AZoogiBall>(T);
+	const AZoogiOrb* TO = Cast<AZoogiOrb>(T);
+	const FVector TL = TB ? TB->BallLocation() : (TO ? TO->OrbLocation() : T->GetActorLocation());
+	return FVector::Dist2D(B->BallLocation(), TL) > ZoogiStageTune::LongLockDist;
+}
+
+float AZoogiGameMode::BattleDuration() const
+{
+	using namespace ZoogiStageTune;
+	const AZoogiBall* B = GetActiveBall();
+	return BattleSwing + (B && B->bCPU ? CPUBattleHold : BattleHold) + (IsLongLock() ? TargetBeat : 0.f);
 }
 
 void AZoogiGameMode::SetStage(EZoogiStage S)
@@ -227,7 +245,7 @@ void AZoogiGameMode::TickStages(float Dt)
 		break;
 	case EZoogiStage::Battle:
 		if (!bCPU && !TargetLock.IsValid()) { SetStage(EZoogiStage::Main); break; }
-		if (StageTime >= BattleSwing + (bCPU ? CPUBattleHold : BattleHold)) FireLockedShot();
+		if (StageTime >= BattleDuration()) FireLockedShot();
 		break;
 	default:
 		break;
@@ -242,6 +260,7 @@ void AZoogiGameMode::TickStages(float Dt)
 		if (Stage == EZoogiStage::Standby && StageTime > 0.7f) TakeShot(FString::Printf(TEXT("s%d_2_standby"), N));
 		if (Stage == EZoogiStage::Main && StageTime > 0.95f) TakeShot(FString::Printf(TEXT("s%d_3_main"), N));
 		if (Stage == EZoogiStage::Battle && StageTime > 0.3f) TakeShot(FString::Printf(TEXT("s%d_4_battle_swing"), N));
-		if (Stage == EZoogiStage::Battle && StageTime > BattleSwing + 0.1f) TakeShot(FString::Printf(TEXT("s%d_5_battle_locked"), N));
+		if (Stage == EZoogiStage::Battle && IsLongLock() && StageTime > ZoogiStageTune::TargetBeat + 0.25f) TakeShot(FString::Printf(TEXT("s%d_4w_battle_whip"), N));
+		if (Stage == EZoogiStage::Battle && StageTime > BattleDuration() - 0.2f) TakeShot(FString::Printf(TEXT("s%d_5_battle_locked"), N));
 	}
 }

@@ -40,7 +40,7 @@ namespace ZoogiCamTune
 		float Blend;      // seconds to blend INTO this profile from whatever was before
 	};
 
-	enum EProfile { PDraw, PStandby, PMain, PBattle, PEnd, PFollow, PMenu, PCount };
+	enum EProfile { PDraw, PStandby, PMain, PBattle, PEnd, PFollow, PMenu, PTargetCU, PCount };
 
 	static const FProfile Profiles[PCount] = {
 		// Name       Pitch  Dist   FOV   Dutch PosLag Blend YawW  Zeta  Vign  DOF   Sat   Contr  Gain                                 BlendIn
@@ -51,6 +51,7 @@ namespace ZoogiCamTune
 		{ TEXT("End"),     83.f, 4300.f, 74.f, 0.f, 1.5f, 1.6f, 3.f, 1.0f, 0.18f, 0.0f,  0.78f, 1.00f, FLinearColor(0.90f, 0.97f, 1.10f), 0.60f }, // (5) aerial resolution: top-down, cool, desaturated
 		{ TEXT("Follow"),  55.f, 2400.f, 90.f, 0.f, 2.5f, 3.f,  3.f, 1.0f, 0.25f, 0.0f,  1.05f, 1.02f, FLinearColor(1.00f, 1.00f, 1.00f), 0.40f }, // shot follow (first part of End)
 		{ TEXT("Menu"),    38.f, 3600.f, 90.f, 0.f, 2.f,  1.f,  2.f, 1.0f, 0.20f, 0.0f,  1.00f, 1.00f, FLinearColor(1.00f, 1.00f, 1.00f), 0.60f },
+		{ TEXT("TargetCU"),  9.f,  640.f, 40.f, -5.f, 14.f, 9.f, 12.f, 0.9f, 0.80f, 1.0f, 1.25f, 1.16f, FLinearColor(1.10f, 0.96f, 0.92f), 0.28f }, // Battle beat 1 (long locks): tight on the target
 	};
 
 	// Draw hero shot: side angle, push-in and orbit sweep.
@@ -109,7 +110,9 @@ namespace ZoogiCamTune
 	inline float SmoothStep(float T) { T = FMath::Clamp(T, 0.f, 1.f); return T * T * (3.f - 2.f * T); }
 	inline float EaseOut3(float T) { T = 1.f - FMath::Clamp(T, 0.f, 1.f); return 1.f - T * T * T; }
 	// Phase blend curve: Main and Battle answer the player immediately (ease-out), the mood shots ease in and out.
-	inline float BlendCurve(int32 Profile, float T) { return (Profile == PMain || Profile == PBattle) ? EaseOut3(T) : SmoothStep(T); }
+	inline float BlendCurve(int32 Profile, float T) { return (Profile == PMain || Profile == PBattle || Profile == PTargetCU) ? EaseOut3(T) : SmoothStep(T); }
+	constexpr float TargetCUYaw = 28.f;       // close-up looks at the target from this far off the shot line
+	constexpr float WhipBackBlend = 0.32f;    // beat 2: whip from the target close-up back to the shooter
 }
 
 namespace
@@ -553,8 +556,23 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	}
 	case EZoogiStage::Battle:
 	{
+		// Long locks: two-beat camera. Beat 1 sits tight on the target (who's about to get hit), then whips
+		// back to the shooter's shoulder for the release.
+		const bool bTwoBeat = Lock && G->IsLongLock();
+		if (bTwoBeat && T < ZoogiStageTune::TargetBeat)
+		{
+			PIdx = PTargetCU;
+			FVector D = TL - SL; D.Z = 0.f; D = D.GetSafeNormal();
+			WantYaw = FMath::RadiansToDegrees(FMath::Atan2(D.Y, D.X)) + TargetCUYaw;
+			WantPivot = TL;
+			WantLook = TL + FVector(0, 0, 10.f);
+			DistMul = 1.f - 0.12f * SmoothStep(T / ZoogiStageTune::TargetBeat); // slow push-in
+			ProbeFrom = TL + FVector(0, 0, 60.f);
+			break;
+		}
 		PIdx = PBattle;
-		const float S = FMath::Clamp(T / ZoogiStageTune::BattleSwing, 0.f, 1.f);
+		const float TB = bTwoBeat ? T - ZoogiStageTune::TargetBeat : T;
+		const float S = FMath::Clamp(TB / ZoogiStageTune::BattleSwing, 0.f, 1.f);
 		const float Mid = FMath::Sin(PI * S);
 		DistMul = 1.f - SwingDip * Mid;
 		PitchOff = -SwingPitchDip * Mid;
@@ -636,6 +654,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	// (time-based ease, so every phase change lands in ~0.4-0.6 s regardless of the profile's tracking lags).
 	if (PIdx != CurProfile)
 	{
+		BlendDur = (CurProfile == PTargetCU && PIdx == PBattle) ? WhipBackBlend : Profiles[PIdx].Blend;
 		CurProfile = PIdx;
 		ProfileAge = 0.f;
 		BlendFrom.Yaw = Yaw; BlendFrom.Pitch = Pitch; BlendFrom.Dist = Dist; BlendFrom.Fov = Fov; BlendFrom.Dutch = Dutch; BlendFrom.Pivot = Pivot; BlendFrom.Look = Look;
@@ -644,14 +663,14 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	const float WantPitch = P.Pitch + PitchOff;
 	const float WantDist = P.Dist * DistMul;
 	const float WantFovF = WantFov > 0.f ? WantFov : P.Fov;
-	const bool bBlending = ProfileAge < P.Blend;
+	const bool bBlending = ProfileAge < BlendDur;
 	// Yaw: spring (underdamped in Battle = arc sweep with overshoot and settle; whip on switches).
 	float W = P.YawFreq, Z = P.YawZeta;
 	if (G->Stage == EZoogiStage::Main && bWhip && SwingAge < WhipTime) { W = WhipFreq; Z = WhipZeta; }
 	if (bBlending && PIdx != PBattle)
 	{
 		// Battle keeps its spring arc swing; every other profile eases in on the clock.
-		const float A = BlendCurve(PIdx, ProfileAge / P.Blend);
+		const float A = BlendCurve(PIdx, ProfileAge / BlendDur);
 		Yaw = FRotator::NormalizeAxis(BlendFrom.Yaw + FRotator::NormalizeAxis(WantYaw - BlendFrom.Yaw) * A);
 		YawVel = 0.f;
 	}
@@ -673,7 +692,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	}
 	if (bBlending)
 	{
-		const float A = BlendCurve(PIdx, ProfileAge / P.Blend);
+		const float A = BlendCurve(PIdx, ProfileAge / BlendDur);
 		Pitch = FMath::Lerp(BlendFrom.Pitch, WantPitch, A);
 		Dist = FMath::Lerp(BlendFrom.Dist, WantDist, A);
 		Dutch = FMath::Lerp(BlendFrom.Dutch, P.Dutch, A);

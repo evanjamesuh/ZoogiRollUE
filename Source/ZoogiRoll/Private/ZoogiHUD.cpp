@@ -500,11 +500,14 @@ void AZoogiHUD::DrawResults(AZoogiGameMode* G)
 		Text(FString::Printf(TEXT("%d orbs   %d KOs%s"), B->OrbsScored, B->KnockOuts, B->bCPU ? TEXT("   CPU") : TEXT("")), TX, Y + 50.f * U, FLinearColor(0.72f, 0.78f, 0.9f), 0.42f, false, false);
 		if (bWin)
 		{
+			// Gold WINNER badge, pulsing gently.
 			const FString Badge = TEXT("WINNER");
-			const FVector2D BS = TextSize(Badge, 0.42f, true);
-			const float BX = RX + RW - 170.f * U - BS.X;
-			Panel(BX - 10.f * U, Y + 26.f * U, BS.X + 20.f * U, BS.Y + 8.f * U, FLinearColor(1.f, 0.78f, 0.2f, 0.95f));
-			Text(Badge, BX, Y + 30.f * U, FLinearColor(0.1f, 0.06f, 0.f), 0.42f);
+			const float Pulse = 1.f + 0.06f * FMath::Sin(Time * 5.f);
+			const FVector2D BS = TextSize(Badge, 0.7f * Pulse, true);
+			const float BX = RX + RW - 150.f * U - BS.X, BY = Y + (RowH - BS.Y) * 0.5f - 4.f * U;
+			Panel(BX - 16.f * U, BY - 4.f * U, BS.X + 32.f * U, BS.Y + 8.f * U, FLinearColor(0.45f, 0.3f, 0.02f, 0.95f));
+			Panel(BX - 13.f * U, BY - 1.f * U, BS.X + 26.f * U, BS.Y + 2.f * U, FLinearColor(1.f, 0.78f, 0.2f, 1.f));
+			Text(Badge, BX, BY, FLinearColor(0.12f, 0.07f, 0.f), 0.7f * Pulse);
 		}
 		const FString Sc = FString::FromInt(B->Score);
 		Text(Sc, RX + RW - 30.f * U - TextSize(Sc, 0.9f).X, Y + RowH * 0.5f - 26.f * U, PC + FLinearColor(0.15f, 0.15f, 0.15f, 0.f), 0.9f);

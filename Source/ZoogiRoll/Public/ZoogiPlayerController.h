@@ -70,6 +70,7 @@ protected:
 	FCamPose BlendFrom;
 	int32 CurProfile = -1;
 	float ProfileAge = 10.f;
+	float BlendDur = 0.5f;
 	float FrameFix = 0.f;
 	float ImpactAge = 10.f, ImpactStrength = 0.f;          // Battle framing guard tilt (deg)
 	int32 SeenLockSerial = -1;
