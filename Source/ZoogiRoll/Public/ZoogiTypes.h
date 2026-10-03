@@ -1,0 +1,97 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "ZoogiTypes.generated.h"
+
+class UMaterialInstanceDynamic;
+class UStaticMesh;
+
+/** Arenas from the web game. Only some are built so far; see AZoogiArena. */
+UENUM(BlueprintType)
+enum class EZoogiArena : uint8
+{
+	Meadow,
+	Frozen,
+	Volcanic,
+	Cosmic,
+	MAX UMETA(Hidden)
+};
+
+/** One playable Zoogi. Stats and abilities are ported from ZOOGI_ROSTER in useZoogiGame.tsx. */
+USTRUCT(BlueprintType)
+struct FZoogiDef
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) FName Id;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) FString Name;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) FString Type;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) FLinearColor Color = FLinearColor::White;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) FLinearColor Secondary = FLinearColor::White;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) FString Ability;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) FString AbilityDesc;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) int32 Speed = 60;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) int32 Power = 60;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) int32 Defense = 60;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) int32 Control = 60;
+	/** Nightshade: keep the file pivot (ball centre) instead of fitting the bounds (horns stick out). */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) bool bPivotFit = false;
+	/** Extra yaw (degrees) so the face looks along the aim. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) float ModelYaw = 0.f;
+
+	/** zoogiMassFromDefense: defense / 60, clamped 0.55..1.8 (60 defense = reference body). */
+	float MassRatio() const { return FMath::Clamp(Defense / 60.f, 0.55f, 1.8f); }
+};
+
+/**
+ * Units: 1 web-game unit (one Zoogi diameter) = 100 cm.
+ * Numbers come from simFeel.ts, restHeight.ts, arenaConstants.ts and roundRim.ts.
+ */
+namespace ZoogiConst
+{
+	constexpr float ZoogiRadius = 50.f;          // ZOOGI_DRAW_RADIUS 0.5
+	constexpr float OrbRadius = 40.f;            // ORB_DRAW_RADIUS 0.4
+	constexpr float FloorRadius = 1520.f;        // ROUND_FLOOR_RADIUS 15.2
+	constexpr float KnockoffRadius = 1550.f;     // ROUND_KNOCKOFF_RADIUS 15.5
+	constexpr float RollingDecel = 450.f;        // ROLLING_DECEL 4.5 u/s^2
+	constexpr float IceRollingDecel = 115.f;     // ICE_ROLLING_DECEL 1.15 u/s^2
+	constexpr float FullLaunchSpeed = 3600.f;    // FULL_LAUNCH_SPEED_PER_SEC 36
+	constexpr float FullPull = 1500.f;           // FULL_PULL_DISTANCE 15
+	constexpr float SlingshotPull = 0.8f;        // SLINGSHOT_PULL
+	constexpr float RestSpeed = 30.f;            // below this (cm/s) a grounded body is snapped to rest
+	constexpr float SettleDelay = 1.5f;          // SETTLE_DELAY_SECONDS
+	constexpr float FallOutZ = -600.f;           // FALL_OUT_Y -6
+	constexpr float MassKg = 10.f;               // kg per unit of web-game mass
+	constexpr float OrbMassRatio = 0.512f;       // (0.4 / 0.5)^3
+	constexpr float SpawnRadius = 1100.f;        // start pads, inside the floor
+	constexpr float OrbRingRadius = 500.f;       // createOrbs(ringRadius = 5)
+	constexpr int32 OrbCount = 15;
+	constexpr int32 ScoreOrb = 50;               // KNOCKOUT_SCORE_ORB
+	constexpr int32 ScorePlayer = 100;           // KNOCKOUT_SCORE_PLAYER
+	constexpr int32 PenaltyFall = 75;            // KNOCKOUT_PENALTY
+	/** Ground drag is multiplied by this before it becomes "pull", so a full pull fits on screen. */
+	constexpr float DragScale = 2.0f;
+
+	/** launchSpeedPerSecForPull, in cm/s. Quadratic through 80%, then a smoothstep rise to a full shot. */
+	ZOOGIROLL_API float LaunchSpeedForPull(float PullFraction);
+}
+
+namespace ZoogiUtil
+{
+	ZOOGIROLL_API FLinearColor Hex(const TCHAR* Hex);
+	ZOOGIROLL_API const TArray<FZoogiDef>& Roster();
+	ZOOGIROLL_API const FZoogiDef* FindZoogi(FName Id);
+	ZOOGIROLL_API FLinearColor PlayerColor(int32 PlayerIndex);
+	ZOOGIROLL_API FString ArenaName(EZoogiArena Arena);
+
+	/** MID of /Game/Materials/M_ZoogiSurface (or the engine BasicShapeMaterial if the project material is missing). */
+	ZOOGIROLL_API UMaterialInstanceDynamic* SurfaceMID(UObject* Outer, const FLinearColor& Color, float Roughness = 0.6f,
+		const FLinearColor& Emissive = FLinearColor::Black, float EmissiveStrength = 0.f, float Metallic = 0.f);
+	/** MID of /Game/Materials/M_ZoogiGlow: emissive body with a fresnel rim (orbs, pads, rings). */
+	ZOOGIROLL_API UMaterialInstanceDynamic* GlowMID(UObject* Outer, const FLinearColor& Color, float Strength);
+	/** MID of /Game/Materials/M_ZoogiGround: two colours blended by world-space noise. */
+	ZOOGIROLL_API UMaterialInstanceDynamic* GroundMID(UObject* Outer, const FLinearColor& A, const FLinearColor& B, float NoiseScale = 0.002f, float Roughness = 0.9f);
+
+	ZOOGIROLL_API UStaticMesh* BasicShape(const TCHAR* Name); // Sphere, Cube, Cylinder, Cone, Plane
+	ZOOGIROLL_API UStaticMesh* LoadMesh(const FString& Path);
+}
