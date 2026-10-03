@@ -137,6 +137,7 @@ void AZoogiGameMode::ClearMatch()
 	Balls.Reset();
 	Orbs.Reset();
 	Popups.Reset();
+	Feed.Reset();
 	bAimActive = false;
 	AimPull = FVector::ZeroVector;
 }
@@ -296,6 +297,7 @@ void AZoogiGameMode::EndTurn()
 		{
 			NB->StunTurns--;
 			UE_LOG(LogZoogi, Log, TEXT("P%d is stunned and skips this turn"), Next + 1);
+			if (Balls.IsValidIndex(Next)) AddFeed(FString::Printf(TEXT("P%d %s  is stunned and skips a turn"), Next + 1, *Balls[Next]->Def.Name), FLinearColor(0.8f, 0.65f, 1.f));
 			AddPopup(FString::Printf(TEXT("P%d STUNNED - SKIPS TURN"), Next + 1), NB->BallLocation() + FVector(0, 0, 120.f), FLinearColor(0.7f, 0.4f, 1.f));
 			continue;
 		}
@@ -375,6 +377,17 @@ void AZoogiGameMode::RespawnBall(AZoogiBall* Ball)
 	Ball->LastHitPlayer = -1;
 }
 
+void AZoogiGameMode::AddFeed(const FString& Text, const FLinearColor& Color)
+{
+	FZoogiFeedItem F;
+	F.Text = Text;
+	F.Color = Color;
+	Feed.Insert(F, 0);
+	if (Feed.Num() > 5) Feed.SetNum(5);
+	static int32 FeedShots = 0;
+	if (FeedShots < 3) TakeShotDelayed(FString::Printf(TEXT("feed_%d"), ++FeedShots), 1.2f);
+}
+
 void AZoogiGameMode::AddPopup(const FString& Text, const FVector& World, const FLinearColor& Color)
 {
 	FZoogiPopup P;
@@ -426,6 +439,8 @@ void AZoogiGameMode::CheckKnockoffs()
 				if (O->bStar) Balls[Scorer]->Charges = FMath::Min(3, Balls[Scorer]->Charges + 1);
 				UE_LOG(LogZoogi, Log, TEXT("%s off the edge -> P%d +%d (score %d)"), O->bStar ? TEXT("Star orb") : TEXT("Orb"), Scorer + 1, Pts, Balls[Scorer]->Score);
 				ZoogiUtil::PlaySfx(this, TEXT("Score"), O->bStar ? 1.f : 0.85f, O->bStar ? 1.25f : 1.f);
+				AddFeed(O->bStar ? FString::Printf(TEXT("P%d %s  knocked off a GOLD STAR  +%d  (+1 power)"), Scorer + 1, *Balls[Scorer]->Def.Name, Pts)
+					: FString::Printf(TEXT("P%d %s  knocked off an orb  +%d"), Scorer + 1, *Balls[Scorer]->Def.Name, Pts), O->bStar ? FLinearColor(1.f, 0.8f, 0.3f) : ZoogiUtil::PlayerColor(Scorer));
 				AddPopup(O->bStar ? FString::Printf(TEXT("+%d STAR  +1 POWER  P%d"), Pts, Scorer + 1) : FString::Printf(TEXT("+%d ORB  P%d"), Pts, Scorer + 1),
 					EdgePoint(L, Arena), O->bStar ? FLinearColor(1.f, 0.8f, 0.3f) : ZoogiUtil::PlayerColor(Scorer));
 			}
@@ -444,11 +459,14 @@ void AZoogiGameMode::CheckKnockoffs()
 			B->Score = FMath::Max(0, B->Score - ZoogiConst::PenaltyFall);
 			UE_LOG(LogZoogi, Log, TEXT("P%d fell off (last hit by %s)"), B->PlayerIndex + 1, B->LastHitPlayer >= 0 ? *FString::Printf(TEXT("P%d"), B->LastHitPlayer + 1) : TEXT("nobody"));
 			AddPopup(FString::Printf(TEXT("-%d FELL OFF  P%d"), ZoogiConst::PenaltyFall, B->PlayerIndex + 1), EdgePoint(L, Arena), FLinearColor(1.f, 0.3f, 0.25f));
+			if (!Balls.IsValidIndex(B->LastHitPlayer) || B->LastHitPlayer == B->PlayerIndex)
+				AddFeed(FString::Printf(TEXT("P%d %s  rolled off the edge  -%d"), B->PlayerIndex + 1, *B->Def.Name, ZoogiConst::PenaltyFall), FLinearColor(1.f, 0.4f, 0.35f));
 			if (Balls.IsValidIndex(B->LastHitPlayer) && B->LastHitPlayer != B->PlayerIndex)
 			{
 				AZoogiBall* A = Balls[B->LastHitPlayer];
 				A->Score += ZoogiConst::ScorePlayer;
 				A->KnockOuts++;
+				AddFeed(FString::Printf(TEXT("P%d %s  KNOCKED OUT  P%d %s   +%d / -%d"), A->PlayerIndex + 1, *A->Def.Name, B->PlayerIndex + 1, *B->Def.Name, ZoogiConst::ScorePlayer, ZoogiConst::PenaltyFall), ZoogiUtil::PlayerColor(A->PlayerIndex));
 				AddPopup(FString::Printf(TEXT("+%d KNOCKOUT  P%d"), ZoogiConst::ScorePlayer, A->PlayerIndex + 1), EdgePoint(L, Arena) + FVector(0, 0, 90.f), ZoogiUtil::PlayerColor(A->PlayerIndex));
 			}
 		}
@@ -688,6 +706,8 @@ void AZoogiGameMode::Tick(float DeltaSeconds)
 	PhaseTime += Dt;
 	BannerTime += Dt;
 	for (FZoogiPopup& P : Popups) P.Age += Dt;
+	for (FZoogiFeedItem& F : Feed) F.Age += Dt;
+	Feed.RemoveAll([](const FZoogiFeedItem& F) { return F.Age > 6.f; });
 	Popups.RemoveAll([](const FZoogiPopup& P) { return P.Age > 2.6f; });
 
 	if (bAuto && bMenuShot && Phase == EZoogiPhase::Menu)

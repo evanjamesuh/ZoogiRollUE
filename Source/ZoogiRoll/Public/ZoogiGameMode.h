@@ -57,6 +57,15 @@ struct FZoogiPlayerSetup
 };
 
 USTRUCT()
+struct FZoogiFeedItem
+{
+	GENERATED_BODY()
+	FString Text;
+	FLinearColor Color = FLinearColor::White;
+	float Age = 0.f;
+};
+
+USTRUCT()
 struct FZoogiPopup
 {
 	GENERATED_BODY()
@@ -105,6 +114,7 @@ public:
 	float PhaseTime = 0.f;
 	float SettleTimer = 0.f;
 	TArray<FZoogiPopup> Popups;
+	TArray<FZoogiFeedItem> Feed;  // HUD event feed (knock-outs, orbs, stars, stuns)
 	FString Banner;
 	float BannerTime = 0.f;
 
@@ -179,6 +189,7 @@ protected:
 	void RespawnBall(AZoogiBall* Ball);
 	FVector FindFreeSpot(const FVector& Desired) const;
 	void AddPopup(const FString& Text, const FVector& World, const FLinearColor& Color);
+	void AddFeed(const FString& Text, const FLinearColor& Color);
 	void FireShot(const FVector2D& Velocity);
 	void FinishGame();
 

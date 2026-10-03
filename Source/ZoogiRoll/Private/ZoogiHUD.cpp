@@ -193,6 +193,19 @@ void AZoogiHUD::DrawScoreboard(AZoogiGameMode* G)
 		Text(FString::FromInt(B->Score), X + 380.f * U - TextSize(FString::FromInt(B->Score), 0.75f).X, Y + 6.f * U, PC + FLinearColor(0.2f, 0.2f, 0.2f, 0.f), 0.75f);
 		Y += RowH;
 	}
+	// Event feed under the scoreboard: newest on top, fades out after a few seconds.
+	Y += 22.f * U;
+	for (const FZoogiFeedItem& F : G->Feed)
+	{
+		const float A = FMath::Clamp(1.f - (F.Age - 4.5f) / 1.5f, 0.f, 1.f) * FMath::Clamp(F.Age * 6.f, 0.f, 1.f);
+		if (A <= 0.f) continue;
+		const float Slide = (1.f - FMath::Clamp(F.Age * 5.f, 0.f, 1.f)) * -40.f * U;
+		const float W = TextSize(F.Text, 0.42f, false).X + 30.f * U;
+		Panel(X + Slide, Y, W, 34.f * U, FLinearColor(0.02f, 0.03f, 0.08f, 0.72f * A));
+		Panel(X + Slide, Y, 5.f * U, 34.f * U, FLinearColor(F.Color.R, F.Color.G, F.Color.B, A));
+		Text(F.Text, X + Slide + 16.f * U, Y + 6.f * U, FLinearColor(F.Color.R * 0.4f + 0.6f, F.Color.G * 0.4f + 0.6f, F.Color.B * 0.4f + 0.6f, A), 0.42f, false, false);
+		Y += 40.f * U;
+	}
 }
 
 void AZoogiHUD::DrawMatch(AZoogiGameMode* G)
@@ -358,14 +371,27 @@ void AZoogiHUD::DrawPower(AZoogiGameMode* G)
 
 void AZoogiHUD::DrawPopups(AZoogiGameMode* G)
 {
-	for (const FZoogiPopup& P : G->Popups)
+	// Screen-space de-overlap: popups spawned at the same spot (e.g. KNOCKOUT + FELL OFF) stack upward instead of overprinting.
+	TArray<FBox2D> Placed;
+	for (int32 i = G->Popups.Num() - 1; i >= 0; --i)
 	{
+		const FZoogiPopup& P = G->Popups[i];
 		const FVector S = Project(P.World + FVector(0, 0, P.Age * 80.f), true);
 		if (S.Z <= 0.f) continue;
 		FLinearColor C = P.Color + FLinearColor(0.15f, 0.15f, 0.15f, 0.f);
 		C.A = FMath::Clamp(2.6f - P.Age, 0.f, 1.f);
 		const float Pop = 1.f + 0.4f * FMath::Max(0.f, 1.f - P.Age * 4.f);
-		Text(P.Text, S.X, S.Y, C, 0.8f * Pop, true);
+		const FVector2D TS = TextSize(P.Text, 0.8f * Pop, false);
+		float Y = S.Y;
+		for (int32 Guard = 0; Guard < 6; ++Guard)
+		{
+			const FBox2D R(FVector2D(S.X - TS.X * 0.5f, Y), FVector2D(S.X + TS.X * 0.5f, Y + TS.Y));
+			const FBox2D* Hit = Placed.FindByPredicate([&R](const FBox2D& O) { return O.Intersect(R); });
+			if (!Hit) break;
+			Y = Hit->Min.Y - TS.Y - 2.f * U;
+		}
+		Placed.Add(FBox2D(FVector2D(S.X - TS.X * 0.5f, Y), FVector2D(S.X + TS.X * 0.5f, Y + TS.Y)));
+		Text(P.Text, S.X, Y, C, 0.8f * Pop, true);
 	}
 }
 
