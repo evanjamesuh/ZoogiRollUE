@@ -621,7 +621,8 @@ void AZoogiGameMode::PlanCPUShot()
 		if (Blocked(B, C.P, C.P)) Cost += 1500.f;
 		// Power needed to push the target ~2.5 m past the edge (1D collision, restitution ~0.7).
 		const float Need = FMath::Sqrt(2.f * Decel * (Edge + 250.f));
-		const float Transfer = (1.f + 0.7f) * M1 / (M1 + C.TargetMass);
+		float Transfer = (1.f + 0.7f) * M1 / (M1 + C.TargetMass);
+		if (bCPUUsePower && MyPower == EZoogiPower::BandageBind && Cast<AZoogiBall>(C.Actor)) Transfer *= 1.25f; // bind yank
 		const float VIn = Need / FMath::Max(Transfer, 0.3f);
 		const float Gap = FMath::Max(0.f, Dist - ZoogiConst::ZoogiRadius - C.Radius);
 		const float V0 = FMath::Sqrt(VIn * VIn + 2.f * Decel * Gap);

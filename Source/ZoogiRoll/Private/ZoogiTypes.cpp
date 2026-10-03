@@ -53,7 +53,7 @@ static TArray<FZoogiDef> BuildRoster()
 	R.Add(Make("bolt", TEXT("Bolt"), TEXT("Electric"), TEXT("#FBBF24"), TEXT("#FDE047"), TEXT("Static Shock"),
 		TEXT("Phase through enemies and stun them"), 80, 55, 40, 70)); P(EZoogiPower::StaticShock);
 	R.Add(Make("wraps", TEXT("Wraps"), TEXT("Mummy"), TEXT("#8B7355"), TEXT("#D4C4B0"), TEXT("Bandage Bind"),
-		TEXT("Slow enemies on contact with ancient curses"), 50, 70, 85, 65)); P(EZoogiPower::BandageBind);
+		TEXT("Curse enemies on contact: they take the hit 25% harder and their next 2 shots are weak"), 50, 70, 85, 65)); P(EZoogiPower::BandageBind);
 	FZoogiDef N = Make("nightshade", TEXT("Nightshade"), TEXT("Shadow"), TEXT("#6B46C1"), TEXT("#9F7AEA"), TEXT("Shadow Stun"),
 		TEXT("A short shadow pulse that freezes nearby opponents and skips their next turn"), 62, 68, 64, 84);
 	N.bPivotFit = true;

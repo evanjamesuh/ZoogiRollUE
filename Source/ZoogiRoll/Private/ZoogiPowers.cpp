@@ -13,11 +13,12 @@
 
 namespace
 {
-	constexpr float ExplosionRadius = 390.f;   // balance Oct 3: 450 -> 390 (Hotstreak won 4 and tied 1 of the 5 power-test matches it was in)
+	constexpr float ExplosionRadius = 360.f;   // balance Oct 3: 450 -> 390 -> 360 (Hotstreak still won 50% of a 20-match, 3-round sample)
 	constexpr float ShadowRadius = 520.f;
 	constexpr float LockOnCone = 35.f;
 	constexpr float LockOnRange = 2600.f;
 	constexpr float BindShotScale = 0.65f;
+	constexpr float BindHitBoost = 1.25f;
 	// Everyone gets a perfect lock-on line now, so Pinpoint's power also makes the locked shot hit harder.
 	constexpr float PinpointPowerBoost = 1.3f;
 	constexpr int32 MaxCharges = 3;
@@ -169,7 +170,7 @@ void AZoogiGameMode::FireInstantPower(AZoogiBall* Ball)
 			AZoogiClone* Cl = GetWorld()->SpawnActor<AZoogiClone>(AZoogiClone::StaticClass(), FTransform(Fwd.Rotation(), SpawnL), SP);
 			if (!Cl) continue;
 			AActor* T = Targets.IsValidIndex(i) ? Targets[i] : (Targets.Num() ? Targets[0] : nullptr);
-			Cl->InitClone(Wolf, T, Ball->PlayerIndex, 1650.f); // balance Oct 3: 1800 -> 1650 (Wolfgang won 52% of its sample matches)
+			Cl->InitClone(Wolf, T, Ball->PlayerIndex, 1750.f); // balance Oct 3: 1800 -> 1650 -> 1750 (52% win share in sample 1, 5% in sample 2)
 			Cl->Sphere->SetPhysicsLinearVelocity(Fwd * 900.f + Offsets[i].GetSafeNormal() * 400.f);
 			Clones.Add(Cl);
 			AZoogiFX::Spawn(GetWorld(), SpawnL, C, 90.f, 0.4f, false, 6.f);
@@ -291,6 +292,11 @@ void AZoogiGameMode::OnShooterContact(AZoogiBall* Shooter, AActor* Other)
 			// Balance Oct 3: the bind used to damp the victim's knock velocity by 45%, which made Wraps' powered hits unable to knock anyone off
 			// (Wraps scored 0 in all 9 sample matches). Now the hit keeps its full force and the curse lasts two shots.
 			OtherBall->BoundShots = 2;
+			// The curse also yanks: the bound victim takes the hit 25% harder (Wraps won 4% of sample 2 even with full hit force).
+			{
+				const FVector V = OtherBall->GetBallVelocity();
+				OtherBall->SetPlanarVelocity(FVector(V.X, V.Y, 0.f) * BindHitBoost);
+			}
 			AZoogiFX::Spawn(GetWorld(), OtherBall->BallLocation(), PowerColor(P), 120.f, 0.7f, true, 6.f, OtherBall);
 			AZoogiFX::Niagara(GetWorld(), TEXT("NS_Burst_Gold"), OtherBall->BallLocation(), FRotator::ZeroRotator, 0.8f);
 			AddPopup(TEXT("BOUND"), OtherBall->BallLocation() + FVector(0, 0, 110.f), PowerColor(P));
