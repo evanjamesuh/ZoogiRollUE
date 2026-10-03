@@ -13,6 +13,7 @@
 #include "Engine/Font.h"
 #include "Engine/World.h"
 #include "CanvasItem.h"
+#include "Engine/Texture2D.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Fonts/FontMeasure.h"
 #include "Rendering/SlateRenderer.h"
@@ -449,29 +450,65 @@ void AZoogiHUD::DrawPopups(AZoogiGameMode* G)
 	}
 }
 
+static UTexture2D* PortraitTex(FName Id)
+{
+	static TMap<FName, TWeakObjectPtr<UTexture2D>> Cache;
+	if (TWeakObjectPtr<UTexture2D>* C = Cache.Find(Id)) if (C->IsValid()) return C->Get();
+	const FString Path = FString::Printf(TEXT("/Game/UI/Portraits/T_Portrait_%s.T_Portrait_%s"), *Id.ToString(), *Id.ToString());
+	UTexture2D* T = LoadObject<UTexture2D>(nullptr, *Path);
+	Cache.Add(Id, T);
+	return T;
+}
+
 void AZoogiHUD::DrawResults(AZoogiGameMode* G)
 {
 	const float W = Canvas->ClipX, H = Canvas->ClipY;
-	const float PW = 720.f * U;
+	// Dim the match behind the results so the panel reads cleanly.
+	Panel(0.f, 0.f, W, H, FLinearColor(0.f, 0.01f, 0.04f, 0.5f));
+	const float PW = 780.f * U;
 	const float X0 = (W - PW) * 0.5f;
-	float Y = 200.f * U;
-	Panel(X0, Y, PW, 140.f * U + 70.f * U * G->Balls.Num() + 120.f * U, GPanel);
-	const FLinearColor WC = G->Balls.IsValidIndex(G->WinnerIndex) ? ZoogiUtil::PlayerColor(G->WinnerIndex) : FLinearColor::White;
-	Text(G->Banner, W * 0.5f, Y + 30.f * U, WC + FLinearColor(0.2f, 0.2f, 0.2f, 0.f), 1.3f, true);
-	Y += 140.f * U;
+	const float RowH = 84.f * U, RowGap = 10.f * U;
+	float Y = 170.f * U;
+	const float PH = 150.f * U + (RowH + RowGap) * G->Balls.Num() + 120.f * U;
+	const FLinearColor WC = G->Balls.IsValidIndex(G->WinnerIndex) ? ZoogiUtil::PlayerColor(G->WinnerIndex) : FLinearColor(0.85f, 0.9f, 1.f);
+	Panel(X0, Y, PW, PH, FLinearColor(0.02f, 0.03f, 0.08f, 0.92f));
+	Panel(X0, Y, PW, 6.f * U, WC);
+	Text(TEXT("MATCH OVER"), W * 0.5f, Y + 22.f * U, FLinearColor(0.7f, 0.78f, 0.95f), 0.45f, true, false);
+	Text(G->Banner, W * 0.5f, Y + 56.f * U, WC + FLinearColor(0.2f, 0.2f, 0.2f, 0.f), 1.3f, true);
+	Y += 150.f * U;
 	TArray<AZoogiBall*> Sorted;
 	for (AZoogiBall* B : G->Balls) Sorted.Add(B);
 	Sorted.Sort([](const AZoogiBall& A, const AZoogiBall& B) { return A.Score > B.Score; });
+	const int32 Top = Sorted.Num() ? Sorted[0]->Score : 0;
 	for (int32 i = 0; i < Sorted.Num(); ++i)
 	{
 		AZoogiBall* B = Sorted[i];
 		const FLinearColor PC = ZoogiUtil::PlayerColor(B->PlayerIndex);
-		Panel(X0 + 30.f * U, Y, PW - 60.f * U, 60.f * U, FLinearColor(0.05f, 0.07f, 0.14f, 0.9f));
-		Panel(X0 + 30.f * U, Y, 10.f * U, 60.f * U, PC);
-		Text(FString::Printf(TEXT("#%d  P%d %s"), i + 1, B->PlayerIndex + 1, *B->Def.Name), X0 + 60.f * U, Y + 10.f * U, FLinearColor::White, 0.65f);
-		Text(FString::Printf(TEXT("%d orbs  %d KOs"), B->OrbsScored, B->KnockOuts), X0 + 400.f * U, Y + 20.f * U, FLinearColor(0.75f, 0.8f, 0.9f), 0.45f, false, false);
-		Text(FString::FromInt(B->Score), X0 + PW - 50.f * U - TextSize(FString::FromInt(B->Score), 0.75f).X, Y + 8.f * U, PC, 0.75f);
-		Y += 70.f * U;
+		const bool bWin = B->Score == Top && G->Balls.IsValidIndex(G->WinnerIndex) && B->PlayerIndex == G->WinnerIndex;
+		const float RX = X0 + 30.f * U, RW = PW - 60.f * U;
+		Panel(RX, Y, RW, RowH, bWin ? FLinearColor(PC.R * 0.25f, PC.G * 0.25f, PC.B * 0.25f, 0.95f) : FLinearColor(0.05f, 0.07f, 0.14f, 0.92f));
+		Panel(RX, Y, 8.f * U, RowH, PC);
+		// Place and portrait.
+		Text(FString::Printf(TEXT("%d"), i + 1), RX + 34.f * U, Y + RowH * 0.5f - 22.f * U, bWin ? FLinearColor(1.f, 0.85f, 0.3f) : FLinearColor(0.7f, 0.75f, 0.85f), 0.8f, true);
+		const float PS = RowH - 14.f * U;
+		const float PX = RX + 64.f * U, PY = Y + 7.f * U;
+		Panel(PX - 3.f * U, PY - 3.f * U, PS + 6.f * U, PS + 6.f * U, PC);
+		if (UTexture2D* T = PortraitTex(B->Def.Id)) DrawTexture(T, PX, PY, PS, PS, 0.f, 0.f, 1.f, 1.f);
+		else Panel(PX, PY, PS, PS, B->Def.Color);
+		const float TX = PX + PS + 20.f * U;
+		Text(FString::Printf(TEXT("P%d  %s"), B->PlayerIndex + 1, *B->Def.Name.ToUpper()), TX, Y + 12.f * U, FLinearColor::White, 0.62f);
+		Text(FString::Printf(TEXT("%d orbs   %d KOs%s"), B->OrbsScored, B->KnockOuts, B->bCPU ? TEXT("   CPU") : TEXT("")), TX, Y + 50.f * U, FLinearColor(0.72f, 0.78f, 0.9f), 0.42f, false, false);
+		if (bWin)
+		{
+			const FString Badge = TEXT("WINNER");
+			const FVector2D BS = TextSize(Badge, 0.42f, true);
+			const float BX = RX + RW - 170.f * U - BS.X;
+			Panel(BX - 10.f * U, Y + 26.f * U, BS.X + 20.f * U, BS.Y + 8.f * U, FLinearColor(1.f, 0.78f, 0.2f, 0.95f));
+			Text(Badge, BX, Y + 30.f * U, FLinearColor(0.1f, 0.06f, 0.f), 0.42f);
+		}
+		const FString Sc = FString::FromInt(B->Score);
+		Text(Sc, RX + RW - 30.f * U - TextSize(Sc, 0.9f).X, Y + RowH * 0.5f - 26.f * U, PC + FLinearColor(0.15f, 0.15f, 0.15f, 0.f), 0.9f);
+		Y += RowH + RowGap;
 	}
 	Y += 20.f * U;
 	Button(TEXT("REMATCH"), W * 0.5f - 300.f * U, Y, 280.f * U, 70.f * U, "Rematch", 0, FLinearColor(1.f, 0.75f, 0.2f), true);
