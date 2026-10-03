@@ -43,6 +43,7 @@ protected:
 	TArray<FZoogiButton> Buttons;
 	float U = 1.f; // UI scale (1 at 1080p)
 	float Time = 0.f;
+	float Letterbox = 0.f; // Battle cinematic bars (0..1)
 
 	/** UMG main menu (the canvas menu is kept as a fallback behind -ZoogiCanvasMenu). */
 	UPROPERTY() TObjectPtr<UZoogiMenuWidget> MenuWidget;

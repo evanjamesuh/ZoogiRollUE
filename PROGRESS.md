@@ -46,7 +46,8 @@ The web game at `C:\dev\ZoogiRollUE` is read-only reference and is never modifie
   4. BATTLE dramatic lock-on: pitch 24, arc swing, FOV punch, 4 deg Dutch, shake, DOF, vignette, contrasty grade,
      0.5 s hold (CPU 0.3 s), fire, then the follow cam. Long-range locks pull the look point back so the shooter stays in frame.
   5. END aerial resolution: follow the shot 1.4 s, then pull up to pitch 83 over the whole arena with a slow settle,
-     a cooler, desaturated grade and score popups.
+     a cooler, desaturated grade and score popups. On Night Circuit it squares up to the rectangle and comes in closer.
+  Battle also slides in cinematic letterbox bars; the bottom power meter hides (the target panel keeps shot % / speed).
 
 ### Zoogi powers
 Every Zoogi starts with 1 power charge (max 3). The three **gold star orbs** are worth 100 and give
@@ -70,11 +71,9 @@ CPU players use powers too (about half the time they have a charge).
 * The match ends when all orbs are gone or after N rounds; highest score wins.
 * Physics: 1 web unit = 100 cm. Zoogi radius 50 cm, orb 40 cm (0.512 mass), per-Zoogi mass =
   defense/60 clamped 0.55-1.8 (x10 kg). Constant rolling deceleration 4.5 u/s^2 (ice 1.15),
-  launch curve `launchSpeedPerSecForPull` (quadratic to 80%, smoothstep to 36 u/s at full pull),
+  shot speed scales with distance to the locked target (capped at the web game's 36 u/s max),
   restitution ~0.75 Zoogi-Zoogi / ~0.68 Zoogi-orb, CCD on, physics sub-stepping at 120 Hz.
-* Camera follows alpha-camera-spec.md: aim pose 30 deg / 7 D behind the Zoogi, eases back and up
-  while pulling, rises to a 55 deg / 24 D soft follow after release with heading drift after
-  bounces, holds when the marble falls, and hard-cuts + swoops into the next player's aim pose.
+* Camera: per-phase duel cameras (see Controls above); the alpha-camera-spec drag/aim pose was replaced.
 
 ## Milestones
 - [x] **1. Project + build** — C++ project created, `.gitignore`, local git repo. Builds with
@@ -90,12 +89,12 @@ CPU players use powers too (about half the time they have a charge).
   The web Meadow arena is drawn in code (no GLB), so the UE Meadow is also built in code:
   floating grass island (radius 15.5 u), six rim boulders at the GRASS_RIM spots with cylinder
   colliders, flowers, start pads, and floating forest islets using the imported trees.
-- [x] **3. Playable Meadow match** — everything listed above (pawns, slingshot, trajectory +
+- [x] **3. Playable Meadow match** — everything listed above (pawns, shooting, trajectory +
   power meter, Chaos bounce/roll, orbs, knock-off scoring, settle-based turns, 2-4 hotseat,
   alpha camera, HUD with scoreboard/turn banner/popups, results screen) plus CPU opponents.
 - [x] **4. Verification** — `Scripts/run_demo.ps1` runs the game with `-ZoogiAuto` (CPU players)
   and saves screenshots on gameplay events. `-ZoogiHumanTest` drives P1 with a scripted virtual
-  mouse through the same drag code (verified: 679 cm ground pull -> 90% shot). Screenshots are
+  mouse and keys through the real lock-on input path (soft lock, Tab, switch, Space). Screenshots are
   mirrored to the box at `/workspace/zoogi-unreal/shots/`.
 - [x] **4b. Packaged build** — `Scripts/package.ps1` (BuildCookRun, Development, ~2 min) ->
   `Packaged\Windows\ZoogiRoll.exe` (~0.9 GB). Verified with a 4-CPU auto match (screenshots `shots/pkg1`).
@@ -120,6 +119,8 @@ CPU players use powers too (about half the time they have a charge).
   - [x] RPG lock-on targeting + per-stage duel cameras (replaces drag-to-shoot), CPU uses the same flow.
   - [x] Per-phase camera profiles with time-based 0.4-0.6 s blends between phases; Main aims at the arena centre
         with no lock; Battle keeps the shooter in frame on long locks; darker Arabian sand.
+  - [x] Battle letterbox bars slide in (the power meter and controls line hide under them); Night Circuit End aerial
+        squares up to the rectangular court and sits closer so it fills the frame.
   - [ ] More polish.
 
 ## Command-line switches (for testing)
@@ -138,7 +139,7 @@ CPU players use powers too (about half the time they have a charge).
 
 ## Known issues / notes
 * Real-mouse play has not been exercised by a person yet (the scripted virtual mouse uses the
-  same code path). Please try a match and report how the pull feels (`ZoogiConst::DragScale`).
+  same code path). Please try a match and report how targeting and the phase cameras feel (`ZoogiCamTune`).
 * The PC had ~300 MB free RAM during builds (another UE editor with 5.5 GB was open), so UBT
   falls back to 1 compile action; builds still take ~1 min.
 * CPU players are simple (pick one of the 3 best orb/rival shots, aim error from Control stat).

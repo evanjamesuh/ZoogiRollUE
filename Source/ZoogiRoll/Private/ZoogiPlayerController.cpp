@@ -90,6 +90,7 @@ namespace ZoogiCamTune
 	constexpr float ProbeIn = 25.f;           // pull in fast when blocked
 	constexpr float ProbeOut = 3.f;           // ease back out
 	constexpr float NeonScale = 1.15f;        // bigger court -> longer overview booms
+	constexpr float NeonEndScale = 0.62f;     // End aerial on the rectangular court (squared up, so it can sit closer)
 
 	inline float Damp(float X, float Target, float Lambda, float Dt) { return X + (Target - X) * (1.f - FMath::Exp(-Lambda * Dt)); }
 	inline FVector Damp(const FVector& X, const FVector& Target, float Lambda, float Dt) { return X + (Target - X) * (1.f - FMath::Exp(-Lambda * Dt)); }
@@ -574,6 +575,12 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 			WantPivot = FVector(0, 0, 0);
 			WantLook = FVector(0, 0, 0);
 			DistMul = Scale;
+			if (G->Arena && G->Arena->IsNeon())
+			{
+				// Rectangular court: square up so the long side runs across the screen, and come in closer to fill it.
+				WantYaw = FMath::Abs(FRotator::NormalizeAxis(Yaw - 90.f)) <= 90.f ? 90.f : -90.f;
+				DistMul = NeonEndScale;
+			}
 			ProbeFrom = FVector(0, 0, 300.f);
 		}
 		break;

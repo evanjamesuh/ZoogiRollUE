@@ -196,6 +196,16 @@ void AZoogiHUD::DrawScoreboard(AZoogiGameMode* G)
 void AZoogiHUD::DrawMatch(AZoogiGameMode* G)
 {
 	const float W = Canvas->ClipX, H = Canvas->ClipY;
+	// Battle: cinematic letterbox bars slide in (and out again as the shot rolls).
+	const bool bBattle = G->Stage == EZoogiStage::Battle && G->Phase == EZoogiPhase::Aiming;
+	const float Dt = GetWorld()->GetDeltaSeconds();
+	Letterbox = FMath::FInterpTo(Letterbox, bBattle ? 1.f : 0.f, Dt, bBattle ? 7.f : 4.f);
+	if (Letterbox > 0.01f)
+	{
+		const float BarH = H * 0.085f * Letterbox;
+		DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.92f), 0.f, 0.f, W, BarH);
+		DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.92f), 0.f, H - BarH, W, BarH);
+	}
 	DrawScoreboard(G);
 
 	// Top centre: round, orbs left, turn banner.
@@ -229,7 +239,7 @@ void AZoogiHUD::DrawMatch(AZoogiGameMode* G)
 	DrawPopups(G);
 
 	DrawStages(G);
-	Text(TEXT("LMB: target   Tab: cycle targets   SPACE: fire   E / Q: power   RMB / Esc: clear target (Esc again: menu)   Ctrl+R: restart"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.75f, 0.85f, 0.85f), 0.38f, false, false);
+	if (Letterbox < 0.3f) Text(TEXT("LMB: target   Tab: cycle targets   SPACE: fire   E / Q: power   RMB / Esc: clear target (Esc again: menu)   Ctrl+R: restart"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.75f, 0.85f, 0.85f), 0.38f, false, false);
 	Button(TEXT("MENU"), W - 150.f * U, 24.f * U, 126.f * U, 46.f * U, "Menu", 0, GOrbBlue);
 }
 
@@ -299,7 +309,8 @@ void AZoogiHUD::DrawAim(AZoogiGameMode* G)
 		DrawRect(C, S.X - Size * 0.5f, S.Y - Size * 0.5f, Size, Size);
 	}
 
-	// Power meter.
+	// Power meter (hidden under the Battle letterbox; the target panel still shows shot % and hit speed).
+	if (G->Stage == EZoogiStage::Battle) return;
 	const float BW = 460.f * U, BH = 22.f * U;
 	const float BX = (W - BW) * 0.5f, BY = H - 130.f * U;
 	Panel(BX - 6.f * U, BY - 34.f * U, BW + 12.f * U, BH + 44.f * U, GPanel);
