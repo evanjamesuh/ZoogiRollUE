@@ -204,6 +204,7 @@ protected:
 	bool bCPUPlanned = false;
 	FVector CPUTargetPull = FVector::ZeroVector;
 	float CPUStartDelay = 1.7f;
+	int32 CPUExplPrevN = 0;      // CPU Hotstreak: most targets seen inside the blast this roll
 	FVector ShotStart = FVector::ZeroVector;
 	float ShotSpeed = 0.f;
 

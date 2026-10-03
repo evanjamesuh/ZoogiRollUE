@@ -364,16 +364,19 @@ void AZoogiGameMode::CPUPowerTick()
 	AZoogiBall* B = GetActiveBall();
 	if (!B || !B->bCPU || !bCPUUsePower || !CanUsePower()) return;
 	const EZoogiPower P = B->Def.PowerKind;
+	const bool bLockedMain = Phase == EZoogiPhase::Aiming && Stage == EZoogiStage::Main && TargetLock.IsValid() && !bSoftLock;
 	if (ZoogiUtil::IsArmedPower(P))
 	{
-		if (Phase == EZoogiPhase::Aiming && !bPowerArmed && PhaseTime > CPUStartDelay - 0.5f) TryPower();
+		// Arm once the target is locked in Main, so the "armed" flash reads before the Battle camera swings in.
+		if (bLockedMain && !bPowerArmed && LockTime > 0.25f) TryPower();
 		return;
 	}
 	const FVector L = B->BallLocation();
 	if (Phase == EZoogiPhase::Aiming)
 	{
+		CPUExplPrevN = 0;
 		// Shadow Stun before shooting if a rival is already close.
-		if (P == EZoogiPower::ShadowStun && PhaseTime > 1.f)
+		if (P == EZoogiPower::ShadowStun && bLockedMain && LockTime > 0.2f)
 		{
 			for (AZoogiBall* O : Balls) if (O && O != B && !O->bOut && FVector::Dist2D(O->BallLocation(), L) < ShadowRadius) { TryPower(); break; }
 		}
@@ -381,13 +384,28 @@ void AZoogiGameMode::CPUPowerTick()
 	}
 	if (P == EZoogiPower::WolfPack)
 	{
-		if (PhaseTime > 0.35f) TryPower();
+		// Release the pack while still fast and with targets around (clones home on the 3 nearest).
+		int32 Near = 0;
+		for (AActor* T : LiveTargets(B)) if (FVector::Dist2D(ActorPos(T), L) < 900.f) ++Near;
+		if ((Near >= 2 && PhaseTime > 0.2f) || PhaseTime > 0.7f) TryPower();
 	}
 	else if (P == EZoogiPower::Explosion)
 	{
 		int32 N = 0;
-		for (AActor* T : LiveTargets(B)) if (FVector::Dist2D(ActorPos(T), L) < ExplosionRadius * 0.85f) ++N;
-		if (N >= 3 || (N >= 1 && B->PlanarSpeed() < 150.f && PhaseTime > 0.5f)) TryPower();
+		bool bEdgeKill = false;
+		for (AActor* T : LiveTargets(B))
+		{
+			const FVector D = ActorPos(T) - L;
+			const float Dist = FVector2D(D.X, D.Y).Size();
+			if (Dist >= ExplosionRadius * 0.85f) continue;
+			++N;
+			// A rival close to the rim inside the blast = likely knock-off.
+			if (Cast<AZoogiBall>(T) && Dist > 1.f && Arena && Arena->DistanceToEdge(FVector2D(ActorPos(T)), FVector2D(D.X, D.Y) / Dist) < 450.f) bEdgeKill = true;
+		}
+		const bool bPastPeak = N >= 2 && N < CPUExplPrevN; // the crowd is starting to thin: blow now
+		const bool bSlow = B->PlanarSpeed() < 200.f && PhaseTime > 0.5f;
+		if (N >= 3 || bPastPeak || bEdgeKill || (N >= 1 && bSlow)) TryPower();
+		CPUExplPrevN = FMath::Max(CPUExplPrevN, N);
 	}
 	else if (P == EZoogiPower::ShadowStun)
 	{
