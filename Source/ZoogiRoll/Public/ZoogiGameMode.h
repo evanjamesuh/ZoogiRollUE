@@ -114,6 +114,10 @@ public:
 	float PhaseTime = 0.f;
 	float SettleTimer = 0.f;
 	TArray<FZoogiPopup> Popups;
+	/** Big centre-screen callout (KNOCKOUT!) */
+	FString BigText;
+	FLinearColor BigColor = FLinearColor::White;
+	float BigAge = 99.f;
 	TArray<FZoogiFeedItem> Feed;  // HUD event feed (knock-outs, orbs, stars, stuns)
 	FString Banner;
 	float BannerTime = 0.f;

@@ -293,6 +293,19 @@ void AZoogiHUD::DrawMatch(AZoogiGameMode* G)
 	if (G->Phase == EZoogiPhase::Aiming) DrawAim(G);
 	DrawPower(G);
 	DrawPopups(G);
+	// Knockout callout: pops in, holds, fades (about 1.6 s).
+	if (G->BigAge < 1.6f && !G->BigText.IsEmpty())
+	{
+		const float A = FMath::Clamp((1.6f - G->BigAge) / 0.35f, 0.f, 1.f);
+		const float Pop = 1.f + 0.6f * FMath::Clamp(1.f - G->BigAge / 0.12f, 0.f, 1.f);
+		FString L1, L2;
+		if (!G->BigText.Split(TEXT("\n"), &L1, &L2)) L1 = G->BigText;
+		const FLinearColor C(FMath::Min(1.f, G->BigColor.R + 0.25f), FMath::Min(1.f, G->BigColor.G + 0.25f), FMath::Min(1.f, G->BigColor.B + 0.25f), A);
+		const float Y = Canvas->ClipY * 0.30f;
+		Panel(0.f, Y - 14.f * U, Canvas->ClipX, 150.f * U, FLinearColor(0.f, 0.f, 0.f, 0.35f * A));
+		Text(L1, Canvas->ClipX * 0.5f, Y, C, 1.9f * Pop, true);
+		if (!L2.IsEmpty()) Text(L2, Canvas->ClipX * 0.5f, Y + 92.f * U, FLinearColor(1.f, 1.f, 1.f, 0.9f * A), 0.6f, true);
+	}
 
 	DrawStages(G);
 	if (Letterbox < 0.3f) Text(TEXT("LMB: target   Tab: cycle targets   SPACE: fire   E / Q: power   RMB / Esc: clear target (Esc again: menu)   Ctrl+R: restart"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.75f, 0.85f, 0.85f), 0.38f, false, false);

@@ -137,6 +137,7 @@ void AZoogiGameMode::ClearMatch()
 	Balls.Reset();
 	Orbs.Reset();
 	Popups.Reset();
+	BigAge = 99.f;
 	Feed.Reset();
 	bAimActive = false;
 	AimPull = FVector::ZeroVector;
@@ -468,6 +469,12 @@ void AZoogiGameMode::CheckKnockoffs()
 				A->KnockOuts++;
 				AddFeed(FString::Printf(TEXT("P%d %s  KNOCKED OUT  P%d %s   +%d / -%d"), A->PlayerIndex + 1, *A->Def.Name, B->PlayerIndex + 1, *B->Def.Name, ZoogiConst::ScorePlayer, ZoogiConst::PenaltyFall), ZoogiUtil::PlayerColor(A->PlayerIndex));
 				AddPopup(FString::Printf(TEXT("+%d KNOCKOUT  P%d"), ZoogiConst::ScorePlayer, A->PlayerIndex + 1), EdgePoint(L, Arena) + FVector(0, 0, 90.f), ZoogiUtil::PlayerColor(A->PlayerIndex));
+				BigText = FString::Printf(TEXT("KNOCKOUT!\n%s  >  %s"), *A->Def.Name.ToUpper(), *B->Def.Name.ToUpper());
+				BigColor = ZoogiUtil::PlayerColor(A->PlayerIndex);
+				BigAge = 0.f;
+				AZoogiFX::Spawn(GetWorld(), EdgePoint(L, Arena) - FVector(0, 0, 20.f), BigColor, 420.f, 0.8f, true, 12.f);
+				if (AZoogiPlayerController* PCtl = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PCtl->OnImpact(1.f);
+				TakeShotDelayed(TEXT("knockout"), 0.25f);
 			}
 		}
 	}
@@ -706,6 +713,7 @@ void AZoogiGameMode::Tick(float DeltaSeconds)
 	PhaseTime += Dt;
 	BannerTime += Dt;
 	for (FZoogiPopup& P : Popups) P.Age += Dt;
+	BigAge += Dt;
 	for (FZoogiFeedItem& F : Feed) F.Age += Dt;
 	Feed.RemoveAll([](const FZoogiFeedItem& F) { return F.Age > 6.f; });
 	Popups.RemoveAll([](const FZoogiPopup& P) { return P.Age > 2.6f; });
