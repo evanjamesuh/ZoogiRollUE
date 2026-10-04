@@ -39,15 +39,19 @@ namespace
 		}
 	}
 
-	void AddToHand(UZoogiArtifactComponent* AC, EZoogiArtifact A)
+	/** Adds to the hand; returns the artifact discarded to stay under the cap (oldest first), or None. */
+	EZoogiArtifact AddToHand(UZoogiArtifactComponent* AC, EZoogiArtifact A)
 	{
-		if (A == EZoogiArtifact::None) return;
+		EZoogiArtifact Discarded = EZoogiArtifact::None;
+		if (A == EZoogiArtifact::None) return Discarded;
 		AC->Hand.Add(A);
 		while (AC->Hand.Num() > UZoogiArtifactComponent::HandCap)
 		{
 			UE_LOG(LogZoogi, Log, TEXT("Hand full: discarded %s"), *ZoogiArtifacts::Name(AC->Hand[0]));
+			Discarded = AC->Hand[0];
 			AC->Hand.RemoveAt(0); // oldest discarded
 		}
+		return Discarded;
 	}
 
 	/** Takes the picked artifact (0 = drawn, 1.. = hand slot); an unused drawn artifact is saved to the hand. */
@@ -190,11 +194,17 @@ bool AZoogiGameMode::AwakenSave()
 	if (!B || !B->Artifact || Phase != EZoogiPhase::Aiming || Stage != EZoogiStage::Awaken || bAwakenDone) return false;
 	UZoogiArtifactComponent* AC = B->Artifact;
 	const EZoogiArtifact A = AC->Drawn;
-	if (A != EZoogiArtifact::None) { AddToHand(AC, A); AC->Drawn = EZoogiArtifact::None; }
+	EZoogiArtifact Dropped = EZoogiArtifact::None;
+	if (A != EZoogiArtifact::None) { Dropped = AddToHand(AC, A); AC->Drawn = EZoogiArtifact::None; }
 	bAwakenDone = true;
 	AwakenDoneAt = StageTime;
 	AwakenChoiceText = A != EZoogiArtifact::None ? FString::Printf(TEXT("SAVE  %s"), *ZoogiArtifacts::Name(A).ToUpper()) : FString(TEXT("SAVE"));
 	if (A != EZoogiArtifact::None) AddPopup(FString::Printf(TEXT("SAVED  %s"), *ZoogiArtifacts::Name(A).ToUpper()), B->BallLocation() + FVector(0, 0, 160.f), ZoogiArtifacts::Color(A));
+	if (Dropped != EZoogiArtifact::None)
+	{
+		AddPopup(FString::Printf(TEXT("DISCARDED  %s"), *ZoogiArtifacts::Name(Dropped).ToUpper()), B->BallLocation() + FVector(0, 0, 215.f), FLinearColor(0.65f, 0.68f, 0.75f));
+		AddFeed(FString::Printf(TEXT("P%d %s  saved %s, hand full: %s discarded"), B->PlayerIndex + 1, *B->Def.Name, *ZoogiArtifacts::Name(A), *ZoogiArtifacts::Name(Dropped)), FLinearColor(0.65f, 0.68f, 0.75f));
+	}
 	UE_LOG(LogZoogi, Log, TEXT("Awaken: P%d %s SAVES %s (hand %d)"), B->PlayerIndex + 1, *B->Def.Name, A != EZoogiArtifact::None ? *ZoogiArtifacts::Name(A) : TEXT("nothing"), AC->Hand.Num());
 	return true;
 }

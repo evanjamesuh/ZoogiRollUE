@@ -840,6 +840,28 @@ void AZoogiHUD::DrawAwaken(AZoogiGameMode* G)
 	Panel(X0, Y0 - 56.f * U, PW, 5.f * U, PC);
 	Text(FString::Printf(TEXT("AWAKEN  -  %s%s"), *B->Def.Name.ToUpper(), B->bCPU ? TEXT("  (CPU deciding)") : TEXT("")), X0 + 24.f * U, Y0 - 44.f * U, FLinearColor(1.f, 0.95f, 0.85f), 0.6f);
 	const EZoogiArtifact Aff = ZoogiArtifacts::Affinity(B->Def.Id);
+	const bool bFullHand = AC->Drawn != EZoogiArtifact::None && AC->Hand.Num() >= UZoogiArtifactComponent::HandCap;
+	// Rivals with a guard up: an infused attack into them gets blocked, so it matters for the choice.
+	{
+		FString Guards;
+		for (const AZoogiBall* O : G->Balls)
+		{
+			if (!O || O == B || O->bOut || !O->Artifact || O->Artifact->Guard == EZoogiArtifact::None) continue;
+			Guards += FString::Printf(TEXT("%sP%d %s (%s)"), Guards.IsEmpty() ? TEXT("") : TEXT(",  "), O->PlayerIndex + 1, *O->Def.Name, *ZoogiArtifacts::Name(O->Artifact->Guard));
+		}
+		const FString Line = Guards.IsEmpty() ? FString(TEXT("no rival guards up")) : FString::Printf(TEXT("GUARDED: %s"), *Guards);
+		Text(Line, X0 + PW - 24.f * U - TextSize(Line, 0.36f, false).X, Y0 - 40.f * U, Guards.IsEmpty() ? FLinearColor(0.55f, 0.6f, 0.7f) : FLinearColor(0.55f, 0.8f, 1.f), 0.36f, false, false);
+	}
+	// Footer: key hints and the hand-limit warning.
+	{
+		const float FY = Y0 + CH + 6.f * U;
+		if (!B->bCPU) Text(TEXT("keys:  1-3 pick card    I infuse    G guard    S save"), X0 + 24.f * U, FY, FLinearColor(0.55f, 0.6f, 0.72f), 0.32f, false, false);
+		if (bFullHand)
+		{
+			const FString Warn = FString::Printf(TEXT("HAND FULL - saving %s discards %s"), *ZoogiArtifacts::Name(AC->Drawn), *ZoogiArtifacts::Name(AC->Hand[0]));
+			Text(Warn, X0 + PW - 24.f * U - TextSize(Warn, 0.34f, false).X, FY, FLinearColor(1.f, 0.6f, 0.35f), 0.34f, false, false);
+		}
+	}
 	int32 Pick = G->AwakenPick;
 	if (!Cards.ContainsByPredicate([Pick](const TPair<int32, EZoogiArtifact>& C) { return C.Key == Pick; }) && Cards.Num()) Pick = Cards[0].Key;
 	float X = X0 + 20.f * U;
@@ -857,7 +879,8 @@ void AZoogiHUD::DrawAwaken(AZoogiGameMode* G)
 		}
 		const float Bob = bSel ? 4.f * U * FMath::Sin(Time * 4.f) : 0.f;
 		Gem((uint8)C.Value, X + CW * 0.5f, Y0 + 82.f * U + Bob, 46.f * U);
-		Text(C.Key == 0 ? TEXT("NEW") : FString::Printf(TEXT("SAVED %d"), C.Key), X + 12.f * U, Y0 + 8.f * U, C.Key == 0 ? FLinearColor(1.f, 0.85f, 0.3f) : FLinearColor(0.7f, 0.75f, 0.85f), 0.34f, false, false);
+		Text(FString::Printf(TEXT("%s%s"), B->bCPU ? TEXT("") : *FString::Printf(TEXT("[%d] "), C.Key + 1), C.Key == 0 ? TEXT("NEW") : *FString::Printf(TEXT("SAVED %d"), C.Key)), X + 12.f * U, Y0 + 8.f * U, C.Key == 0 ? FLinearColor(1.f, 0.85f, 0.3f) : FLinearColor(0.7f, 0.75f, 0.85f), 0.34f, false, false);
+		if (bFullHand && C.Key == 1) Text(TEXT("discarded on SAVE"), X + CW * 0.5f, Y0 + CH - 28.f * U, FLinearColor(1.f, 0.55f, 0.35f), 0.3f, true, false);
 		if (C.Value == Aff) Text(TEXT("AFFINITY"), X + CW - 12.f * U - TextSize(TEXT("AFFINITY"), 0.34f, false).X, Y0 + 8.f * U, FLinearColor(1.f, 0.9f, 0.4f), 0.34f, false, false);
 		Text(R.DisplayName, X + CW * 0.5f, Y0 + 150.f * U, FLinearColor::White, 0.5f, true);
 		Text(ZoogiArtifacts::Key(C.Value).ToUpper(), X + CW * 0.5f, Y0 + 192.f * U, R.RimColor, 0.36f, true, false);
