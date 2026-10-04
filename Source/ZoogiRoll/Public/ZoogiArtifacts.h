@@ -1,10 +1,15 @@
 // Milestone "Awaken": artifacts (Ember Stone, Storm Eye, Frost Crystal, Titan Core, Void Shard).
-// Data lives in FZoogiArtifactRow. Built-in defaults below; /Game/Data/DT_Artifacts (row names Ember/Storm/Frost/Titan/Void)
-// overrides them when present (create it in the editor: Miscellaneous > Data Table, row struct ZoogiArtifactRow).
+// Data lives in FZoogiArtifactRow. Lookup order per artifact (checklist item 7), resolved once on first use:
+//   1. DataAsset /Game/Data/Artifacts/DA_Artifact_<Key> (UZoogiArtifactData; made by Scripts/make_artifact_data.py from the built-ins)
+//   2. DataTable /Game/Data/DT_Artifacts row <Key> (optional, row struct ZoogiArtifactRow)
+//   3. the built-in C++ table in ZoogiArtifacts.cpp (fallback; -ZoogiBuiltInArtifacts forces it)
+// The log says which source each artifact used and whether it is identical to the built-in row.
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Engine/DataTable.h"
+#include "Engine/DataAsset.h"
+#include "Kismet/BlueprintFunctionLibrary.h"
 #include "Math/RandomStream.h"
 #include "ZoogiArtifacts.generated.h"
 
@@ -68,6 +73,33 @@ struct FZoogiArtifactRow : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) FName AffinityZoogi;   // primary affinity (see ZoogiArtifacts::Affinity for the full map)
 };
 
+/** One artifact as a DataAsset (DA_Artifact_<Key> in /Game/Data/Artifacts). Edit Row in the editor to retune Infuse / Guard. */
+UCLASS(BlueprintType)
+class ZOOGIROLL_API UZoogiArtifactData : public UDataAsset
+{
+	GENERATED_BODY()
+public:
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Artifact") FZoogiArtifactRow Row;
+};
+
+/** Script / Blueprint access to the artifact table (used by Scripts/make_artifact_data.py and make_artifact_instances.py). */
+UCLASS()
+class ZOOGIROLL_API UZoogiArtifactLibrary : public UBlueprintFunctionLibrary
+{
+	GENERATED_BODY()
+public:
+	/** The built-in C++ row (ignores DataAssets / DataTable). */
+	UFUNCTION(BlueprintCallable, Category = "Zoogi|Artifacts") static FZoogiArtifactRow GetBuiltInArtifact(EZoogiArtifact Artifact);
+	/** The row the game uses (DataAsset > DataTable > built-in). */
+	UFUNCTION(BlueprintCallable, Category = "Zoogi|Artifacts") static FZoogiArtifactRow GetArtifact(EZoogiArtifact Artifact);
+	/** UI / light colour (rim colour for Void), same as ZoogiArtifacts::Color. */
+	UFUNCTION(BlueprintCallable, Category = "Zoogi|Artifacts") static FLinearColor GetArtifactColor(EZoogiArtifact Artifact);
+	/** "Ember", "Storm", ... */
+	UFUNCTION(BlueprintCallable, Category = "Zoogi|Artifacts") static FString GetArtifactKey(EZoogiArtifact Artifact);
+	/** "DataAsset", "DataTable" or "BuiltIn". */
+	UFUNCTION(BlueprintCallable, Category = "Zoogi|Artifacts") static FString GetArtifactSource(EZoogiArtifact Artifact);
+};
+
 /** Status effects applied by artifacts (in addition to the existing StunTurns / BoundShots). */
 UENUM(BlueprintType)
 enum class EZoogiStatus : uint8
@@ -81,6 +113,10 @@ enum class EZoogiStatus : uint8
 namespace ZoogiArtifacts
 {
 	ZOOGIROLL_API const FZoogiArtifactRow& Get(EZoogiArtifact A);
+	/** Built-in C++ row only (the fallback table). */
+	ZOOGIROLL_API const FZoogiArtifactRow& BuiltIn(EZoogiArtifact A);
+	/** Where Get(A) came from: "DataAsset", "DataTable" or "BuiltIn". */
+	ZOOGIROLL_API FString Source(EZoogiArtifact A);
 	ZOOGIROLL_API FString Name(EZoogiArtifact A);
 	ZOOGIROLL_API FString Key(EZoogiArtifact A);        // "Ember", "Storm", ...
 	ZOOGIROLL_API FLinearColor Color(EZoogiArtifact A);

@@ -1,10 +1,13 @@
 #include "ZoogiArtifacts.h"
 #include "ZoogiTypes.h"
 #include "Engine/DataTable.h"
+#include "ZoogiRoll.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 
 namespace
 {
-	TArray<FZoogiArtifactRow> BuildDefaults()
+	TArray<FZoogiArtifactRow> BuildArtifactDefaults()
 	{
 		TArray<FZoogiArtifactRow> R;
 		R.SetNum((int32)EZoogiArtifact::MAX);
@@ -50,32 +53,90 @@ namespace
 			A.ImpactRadius = 450.f; A.PullTime = 0.6f; A.PullAccel = 2500.f; A.GuardReflectDeg = 25.f;
 			A.ImpactNiagara = TEXT("NS_Burst_Purple"); A.AuraNiagara = TEXT("NS_Burst_Purple"); A.AnimeKey = TEXT("Void"); A.AffinityZoogi = TEXT("nightshade");
 		}
-		// Optional DataTable override (editor-tunable).
-		if (UDataTable* DT = LoadObject<UDataTable>(nullptr, TEXT("/Game/Data/DT_Artifacts.DT_Artifacts"), nullptr, LOAD_NoWarn | LOAD_Quiet))
-		{
-			if (DT->GetRowStruct() == FZoogiArtifactRow::StaticStruct())
-			{
-				for (int32 i = 1; i < (int32)EZoogiArtifact::MAX; ++i)
-				{
-					const FName RowName(*ZoogiArtifacts::Key((EZoogiArtifact)i));
-					if (const FZoogiArtifactRow* Row = DT->FindRow<FZoogiArtifactRow>(RowName, TEXT("ZoogiArtifacts"), false))
-					{
-						R[i] = *Row;
-						R[i].Id = (EZoogiArtifact)i;
-					}
-				}
-			}
-		}
 		return R;
+	}
+
+	struct FZoogiArtifactTableData
+	{
+		TArray<FZoogiArtifactRow> Rows;
+		TArray<FString> Sources;
+	};
+
+	const TArray<FZoogiArtifactRow>& BuiltInArtifactRows()
+	{
+		static TArray<FZoogiArtifactRow> Rows = BuildArtifactDefaults();
+		return Rows;
+	}
+
+	/** Built-ins overridden per artifact by DA_Artifact_<Key>, then DT_Artifacts. Logged once. */
+	FZoogiArtifactTableData BuildArtifactTable()
+	{
+		FZoogiArtifactTableData T;
+		T.Rows = BuiltInArtifactRows();
+		T.Sources.Init(TEXT("BuiltIn"), T.Rows.Num());
+		const bool bForceBuiltIn = FParse::Param(FCommandLine::Get(), TEXT("ZoogiBuiltInArtifacts"));
+		if (bForceBuiltIn) UE_LOG(LogZoogi, Log, TEXT("Artifacts: -ZoogiBuiltInArtifacts, using the C++ table"));
+		UDataTable* DT = bForceBuiltIn ? nullptr : LoadObject<UDataTable>(nullptr, TEXT("/Game/Data/DT_Artifacts.DT_Artifacts"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+		if (DT && DT->GetRowStruct() != FZoogiArtifactRow::StaticStruct()) DT = nullptr;
+		FString Summary;
+		int32 NData = 0, NSame = 0;
+		for (int32 i = 1; i < (int32)EZoogiArtifact::MAX; ++i)
+		{
+			const FString Key = ZoogiArtifacts::Key((EZoogiArtifact)i);
+			const FString Path = FString::Printf(TEXT("/Game/Data/Artifacts/DA_Artifact_%s.DA_Artifact_%s"), *Key, *Key);
+			if (const UZoogiArtifactData* DA = bForceBuiltIn ? nullptr : LoadObject<UZoogiArtifactData>(nullptr, *Path, nullptr, LOAD_NoWarn | LOAD_Quiet))
+			{
+				T.Rows[i] = DA->Row;
+				T.Sources[i] = TEXT("DataAsset");
+			}
+			else if (const FZoogiArtifactRow* Row = DT ? DT->FindRow<FZoogiArtifactRow>(FName(*Key), TEXT("ZoogiArtifacts"), false) : nullptr)
+			{
+				T.Rows[i] = *Row;
+				T.Sources[i] = TEXT("DataTable");
+			}
+			T.Rows[i].Id = (EZoogiArtifact)i;
+			const bool bSame = FZoogiArtifactRow::StaticStruct()->CompareScriptStruct(&T.Rows[i], &BuiltInArtifactRows()[i], PPF_None);
+			if (T.Sources[i] != TEXT("BuiltIn")) { ++NData; if (bSame) ++NSame; }
+			Summary += FString::Printf(TEXT(" %s=%s%s"), *Key, *T.Sources[i], T.Sources[i] == TEXT("BuiltIn") ? TEXT("") : (bSame ? TEXT("(identical)") : TEXT("(TUNED)")));
+			const FZoogiArtifactRow& X = T.Rows[i];
+			UE_LOG(LogZoogi, Log, TEXT("ArtifactRow %s [%s]: launch %.3f mass %.3f radius %.1f push %.1f chain %d pull %.2f s / %.0f status %d | guard kb %.3f mass %.3f reflect %.1f attacker %.3f | fx %s / %s"),
+				*Key, *T.Sources[i], X.LaunchSpeedMul, X.MassMul, X.ImpactRadius, X.ImpactPush, X.ChainCount, X.PullTime, X.PullAccel, X.StatusTurns,
+				X.GuardKnockbackMul, X.GuardMassMul, X.GuardReflectDeg, X.GuardAttackerMul, *X.ImpactNiagara.ToString(), *X.AuraNiagara.ToString());
+		}
+		UE_LOG(LogZoogi, Log, TEXT("Artifacts:%s  [%d/%d from data, %d identical to the C++ table]"), *Summary, NData, (int32)EZoogiArtifact::MAX - 1, NSame);
+		return T;
+	}
+
+	const FZoogiArtifactTableData& ArtifactTable()
+	{
+		static FZoogiArtifactTableData T = BuildArtifactTable();
+		return T;
 	}
 }
 
 const FZoogiArtifactRow& ZoogiArtifacts::Get(EZoogiArtifact A)
 {
-	static TArray<FZoogiArtifactRow> Rows = BuildDefaults();
-	const int32 I = FMath::Clamp((int32)A, 0, Rows.Num() - 1);
-	return Rows[I];
+	const TArray<FZoogiArtifactRow>& Rows = ArtifactTable().Rows;
+	return Rows[FMath::Clamp((int32)A, 0, Rows.Num() - 1)];
 }
+
+const FZoogiArtifactRow& ZoogiArtifacts::BuiltIn(EZoogiArtifact A)
+{
+	const TArray<FZoogiArtifactRow>& Rows = BuiltInArtifactRows();
+	return Rows[FMath::Clamp((int32)A, 0, Rows.Num() - 1)];
+}
+
+FString ZoogiArtifacts::Source(EZoogiArtifact A)
+{
+	const TArray<FString>& S = ArtifactTable().Sources;
+	return S[FMath::Clamp((int32)A, 0, S.Num() - 1)];
+}
+
+FZoogiArtifactRow UZoogiArtifactLibrary::GetBuiltInArtifact(EZoogiArtifact Artifact) { return ZoogiArtifacts::BuiltIn(Artifact); }
+FZoogiArtifactRow UZoogiArtifactLibrary::GetArtifact(EZoogiArtifact Artifact) { return ZoogiArtifacts::Get(Artifact); }
+FLinearColor UZoogiArtifactLibrary::GetArtifactColor(EZoogiArtifact Artifact) { return ZoogiArtifacts::Color(Artifact); }
+FString UZoogiArtifactLibrary::GetArtifactKey(EZoogiArtifact Artifact) { return ZoogiArtifacts::Key(Artifact); }
+FString UZoogiArtifactLibrary::GetArtifactSource(EZoogiArtifact Artifact) { return ZoogiArtifacts::Source(Artifact); }
 
 FString ZoogiArtifacts::Key(EZoogiArtifact A)
 {
