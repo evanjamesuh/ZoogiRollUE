@@ -1,5 +1,6 @@
 #include "ZoogiArena.h"
 #include "ZoogiRock.h"
+#include "ZoogiTopping.h"
 #include "ZoogiRoll.h"
 #include "ZoogiPhysics.h"
 #include "Components/StaticMeshComponent.h"
@@ -164,6 +165,8 @@ void AZoogiArena::Clear()
 	Built.Reset();
 	for (AZoogiRock* R : Rocks) if (IsValid(R)) R->Destroy();
 	Rocks.Reset();
+	for (AZoogiTopping* T : Toppings) if (IsValid(T)) T->Destroy();
+	Toppings.Reset();
 	SolidBoxes.Reset();
 	SolidPosts.Reset();
 }
@@ -434,6 +437,7 @@ void AZoogiArena::BuildIsland(const FLinearColor& TopA, const FLinearColor& TopB
 void AZoogiArena::ResetRocks()
 {
 	for (AZoogiRock* R : Rocks) if (IsValid(R)) R->ResetRock();
+	for (AZoogiTopping* T : Toppings) if (IsValid(T)) T->ResetTopping();
 }
 
 AZoogiRock* AZoogiArena::NearestStandingRock(const FVector2D& From) const
@@ -690,11 +694,104 @@ void AZoogiArena::AddBumper(const FVector2D& XY, float Radius, float Height, USt
 
 void AZoogiArena::BuildArabian()
 {
-	// RoundIsland kind="saturn": warm sand floor, glowing gold lip, dark underside.
-	BuildIsland(ZoogiUtil::Hex(TEXT("#C49E6A")), ZoogiUtil::Hex(TEXT("#B08756")), ZoogiUtil::Hex(TEXT("#9E784C")),
+	// RoundIsland kind="saturn", dressed as a PIZZA (Oct 4, Evan): melted-cheese floor over tomato sauce, a golden baked
+	// crust instead of the glowing gold lip, same dark underside. Floor collider and knockoff line are unchanged.
+	BuildIsland(ZoogiUtil::Hex(TEXT("#F2B544")), ZoogiUtil::Hex(TEXT("#E39A2E")), ZoogiUtil::Hex(TEXT("#B9773A")),
 		ZoogiUtil::Hex(TEXT("#1A120C")), ZoogiUtil::Hex(TEXT("#2E2016")), 0.3f);
-	AddCylinder(FVector2D::ZeroVector, ZoogiConst::KnockoffRadius + 12.f, 18.f, -3.f, ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#FFB03A")), 3.f), false)->SetCastShadow(false);
 	RockPM = ZoogiPhysics::MakeMaterial(this, 0.3f, 0.5f, false);
+	{
+		const float KR = ZoogiConst::KnockoffRadius;
+		UStaticMesh* PizzaSph = ZoogiUtil::BasicShape(TEXT("Sphere"));
+		// Visual-only instanced layers (no collision, no shadows; skipped by the camera-blocker pass in Build()).
+		auto MakeISM = [&](UMaterialInterface* Mat) -> UInstancedStaticMeshComponent*
+		{
+			UInstancedStaticMeshComponent* ISM = NewObject<UInstancedStaticMeshComponent>(this);
+			ISM->SetStaticMesh(PizzaSph);
+			ISM->SetMobility(EComponentMobility::Movable);
+			ISM->SetupAttachment(Root);
+			ISM->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			ISM->SetCastShadow(false);
+			ISM->RegisterComponent();
+			if (Mat) ISM->SetMaterial(0, Mat);
+			Built.Add(ISM);
+			return ISM;
+		};
+		FRandomStream PizzaRng(2024);
+
+		// Crust: a toasted band just under the floor edge plus a ring of puffy ellipsoids. Each puff's inner edge is at
+		// the knockoff line and stays below Z = 0 there (about -2.5 cm), so nothing rises inside the court; the crust
+		// peaks ~+15 cm about 48 cm outside the line. No colliders: marbles fall off exactly where they did.
+		AddCylinder(FVector2D::ZeroVector, KR + 95.f, 50.f, -6.f, ZoogiUtil::GroundMID(this, ZoogiUtil::Hex(TEXT("#B8742F")), ZoogiUtil::Hex(TEXT("#8E5222")), 0.01f, 0.9f), false)->SetCastShadow(false);
+		UInstancedStaticMeshComponent* Crust = MakeISM(ZoogiUtil::GroundMID(this, ZoogiUtil::Hex(TEXT("#E0A04A")), ZoogiUtil::Hex(TEXT("#C27A33")), 0.012f, 0.85f));
+		UInstancedStaticMeshComponent* CrustChar = MakeISM(ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#8A4A1E")), 0.9f));
+		const int32 Puffs = 40;
+		const float PuffR = KR + 48.f;
+		for (int32 i = 0; i < Puffs; ++i)
+		{
+			const float Deg = i * 360.f / Puffs + PizzaRng.FRandRange(-2.f, 2.f);
+			const float A = FMath::DegreesToRadians(Deg);
+			const float Len = 2.f * PI * PuffR / Puffs * PizzaRng.FRandRange(1.3f, 1.5f);
+			const float H = PizzaRng.FRandRange(44.f, 54.f);
+			const float Semi = PizzaRng.FRandRange(48.f, 50.f); // radial half-width
+			Crust->AddInstance(FTransform(FRotator(0.f, Deg + 90.f, 0.f), FVector(FMath::Cos(A) * PuffR, FMath::Sin(A) * PuffR, -10.f), FVector(Len / 100.f, Semi / 50.f, H / 100.f)));
+			// Browned blister near the top of most puffs.
+			if (PizzaRng.FRand() < 0.75f)
+			{
+				const float BDeg = Deg + PizzaRng.FRandRange(-1.5f, 1.5f), BA = FMath::DegreesToRadians(BDeg);
+				const float BD = PuffR + PizzaRng.FRandRange(-12.f, 8.f);
+				const float S = PizzaRng.FRandRange(0.22f, 0.45f);
+				CrustChar->AddInstance(FTransform(FRotator(0.f, BDeg + 90.f + PizzaRng.FRandRange(-25.f, 25.f), 0.f), FVector(FMath::Cos(BA) * BD, FMath::Sin(BA) * BD, -10.f + H * 0.5f - 2.5f), FVector(S * 1.5f, S, 0.1f)));
+			}
+		}
+
+		// Floor dressing: sauce showing through the cheese, browned spots and low cheese bubbles, clear of the spawn pads.
+		auto FloorSpot = [&](float RMin, float RMax) -> FVector2D
+		{
+			FVector2D P = FVector2D::ZeroVector;
+			for (int32 Try = 0; Try < 12; ++Try)
+			{
+				const float A = PizzaRng.FRandRange(0.f, 2.f * PI);
+				const float D = FMath::Sqrt(PizzaRng.FRandRange(RMin * RMin, RMax * RMax));
+				P = FVector2D(FMath::Cos(A) * D, FMath::Sin(A) * D);
+				bool bClear = true;
+				for (int32 s = 0; s < 4 && bClear; ++s) bClear = FVector2D::Distance(P, FVector2D(GetSpawnPoint(s))) > 140.f;
+				if (bClear) break;
+			}
+			return P;
+		};
+		UInstancedStaticMeshComponent* Sauce = MakeISM(ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#C2461F")), 0.45f));
+		for (int32 i = 0; i < 22; ++i)
+		{
+			const FVector2D P = FloorSpot(150.f, 1380.f);
+			const float S = PizzaRng.FRandRange(0.6f, 1.4f);
+			Sauce->AddInstance(FTransform(FRotator(0.f, PizzaRng.FRandRange(0.f, 360.f), 0.f), FVector(P.X, P.Y, 0.35f), FVector(S * PizzaRng.FRandRange(1.f, 1.6f), S, 0.012f)));
+		}
+		UInstancedStaticMeshComponent* Browned = MakeISM(ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#A5612A")), 0.85f));
+		for (int32 i = 0; i < 36; ++i)
+		{
+			const FVector2D P = FloorSpot(100.f, 1460.f);
+			const float S = PizzaRng.FRandRange(0.25f, 0.7f);
+			Browned->AddInstance(FTransform(FRotator(0.f, PizzaRng.FRandRange(0.f, 360.f), 0.f), FVector(P.X, P.Y, 1.1f), FVector(S * PizzaRng.FRandRange(1.f, 1.3f), S, 0.012f)));
+		}
+		UInstancedStaticMeshComponent* Bubbles = MakeISM(ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#FFD978")), 0.4f));
+		for (int32 i = 0; i < 40; ++i)
+		{
+			const FVector2D P = FloorSpot(100.f, 1470.f);
+			const float S = PizzaRng.FRandRange(0.18f, 0.36f);
+			Bubbles->AddInstance(FTransform(FRotator(0.f, PizzaRng.FRandRange(0.f, 360.f), 0.f), FVector(P.X, P.Y, 0.f), FVector(S, S * PizzaRng.FRandRange(0.8f, 1.f), 0.05f)));
+		}
+		// Slice cuts: four thin sauce-dark lines through the centre (eight slices), angled clear of the spawn lanes
+		// (0/90/180/270 deg) and the planters (8 deg minimum gap).
+		UMaterialInterface* CutMat = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#9A3A1A")), 0.6f);
+		UStaticMesh* PizzaCube = ZoogiUtil::BasicShape(TEXT("Cube"));
+		for (int32 k = 0; k < 4; ++k)
+		{
+			UStaticMeshComponent* Cut = AddMesh(PizzaCube, CutMat, false, false);
+			Cut->SetRelativeScale3D(FVector((KR - 15.f) * 2.f / 100.f, 0.06f, 0.01f)); // 6 cm wide, 1 cm thick
+			Cut->SetRelativeRotation(FRotator(0.f, 8.f + k * 45.f, 0.f));
+			Cut->SetRelativeLocation(FVector(0.f, 0.f, 0.8f));
+		}
+	}
 
 	UStaticMesh* Cyl = ZoogiUtil::BasicShape(TEXT("Cylinder"));
 	UStaticMesh* Sph = ZoogiUtil::BasicShape(TEXT("Sphere"));
@@ -722,6 +819,58 @@ void AZoogiArena::BuildArabian()
 			L->SetRelativeRotation(FRotator(0.f, Yaw, 28.f));
 			L->SetRelativeLocation(FVector(P.X, P.Y, H + 45.f));
 		}
+	}
+
+	// Poppable toppings (AZoogiTopping): flat, overlap-only, never block or deflect a marble. Deterministic layout between
+	// r 250 and 1350, clear of the spawn pads, the tomato planters and the orbs (AZoogiGameMode::SpawnOrbs layout).
+	{
+		TArray<FVector4> Keep; // x, y, clearance added to the topping radius
+		for (int32 s = 0; s < 4; ++s) { const FVector S = GetSpawnPoint(s); Keep.Add(FVector4(S.X, S.Y, 150.f, 0.f)); }
+		for (int32 i = 0; i < 6; ++i)
+		{
+			const float A = FMath::DegreesToRadians(Angles[i]);
+			const float D = (13.55f + Jitter[i]) * 100.f;
+			Keep.Add(FVector4(FMath::Cos(A) * D, FMath::Sin(A) * D, 72.f + 120.f, 0.f));
+		}
+		for (int32 i = 0; i < ZoogiConst::OrbCount; ++i)
+		{
+			const float A = (float)i / ZoogiConst::OrbCount * 2.f * PI;
+			Keep.Add(FVector4(FMath::Cos(A) * ZoogiConst::OrbRingRadius, FMath::Sin(A) * ZoogiConst::OrbRingRadius, ZoogiConst::OrbRadius + 25.f, 0.f));
+		}
+		for (int32 i = 0; i < 3; ++i)
+		{
+			const float A = i * 2.f * PI / 3.f + PI / 6.f;
+			Keep.Add(FVector4(FMath::Cos(A) * 90.f, FMath::Sin(A) * 90.f, ZoogiConst::OrbRadius + 25.f, 0.f));
+		}
+		FRandomStream TopRng(4242);
+		TArray<FVector> Placed; // x, y, radius
+		const int32 Pieces = 21; // even = pepperoni (11), odd = cheese (10)
+		for (int32 i = 0; i < Pieces; ++i)
+		{
+			const EZoogiToppingKind Kind = (i % 2 == 0) ? EZoogiToppingKind::Pepperoni : EZoogiToppingKind::Cheese;
+			const float TR = Kind == EZoogiToppingKind::Pepperoni ? TopRng.FRandRange(35.f, 45.f) : TopRng.FRandRange(20.f, 30.f);
+			const float TYaw = TopRng.FRandRange(0.f, 360.f);
+			bool bFound = false;
+			FVector2D P = FVector2D::ZeroVector;
+			for (int32 Try = 0; Try < 80 && !bFound; ++Try)
+			{
+				const float A = TopRng.FRandRange(0.f, 2.f * PI);
+				const float D = FMath::Sqrt(TopRng.FRandRange(250.f * 250.f, 1350.f * 1350.f));
+				P = FVector2D(FMath::Cos(A) * D, FMath::Sin(A) * D);
+				bFound = true;
+				for (const FVector4& K : Keep) if (FVector2D::Distance(P, FVector2D(K.X, K.Y)) < K.Z + TR) { bFound = false; break; }
+				for (const FVector& Q : Placed) if (bFound && FVector2D::Distance(P, FVector2D(Q.X, Q.Y)) < Q.Z + TR + 60.f) { bFound = false; break; }
+			}
+			if (!bFound) continue;
+			Placed.Add(FVector(P.X, P.Y, TR));
+			FActorSpawnParameters SP;
+			SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			AZoogiTopping* T = GetWorld()->SpawnActor<AZoogiTopping>(AZoogiTopping::StaticClass(), FTransform(FVector(P.X, P.Y, 0.f)), SP);
+			if (!T) continue;
+			T->InitTopping(Kind, TR, TYaw, 500 + i / 2); // cheese alternates blob / wedge by seed parity
+			Toppings.Add(T);
+		}
+		UE_LOG(LogZoogi, Log, TEXT("Pizza court: %d toppings"), Toppings.Num());
 	}
 
 	// Floating palace islets: domes, minarets, glowing lanterns.

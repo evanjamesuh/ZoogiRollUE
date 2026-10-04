@@ -95,6 +95,8 @@ protected:
 
 	UPROPERTY() TArray<TObjectPtr<UActorComponent>> Built;
 	UPROPERTY() TArray<TObjectPtr<class AZoogiRock>> Rocks;
+	/** Poppable pizza toppings (Arabian court). Destroyed in Clear(), restored with the rocks in ResetRocks(). */
+	UPROPERTY() TArray<TObjectPtr<class AZoogiTopping>> Toppings;
 	UPROPERTY() TObjectPtr<UPhysicalMaterial> FloorPM;
 	UPROPERTY() TObjectPtr<UPhysicalMaterial> RockPM;
 	EZoogiArena Theme = EZoogiArena::Meadow;
