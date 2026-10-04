@@ -78,7 +78,13 @@ float AZoogiArena::DistanceToEdge(const FVector2D& P, const FVector2D& Dir) cons
 	{
 		const float TX = Dir.X > 0.f ? (GNeonHalfX - P.X) / Dir.X : (Dir.X < 0.f ? (-GNeonHalfX - P.X) / Dir.X : 1e6f);
 		const float TY = Dir.Y > 0.f ? (GNeonHalfY - P.Y) / Dir.Y : (Dir.Y < 0.f ? (-GNeonHalfY - P.Y) / Dir.Y : 1e6f);
-		return FMath::Max(0.f, FMath::Min(TX, TY));
+		const float T = FMath::Max(0.f, FMath::Min(TX, TY));
+		// The rails cover each side except the corner mouths (BuildNeon: Mouth 315): a line that meets a rail
+		// bounces back instead of leaving the court, so for planning there is no edge that way.
+		const FVector2D E = P + Dir * T;
+		const float Mouth = 315.f, Slack = 40.f; // a ball centre within ~a radius of the rail end still clips it
+		const bool bRail = TX < TY ? FMath::Abs(E.Y) < GNeonHalfY - Mouth + Slack : FMath::Abs(E.X) < GNeonHalfX - Mouth + Slack;
+		return bRail ? T + 3000.f : T;
 	}
 	const float R = ZoogiConst::KnockoffRadius;
 	const float PD = FVector2D::DotProduct(P, Dir);
@@ -95,6 +101,36 @@ bool AZoogiArena::IsSpotClear(const FVector2D& P, float Radius) const
 	}
 	for (const FVector2D& Q : SolidPosts) if (FVector2D::Distance(Q, P) < Radius + 95.5f + 15.f) return false;
 	return true;
+}
+
+bool AZoogiArena::IsPathBlocked(const FVector2D& From, const FVector2D& To, float Radius) const
+{
+	const FVector2D D = To - From;
+	const float Len = D.Size();
+	if (Len < 1.f) return false;
+	for (const FVector2D& Q : SolidPosts)
+	{
+		const float T = FMath::Clamp(FVector2D::DotProduct(Q - From, D) / (Len * Len), 0.f, 1.f);
+		if (FVector2D::Distance(From + D * T, Q) < Radius + 95.5f) return true;
+	}
+	for (const FBox2D& B : SolidBoxes)
+	{
+		// Slab test against the box grown by the ball radius.
+		const FVector2D Mn = B.Min - FVector2D(Radius, Radius), Mx = B.Max + FVector2D(Radius, Radius);
+		float T0 = 0.f, T1 = 1.f;
+		bool bMiss = false;
+		for (int32 a = 0; a < 2 && !bMiss; ++a)
+		{
+			const float O = a ? From.Y : From.X, Dd = a ? D.Y : D.X, Lo = a ? Mn.Y : Mn.X, Hi = a ? Mx.Y : Mx.X;
+			if (FMath::Abs(Dd) < 1e-4f) { if (O < Lo || O > Hi) bMiss = true; continue; }
+			float Ta = (Lo - O) / Dd, Tb = (Hi - O) / Dd;
+			if (Ta > Tb) Swap(Ta, Tb);
+			T0 = FMath::Max(T0, Ta); T1 = FMath::Min(T1, Tb);
+			if (T0 > T1) bMiss = true;
+		}
+		if (!bMiss) return true;
+	}
+	return false;
 }
 
 FVector AZoogiArena::GetSpawnPoint(int32 PlayerIndex) const

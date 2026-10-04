@@ -43,6 +43,8 @@ public:
 	bool IsSpotClear(const FVector2D& P, float Radius) const;
 	/** Distance from P along Dir to the knockout line. */
 	float DistanceToEdge(const FVector2D& P, const FVector2D& Dir) const;
+	/** True if a ball of the given radius rolling straight From -> To would hit a solid pad or post (Night Circuit). */
+	bool IsPathBlocked(const FVector2D& From, const FVector2D& To, float Radius) const;
 	bool IsNeon() const { return Theme == EZoogiArena::Neon; }
 
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> Root;

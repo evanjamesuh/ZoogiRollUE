@@ -265,7 +265,8 @@ void AZoogiGameMode::ApplyStatusOnShot(AZoogiBall* Ball, FVector2D& V)
 		V *= R.LaunchSpeedMul;
 		RefreshArtifactMass(Ball, true);
 		// Affinity: the Zoogi's signature power rides along. Armed powers fire with this shot (OnArmedShot), instant ones on impact.
-		if (ZoogiArtifacts::Affinity(Ball->Def.Id) == AC->Infused && ZoogiUtil::IsArmedPower(Ball->Def.PowerKind))
+		// (Bolt's Static Shock is the exception: phasing through would skip the powered contact, so it stuns on impact instead.)
+		if (ZoogiArtifacts::Affinity(Ball->Def.Id) == AC->Infused && ZoogiUtil::IsArmedPower(Ball->Def.PowerKind) && Ball->Def.PowerKind != EZoogiPower::StaticShock)
 		{
 			bPowerArmed = true;
 			Ball->Charges = FMath::Max(Ball->Charges, 1);
@@ -320,7 +321,7 @@ void AZoogiGameMode::ApplyInfuseImpact(AZoogiBall* Shooter, AActor* Other)
 	{
 		const float Rad = R.ImpactRadius * Mul;
 		// Balance Oct 4: with affinity (Hotstreak) the signature explosion also fires, so Ember's own burst is weaker.
-		const float AffPush = ZoogiArtifacts::Affinity(Shooter->Def.Id) == A ? 0.55f : 1.f;
+		const float AffPush = ZoogiArtifacts::Affinity(Shooter->Def.Id) == A ? 0.3f : 1.f; // 0.55 -> 0.3 (bal4+5: Hotstreak's affinity turns scored 91 pts/turn, others 25-67)
 		for (AActor* T : LiveTargets(Shooter))
 		{
 			const FVector D = Pos(T) - Mid;
@@ -418,6 +419,18 @@ void AZoogiGameMode::ApplyInfuseImpact(AZoogiBall* Shooter, AActor* Other)
 	{
 		Shooter->Charges = FMath::Max(Shooter->Charges, 1);
 		FireInstantPower(Shooter);
+	}
+	else if (ZoogiArtifacts::Affinity(Shooter->Def.Id) == A && Shooter->Def.PowerKind == EZoogiPower::StaticShock && !bPowerUsed && OB)
+	{
+		// Balance Oct 4: Bolt's affinity used to phase through the target (affinity turns scored half of his plain infused
+		// turns). Now the shock lands with the hit: the victim keeps the knock and skips its next turn.
+		bPowerUsed = true;
+		OB->StunTurns = FMath::Max(OB->StunTurns, 1);
+		OB->LastHitPlayer = Shooter->PlayerIndex;
+		AZoogiFX::Niagara(GetWorld(), TEXT("NS_Burst_Yellow"), OB->BallLocation());
+		AddPopup(TEXT("STATIC SHOCK!  STUNNED"), OB->BallLocation() + FVector(0, 0, 110.f), FLinearColor(1.f, 0.85f, 0.15f));
+		ZoogiUtil::PlaySfx(this, TEXT("Zap"), 0.8f, 1.6f);
+		UE_LOG(LogZoogi, Log, TEXT("Affinity: Bolt's Static Shock stunned P%d on impact"), OB->PlayerIndex + 1);
 	}
 
 	UE_LOG(LogZoogi, Log, TEXT("Powered hit: P%d %s %s -> %s (contact %.0f / launch %.0f cm/s = %.0f%%, cut %.1f deg)%s, affected %d"),

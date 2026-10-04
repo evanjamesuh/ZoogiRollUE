@@ -144,7 +144,9 @@ void AZoogiGameMode::FireInstantPower(AZoogiBall* Ball)
 			if (!B || B == Ball || B->bOut) continue;
 			if (FVector::Dist2D(B->BallLocation(), L) > ShadowRadius + ZoogiConst::ZoogiRadius) continue;
 			B->StunTurns = FMath::Max(B->StunTurns, 1);
-			B->SetPlanarVelocity(FVector::ZeroVector);
+			// Artifact rules: the stun fires on Nightshade's powered impact (Void affinity); freezing the target in place
+			// cancelled the knock (affinity turns averaged -1 pt). There the stun only skips the victim's next turn.
+			if (!bArtifactMode) B->SetPlanarVelocity(FVector::ZeroVector);
 			AZoogiFX::Spawn(GetWorld(), B->BallLocation(), C, 110.f, 0.6f, false, 6.f, B);
 			AZoogiFX::Niagara(GetWorld(), TEXT("NS_Burst_Purple"), B->BallLocation(), FRotator::ZeroRotator, 0.7f);
 			AddPopup(TEXT("FROZEN"), B->BallLocation() + FVector(0, 0, 110.f), C);

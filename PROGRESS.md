@@ -206,6 +206,14 @@ one Zoogi per player, no HP, deterministic crit, Guard = next opponent attack on
   - [x] Polish: Awaken panel shows empty hand slots, larger texts and the affinity line; Resolve panel moved to the lower third
         with powered-hit / crit / KO / combo / guard notes; CPUs guard more (protecting a lead / playing safe); guard anime
         framed from outside the bubble.
+  - [x] Oct 4 1:15-1:30 PM: Awaken panel key hints ([1]-[3], I / G / S), "GUARDED:" line listing rivals with a guard up,
+        hand-full warning ("saving X discards Y") and a DISCARDED popup / feed line when SAVE pushes out the oldest card.
+        `-ZoogiHumanTest` now cycles Save x3 / Guard (saved card) / Infuse and screenshots every human Awaken.
+  - [x] Balance sample 4 (20 matches, artifact rules, 1:04 PM package): Hotstreak 46%, Wolfgang 41%, Wraps 29%, Nightshade 18%,
+        Bolt 18%, Pinpoint 14%, Lars 8%. Hotstreak won by rarely being knocked off (lowest points lost) -> Defense 70 -> 62
+        (mass 1.17 -> 1.03).
+  - [x] Night Circuit CPU planning: rails count as "no edge" (only the corner mouths knock off) and pads / posts in the shot
+        path or the target's exit path make a plan expensive (CPUs used to plan through them; whole matches ended 0-0).
   New switches: `-ZoogiClassicPowers` (Oct 3 rules), `-ZoogiCinematic`, `-ZoogiAnime=Off|Short|Full` (auto runs without
   `-ZoogiShots` default to Off).
 

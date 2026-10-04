@@ -674,6 +674,9 @@ void AZoogiGameMode::PlanCPUShot()
 		const float Edge = Arena->DistanceToEdge(C.P, Dir);
 		float Cost = Dist * 0.5f + Edge - C.Value * 6.f;
 		if (Blocked(B, C.P, C.P)) Cost += 1500.f;
+		// Night Circuit pads / posts: in the way of the shot, or between the target and its edge.
+		if (Arena->IsPathBlocked(B, C.P - Dir * (ZoogiConst::ZoogiRadius + C.Radius), ZoogiConst::ZoogiRadius - 5.f)) Cost += 1500.f;
+		else if (Arena->IsPathBlocked(C.P + Dir * (C.Radius + 10.f), C.P + Dir * FMath::Min(Edge, 2500.f), C.Radius - 5.f)) Cost += 700.f;
 		// Power needed to push the target ~2.5 m past the edge (1D collision, restitution ~0.7).
 		const float Need = FMath::Sqrt(2.f * Decel * (Edge + 250.f));
 		float Transfer = (1.f + 0.7f) * M1 / (M1 + C.TargetMass);
@@ -720,6 +723,8 @@ void AZoogiGameMode::PlanCPUShot()
 			if (CosCut < FMath::Cos(FMath::DegreesToRadians(50.f)) || CosCut > FMath::Cos(FMath::DegreesToRadians(4.f))) continue; // not a real cut, or too thin
 			float Cost = GDist * 0.5f + BestEdge - C.Value * 6.f + 20.f; // small bias: straight shots are more reliable (Oct 4: 60 -> 20 for variety)
 			if (Blocked(B, Ghost, C.P)) Cost += 1500.f;
+			if (Arena->IsPathBlocked(B, Ghost, ZoogiConst::ZoogiRadius - 5.f)) Cost += 1500.f;
+			else if (Arena->IsPathBlocked(C.P + BestN * (C.Radius + 10.f), C.P + BestN * FMath::Min(BestEdge, 2500.f), C.Radius - 5.f)) Cost += 700.f;
 			const float Need = FMath::Sqrt(2.f * Decel * (BestEdge + 250.f));
 			const float Transfer = (1.f + 0.7f) * M1 / (M1 + C.TargetMass) * CosCut;
 			const float VIn = Need / FMath::Max(Transfer, 0.3f);
