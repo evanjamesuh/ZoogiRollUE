@@ -75,6 +75,7 @@ bool AZoogiGameMode::CanUsePower() const
 {
 	const AZoogiBall* B = GetActiveBall();
 	if (!B || B->bOut || bPowerUsed) return false;
+	if (bArtifactMode) return false; // artifact mode: signature powers only ride along with an affinity Infuse (ZoogiAwaken.cpp)
 	if (B->Charges <= 0 && !bPowerArmed) return false;
 	const EZoogiPower P = B->Def.PowerKind;
 	if (ZoogiUtil::IsArmedPower(P)) return Phase == EZoogiPhase::Aiming;
@@ -255,6 +256,7 @@ void AZoogiGameMode::OnShooterContact(AZoogiBall* Shooter, AActor* Other)
 		if (S > 0.6f) AddPopup(TEXT("SMASH!"), Mid + FVector(0, 0, 150.f), PC);
 		if (AZoogiPlayerController* PCtl = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PCtl->OnImpact(S);
 	}
+	if (Phase == EZoogiPhase::Rolling && Shooter && Other) ApplyInfuseImpact(Shooter, Other);
 	if (Phase != EZoogiPhase::Rolling || !Shooter || !Other || !bPowerUsed) return;
 	const EZoogiPower P = Shooter->Def.PowerKind;
 	AZoogiBall* OtherBall = Cast<AZoogiBall>(Other);
@@ -396,7 +398,7 @@ void AZoogiGameMode::CPUPowerTick()
 	AZoogiBall* B = GetActiveBall();
 	if (!B || !B->bCPU || !bCPUUsePower || !CanUsePower()) return;
 	const EZoogiPower P = B->Def.PowerKind;
-	const bool bLockedMain = Phase == EZoogiPhase::Aiming && Stage == EZoogiStage::Main && TargetLock.IsValid() && !bSoftLock;
+	const bool bLockedMain = Phase == EZoogiPhase::Aiming && IsAimStep() && TargetLock.IsValid() && !bSoftLock;
 	if (ZoogiUtil::IsArmedPower(P))
 	{
 		// Arm once the target is locked in Main, so the "armed" flash reads before the Battle camera swings in.
