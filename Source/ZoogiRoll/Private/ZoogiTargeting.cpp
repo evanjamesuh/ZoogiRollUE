@@ -489,6 +489,12 @@ void AZoogiGameMode::TickStages(float Dt)
 		UpdatePreview();
 	}
 
+	// Automation: every human Awaken (choice + result) for the first turns, so hand states past turn 4 get captured.
+	if (!bCPU && ShotsFired < 12 && Stage == EZoogiStage::Awaken)
+	{
+		if (StageTime > 1.0f && !bAwakenDone) TakeShot(FString::Printf(TEXT("hum_t%d_awaken"), ShotsFired + 1));
+		if (bAwakenDone && StageTime - AwakenDoneAt > 0.3f) TakeShot(FString::Printf(TEXT("hum_t%d_awakened"), ShotsFired + 1));
+	}
 	// Automation: one screenshot per phase for the first few turns.
 	if (ShotsFired < 4)
 	{

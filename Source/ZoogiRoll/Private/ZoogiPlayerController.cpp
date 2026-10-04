@@ -210,11 +210,14 @@ void AZoogiPlayerController::UpdateHumanTest(float Dt)
 	};
 	if (G->Stage == EZoogiStage::Awaken)
 	{
-		// Alternate Infuse / Guard / Save through the HUD actions, like clicking the buttons.
-		if (SimStep == 0 && T > 0.8f)
+		// Cycle through the HUD actions like clicking the buttons: Save x3 (fills the hand, third one discards),
+		// Guard with saved card 1, then Infuse the drawn card.
+		if (SimStep == 0 && T > 1.3f)
 		{
-			const int32 Mode = SimTurn % 3;
-			G->MenuAction(Mode == 2 ? FName(TEXT("Save")) : Mode == 1 ? FName(TEXT("Guard")) : FName(TEXT("Infuse")), -1);
+			const int32 Mode = SimTurn % 5;
+			if (Mode >= 1 && Mode <= 3) G->MenuAction(TEXT("Save"), -1);
+			else if (Mode == 4) G->MenuAction(TEXT("Guard"), 1);
+			else G->MenuAction(TEXT("Infuse"), -1);
 			SimStep = 1;
 		}
 	}
