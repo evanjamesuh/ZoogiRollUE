@@ -151,7 +151,13 @@ void UZoogiArtifactComponent::ResetAll()
 	ApplyLook();
 }
 
-void UZoogiArtifactComponent::Pulse(float Strength) { PulseAge = 0.f; PulseStrength = FMath::Clamp(Strength, 0.f, 1.5f); }
+void UZoogiArtifactComponent::Pulse(float Strength)
+{
+	PulseAge = 0.f;
+	PulseStrength = FMath::Clamp(Strength, 0.f, 1.5f);
+	// Item 4 hook: the character shell breathes out with the core pulse (draw 0.35, infuse / power-up 1.0 -> 1.06x).
+	if (AZoogiBall* B = Cast<AZoogiBall>(GetOwner())) B->ShellExpand(PulseStrength);
+}
 void UZoogiArtifactComponent::ImpactPulse(float Strength) { ImpactAge = 0.f; ImpactStrength = FMath::Clamp(Strength, 0.f, 1.5f); }
 void UZoogiArtifactComponent::GuardFlash() { GuardFlashAge = 0.f; }
 

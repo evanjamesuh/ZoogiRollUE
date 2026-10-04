@@ -15,6 +15,8 @@
 #include "PhysicalMaterials/PhysicalMaterial.h"
 #include "Components/AudioComponent.h"
 #include "Sound/SoundBase.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 
 AZoogiBall::AZoogiBall()
 {
@@ -153,6 +155,144 @@ void AZoogiBall::FitVisual()
 	Visual->SetRelativeScale3D(FVector(Scale));
 	Visual->SetRelativeRotation(FRotator(0.f, Def.ModelYaw, 0.f));
 	Visual->SetRelativeLocation(FRotator(0.f, Def.ModelYaw, 0.f).RotateVector(Offset));
+	// Rest pose for the visual hooks (Offset == -Origin * Scale, so scaling about the bounds centre keeps the model centred).
+	BaseVisualRot = FRotator(0.f, Def.ModelYaw, 0.f).Quaternion();
+	BaseVisualScale = FVector(Scale);
+	BaseVisualOrigin = Offset.IsNearlyZero() ? FVector::ZeroVector : B.Origin;
+	ResetVisualHooks();
+}
+
+// ------------------------------------------------------------------ visual hooks (item 4)
+
+float AZoogiBall::HookGain()
+{
+	static float Gain = -1.f;
+	if (Gain < 0.f)
+	{
+		Gain = 1.f;
+		const TCHAR* Cmd = FCommandLine::Get();
+		FParse::Value(Cmd, TEXT("ZoogiHookGain="), Gain);
+		if (FParse::Param(Cmd, TEXT("ZoogiNoHooks"))) Gain = 0.f;
+		Gain = FMath::Clamp(Gain, 0.f, 4.f);
+	}
+	return Gain;
+}
+
+void AZoogiBall::PulseCore(float Strength)
+{
+	if (Artifact) Artifact->Pulse(Strength); // the artifact pulse also calls ShellExpand
+	else ShellExpand(Strength);
+}
+
+void AZoogiBall::Squash(float Amount, const FVector& WorldDir)
+{
+	const float G = HookGain();
+	if (G <= 0.f || WorldDir.IsNearlyZero() || bOut) return;
+	SquashAmount = FMath::Clamp(Amount * G, -0.15f * FMath::Max(1.f, G), 0.15f * FMath::Max(1.f, G));
+	SquashDirWorld = WorldDir.GetSafeNormal();
+	SquashAge = 0.f;
+	bHooksDirty = true;
+}
+
+void AZoogiBall::SpinBoost(float DegPerSec, const FVector& WorldAxis)
+{
+	const float G = HookGain();
+	if (G <= 0.f || WorldAxis.IsNearlyZero() || bOut) return;
+	SpinAxisWorld = WorldAxis.GetSafeNormal();
+	SpinRate = FMath::Clamp(DegPerSec, -720.f, 720.f) * G;
+	bHooksDirty = true;
+}
+
+void AZoogiBall::Wobble(float Degrees, const FVector& WorldDir)
+{
+	const float G = HookGain();
+	const FVector Axis = FVector::CrossProduct(FVector::UpVector, FVector(WorldDir.X, WorldDir.Y, 0.f)).GetSafeNormal();
+	if (G <= 0.f || Axis.IsNearlyZero() || bOut) return;
+	WobbleDeg = FMath::Clamp(Degrees, 0.f, 6.f) * G;
+	WobbleAxisWorld = Axis;
+	WobbleAge = 0.f;
+	bHooksDirty = true;
+}
+
+void AZoogiBall::ShellExpand(float Strength)
+{
+	const float G = HookGain();
+	if (G <= 0.f || bOut) return;
+	ExpandStrength = FMath::Clamp(Strength, 0.f, 1.5f) * G;
+	ExpandAge = 0.f;
+	bHooksDirty = true;
+}
+
+void AZoogiBall::ResetVisualHooks()
+{
+	SpinLocal = FQuat::Identity;
+	SpinRate = 0.f;
+	SquashAge = WobbleAge = ExpandAge = 10.f;
+	bHooksDirty = true;
+	TickVisualHooks(0.f);
+}
+
+void AZoogiBall::TickVisualHooks(float Dt)
+{
+	if (!bHooksDirty || !Visual) return;
+	Dt = FMath::Min(Dt, 0.05f);
+	const FQuat SphereQ = Sphere->GetComponentQuat();
+	const FQuat ToLocal = SphereQ.Inverse();
+	bool bActive = false;
+
+	// Spin: extra rotation about the world axis, accumulated in the sphere's frame so later rolling stays about the true axis.
+	if (FMath::Abs(SpinRate) > 1.f)
+	{
+		SpinLocal = FQuat(ToLocal.RotateVector(SpinAxisWorld), FMath::DegreesToRadians(SpinRate * Dt)) * SpinLocal;
+		SpinLocal.Normalize();
+		SpinRate *= FMath::Exp(-Dt / 0.35f);
+		bActive = true;
+	}
+	else SpinRate = 0.f;
+
+	// Wobble: decaying ~6 Hz tilt.
+	FQuat WobbleLocal = FQuat::Identity;
+	WobbleAge += Dt;
+	if (WobbleAge < 0.6f)
+	{
+		const float Ang = WobbleDeg * FMath::Exp(-WobbleAge / 0.18f) * FMath::Sin(UE_TWO_PI * 6.f * WobbleAge);
+		WobbleLocal = FQuat(ToLocal.RotateVector(WobbleAxisWorld), FMath::DegreesToRadians(Ang));
+		bActive = true;
+	}
+	const FQuat Rel = WobbleLocal * SpinLocal * BaseVisualRot;
+
+	// Squash: the diagonal of the squash matrix I + a (1.5 d d^T - 0.5 I) in the model's own axes (no shear on a rotated mesh).
+	FVector S = FVector::OneVector;
+	SquashAge += Dt;
+	if (SquashAge < 0.15f)
+	{
+		const float A = SquashAmount * FMath::Sin(PI * SquashAge / 0.15f);
+		const FVector D = (SphereQ * Rel).Inverse().RotateVector(SquashDirWorld);
+		S = FVector(1.f + A * (1.5f * D.X * D.X - 0.5f), 1.f + A * (1.5f * D.Y * D.Y - 0.5f), 1.f + A * (1.5f * D.Z * D.Z - 0.5f));
+		bActive = true;
+	}
+	// Shell expansion during power-up.
+	ExpandAge += Dt;
+	float E = 1.f;
+	if (ExpandAge < 0.5f)
+	{
+		E = 1.f + 0.06f * ExpandStrength * FMath::Sin(PI * ExpandAge / 0.5f);
+		bActive = true;
+	}
+	const FVector Scale = BaseVisualScale * S * E;
+	Visual->SetRelativeTransform(FTransform(Rel, -Rel.RotateVector(Scale * BaseVisualOrigin), Scale));
+	bHooksDirty = bActive;
+	// -ZoogiHookShots: a few frames at the peak of each hook for review (with -ZoogiShots=<dir>).
+	static const bool bHookShots = FParse::Param(FCommandLine::Get(), TEXT("ZoogiHookShots"));
+	if (bHookShots && Dt > 0.f)
+	{
+		static int32 NSquash = 0, NExpand = 0, NSpin = 0;
+		AZoogiGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<AZoogiGameMode>() : nullptr;
+		if (GM && SquashAge >= 0.075f && SquashAge - Dt < 0.075f && NSquash < 8)
+			GM->TakeShot(FString::Printf(TEXT("hook_%s%d_P%d"), SquashAmount < 0.f ? TEXT("squash") : TEXT("stretch"), ++NSquash, PlayerIndex + 1));
+		if (GM && ExpandAge >= 0.25f && ExpandAge - Dt < 0.25f && NExpand < 4) GM->TakeShot(FString::Printf(TEXT("hook_expand%d_P%d"), ++NExpand, PlayerIndex + 1));
+		if (GM && SpinRate > 200.f && NSpin < 3 && SquashAge > 0.15f) { GM->TakeShot(FString::Printf(TEXT("hook_spin%d_P%d"), ++NSpin, PlayerIndex + 1)); }
+	}
 }
 
 void AZoogiBall::PlaceAt(const FVector& Location, float FacingYaw)
@@ -166,6 +306,7 @@ void AZoogiBall::PlaceAt(const FVector& Location, float FacingYaw)
 	Sphere->SetPhysicsLinearVelocity(FVector::ZeroVector);
 	Sphere->SetPhysicsAngularVelocityInRadians(FVector::ZeroVector);
 	AimYaw = FacingYaw;
+	ResetVisualHooks();
 }
 
 void AZoogiBall::SetOut()
@@ -192,7 +333,16 @@ void AZoogiBall::Launch(const FVector2D& PlanarVelocity)
 	const FVector V(PlanarVelocity.X, PlanarVelocity.Y, 0.f);
 	Sphere->SetPhysicsLinearVelocity(V);
 	Sphere->SetPhysicsAngularVelocityInRadians(FVector::CrossProduct(FVector::UpVector, V) / ZoogiConst::ZoogiRadius);
-	if (!V.IsNearlyZero()) AimYaw = V.Rotation().Yaw;
+	if (!V.IsNearlyZero())
+	{
+		AimYaw = V.Rotation().Yaw;
+		// Visual hooks: a quick stretch along the shot and a little extra spin (same sense as the roll).
+		const float K = FMath::Clamp(V.Size() / ZoogiConst::FullLaunchSpeed, 0.25f, 1.f);
+		Squash(0.08f * K, V);
+		SpinBoost(360.f * K, FVector::CrossProduct(FVector::UpVector, V));
+		if (HookGain() > 0.f && FParse::Param(FCommandLine::Get(), TEXT("ZoogiHookShots")))
+			UE_LOG(LogZoogi, Log, TEXT("Hook launch P%d stretch %.3f spin %.0f deg/s"), PlayerIndex + 1, SquashAmount, SpinRate);
+	}
 }
 
 bool AZoogiBall::IsAtRest() const
@@ -225,6 +375,7 @@ void AZoogiBall::Tick(float DeltaSeconds)
 	if (bOut) return;
 	PrevVelocity = GetBallVelocity();
 	ZoogiPhysics::ApplyRolling(Sphere, ZoogiConst::ZoogiRadius, RollingDecel, DeltaSeconds, ZoogiConst::FullLaunchSpeed);
+	TickVisualHooks(DeltaSeconds);
 
 	// Keep the ring flat on the floor under the marble.
 	Ring->SetWorldLocation(BallLocation() - FVector(0, 0, ZoogiConst::ZoogiRadius - 1.5f));
@@ -312,6 +463,16 @@ void AZoogiBall::OnSphereHit(UPrimitiveComponent* HitComp, AActor* OtherActor, U
 				ZoogiUtil::PlaySfx(this, TEXT("HitCrack"), FMath::Clamp(NormalImpulse.Size() / 14000.f, 0.35f, 1.f), FMath::FRandRange(0.94f, 1.08f));
 		}
 		else ZoogiUtil::PlaySfx(this, TEXT("Clack"), FMath::Clamp(NormalImpulse.Size() / 15000.f, 0.25f, 1.f), FMath::FRandRange(0.9f, 1.15f) * 1.25f);
+	}
+	// Visual hooks: compress along the contact normal and wobble on hard hits (marbles, orbs, rocks, walls, hard landings).
+	if (NormalImpulse.Size() > 3000.f && Now - LastSquashTime > 0.12f && !Hit.ImpactNormal.IsNearlyZero())
+	{
+		LastSquashTime = Now;
+		const float K = FMath::Clamp((NormalImpulse.Size() - 3000.f) / 25000.f, 0.f, 1.f);
+		Squash(-(0.04f + 0.08f * K), Hit.ImpactNormal);
+		Wobble(1.5f + 3.f * K, Hit.ImpactNormal);
+		if (HookGain() > 0.f && FParse::Param(FCommandLine::Get(), TEXT("ZoogiHookShots")))
+			UE_LOG(LogZoogi, Log, TEXT("Hook impact P%d squash %.3f (impulse %.0f, other %s)"), PlayerIndex + 1, SquashAmount, NormalImpulse.Size(), OtherActor ? *OtherActor->GetName() : TEXT("-"));
 	}
 	const int32 Credit = (PlayerIndex == Shooter) ? PlayerIndex : LastHitPlayer;
 	if (AZoogiBall* Other = Cast<AZoogiBall>(OtherActor))

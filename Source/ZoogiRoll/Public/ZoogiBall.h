@@ -80,7 +80,39 @@ public:
 
 	virtual void Tick(float DeltaSeconds) override;
 
+	// ---- visual hooks (checklist item 4). Visual only: the physics sphere is never scaled or rotated by these.
+	// The character model stays a sphere with no limbs; everything here is a short, subtle transform of the Visual mesh.
+	/** Core pulse: the artifact glow / light pulse plus a small shell expansion of the model (1.0 -> 1.06 -> 1.0 at Strength 1). */
+	void PulseCore(float Strength);
+	/** Squash and stretch for <= 0.15 s along a world direction: scale (1+a, 1-a/2, 1-a/2) in that frame, volume roughly kept.
+	 *  Amount > 0 stretches along Dir (launch), Amount < 0 compresses along Dir (impact). Clamped to +-0.15. */
+	void Squash(float Amount, const FVector& WorldDir);
+	/** Extra visual spin about a world axis (deg/s, decays over ~0.35 s); the model ends rolled ahead of the sphere, rolling stays true. */
+	void SpinBoost(float DegPerSec, const FVector& WorldAxis);
+	/** Small decaying tilt wobble (degrees, <= 6) away from a world direction, e.g. the impact normal. */
+	void Wobble(float Degrees, const FVector& WorldDir);
+	/** Shell expansion only (PulseCore without the glow): uniform model scale 1 -> 1 + 0.06 * Strength -> 1 over 0.5 s. */
+	void ShellExpand(float Strength);
+	/** -ZoogiHookGain=<x> scales every hook (0 disables them, default 1); -ZoogiNoHooks is the same as 0. */
+	static float HookGain();
+
 protected:
+	/** Applies the hook state to Visual's relative transform (called from Tick, and once from FitVisual). */
+	void TickVisualHooks(float Dt);
+	void ResetVisualHooks();
+	FQuat BaseVisualRot = FQuat::Identity;
+	FVector BaseVisualScale = FVector::OneVector;
+	FVector BaseVisualOrigin = FVector::ZeroVector; // mesh bounds centre (local units) kept at the sphere centre while scaling
+	FQuat SpinLocal = FQuat::Identity;              // accumulated extra spin in the sphere's local frame
+	FVector SpinAxisWorld = FVector::ZeroVector;
+	float SpinRate = 0.f;                           // deg/s
+	float SquashAge = 10.f, SquashAmount = 0.f;
+	FVector SquashDirWorld = FVector::ForwardVector;
+	float WobbleAge = 10.f, WobbleDeg = 0.f;
+	FVector WobbleAxisWorld = FVector::RightVector;
+	float ExpandAge = 10.f, ExpandStrength = 0.f;
+	float LastSquashTime = -10.f;
+	bool bHooksDirty = false;
 	virtual void BeginPlay() override;
 	void FitVisual();
 
