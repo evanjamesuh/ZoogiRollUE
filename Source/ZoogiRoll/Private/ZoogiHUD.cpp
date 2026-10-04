@@ -788,7 +788,7 @@ void AZoogiHUD::DrawPreview(AZoogiGameMode* G)
 void AZoogiHUD::DrawAimControls(AZoogiGameMode* G)
 {
 	const float W = Canvas->ClipX, H = Canvas->ClipY;
-	const float PW = 1060.f * U, PH = 118.f * U;
+	const float PW = 1180.f * U, PH = 118.f * U;
 	const float X0 = (W - PW) * 0.5f, Y0 = H - PH - 96.f * U;
 	Panel(X0, Y0, PW, PH, GPanel);
 	const FLinearColor Acc(0.55f, 0.8f, 1.f);
@@ -808,6 +808,7 @@ void AZoogiHUD::DrawAimControls(AZoogiGameMode* G)
 	static const TCHAR* PowerNames[4] = { TEXT("AUTO"), TEXT("SOFT"), TEXT("MED"), TEXT("FULL") };
 	for (int32 i = 0; i < 4; ++i) { Button(PowerNames[i], X, BY, 96.f * U, BH, "AimPower", i, FLinearColor(1.f, 0.8f, 0.3f), G->AimPowerStep == i); X += 102.f * U; }
 	X += 18.f * U;
+	Button(TEXT("NEXT"), X, BY, 110.f * U, BH, "AimNext", 0, Acc); X += 118.f * U;
 	Button(TEXT("CONFIRM"), X, BY, 170.f * U, BH, "AimConfirm", 0, FLinearColor(0.35f, 1.f, 0.45f), G->HasAim()); X += 178.f * U;
 	Button(TEXT("CANCEL"), X, BY, 150.f * U, BH, "AimCancel", 0, FLinearColor(1.f, 0.4f, 0.35f));
 }
@@ -999,5 +1000,6 @@ void AZoogiHUD::DrawAnime(AZoogiGameMode* G)
 	const float BW = 360.f * U;
 	Panel((W - BW) * 0.5f, H * 0.9f, BW, 6.f * U, FLinearColor(0.1f, 0.1f, 0.15f, 0.8f * A));
 	Panel((W - BW) * 0.5f, H * 0.9f, BW * FMath::Clamp(Age / Len, 0.f, 1.f), 6.f * U, FLinearColor(C.R, C.G, C.B, A));
-	if (Age > 0.3f) Text(TEXT("click / SPACE to skip"), W * 0.5f, H * 0.9f + 14.f * U, FLinearColor(0.8f, 0.85f, 0.95f, 0.7f * A), 0.32f, true, false);
+	if (Age > 0.3f) Button(TEXT("SKIP"), W - 190.f * U, H * 0.9f - 10.f * U, 150.f * U, 52.f * U, "AnimeSkip", 0, FLinearColor(0.8f, 0.85f, 0.95f));
+	if (Age > 0.3f) Text(TEXT("tap / click / SPACE to skip"), W * 0.5f, H * 0.9f + 14.f * U, FLinearColor(0.8f, 0.85f, 0.95f, 0.7f * A), 0.32f, true, false);
 }
