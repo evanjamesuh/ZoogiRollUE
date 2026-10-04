@@ -45,7 +45,7 @@ static TArray<FZoogiDef> BuildRoster()
 	R.Add(Make("wolfgang", TEXT("Wolfgang"), TEXT("Wolf"), TEXT("#6B7280"), TEXT("#9CA3AF"), TEXT("Wolf Pack"),
 		TEXT("While moving, send three clones that chase the nearest orb or opponent"), 85, 60, 50, 75)); P(EZoogiPower::WolfPack);
 	R.Add(Make("hotstreak", TEXT("Hotstreak"), TEXT("Lava"), TEXT("#EF4444"), TEXT("#F97316"), TEXT("Instant Explosion"),
-		TEXT("Create a fiery explosion around you"), 55, 90, 70, 45)); P(EZoogiPower::Explosion);
+		TEXT("Create a fiery explosion around you"), 55, 90, 62, 45)); P(EZoogiPower::Explosion); // balance Oct 4: Defense 70 -> 62 (mass 1.17 -> 1.03); bal4 Hotstreak won 46% mostly by rarely being knocked off
 	R.Add(Make("lars", TEXT("Lars"), TEXT("Bouncer"), TEXT("#3B82F6"), TEXT("#93C5FD"), TEXT("Ricochet"),
 		TEXT("Ricochets toward the nearest target after a hit"), 70, 75, 60, 80)); P(EZoogiPower::Ricochet);
 	R.Add(Make("pinpoint", TEXT("Pinpoint"), TEXT("Precision"), TEXT("#8B5CF6"), TEXT("#A78BFA"), TEXT("Laser Trajectory"),
