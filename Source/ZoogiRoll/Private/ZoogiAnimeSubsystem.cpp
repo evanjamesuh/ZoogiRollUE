@@ -339,6 +339,13 @@ void UZoogiAnimeSubsystem::LoadMovieTable()
 	UE_LOG(LogZoogi, Log, TEXT("Anime cut-in clips: %d listed in Movies.csv%s"), MovieSeconds.Num(), bMoviesOff ? TEXT(" (disabled: -ZoogiNoAnimeMovies)") : TEXT(""));
 }
 
+namespace
+{
+	// Last cut-in variant played per base clip id (e.g. Anime_Any_Any_KO_01 -> Anime_Any_Any_KO_03), kept for the whole session
+	// so two plays in a row (same match or the next one) never show the same clip.
+	TMap<FString, FString> GLastCutInVariant;
+}
+
 FString UZoogiAnimeSubsystem::FindMovie(const FZoogiCombatEvent& E, const FString& ResolvedId) const
 {
 	if (bMoviesOff) return FString();
@@ -351,9 +358,31 @@ FString UZoogiAnimeSubsystem::FindMovie(const FZoogiCombatEvent& E, const FStrin
 		FString::Printf(TEXT("Anime_Any_%s_%s_01"), *A, *Ev),
 		FString::Printf(TEXT("Anime_%s_Any_%s_01"), *Z, *Ev),
 		FString::Printf(TEXT("Anime_Any_Any_%s_01"), *Ev) };
+	const FString Dir = FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Anime/Movies"));
+	auto Exists = [&Dir](const FString& Id) { return FPaths::FileExists(FPaths::Combine(Dir, Id + TEXT(".mp4"))); };
 	for (const FString& Id : Chain)
 	{
-		if (FPaths::FileExists(FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Anime/Movies"), Id + TEXT(".mp4")))) return Id;
+		if (!Exists(Id)) continue;
+		// Variants: <stem>_01 .. <stem>_09 that exist on disk. Pick one at random, never the one this base id played last time.
+		TArray<FString> Variants;
+		Variants.Add(Id);
+		if (Id.EndsWith(TEXT("_01")))
+		{
+			const FString Stem = Id.LeftChop(2);
+			for (int32 N = 2; N <= 9; ++N)
+			{
+				const FString V = FString::Printf(TEXT("%s%02d"), *Stem, N);
+				if (Exists(V)) Variants.Add(V);
+			}
+		}
+		if (Variants.Num() == 1) return Id;
+		FString& Last = GLastCutInVariant.FindOrAdd(Id);
+		TArray<FString> Pool = Variants;
+		Pool.Remove(Last);
+		const FString Pick = Pool[FMath::RandRange(0, Pool.Num() - 1)];
+		UE_LOG(LogZoogi, Log, TEXT("Anime cut-in variant: %s -> %s (%d variants, previous %s)"), *Id, *Pick, Variants.Num(), Last.IsEmpty() ? TEXT("none") : *Last);
+		Last = Pick;
+		return Pick;
 	}
 	return FString();
 }
