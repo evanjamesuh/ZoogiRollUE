@@ -24,7 +24,7 @@
 
 namespace
 {
-	const FLinearColor GOrbBlue(0.53f, 0.81f, 0.92f, 1.f);
+	const FLinearColor GMenuOrbBlue(0.53f, 0.81f, 0.92f, 1.f);
 	const FLinearColor GGold(1.f, 0.75f, 0.2f, 1.f);
 	const FLinearColor GInk(0.8f, 0.86f, 0.97f, 1.f);
 
@@ -77,7 +77,7 @@ void UZoogiMenuWidget::Refresh(float DeltaSeconds)
 	if (Title)
 	{
 		const float Pulse = 0.5f + 0.5f * FMath::Sin(Time * 2.f);
-		Title->SetColorAndOpacity(FSlateColor(FMath::Lerp(GOrbBlue, FLinearColor::White, Pulse * 0.35f)));
+		Title->SetColorAndOpacity(FSlateColor(FMath::Lerp(GMenuOrbBlue, FLinearColor::White, Pulse * 0.35f)));
 	}
 }
 
@@ -258,7 +258,7 @@ void UZoogiMenuWidget::BuildContents()
 	UVerticalBox* Main = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
 	if (UOverlaySlot* OS = Root->AddChildToOverlay(Main)) { OS->SetHorizontalAlignment(HAlign_Center); OS->SetVerticalAlignment(VAlign_Center); }
 
-	Title = MakeText(nullptr, TEXT("ZOOGI ROLL"), 84, GOrbBlue);
+	Title = MakeText(nullptr, TEXT("ZOOGI ROLL"), 84, GMenuOrbBlue);
 	{
 		FSlateFontInfo F = FCoreStyle::GetDefaultFontStyle("Black", 84);
 		F.OutlineSettings.OutlineSize = 4;
@@ -285,9 +285,9 @@ void UZoogiMenuWidget::BuildContents()
 		Box->AddChildToHorizontalBox(Sp);
 	};
 	Label(Top, TEXT("PLAYERS"), 0.f);
-	for (int32 n = 2; n <= 4; ++n) { MakeButton(Top, FString::FromInt(n), "Players", n, GOrbBlue, G->MenuNumPlayers == n, 64.f, 50.f, 24); Gap(Top, 8.f); }
+	for (int32 n = 2; n <= 4; ++n) { MakeButton(Top, FString::FromInt(n), "Players", n, GMenuOrbBlue, G->MenuNumPlayers == n, 64.f, 50.f, 24); Gap(Top, 8.f); }
 	Label(Top, TEXT("ROUNDS"), 60.f);
-	MakeButton(Top, TEXT("-"), "Rounds", G->MenuRounds - 1, GOrbBlue, false, 50.f, 50.f, 26);
+	MakeButton(Top, TEXT("-"), "Rounds", G->MenuRounds - 1, GMenuOrbBlue, false, 50.f, 50.f, 26);
 	{
 		USizeBox* NB = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
 		NB->SetWidthOverride(70.f);
@@ -295,7 +295,7 @@ void UZoogiMenuWidget::BuildContents()
 		N->SetJustification(ETextJustify::Center);
 		if (UHorizontalBoxSlot* HS = Top->AddChildToHorizontalBox(NB)) HS->SetVerticalAlignment(VAlign_Center);
 	}
-	MakeButton(Top, TEXT("+"), "Rounds", G->MenuRounds + 1, GOrbBlue, false, 50.f, 50.f, 26);
+	MakeButton(Top, TEXT("+"), "Rounds", G->MenuRounds + 1, GMenuOrbBlue, false, 50.f, 50.f, 26);
 
 	// Player cards.
 	UHorizontalBox* Cards = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());

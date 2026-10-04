@@ -637,7 +637,10 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	default: Cine = ECine::End; T = 99.f; break;
 	}
 	UZoogiAnimeSubsystem* Anime = GetWorld()->GetSubsystem<UZoogiAnimeSubsystem>();
-	const bool bAnimeShot = bAnimeCam && Anime && Anime->IsBusy() && AnimeFocus.IsValid();
+	const AZoogiBall* FocusBall = Cast<AZoogiBall>(AnimeFocus.Get());
+	const bool bFocusGone = FocusBall && (FocusBall->bOut || FocusBall->BallLocation().Z < -200.f);
+	const bool bAnimeShot = bAnimeCam && Anime && Anime->IsBusy() && AnimeFocus.IsValid() && !bFocusGone;
+	if (Shooter && !Shooter->bOut && SL.Z > -200.f) CourtZ = SL.Z;
 	const bool bTac = !G->bCinematicCam;
 
 	// Lock changes in Main swing (switching = whip-pan).
@@ -671,7 +674,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	else if (bTac)
 	{
 		PIdx = PTactical;
-		const FVector C0(0.f, 0.f, SL.Z);
+		const FVector C0(0.f, 0.f, CourtZ);
 		FVector AimP = C0;
 		bool bHasAim = false;
 		if (Lock) { AimP = TL; bHasAim = true; }
@@ -687,7 +690,9 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		DistMul = Scale;
 		if (G->Stage == EZoogiStage::Draw || G->Stage == EZoogiStage::Awaken)
 		{
-			WantPivot = SL;
+			WantPivot = FVector(SL.X, SL.Y, CourtZ);
+			// Awaken: the card panel covers the lower part of the screen; slide the pivot toward the camera so the Zoogi sits above it.
+			if (G->Stage == EZoogiStage::Awaken && Shooter && !Shooter->bCPU) WantPivot -= FRotator(0.f, TacYaw, 0.f).Vector() * 230.f;
 			DistMul = TacDrawZoom * Scale;
 		}
 		else if (G->Stage == EZoogiStage::Battle && G->BattleStep == EZoogiBattleStep::Aim)
@@ -707,7 +712,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		}
 		else
 		{
-			WantPivot = FVector(0.f, 0.f, SL.Z);
+			WantPivot = C0;
 			DistMul = TacResolveDist * Scale;
 			if (G->Arena && G->Arena->IsNeon()) WantYaw = TacYaw = (FMath::Abs(FRotator::NormalizeAxis(Yaw - 90.f)) <= 90.f ? 90.f : -90.f);
 		}

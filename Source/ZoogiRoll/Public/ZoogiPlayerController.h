@@ -71,6 +71,7 @@ protected:
 	float MenuOrbit = 0.f;
 	float DrawBaseYaw = 0.f;
 	float StandbyYaw = 0.f;
+	float CourtZ = ZoogiConst::ZoogiRadius; // last on-court shooter height (camera pivots stay on the floor after a fall)
 	float TacYaw = 0.f;            // tactical camera heading (set per turn, follows the aim gently)
 	float AnimeYaw = 0.f;
 	TWeakObjectPtr<AActor> AnimeFocus;

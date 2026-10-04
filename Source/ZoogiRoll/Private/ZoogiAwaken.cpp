@@ -217,7 +217,7 @@ void AZoogiGameMode::PlanCPUAwaken()
 	const TCHAR* Why = TEXT("");
 	if (bPowerTest || bRival || bAff) { Why = bPowerTest ? TEXT("test") : bAff ? TEXT("affinity") : TEXT("rival target"); AwakenInfuse(Pick); }
 	else if (Edge < 450.f && AC->Guard == EZoogiArtifact::None) { Why = TEXT("near the edge"); AwakenGuard(Pick); }
-	else if (bFull) { Why = TEXT("hand full"); AwakenInfuse(Pick); }
+	else if (bFull || AC->Hand.Num() >= 1) { Why = bFull ? TEXT("hand full") : TEXT("hand stocked"); AwakenInfuse(Pick); }
 	else { Why = TEXT("orb target, saving"); AwakenSave(); }
 	UE_LOG(LogZoogi, Log, TEXT("CPU P%d Awaken decision: %s (%s, edge %.0f cm)"), B->PlayerIndex + 1, *AwakenChoiceText, Why, Edge);
 	// The plan may change with Titan's mass / speed; re-plan the shot so the power fraction accounts for it.
