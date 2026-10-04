@@ -17,6 +17,7 @@
 		{ "Name": "EditorScriptingUtilities", "Enabled": true },
 		{ "Name": "Interchange", "Enabled": true },
 		{ "Name": "InterchangeEditor", "Enabled": true },
-		{ "Name": "ModelingToolsEditorMode", "Enabled": false }
+		{ "Name": "ModelingToolsEditorMode", "Enabled": false },
+		{ "Name": "Aura", "Enabled": true }
 	]
 }
