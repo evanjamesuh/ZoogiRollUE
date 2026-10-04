@@ -134,6 +134,8 @@ void AZoogiGameMode::MenuAction(FName Action, int32 Index)
 	else if (Action == "AimPower") AimPowerStep = FMath::Clamp(Index, 0, 3);
 	else if (Action == "AimConfirm") CommitLock();
 	else if (Action == "AimCancel") ClearLock();
+	else if (Action == "AimNext") CycleLock(false);
+	else if (Action == "AnimeSkip") { if (UZoogiAnimeSubsystem* Anime = GetWorld()->GetSubsystem<UZoogiAnimeSubsystem>()) Anime->Skip(); }
 	else if (Action == "CamStyle") bCinematicCam = !bCinematicCam;
 	else if (Action == "Menu") ReturnToMenu();
 	else if (Action == "Rematch") StartMatch();
@@ -654,7 +656,8 @@ void AZoogiGameMode::PlanCPUShot()
 		return false;
 	};
 
-	struct FPlan { float Cost; FVector2D Dir; float Frac; AActor* Actor; };
+	CPUPlannedCut = 0.f;
+	struct FPlan { float Cost; FVector2D Dir; float Frac; AActor* Actor; bool bStraight; float Dist; float Radius; };
 	TArray<FPlan> Plans;
 	FVector2D BestDir(-B.GetSafeNormal());
 	float BestFrac = 0.45f;
@@ -686,7 +689,7 @@ void AZoogiGameMode::PlanCPUShot()
 		const FVector2D Contact = C.P - Dir * (ZoogiConst::ZoogiRadius + C.Radius);
 		const float MyEdge = Arena->DistanceToEdge(Contact, Dir);
 		if (Coast > MyEdge - 80.f) Cost += 900.f; // would follow the target off the edge (-75 and a wasted turn)
-		Plans.Add({ Cost, Dir, Frac, C.Actor });
+		Plans.Add({ Cost, Dir, Frac, C.Actor, true, Dist, C.Radius });
 	}
 	// Angled (cut) shots: aim the ghost-ball contact so the target departs toward its nearest edge.
 	// The target leaves along the contact normal; a cut of c degrees transfers ~cos(c) of the head-on push.
@@ -713,7 +716,7 @@ void AZoogiGameMode::PlanCPUShot()
 			const FVector2D Dir = ToGhost / GDist;
 			const float CosCut = FVector2D::DotProduct(Dir, BestN);
 			if (CosCut < FMath::Cos(FMath::DegreesToRadians(50.f)) || CosCut > FMath::Cos(FMath::DegreesToRadians(4.f))) continue; // not a real cut, or too thin
-			float Cost = GDist * 0.5f + BestEdge - C.Value * 6.f + 60.f; // small bias: straight shots are more reliable
+			float Cost = GDist * 0.5f + BestEdge - C.Value * 6.f + 20.f; // small bias: straight shots are more reliable (Oct 4: 60 -> 20 for variety)
 			if (Blocked(B, Ghost, C.P)) Cost += 1500.f;
 			const float Need = FMath::Sqrt(2.f * Decel * (BestEdge + 250.f));
 			const float Transfer = (1.f + 0.7f) * M1 / (M1 + C.TargetMass) * CosCut;
@@ -726,7 +729,7 @@ void AZoogiGameMode::PlanCPUShot()
 			const float VHit = FMath::Sqrt(FMath::Max(0.f, FMath::Square(ZoogiConst::LaunchSpeedForPull(Frac)) - 2.f * Decel * GDist));
 			const float VAfter = VHit * FMath::Sqrt(FMath::Max(0.f, 1.f - CosCut * CosCut));
 			if (!Tang.IsNearlyZero() && VAfter * VAfter / (2.f * Decel) > Arena->DistanceToEdge(Ghost, Tang) - 80.f) Cost += 900.f;
-			Plans.Add({ Cost, Dir, Frac, C.Actor });
+			Plans.Add({ Cost, Dir, Frac, C.Actor, false, GDist, C.Radius });
 		}
 	}
 	// Pick one of the three cheapest shots so CPU players vary their targets.
@@ -742,6 +745,16 @@ void AZoogiGameMode::PlanCPUShot()
 		CPULock = Pick.Actor;
 		// Rival-only powers: don't waste a charge if the best shot ended up being an orb.
 		if (bHuntRivals && !bPowerTest && !Cast<AZoogiBall>(Pick.Actor)) bCPUUsePower = false;
+		// Cut variety (Oct 4): about half of the straight shots are played slightly off-centre (6-20 deg contact cut),
+		// so CPUs aren't always head-on (and don't crit every powered hit). Aim offset a: Dist * sin(a) = (R1 + R2) * sin(cut).
+		if (bArtifactMode && Pick.bStraight && Pick.Dist > 250.f && FMath::FRand() < 0.5f)
+		{
+			const float CutDeg = FMath::FRandRange(6.f, 20.f) * (FMath::RandBool() ? 1.f : -1.f);
+			const float SinA = FMath::Clamp((ZoogiConst::ZoogiRadius + Pick.Radius) * FMath::Sin(FMath::DegreesToRadians(CutDeg)) / Pick.Dist, -0.5f, 0.5f);
+			BestDir = BestDir.GetRotated(FMath::RadiansToDegrees(FMath::Asin(SinA)));
+			BestFrac = FMath::Min(0.97f, BestFrac / FMath::Sqrt(FMath::Max(0.5f, FMath::Cos(FMath::DegreesToRadians(CutDeg)))));
+			CPUPlannedCut = CutDeg;
+		}
 	}
 	// Bolt phases through Zoogis while powered, so the shot won't stop on a rival: keep it short of the edge.
 	if (bCPUUsePower && MyPower == EZoogiPower::StaticShock)
@@ -757,7 +770,7 @@ void AZoogiGameMode::PlanCPUShot()
 	const float PullLen = BestFrac * ZoogiConst::FullPull / ZoogiConst::DragScale;
 	CPUTargetPull = FVector(BestDir.X, BestDir.Y, 0.f) * PullLen;
 	Me->AimYaw = FVector(BestDir.X, BestDir.Y, 0.f).Rotation().Yaw;
-	UE_LOG(LogZoogi, Log, TEXT("CPU P%d plans %s at %.0f%% (power %s)"), ActivePlayer + 1, CPULock.IsValid() ? *TargetName(CPULock.Get()) : TEXT("-"), BestFrac * 100.f, bCPUUsePower ? TEXT("yes") : TEXT("no"));
+	UE_LOG(LogZoogi, Log, TEXT("CPU P%d plans %s at %.0f%% (power %s, cut %+.0f deg)"), ActivePlayer + 1, CPULock.IsValid() ? *TargetName(CPULock.Get()) : TEXT("-"), BestFrac * 100.f, bCPUUsePower ? TEXT("yes") : TEXT("no"), CPUPlannedCut);
 	bCPUPlanned = true;
 }
 

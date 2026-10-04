@@ -70,8 +70,8 @@ namespace ZoogiStageTune
 	constexpr float EndBeat = 0.35f;
 	constexpr float MaxCutDeg = 30.f;        // angled aiming: cut nudges up to +-30 deg
 	constexpr float CutStepDeg = 2.f;
-	constexpr float CritImpactFrac = 0.75f;  // crit: powered hit keeping >= 75% of its launch speed at contact...
-	constexpr float CritMaxCutDeg = 8.f;     // ...and hitting within 8 deg of head-on
+	constexpr float CritImpactFrac = 0.90f;  // crit: powered hit keeping >= 90% of its launch speed at contact (Oct 4: 75% -> 90%)...
+	constexpr float CritMaxCutDeg = 5.f;     // ...and hitting within 5 deg of head-on (Oct 4: 8 -> 5)
 	constexpr float CritEffectMul = 1.3f;
 }
 
@@ -261,6 +261,7 @@ public:
 	bool bInfusedContact = false;
 	float ContactImpactSpeed = 0.f;
 	bool bLastHitCrit = false;
+	float CPUPlannedCut = 0.f;
 	FVector PullCenter = FVector::ZeroVector;
 	float PullLeft = 0.f, PullAccel = 0.f, PullRadius = 0.f;
 	int32 PullCredit = -1;
