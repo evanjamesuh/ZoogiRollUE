@@ -303,6 +303,8 @@ void AZoogiGameMode::ApplyInfuseImpact(AZoogiBall* Shooter, AActor* Other)
 	case EZoogiArtifact::Ember:
 	{
 		const float Rad = R.ImpactRadius * Mul;
+		// Balance Oct 4: with affinity (Hotstreak) the signature explosion also fires, so Ember's own burst is weaker.
+		const float AffPush = ZoogiArtifacts::Affinity(Shooter->Def.Id) == A ? 0.55f : 1.f;
 		for (AActor* T : LiveTargets(Shooter))
 		{
 			const FVector D = Pos(T) - Mid;
@@ -310,7 +312,7 @@ void AZoogiGameMode::ApplyInfuseImpact(AZoogiBall* Shooter, AActor* Other)
 			if (Dist > Rad + ZoogiConst::ZoogiRadius) continue;
 			const float K = 1.f - FMath::Clamp(Dist / (Rad + ZoogiConst::ZoogiRadius), 0.f, 1.f);
 			const FVector Dir = T == Other ? FVector(N.X, N.Y, 0.f) : FVector(D.X, D.Y, 0.f).GetSafeNormal(UE_SMALL_NUMBER, FVector(N.X, N.Y, 0.f));
-			Push(T, Dir * R.ImpactPush * Mul * (0.5f + 0.5f * K), 150.f, Credit);
+			Push(T, Dir * R.ImpactPush * Mul * AffPush * (0.5f + 0.5f * K), 150.f, Credit);
 			++Affected;
 		}
 		if (OB && OB->Artifact) { OB->Artifact->Status = EZoogiStatus::Burned; OB->Artifact->StatusTurns = R.StatusTurns; AddPopup(TEXT("BURNED"), OP + FVector(0, 0, 120.f), C); }

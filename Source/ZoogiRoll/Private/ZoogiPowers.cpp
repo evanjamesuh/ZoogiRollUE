@@ -13,7 +13,7 @@
 
 namespace
 {
-	constexpr float ExplosionRadius = 360.f;   // balance Oct 3: 450 -> 390 -> 360 (Hotstreak still won 50% of a 20-match, 3-round sample)
+	constexpr float ExplosionRadius = 310.f;   // balance Oct 3: 450 -> 390 -> 360; Oct 4: 360 -> 310 (Hotstreak won 62% of the 3rd 20-match sample)
 	constexpr float ShadowRadius = 520.f;
 	constexpr float LockOnCone = 35.f;
 	constexpr float LockOnRange = 2600.f;
@@ -127,7 +127,7 @@ void AZoogiGameMode::FireInstantPower(AZoogiBall* Ball)
 			if (Dist > ExplosionRadius + ZoogiConst::ZoogiRadius) continue;
 			const float K = 1.f - FMath::Clamp(Dist / (ExplosionRadius + ZoogiConst::ZoogiRadius), 0.f, 1.f);
 			const FVector Dir = FVector(D.X, D.Y, 0.f).GetSafeNormal(UE_SMALL_NUMBER, FVector(1, 0, 0));
-			PushActor(T, Dir * (550.f + 1300.f * K), 220.f + 200.f * K, Ball->PlayerIndex); // balance Oct 3 (20-match sample): 600+1400k -> 550+1300k, Hotstreak won 50%
+			PushActor(T, Dir * (470.f + 1100.f * K), 200.f + 180.f * K, Ball->PlayerIndex); // Oct 4: 550+1300k -> 470+1100k; // balance Oct 3 (20-match sample): 600+1400k -> 550+1300k, Hotstreak won 50%
 			++N;
 		}
 		UE_LOG(LogZoogi, Log, TEXT("P%d Hotstreak explosion pushed %d"), Ball->PlayerIndex + 1, N);
