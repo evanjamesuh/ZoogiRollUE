@@ -93,6 +93,8 @@ public:
 	void Wobble(float Degrees, const FVector& WorldDir);
 	/** Shell expansion only (PulseCore without the glow): uniform model scale 1 -> 1 + 0.06 * Strength -> 1 over 0.5 s. */
 	void ShellExpand(float Strength);
+	/** Persistent model scale on top of the fit (Titan Core infuse: 1.04, "rock plating"); 1 = normal size. */
+	void SetModelScale(float Scale);
 	/** -ZoogiHookGain=<x> scales every hook (0 disables them, default 1); -ZoogiNoHooks is the same as 0. */
 	static float HookGain();
 
@@ -112,6 +114,7 @@ protected:
 	FVector WobbleAxisWorld = FVector::RightVector;
 	float ExpandAge = 10.f, ExpandStrength = 0.f;
 	float LastSquashTime = -10.f;
+	float ModelScale = 1.f;
 	bool bHooksDirty = false;
 	virtual void BeginPlay() override;
 	void FitVisual();

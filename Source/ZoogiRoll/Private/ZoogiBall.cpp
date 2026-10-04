@@ -223,6 +223,15 @@ void AZoogiBall::ShellExpand(float Strength)
 	bHooksDirty = true;
 }
 
+void AZoogiBall::SetModelScale(float Scale)
+{
+	Scale = FMath::Clamp(Scale, 0.5f, 1.5f);
+	if (FMath::IsNearlyEqual(Scale, ModelScale)) return;
+	ModelScale = Scale;
+	bHooksDirty = true;
+	TickVisualHooks(0.f);
+}
+
 void AZoogiBall::ResetVisualHooks()
 {
 	SpinLocal = FQuat::Identity;
@@ -279,7 +288,7 @@ void AZoogiBall::TickVisualHooks(float Dt)
 		E = 1.f + 0.06f * ExpandStrength * FMath::Sin(PI * ExpandAge / 0.5f);
 		bActive = true;
 	}
-	const FVector Scale = BaseVisualScale * S * E;
+	const FVector Scale = BaseVisualScale * S * (E * ModelScale);
 	Visual->SetRelativeTransform(FTransform(Rel, -Rel.RotateVector(Scale * BaseVisualOrigin), Scale));
 	bHooksDirty = bActive;
 	// -ZoogiHookShots: a few frames at the peak of each hook for review (with -ZoogiShots=<dir>).

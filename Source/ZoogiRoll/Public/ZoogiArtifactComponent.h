@@ -70,6 +70,10 @@ protected:
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> ShellMID;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> GuardMID;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> OverlayMID;
+	/** Item 2: dynamic instances of MI_Artifact_<Key> (shell, overlay) and MI_Guard_<Key>, one per artifact used. */
+	UPROPERTY() TMap<EZoogiArtifact, TObjectPtr<UMaterialInstanceDynamic>> ArtifactMIDs;
+	UPROPERTY() TMap<EZoogiArtifact, TObjectPtr<UMaterialInstanceDynamic>> OverlayMIDs;
+	UPROPERTY() TMap<EZoogiArtifact, TObjectPtr<UMaterialInstanceDynamic>> GuardMIDs;
 	UPROPERTY() TArray<TObjectPtr<UMaterialInstanceDynamic>> OrbitMIDs;
 	UPROPERTY() TArray<TObjectPtr<UMaterialInstanceDynamic>> PlateMIDs;
 

@@ -1,5 +1,6 @@
 #include "ZoogiArtifactComponent.h"
 #include "ZoogiBall.h"
+#include "ZoogiRoll.h"
 #include "ZoogiFX.h"
 #include "ZoogiTypes.h"
 #include "ZoogiGameMode.h"
@@ -26,6 +27,32 @@ namespace
 			M = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Materials/M_ZoogiArtifact.M_ZoogiArtifact"), nullptr, LOAD_NoWarn | LOAD_Quiet);
 		}
 		return M.Get();
+	}
+
+	/** Per-artifact material instance (Scripts/make_artifact_instances.py): MI_Artifact_<Key> / MI_Guard_<Key>, cached; null if absent. */
+	UMaterialInterface* ArtifactInstance(const TCHAR* Prefix, EZoogiArtifact A)
+	{
+		if (A == EZoogiArtifact::None) return nullptr;
+		static TMap<FString, TWeakObjectPtr<UMaterialInterface>> Cache;
+		const FString Name = FString::Printf(TEXT("%s_%s"), Prefix, *ZoogiArtifacts::Key(A));
+		if (TWeakObjectPtr<UMaterialInterface>* Hit = Cache.Find(Name)) return Hit->Get();
+		UMaterialInterface* M = LoadObject<UMaterialInterface>(nullptr, *FString::Printf(TEXT("/Game/Materials/Artifacts/%s.%s"), *Name, *Name), nullptr, LOAD_NoWarn | LOAD_Quiet);
+		Cache.Add(Name, M);
+		UE_LOG(LogZoogi, Log, TEXT("Artifact material %s: %s"), *Name, M ? *M->GetPathName() : TEXT("missing, using the base material"));
+		return M;
+	}
+
+	/** Dynamic instance of the artifact's MI (keeps the per-artifact look authored in the asset); falls back to the base material. */
+	UMaterialInstanceDynamic* MakeArtifactMID(UObject* Outer, const TCHAR* Prefix, EZoogiArtifact A, const FLinearColor& C, float Strength)
+	{
+		if (UMaterialInterface* MI = ArtifactInstance(Prefix, A))
+		{
+			UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(MI, Outer);
+			MID->SetVectorParameterValue(TEXT("Color"), C);
+			MID->SetScalarParameterValue(TEXT("Strength"), Strength);
+			return MID;
+		}
+		return nullptr;
 	}
 
 	UMaterialInstanceDynamic* MakeOverlayMID(UObject* Outer, const FLinearColor& C, float Strength)
@@ -180,6 +207,16 @@ void UZoogiArtifactComponent::ApplyLook()
 	Shell->SetVisibility(bOn);
 	if (bOn)
 	{
+		// Item 2: per-artifact instances (MI_Artifact_<Key>) when they exist; one MID per artifact, reused.
+		if (TObjectPtr<UMaterialInstanceDynamic>* Cached = ArtifactMIDs.Find(A)) ShellMID = *Cached;
+		else if (UMaterialInstanceDynamic* SM = MakeArtifactMID(this, TEXT("MI_Artifact"), A, C, 1.f))
+		{
+			ArtifactMIDs.Add(A, SM);
+			OverlayMIDs.Add(A, MakeArtifactMID(this, TEXT("MI_Artifact"), A, A == EZoogiArtifact::Void ? R.RimColor : C, 2.f));
+			ShellMID = SM;
+		}
+		if (TObjectPtr<UMaterialInstanceDynamic>* Ov = OverlayMIDs.Find(A)) OverlayMID = *Ov;
+		Shell->SetMaterial(0, ShellMID);
 		ShellMID->SetVectorParameterValue(TEXT("Color"), C);
 		ShellMID->SetScalarParameterValue(TEXT("Pattern"), (float)(int32)A);
 		if (!OverlayMID) OverlayMID = MakeOverlayMID(this, C, 2.f);
@@ -196,6 +233,9 @@ void UZoogiArtifactComponent::ApplyLook()
 			B->TurnLight->SetIntensity(B->IsActiveTurn() ? 60.f : 0.f);
 		}
 	}
+
+	// Titan Core: slightly bigger, heavier-looking model while infused (assignment: Visual x1.04).
+	B->SetModelScale(A == EZoogiArtifact::Titan ? 1.04f : 1.f);
 
 	// Orbiters: Storm arcs (stretched sparks), Void rings (flat ring cylinders), Ember motes.
 	const int32 NOrb = A == EZoogiArtifact::Storm ? 3 : (A == EZoogiArtifact::Void ? 2 : (A == EZoogiArtifact::Ember ? 5 : (A == EZoogiArtifact::Frost ? 4 : 0)));
@@ -251,7 +291,18 @@ void UZoogiArtifactComponent::ApplyLook()
 	// Guard bubble.
 	const bool bGuard = Guard != EZoogiArtifact::None;
 	GuardShell->SetVisibility(bGuard);
-	if (bGuard) GuardMID->SetVectorParameterValue(TEXT("Color"), ZoogiArtifacts::Color(Guard));
+	if (bGuard)
+	{
+		if (TObjectPtr<UMaterialInstanceDynamic>* Cached = GuardMIDs.Find(Guard)) GuardMID = *Cached;
+		else if (UMaterialInstanceDynamic* GM = MakeArtifactMID(this, TEXT("MI_Guard"), Guard, ZoogiArtifacts::Color(Guard), 1.f))
+		{
+			GM->SetScalarParameterValue(TEXT("Ring"), 0.f);
+			GuardMIDs.Add(Guard, GM);
+			GuardMID = GM;
+		}
+		GuardShell->SetMaterial(0, GuardMID);
+		GuardMID->SetVectorParameterValue(TEXT("Color"), ZoogiArtifacts::Color(Guard));
+	}
 }
 
 void UZoogiArtifactComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
