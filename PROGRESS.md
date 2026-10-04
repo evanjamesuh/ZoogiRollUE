@@ -183,7 +183,7 @@ one Zoogi per player, no HP, deterministic crit, Guard = next opponent attack on
         `UZoogiArtifactComponent` (hand of 2, drawn, infused, guard, statuses, transformation visuals).
   - [x] Awaken: Infuse / Guard / Save (Canvas HUD cards + buttons, keys I / G / S, CPU logic in `PlanCPUAwaken`).
   - [x] Powered collisions (`ZoogiAwaken.cpp`): Ember burst + Burned, Storm chain + Shocked, Frost ice-slide + Frozen,
-        Titan mass + shockwave, Void gravity well. Crit = contact speed >= 75% of the launch speed and cut <= 8 deg (x1.3).
+        Titan mass + shockwave, Void gravity well. Crit = contact speed >= 90% of the launch speed and cut <= 5 deg (x1.3; tightened Oct 4 from 75% / 8 deg).
         Affinity Infuse also fires the Zoogi's signature power. Guard: 40% less knockback + per-artifact attacker effect.
   - [x] Clickable angled aiming: click a target (lock) or the floor (free aim), cut nudges (A/D, arrows, HUD buttons),
         power steps, ghost-ball preview with target / shooter departure arrows and one bank bounce.
@@ -200,7 +200,12 @@ one Zoogi per player, no HP, deterministic crit, Guard = next opponent attack on
         Screenshots: `shots/aw1`, `shots/aw2s` (box).
   - [x] Playtest fixes: camera stays on the floor after the shooter falls, Awaken / Aim framing keeps the shooter above
         the HUD panels, CPU infuses once its hand has a card.
-  - [ ] Balance: crits are frequent (CPU shots are mostly straight, so >= 75% speed and <= 8 deg cut is common).
+  - [x] Oct 4 1:00 PM: crits tightened (90% / 5 deg); CPUs play about half their straight shots with a 6-20 deg cut and pick cut
+        plans more often; Hotstreak nerf (explosion radius 360 -> 310, push 550+1300k -> 470+1100k, Ember burst x0.55 when his
+        affinity explosion also fires). NEXT (target) button in the aim bar, SKIP button on anime overlays.
+  - [x] Polish: Awaken panel shows empty hand slots, larger texts and the affinity line; Resolve panel moved to the lower third
+        with powered-hit / crit / KO / combo / guard notes; CPUs guard more (protecting a lead / playing safe); guard anime
+        framed from outside the bubble.
   New switches: `-ZoogiClassicPowers` (Oct 3 rules), `-ZoogiCinematic`, `-ZoogiAnime=Off|Short|Full` (auto runs without
   `-ZoogiShots` default to Off).
 
