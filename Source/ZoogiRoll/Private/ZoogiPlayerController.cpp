@@ -698,6 +698,8 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		else if (G->Stage == EZoogiStage::Battle && G->BattleStep == EZoogiBattleStep::Aim)
 		{
 			WantPivot = FMath::Lerp(SL, AimP, TacAimLook);
+			// Human aiming: the aim control bar covers the bottom of the screen; slide the view so the shooter sits above it.
+			if (Shooter && !Shooter->bCPU) { WantPivot -= FRotator(0.f, TacYaw, 0.f).Vector() * 150.f; DistMul *= 1.12f; }
 		}
 		else if (G->Stage == EZoogiStage::Battle && G->BattleStep == EZoogiBattleStep::PowerUp)
 		{
