@@ -17,6 +17,9 @@
 #include "Sound/SoundBase.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
+#include "GameFramework/PlayerController.h"
 
 AZoogiBall::AZoogiBall()
 {
@@ -304,6 +307,74 @@ void AZoogiBall::TickVisualHooks(float Dt)
 	}
 }
 
+void AZoogiBall::TickHookDemo(float Dt)
+{
+	static const bool bDemo = FParse::Param(FCommandLine::Get(), TEXT("ZoogiHookDemo"));
+	if (!bDemo || PlayerIndex != 0 || HookDemoStep < 0) return;
+	if (HookDemoClock < 0.f)
+	{
+		if (!bActiveTurn || !IsAtRest()) return;
+		HookDemoClock = 0.f;
+	}
+	HookDemoClock += Dt;
+	AZoogiGameMode* GM = GetWorld()->GetAuthGameMode<AZoogiGameMode>();
+	APlayerController* PC = GetWorld()->GetFirstPlayerController();
+	if (!GM || !PC) return;
+	// Camera: 7 radii away, slightly above, looking at the ball centre; follows the ball while the demo runs.
+	const FVector Side = FRotator(0.f, AimYaw + 90.f, 0.f).Vector();
+	const FVector Eye = BallLocation() + FRotator(0.f, AimYaw + 180.f, 0.f).Vector() * (ZoogiConst::ZoogiRadius * 7.f) + FVector(0, 0, ZoogiConst::ZoogiRadius * 1.6f);
+	if (HookDemoCam) HookDemoCam->SetActorLocationAndRotation(Eye, (BallLocation() - Eye).Rotation());
+	struct FStep { float T; int32 Kind; const TCHAR* Shot; };
+	// Kind: 0 camera on, 1 shot, 2 squash, 3 stretch, 4 expand, 5 spin, 6 wobble, 9 camera off.
+	// A screenshot frame takes ~0.2 s, so every trigger sits well after the previous shot, and only one step runs per frame:
+	// the shot right after a squash/stretch/wobble trigger lands on the next (normal-length) frame, near the peak.
+	static const FStep Steps[] = {
+		{ 0.05f, 0, nullptr }, { 1.0f, 1, TEXT("hookdemo_0_rest") },
+		{ 1.5f, 2, nullptr }, { 1.53f, 1, TEXT("hookdemo_1_squash_peak") },
+		{ 2.0f, 3, nullptr }, { 2.03f, 1, TEXT("hookdemo_2_stretch_peak") },
+		{ 2.4f, 4, nullptr }, { 2.65f, 1, TEXT("hookdemo_3_expand_peak") },
+		{ 3.0f, 1, TEXT("hookdemo_4_spin_before") }, { 3.3f, 5, nullptr }, { 3.6f, 1, TEXT("hookdemo_5_spin_after") },
+		{ 3.9f, 6, nullptr }, { 3.94f, 1, TEXT("hookdemo_6_wobble") },
+		{ 4.3f, 9, nullptr } };
+	if (HookDemoStep < (int32)UE_ARRAY_COUNT(Steps) && HookDemoClock >= Steps[HookDemoStep].T)
+	{
+		const FStep& St = Steps[HookDemoStep++];
+		switch (St.Kind)
+		{
+		case 0:
+			HookDemoPrevView = PC->GetViewTarget();
+			HookDemoCam = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform(Eye));
+			if (HookDemoCam)
+			{
+				if (ACameraActor* PrevCam = Cast<ACameraActor>(HookDemoPrevView.Get()))
+				{
+					HookDemoCam->GetCameraComponent()->PostProcessSettings = PrevCam->GetCameraComponent()->PostProcessSettings; // same look as the game camera
+					HookDemoCam->GetCameraComponent()->PostProcessBlendWeight = PrevCam->GetCameraComponent()->PostProcessBlendWeight;
+				}
+				HookDemoCam->GetCameraComponent()->SetFieldOfView(30.f);
+				HookDemoCam->GetCameraComponent()->bConstrainAspectRatio = false;
+				HookDemoCam->SetActorLocationAndRotation(Eye, (BallLocation() - Eye).Rotation());
+				PC->SetViewTarget(HookDemoCam);
+			}
+			break;
+		case 1: GM->TakeShot(St.Shot); break;
+		case 2: Squash(-0.12f, Side); break;
+		case 3: Squash(0.08f, Side); break;
+		case 4: ShellExpand(1.f); break;
+		case 5: SpinBoost(360.f, FVector::CrossProduct(FVector::UpVector, Side)); break;
+		case 6: Wobble(5.f, Side); break;
+		case 9:
+			if (HookDemoPrevView.IsValid()) PC->SetViewTarget(HookDemoPrevView.Get());
+			if (HookDemoCam) HookDemoCam->Destroy();
+			HookDemoCam = nullptr;
+			HookDemoStep = -1;
+			UE_LOG(LogZoogi, Log, TEXT("HookDemo done (P1 %s, gain %.2f)"), *Def.Name, HookGain());
+			return;
+		}
+		UE_LOG(LogZoogi, Log, TEXT("HookDemo t=%.2f step %d kind %d"), HookDemoClock, HookDemoStep, St.Kind);
+	}
+}
+
 void AZoogiBall::PlaceAt(const FVector& Location, float FacingYaw)
 {
 	bOut = false;
@@ -384,6 +455,7 @@ void AZoogiBall::Tick(float DeltaSeconds)
 	if (bOut) return;
 	PrevVelocity = GetBallVelocity();
 	ZoogiPhysics::ApplyRolling(Sphere, ZoogiConst::ZoogiRadius, RollingDecel, DeltaSeconds, ZoogiConst::FullLaunchSpeed);
+	TickHookDemo(DeltaSeconds);
 	TickVisualHooks(DeltaSeconds);
 
 	// Keep the ring flat on the floor under the marble.

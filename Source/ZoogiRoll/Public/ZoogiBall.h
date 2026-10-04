@@ -115,6 +115,12 @@ protected:
 	float ExpandAge = 10.f, ExpandStrength = 0.f;
 	float LastSquashTime = -10.f;
 	float ModelScale = 1.f;
+	/** -ZoogiHookDemo (with -ZoogiShots): close-up test camera on P1 during its first turn, firing each hook once for review shots. */
+	void TickHookDemo(float Dt);
+	float HookDemoClock = -1.f;
+	int32 HookDemoStep = 0;
+	UPROPERTY() TObjectPtr<class ACameraActor> HookDemoCam;
+	TWeakObjectPtr<AActor> HookDemoPrevView;
 	bool bHooksDirty = false;
 	virtual void BeginPlay() override;
 	void FitVisual();
