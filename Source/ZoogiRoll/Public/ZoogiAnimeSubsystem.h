@@ -85,7 +85,7 @@ public:
 	FString CurrentId;
 	FString CurrentTier;
 	FString Caption;        // big line ("CRITICAL!", "EMBER STONE INFUSED")
-	FString SubCaption;     // "Anime_Hotstreak_Ember_Critical_01  (placeholder, Full 3.0 s)"
+	FString SubCaption;     // debug only (log / -ZoogiAnimeDebug): "Anime_Hotstreak_Ember_Critical_01  (placeholder, Full 3.0 s)"; not drawn on the cards
 	FLinearColor Color = FLinearColor::White;
 	float Age = 0.f;
 	float Length = 0.f;

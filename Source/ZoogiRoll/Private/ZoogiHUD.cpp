@@ -1082,7 +1082,9 @@ void AZoogiHUD::DrawAnime(AZoogiGameMode* G)
 	const float Pop = 1.f + 0.35f * FMath::Clamp(1.f - Age / 0.15f, 0.f, 1.f);
 	const FLinearColor CC(FMath::Min(1.f, C.R + 0.35f), FMath::Min(1.f, C.G + 0.35f), FMath::Min(1.f, C.B + 0.35f), A);
 	Text(Anime->Caption, W * 0.5f, H * 0.17f, CC, (Ev == TEXT("Critical") ? 2.0f : 1.4f) * Pop, true);
-	Text(Anime->SubCaption, W * 0.5f, H * 0.17f + 120.f * U, FLinearColor(0.85f, 0.9f, 1.f, 0.8f * A), 0.36f, true, false);
+	// The sequence id / clip filename line is a debug aid only (Evan: no filenames on the cards); -ZoogiAnimeDebug shows it again.
+	static const bool bAnimeDebugCaption = FParse::Param(FCommandLine::Get(), TEXT("ZoogiAnimeDebug"));
+	if (bAnimeDebugCaption) Text(Anime->SubCaption, W * 0.5f, H * 0.17f + 120.f * U, FLinearColor(0.85f, 0.9f, 1.f, 0.8f * A), 0.36f, true, false);
 	// Progress + skip hint.
 	const float BW = 360.f * U;
 	Panel((W - BW) * 0.5f, H * 0.9f, BW, 6.f * U, FLinearColor(0.1f, 0.1f, 0.15f, 0.8f * A));
