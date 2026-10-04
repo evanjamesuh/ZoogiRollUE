@@ -722,8 +722,13 @@ void AZoogiArena::BuildArabian()
 		// the knockoff line and stays below Z = 0 there (about -2.5 cm), so nothing rises inside the court; the crust
 		// peaks ~+15 cm about 48 cm outside the line. No colliders: marbles fall off exactly where they did.
 		AddCylinder(FVector2D::ZeroVector, KR + 95.f, 50.f, -6.f, ZoogiUtil::GroundMID(this, ZoogiUtil::Hex(TEXT("#B8742F")), ZoogiUtil::Hex(TEXT("#8E5222")), 0.01f, 0.9f), false)->SetCastShadow(false);
-		UInstancedStaticMeshComponent* Crust = MakeISM(ZoogiUtil::GroundMID(this, ZoogiUtil::Hex(TEXT("#E0A04A")), ZoogiUtil::Hex(TEXT("#C27A33")), 0.012f, 0.85f));
-		UInstancedStaticMeshComponent* CrustChar = MakeISM(ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#8A4A1E")), 0.9f));
+		// The puffs are ISMs, so they must use M_ZoogiSurface (SurfaceMID): M_ZoogiGround is not flagged "Used with
+		// Instanced Static Meshes" (Scripts/fix_material_usage.py only flags Surface/Glow/FX), so a GroundMID on an ISM
+		// falls back to the grey default material, which the purple night light turned slate grey. Two toasted shades
+		// (golden / deeper bake) stand in for the ground noise; a faint warm self-lit tint keeps them golden at night.
+		UInstancedStaticMeshComponent* Crust = MakeISM(ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#D9963F")), 0.55f, ZoogiUtil::Hex(TEXT("#FF9A40")), 0.12f));
+		UInstancedStaticMeshComponent* CrustDeep = MakeISM(ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#B8702A")), 0.6f, ZoogiUtil::Hex(TEXT("#FF8A30")), 0.09f));
+		UInstancedStaticMeshComponent* CrustChar = MakeISM(ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#6B3414")), 0.75f, ZoogiUtil::Hex(TEXT("#8A4A1E")), 0.03f));
 		const int32 Puffs = 40;
 		const float PuffR = KR + 48.f;
 		for (int32 i = 0; i < Puffs; ++i)
@@ -733,7 +738,8 @@ void AZoogiArena::BuildArabian()
 			const float Len = 2.f * PI * PuffR / Puffs * PizzaRng.FRandRange(1.3f, 1.5f);
 			const float H = PizzaRng.FRandRange(44.f, 54.f);
 			const float Semi = PizzaRng.FRandRange(48.f, 50.f); // radial half-width
-			Crust->AddInstance(FTransform(FRotator(0.f, Deg + 90.f, 0.f), FVector(FMath::Cos(A) * PuffR, FMath::Sin(A) * PuffR, -10.f), FVector(Len / 100.f, Semi / 50.f, H / 100.f)));
+			// Shade by index (no extra PizzaRng draws, so the floor dressing layout stays identical).
+			(((i * 7) % 5) < 2 ? CrustDeep : Crust)->AddInstance(FTransform(FRotator(0.f, Deg + 90.f, 0.f), FVector(FMath::Cos(A) * PuffR, FMath::Sin(A) * PuffR, -10.f), FVector(Len / 100.f, Semi / 50.f, H / 100.f)));
 			// Browned blister near the top of most puffs.
 			if (PizzaRng.FRand() < 0.75f)
 			{
