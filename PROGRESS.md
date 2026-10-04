@@ -300,6 +300,13 @@ Awakened / crit-grade hit), and so are the collider, events, SFX, popup, feed li
   turf from the island edge). Everything is hidden/rebuilt by `ResetRock()`. Per rock: ~16 mesh components + 2 instanced
   grit sets + 14 dust spheres; ticks only while something moves.
 - While the rock FX play, the shooter's bright speed sparks are held for 0.6 s (`SparkClock`) so the stone debris reads.
+- **Pass 2 (Oct 4, ~5 PM):** the crack now radiates from the impact. One main fracture is hinged at the far side, so the gap
+  is widest at the hit and closes away from it, with dark faces inside. It has 3-6 forked branches at irregular angles,
+  hairlines near the hit and a crushed light powder spot, all with multi-scale noise. The dust is much denser (8+3 puffs on
+  crack; 10 burst puffs + a 10-puff ground ring on shatter), lingers ~1.8-2.6 s and stays lit. The stump is a Voronoi-faceted
+  jagged base (varied heights/tilts, 2 teeth, dark fresh tops, leaning fragments). Shards are convex hulls with
+  cleave faces (3 main size classes + 12 small chips). Speed sparks near the rock are cut and held for 1.2 s.
+  Under `-ZoogiRockTest` only, a test camera frames the rock for crack_after / shatter_after / rubble.
 - Dust material: `Scripts/make_dust_material.py` -> `/Game/Materials/M_ZoogiDust` (lit translucent, soft edge, depth fade).
   Without it the rock falls back to `NS_Dust`.
 

@@ -11,6 +11,7 @@ class UInstancedStaticMeshComponent;
 class UMaterialInterface;
 class UMaterialInstanceDynamic;
 class UPhysicalMaterial;
+class ACameraActor;
 class AZoogiBall;
 
 UENUM()
@@ -27,6 +28,11 @@ enum class EZoogiRockState : uint8 { Intact, Cracked, Shattered };
  * tilts away a few cm and shows dark fracture faces), branching zigzag cracks with dark gaps and lighter chipped edges
  * conform to the surface, a flake pops off and leaves a dented fresh-stone scar; stone grit, pebbles and slow
  * non-emissive dust replace the old glow FX. All debris motion is scripted against the court plane (Z = 0).
+ *
+ * Pass 2 (Oct 4, ~4:30 PM): the crack network radiates from the impact (main fracture hinged at the far side, so it is
+ * widest at the impact face; irregular branches, hairlines, a crushed powdery spot), denser lit dust with a ground
+ * ring, a jagged Voronoi-faceted stump with teeth and leaning fragments, chunky convex-hull shards (plus small ones),
+ * the shooter's speed sparks are cut around the rock for 1.2 s, and -ZoogiRockTest frames the rock for the after shots.
  */
 UCLASS()
 class ZOOGIROLL_API AZoogiRock : public AActor
@@ -95,6 +101,12 @@ protected:
 	void SpawnGrit(int32 First, int32 Count, const FVector& Origin, float Spread, const FVector& MainDir, float Cone, float SpeedMin, float SpeedMax, FRandomStream& Rng);
 	void SpawnPuff(const FVector& Pos, const FVector& Vel, float R0, float R1, float Life, float Peak, float Drag, float Settle, float Flat, const FLinearColor& Col);
 	bool HasGround(const FVector& LocalPos) const;
+	/** Cuts the player-colour speed sparks around the rock (balls nearby: none for 1.2 s; sparks in the air: removed). Visual only. */
+	void QuietSparks(AZoogiBall* By);
+	/** -ZoogiRockTest only: a test camera aimed at the rock for the "after" screenshots, then the game camera again. */
+	void StartTestCam(bool bShattered, const FVector& WorldDir);
+	bool TickTestCam(float RawDt);
+	void SetTestCam(bool bOn);
 	bool TickChunks(float Dt, float FloorZ);
 	bool TickGrit(float Dt, float FloorZ);
 	bool TickPuffs(float Dt, float FloorZ);
@@ -121,6 +133,8 @@ protected:
 	UPROPERTY() TObjectPtr<UMaterialInterface> MatFracture;
 	UPROPERTY() TObjectPtr<UMaterialInterface> MatFreshDark;
 	UPROPERTY() TArray<TObjectPtr<UMaterialInterface>> MatShard;
+	UPROPERTY() TObjectPtr<UMaterialInterface> MatPowder;
+	UPROPERTY() TObjectPtr<ACameraActor> TestCam;
 
 	struct FChunk
 	{
@@ -154,6 +168,8 @@ protected:
 	float SplitAz = 0.f, SplitSep = 0.f;
 	FVector SplitN = FVector::YAxisVector;
 	FQuat SplitQ = FQuat::Identity;
+	FVector SplitPivot = FVector::ZeroVector; // half B swings open about a vertical axis through this far-side foot point
+	float SplitOpen = 1.f;                    // gap at the impact face, cm
 	bool bSplit = false;
 	bool bBodyBuiltIntact = false;
 	bool bHasDust = false;
@@ -163,4 +179,10 @@ protected:
 	float Radius = 100.f, Height = 80.f, Yaw = 0.f;
 	float LastHitTime = -10.f;
 	int32 Seed = 0;
+
+	// -ZoogiRockTest framing (test runs only).
+	TWeakObjectPtr<AActor> TestPrevView;
+	FVector TestDir = FVector::ForwardVector;
+	float TestClock = 0.f, TestFrom = 0.f, TestUntil = -1.f;
+	bool bTestCamOn = false, bTestShatter = false;
 };
