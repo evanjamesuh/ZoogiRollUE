@@ -594,7 +594,8 @@ void AZoogiGameMode::DoResolve()
 	// 3) Anime events for the outcome (final now).
 	if (Shooter)
 	{
-		if (ShooterScores >= 2) EmitAnime(TEXT("Combo"), Shooter, ShotArtifact, Shooter, Shooter->BallLocation(), ShooterScores, false);
+		if (IsClimaxMoment(Shooter, KOs)) BeginClimax(Shooter, ShotArtifact, KOs, ShooterScores); // once per match: hit lands after the rumble
+		else if (ShooterScores >= 2) EmitAnime(TEXT("Combo"), Shooter, ShotArtifact, Shooter, Shooter->BallLocation(), ShooterScores, false);
 		else if (KOs > 0) EmitAnime(TEXT("KO"), Shooter, ShotArtifact, Shooter, Shooter->BallLocation(), KOs, false);
 		else if (ShotArtifact != EZoogiArtifact::None && !bInfusedContact) EmitAnime(TEXT("Miss"), Shooter, ShotArtifact, Shooter, Shooter->BallLocation(), 1.f, false);
 	}

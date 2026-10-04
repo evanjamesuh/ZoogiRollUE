@@ -231,6 +231,12 @@ void UZoogiAnimeSubsystem::PlayEventSfx(const FZoogiCombatEvent& E)
 	else if (Ev == TEXT("GuardBlock")) ZoogiUtil::PlaySfx(this, TEXT("GuardClang"), 1.f, 1.1f);
 	else if (Ev == TEXT("PoweredHit")) Sting(0.9f);
 	else if (Ev == TEXT("Critical")) { ZoogiUtil::PlaySfx(this, TEXT("CritBoom"), 1.f); Sting(0.55f); if (G) G->DuckMusic(1.4f); }
+	else if ((Ev == TEXT("KO") || Ev == TEXT("Combo")) && G && G->ConsumeClimaxHit())
+	{
+		// The match's one climax hit: full boom (slightly lower), the artifact layer; the music swell is GameMode's.
+		ZoogiUtil::PlaySfx(this, TEXT("CritBoom"), 1.f, 0.9f);
+		Sting(0.6f);
+	}
 	else if (Ev == TEXT("KO")) { ZoogiUtil::PlaySfx(this, TEXT("CritBoom"), 0.8f, 0.9f); if (G) G->DuckMusic(1.1f); }
 	else if (Ev == TEXT("Combo")) { ZoogiUtil::PlaySfx(this, TEXT("CritBoom"), 0.7f, 1.12f); if (G) G->DuckMusic(1.f); }
 }

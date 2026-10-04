@@ -23,7 +23,7 @@ for t in tasks:
     for p in t.imported_object_paths:
         a = unreal.load_asset(p)
         if isinstance(a, unreal.SoundWave):
-            a.set_editor_property("looping", False)
+            a.set_editor_property("looping", os.path.basename(t.filename) == "RollLoop.wav")  # roll loop repeats
             unreal.EditorAssetLibrary.save_loaded_asset(a)
             n += 1
         unreal.log("[ZoogiSFX] %s -> %s" % (os.path.basename(t.filename), p))

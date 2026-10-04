@@ -56,6 +56,7 @@ void AZoogiGameMode::BeginPlay()
 	bArtifactMode = !FParse::Param(Cmd, TEXT("ZoogiClassicPowers"));
 	bCinematicCam = FParse::Param(Cmd, TEXT("ZoogiCinematic"));
 	bRockTest = FParse::Param(Cmd, TEXT("ZoogiRockTest"));
+	bClimaxTest = FParse::Param(Cmd, TEXT("ZoogiClimaxTest"));
 	{
 		int32 Vol = 100;
 		if (FParse::Value(Cmd, TEXT("ZoogiSfxVol="), Vol)) ZoogiUtil::SetSfxVolume(Vol / 100.f);
@@ -148,7 +149,13 @@ void AZoogiGameMode::MenuAction(FName Action, int32 Index)
 	else if (Action == "Menu") ReturnToMenu();
 	else if (Action == "Rematch") StartMatch();
 	else if (Action == "Quit") UKismetSystemLibrary::QuitGame(this, GetWorld()->GetFirstPlayerController(), EQuitPreference::Quit, false);
-	if (Action != "Start" && Action != "Quit" && Action != "Power" && Action != "AimNudge") ZoogiUtil::PlaySfx(this, TEXT("HitClick"), 0.8f);
+	// UI sounds (team brief: short, soft, rounded, never harsh when repeated): confirm / cancel / click.
+	if (Action == "Start" || Action == "Rematch" || Action == "Infuse" || Action == "Guard" || Action == "Save" || Action == "AimConfirm")
+		ZoogiUtil::PlaySfx(this, TEXT("UiConfirm"), 0.4f);
+	else if (Action == "AimCancel" || Action == "Menu" || Action == "Quit")
+		ZoogiUtil::PlaySfx(this, TEXT("UiCancel"), 0.4f);
+	else if (Action != "Power" && Action != "AimNudge" && Action != "AnimeSkip")
+		ZoogiUtil::PlaySfx(this, TEXT("UiClick"), 0.55f);
 	MenuRevision++;
 }
 
@@ -171,6 +178,10 @@ void AZoogiGameMode::ClearMatch()
 	PullLeft = 0.f;
 	bFreeAim = false;
 	AimCutDeg = 0.f;
+	bClimaxUsed = false;
+	bClimaxHitPending = false;
+	ClimaxLeft = 0.f;
+	ClimaxFlashAt = -100.f;
 	if (UZoogiAnimeSubsystem* Anime = GetWorld()->GetSubsystem<UZoogiAnimeSubsystem>()) Anime->ResetMatch();
 }
 
@@ -383,8 +394,84 @@ void AZoogiGameMode::FinishGame()
 		UE_LOG(LogZoogi, Log, TEXT("FinalScores: %s"), *Final);
 	}
 	ZoogiUtil::PlaySfx(this, TEXT("Win"), 0.8f);
+	PlayVictoryCrowd();
 	if (AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PC->OnGameOver(GetActiveBall());
 }
+
+void AZoogiGameMode::PlayVictoryCrowd()
+{
+	// Wave 1 right after the win sting, wave 2 (denser, the main cheer) ~3 s later. Both sit under the music (the brief:
+	// the crowd always sits underneath) and build by density, not loudness. A draw gets only the first, polite wave.
+	ZoogiUtil::PlaySfx(this, TEXT("CrowdWave1"), 0.45f);
+	if (WinnerIndex < 0) return;
+	FTimerHandle H;
+	TWeakObjectPtr<AZoogiGameMode> Self(this);
+	GetWorldTimerManager().SetTimer(H, FTimerDelegate::CreateLambda([Self]()
+	{
+		if (Self.IsValid() && Self->Phase == EZoogiPhase::GameOver) ZoogiUtil::PlaySfx(Self.Get(), TEXT("CrowdWave2"), 0.5f);
+	}), 3.0f, false);
+	UE_LOG(LogZoogi, Log, TEXT("Victory crowd: wave 1 now, wave 2 in 3.0 s"));
+}
+
+bool AZoogiGameMode::IsClimaxMoment(const AZoogiBall* Shooter, int32 KOs) const
+{
+	if (bClimaxUsed || !Shooter || KOs <= 0 || !Balls.IsValidIndex(ActivePlayer)) return false;
+	if (bClimaxTest) return true;
+	if (RoundNumber < MenuRounds) return false;
+	// Shooter must be the sole leader after this turn's ledger.
+	for (const AZoogiBall* B : Balls) if (B && B != Shooter && B->Score >= Shooter->Score) return false;
+	// Final turn of the match: no orbs left, or nobody after the shooter still gets a turn this (last) round.
+	bool bFinal = OrbsLeft() == 0;
+	if (!bFinal)
+	{
+		bFinal = true;
+		for (int32 j = ActivePlayer + 1; j < Balls.Num(); ++j) if (Balls[j] && Balls[j]->StunTurns <= 0) bFinal = false;
+	}
+	if (bFinal) return true;
+	// Final round, not the last turn: only if this KO took the sole lead (the shooter was not leading alone before it).
+	const int32 Before = Shooter->Score - (ResolveDeltas.IsValidIndex(ActivePlayer) ? ResolveDeltas[ActivePlayer] : 0);
+	for (int32 i = 0; i < Balls.Num(); ++i)
+	{
+		const AZoogiBall* B = Balls[i];
+		if (!B || B == Shooter) continue;
+		const int32 OtherBefore = B->Score - (ResolveDeltas.IsValidIndex(i) ? ResolveDeltas[i] : 0);
+		if (OtherBefore >= Before) return true; // someone was level or ahead before this KO
+	}
+	return false;
+}
+
+void AZoogiGameMode::BeginClimax(AZoogiBall* Shooter, EZoogiArtifact A, int32 KOs, int32 ShooterScores)
+{
+	bClimaxUsed = true;
+	ClimaxShooter = Shooter;
+	ClimaxArtifact = A;
+	ClimaxKOs = KOs;
+	ClimaxScores = ShooterScores;
+	ClimaxLeft = 2.55f; // ClimaxRumble length: 2.25 s rumble + 0.3 s silence
+	if (MusicComp) MusicComp->AdjustVolume(0.25f, 0.f); // the one full music drop-out of the match
+	ZoogiUtil::PlaySfx(this, TEXT("ClimaxRumble"), 1.f);
+	UE_LOG(LogZoogi, Log, TEXT("CLIMAX: P%d %s match-deciding KO x%d: music out, rumble, hit in %.2f s"), Shooter ? Shooter->PlayerIndex + 1 : 0, Shooter ? *Shooter->Def.Name : TEXT("?"), KOs, ClimaxLeft);
+	TakeShotDelayed(TEXT("climax_rumble"), 1.2f);
+}
+
+void AZoogiGameMode::LandClimax()
+{
+	AZoogiBall* Shooter = ClimaxShooter.Get();
+	ClimaxFlashAt = Clock;  // impact flash on this frame...
+	bClimaxHitPending = true; // ...and PlayEventSfx plays the big hit on this same frame
+	if (Shooter)
+	{
+		if (ClimaxScores >= 2) EmitAnime(TEXT("Combo"), Shooter, ClimaxArtifact, Shooter, Shooter->BallLocation(), ClimaxScores, false);
+		else EmitAnime(TEXT("KO"), Shooter, ClimaxArtifact, Shooter, Shooter->BallLocation(), ClimaxKOs, false);
+	}
+	if (bClimaxHitPending) { bClimaxHitPending = false; ZoogiUtil::PlaySfx(this, TEXT("CritBoom"), 1.f, 0.9f); }
+	// Music swells back in big.
+	if (MusicComp) MusicComp->AdjustVolume(1.6f, 1.f);
+	if (AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PC->OnImpact(0.6f);
+	UE_LOG(LogZoogi, Log, TEXT("CLIMAX hit: flash + boom, music swells back"));
+	TakeShotDelayed(TEXT("climax_hit"), 0.03f);
+}
+
 
 FVector AZoogiGameMode::FindFreeSpot(const FVector& Desired) const
 {
@@ -843,6 +930,11 @@ void AZoogiGameMode::Tick(float DeltaSeconds)
 	}
 	const float Dt = FMath::Min(DeltaSeconds, 0.05f);
 	Clock += DeltaSeconds;
+	if (ClimaxLeft > 0.f)
+	{
+		ClimaxLeft -= DeltaSeconds;
+		if (ClimaxLeft <= 0.f) { ClimaxLeft = 0.f; LandClimax(); }
+	}
 	PhaseTime += Dt;
 	BannerTime += Dt;
 	for (FZoogiPopup& P : Popups) P.Age += Dt;

@@ -456,7 +456,7 @@ void AZoogiGameMode::TickStages(float Dt)
 	if (TargetLock.IsValid() && !IsValidTarget(TargetLock.Get())) ClearLock(); // knocked off / gone
 	const bool bCPU = Ball->bCPU;
 	UZoogiAnimeSubsystem* Anime = GetWorld()->GetSubsystem<UZoogiAnimeSubsystem>();
-	const bool bAnimeBusy = Anime && Anime->IsBusy();
+	const bool bAnimeBusy = (Anime && Anime->IsBusy()) || ClimaxLeft > 0.f; // the climax rumble holds Resolve too
 	switch (Stage)
 	{
 	case EZoogiStage::Draw:

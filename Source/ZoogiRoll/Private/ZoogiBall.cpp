@@ -13,6 +13,8 @@
 #include "Engine/StaticMesh.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
+#include "Components/AudioComponent.h"
+#include "Sound/SoundBase.h"
 
 AZoogiBall::AZoogiBall()
 {
@@ -219,6 +221,7 @@ FVector AZoogiBall::BallLocation() const
 void AZoogiBall::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	TickRollSound();
 	if (bOut) return;
 	PrevVelocity = GetBallVelocity();
 	ZoogiPhysics::ApplyRolling(Sphere, ZoogiConst::ZoogiRadius, RollingDecel, DeltaSeconds, ZoogiConst::FullLaunchSpeed);
@@ -319,4 +322,37 @@ void AZoogiBall::OnSphereHit(UPrimitiveComponent* HitComp, AActor* OtherActor, U
 	{
 		if (Credit >= 0) Orb->LastHitBy = Credit;
 	}
+}
+
+void AZoogiBall::TickRollSound()
+{
+	if (bRollSoundMissing) return;
+	const float Speed = bOut ? 0.f : GetBallVelocity().Size2D();
+	const bool bWant = Speed > 60.f && ZoogiUtil::GetSfxVolume() > 0.001f;
+	if (!RollAudio)
+	{
+		if (!bWant) return;
+		USoundBase* S = ZoogiUtil::LoadSound(TEXT("RollLoop"));
+		if (!S) { bRollSoundMissing = true; return; }
+		RollAudio = NewObject<UAudioComponent>(this);
+		RollAudio->SetSound(S);
+		RollAudio->bAutoActivate = false;
+		RollAudio->bAllowSpatialization = false;
+		RollAudio->bIsUISound = false; // pauses with the game (anime freezes)
+		RollAudio->SetupAttachment(Sphere);
+		RollAudio->RegisterComponent();
+	}
+	if (!bWant)
+	{
+		if (RollAudio->IsPlaying() && Speed < 40.f) RollAudio->FadeOut(0.15f, 0.f);
+		return;
+	}
+	// Louder / higher with speed; heavier Zoogis (MassRatio from Defense) are deeper and a touch louder.
+	const float U = FMath::Clamp(Speed / ZoogiConst::FullLaunchSpeed, 0.f, 1.f);
+	const float Mass = Def.MassRatio();
+	const float Vol = ZoogiUtil::GetSfxVolume() * 0.3f * FMath::Pow(FMath::Clamp(Speed / 1800.f, 0.f, 1.f), 0.7f) * (0.85f + 0.15f * Mass);
+	const float Pitch = FMath::Clamp(FMath::Lerp(0.75f, 1.25f, U) / FMath::Sqrt(Mass), 0.55f, 1.6f);
+	RollAudio->SetVolumeMultiplier(Vol);
+	if (!RollAudio->IsPlaying()) RollAudio->FadeIn(0.08f, 1.f);
+	RollAudio->SetPitchMultiplier(Pitch);
 }

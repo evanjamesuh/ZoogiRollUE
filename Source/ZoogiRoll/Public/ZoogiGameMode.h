@@ -317,6 +317,25 @@ public:
 	float GetShotSpeed() const { return ShotSpeed; }
 	/** Dips the music for a big hit (the beat of silence around the boom), back up after Seconds. */
 	void DuckMusic(float Seconds);
+	// ---- Climax (team brief): ONE moment per match, the match-winning KO (or the KO that takes the sole lead in the
+	// final round). Music drops out completely, ClimaxRumble plays (~2.2 s + 0.3 s silence), then the KO hit lands with an
+	// impact flash + CritBoom on the same frame and the music swells back.
+	bool IsClimaxMoment(const AZoogiBall* Shooter, int32 KOs) const;
+	void BeginClimax(AZoogiBall* Shooter, EZoogiArtifact A, int32 KOs, int32 ShooterScores);
+	void LandClimax();
+	/** PlayEventSfx asks this for the KO/Combo it is about to sound: true once, for the climax hit. */
+	bool ConsumeClimaxHit() { const bool b = bClimaxHitPending; bClimaxHitPending = false; return b; }
+	bool bClimaxUsed = false;
+	bool bClimaxTest = false; // -ZoogiClimaxTest: the first KO of the match (any round) gets the climax
+	bool bClimaxHitPending = false;
+	float ClimaxLeft = 0.f;          // > 0 while the rumble plays (holds Resolve like an anime card)
+	float ClimaxFlashAt = -100.f;    // Clock time of the climax impact flash (HUD draws a white frame for ~0.1 s)
+	float GetClock() const { return Clock; }
+	TWeakObjectPtr<AZoogiBall> ClimaxShooter;
+	EZoogiArtifact ClimaxArtifact = EZoogiArtifact::None;
+	int32 ClimaxKOs = 0, ClimaxScores = 0;
+	/** Victory crowd: two synthesized waves (second one denser) on the game-over screen. */
+	void PlayVictoryCrowd();
 	/** -ZoogiRockTest: CPUs aim at the nearest standing rock and always SAVE (crack first, shatter on the second hit). */
 	bool bRockTest = false;
 	UPROPERTY() TArray<TObjectPtr<AZoogiClone>> Clones;

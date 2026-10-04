@@ -356,6 +356,11 @@ void AZoogiHUD::DrawMatch(AZoogiGameMode* G)
 	Button(TEXT("MENU"), W - 150.f * U, 24.f * U, 126.f * U, 46.f * U, "Menu", 0, GOrbBlue);
 	Button(G->bCinematicCam ? TEXT("CAM: CINE") : TEXT("CAM: TACT"), W - 340.f * U, 24.f * U, 176.f * U, 46.f * U, "CamStyle", 0, FLinearColor(0.6f, 0.9f, 0.6f), G->bCinematicCam);
 	DrawAnime(G);
+	// Climax impact frame (drawn even with Anime=Off): 1-2 frames of white on the hit, fading over ~0.1 s.
+	{
+		const float Since = G->GetClock() - G->ClimaxFlashAt;
+		if (Since >= 0.f && Since < 0.11f) Panel(0, 0, Canvas->ClipX, Canvas->ClipY, FLinearColor(1.f, 1.f, 1.f, 0.85f * (1.f - Since / 0.11f)));
+	}
 }
 
 void AZoogiHUD::DrawAim(AZoogiGameMode* G)

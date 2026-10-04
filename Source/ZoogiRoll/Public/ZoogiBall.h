@@ -91,5 +91,9 @@ protected:
 
 	bool bActiveTurn = false;
 	float RingPulse = 0.f;
+	/** Roll loop (team brief): one looping audio component per Zoogi, volume / pitch follow speed and weight, stopped at rest. */
+	void TickRollSound();
+	UPROPERTY() TObjectPtr<class UAudioComponent> RollAudio;
+	bool bRollSoundMissing = false;
 	UPROPERTY() TObjectPtr<class UMaterialInstanceDynamic> RingMID;
 };

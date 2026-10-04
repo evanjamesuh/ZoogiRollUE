@@ -328,12 +328,137 @@ def sting_void():
     return reverb(out, 1.2, 0.3, 2500)
 
 
+# ---------------------------------------------------------------- Oct 4 PM: rest of the team brief
+
+def climax_rumble():
+    # The one climax per match (match-winning KO): the music drops out completely and this plays instead: ~2.2 s of very
+    # deep, quiet-feeling rumble (almost all energy < 150 Hz, like the ref's 86-93 %), a little crackle creeping in, then
+    # 0.3 s of real silence (the held beat). The hit (CritBoom) lands after it, on the impact-flash frame.
+    d = 2.25
+    t = t_axis(d)
+    swell = env_rise(len(t), 1.6)
+    swell[-int(0.18 * SR):] *= np.linspace(1, 0, int(0.18 * SR)) ** 2
+    rumble = lp(noise(d), 90, 4) * 2.2 + osc(38 + 4 * np.sin(2 * np.pi * 0.6 * t)) * 0.6 + osc(np.full(len(t), 57.0)) * 0.25
+    rumble *= 0.75 + 0.25 * np.sin(2 * np.pi * (1.5 + 3.0 * t / d) * t)  # slow throb that quickens
+    crack = crackle(d, 30, 500, 2200, 0.004, lambda u: u ** 2) * 0.35
+    y = (rumble + crack) * swell
+    return np.concatenate([reverb(y, 1.0, 0.2, 1500)[:len(y)], np.zeros(int(0.3 * SR))])
+
+
+def _formant_voice(f0, dur, glide, vowel):
+    # One synthetic "cheer" grain: a buzzy pulse at f0 gliding up, through two vowel formants. Not a recorded voice.
+    t = t_axis(dur)
+    f = f0 * (1 + glide * (1 - np.exp(-t * 6))) * (1 + 0.012 * np.sin(2 * np.pi * RNG.uniform(5, 7) * t))
+    src = osc(f, 'saw') * 0.6 + RNG.standard_normal(len(t)) * 0.25  # breathy
+    f1, f2 = vowel
+    v = bp(src, f1 * 0.8, f1 * 1.25) + bp(src, f2 * 0.85, f2 * 1.18) * 0.6
+    return v * env_ad(len(t), RNG.uniform(0.03, 0.09), dur, 2.5)
+
+
+VOWELS = [(750, 1200), (600, 1000), (700, 1700), (500, 1500), (650, 1100)]  # ah / aw / a / eh / o-ish
+
+
+def _crowd(d, voices0, voices1, claps0, claps1, peak_at, fade_out):
+    # Crowd texture that builds by DENSITY, not loudness (team brief, Ref 2): grains per second rise while each grain gets
+    # quieter (1/sqrt(density)), so the level stays roughly flat while the sound gets thicker and more cheer-like.
+    n = int(d * SR)
+    out = np.zeros(n)
+    dens = lambda u: (voices0 + (voices1 - voices0) * min(1.0, u / peak_at)) if u <= peak_at else voices1 * (1 - 0.5 * (u - peak_at) / max(1e-3, 1 - peak_at))
+    tt = 0.0
+    while True:
+        r = dens(tt / d)
+        tt += RNG.exponential(1.0 / max(r, 1e-3))
+        if tt >= d - 0.2:
+            break
+        g = _formant_voice(RNG.uniform(190, 430), RNG.uniform(0.35, 0.95), RNG.uniform(0.05, 0.35), VOWELS[RNG.integers(len(VOWELS))])
+        place(out, g * RNG.uniform(0.5, 1.0) / np.sqrt(r), tt)
+    # claps: short filtered noise ticks, also denser over time
+    cl = np.zeros(n)
+    tt = 0.0
+    while True:
+        u = tt / d
+        r = claps0 + (claps1 - claps0) * min(1.0, u / peak_at)
+        tt += RNG.exponential(1.0 / r)
+        if tt >= d:
+            break
+        k = int(0.012 * SR)
+        place(cl, RNG.standard_normal(k) * np.exp(-np.arange(k) / (k / 6)) * RNG.uniform(0.4, 1.0) / np.sqrt(r), tt)
+    cl = bp(cl, 900, 4500) * 1.6
+    murmur = bp(noise(d), 250, 2200) * (0.6 + 0.4 * lp(RNG.standard_normal(n), 3) * 30).clip(0.2, 1.2) * 0.08
+    y = out + cl * 0.5 + murmur
+    e = np.ones(n)
+    fi = int(0.35 * SR)
+    e[:fi] = np.linspace(0, 1, fi) ** 1.5
+    fo = int(fade_out * SR)
+    e[-fo:] *= np.linspace(1, 0, fo) ** 1.5
+    return reverb(lp(y * e, 7000), 1.6, 0.35, 5000)
+
+
+def crowd_wave1():
+    # Victory wave 1 (~3.5 s): a first, lighter cheer right after the win sting.
+    return _crowd(3.5, 5, 14, 6, 14, 0.55, 1.0)
+
+
+def crowd_wave2():
+    # Victory wave 2 (~6.5 s): the main cheer. Much denser (up to ~45 grains/s, claps ~40/s), peaks ~2/3 in, fades out.
+    return _crowd(6.5, 10, 45, 10, 40, 0.65, 2.0)
+
+
+def roll_loop():
+    # Seamless 2 s loop: soft furry rumble (brown-ish noise < 200 Hz + a little 200-700 Hz texture with a gentle
+    # 9-13 Hz grain). Runtime volume / pitch follow ball speed and Zoogi weight (AZoogiBall::TickRollSound).
+    L = 2.0
+    xf = 0.5
+    d = L + xf
+    t = t_axis(d)
+    base = lp(np.cumsum(RNG.standard_normal(len(t))) * 0.02, 180, 2)
+    base = hp(base, 25)
+    tex = bp(noise(d), 200, 700) * (0.7 + 0.3 * np.sin(2 * np.pi * 11 * t + 2 * np.sin(2 * np.pi * 0.5 * t))) * 0.25
+    x = base / (np.std(base) + 1e-9) * 0.5 + tex / (np.std(tex) + 1e-9) * 0.12
+    n, k = int(L * SR), int(xf * SR)
+    w = np.sin(np.linspace(0, np.pi / 2, k))
+    y = x[:n].copy()
+    y[:k] = x[:k] * w + x[n:n + k] * np.cos(np.linspace(0, np.pi / 2, k))  # equal-power wrap: the end flows into the start
+    return y
+
+
+def _blip(f, dur, amp=1.0):
+    t = t_axis(dur)
+    return (np.sin(2 * np.pi * f * t) + 0.25 * np.sin(4 * np.pi * f * t)) * env_ad(len(t), 0.003, dur, 5.0) * amp
+
+
+def ui_click():
+    # Soft rounded click: a short 1.4 kHz tick with a tiny 260 Hz body, low-passed so it never gets sharp when repeated.
+    d = 0.09
+    t = t_axis(d)
+    y = np.sin(2 * np.pi * 1400 * t) * np.exp(-t * 160) * 0.6 + np.sin(2 * np.pi * 260 * t) * np.exp(-t * 70)
+    return lp(y, 5000)
+
+
+def ui_confirm():
+    # Confirm: two soft rising notes (E5 -> B5), rounded attack.
+    y = np.zeros(int(0.28 * SR))
+    place(y, _blip(659.3, 0.12, 0.8), 0.0)
+    place(y, _blip(987.8, 0.16, 1.0), 0.07)
+    return reverb(lp(y, 6000), 0.4, 0.12)
+
+
+def ui_cancel():
+    # Cancel / back: two soft falling notes (C5 -> G4), a bit duller.
+    y = np.zeros(int(0.28 * SR))
+    place(y, _blip(523.3, 0.11, 0.9), 0.0)
+    place(y, _blip(392.0, 0.15, 0.8), 0.07)
+    return reverb(lp(y, 3500), 0.4, 0.1)
+
+
 SOUNDS = {
     'Dash': dash, 'HitCrack': hit_crack, 'CritBoom': crit_boom, 'Inhale': inhale, 'AwakenCharge': awaken_charge,
     'GuardClang': guard_clang, 'RockCrack': rock_crack, 'RockShatter': rock_shatter,
     'StingEmber': sting_ember, 'StingStorm': sting_storm, 'StingFrost': sting_frost, 'StingTitan': sting_titan, 'StingVoid': sting_void,
+    'ClimaxRumble': climax_rumble, 'CrowdWave1': crowd_wave1, 'CrowdWave2': crowd_wave2, 'RollLoop': roll_loop,
+    'UiClick': ui_click, 'UiConfirm': ui_confirm, 'UiCancel': ui_cancel,
 }
-NO_TRIM = {'Inhale', 'CritBoom'}  # keep the built-in silences
+NO_TRIM = {'Inhale', 'CritBoom', 'ClimaxRumble', 'RollLoop'}  # keep built-in silences / exact loop length
 
 
 def measure(x):
@@ -350,12 +475,17 @@ def measure(x):
     return (max(ms) if ms else -70.0), (float(tp[-1]) if tp and tp[-1] != '-inf' else -70.0)
 
 
-def main(out):
+def main(out, only=None):
     os.makedirs(out, exist_ok=True)
     report = []
     for name, fn in SOUNDS.items():
+        if only and name not in only:
+            fn()  # keep the shared RNG sequence identical so the other sounds don't change
+            continue
         x = fn()
         x = x - np.mean(x)
+        if name == 'RollLoop':
+            x = x  # loop: no DC fix beyond the mean, no fades (seamless)
         if name not in NO_TRIM:
             x = trim_tail(x)
         x = x / (np.max(np.abs(x)) + 1e-9) * 0.5
@@ -375,4 +505,4 @@ def main(out):
 
 
 if __name__ == '__main__':
-    main(sys.argv[1] if len(sys.argv) > 1 else 'SFX')
+    main(sys.argv[1] if len(sys.argv) > 1 else 'SFX', set(sys.argv[2:]) or None)
