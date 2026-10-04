@@ -421,14 +421,11 @@ bool AZoogiGameMode::IsClimaxMoment(const AZoogiBall* Shooter, int32 KOs) const
 	// Shooter must be the sole leader after this turn's ledger.
 	for (const AZoogiBall* B : Balls) if (B && B != Shooter && B->Score >= Shooter->Score) return false;
 	// Final turn of the match: no orbs left, or nobody after the shooter still gets a turn this (last) round.
-	bool bFinal = OrbsLeft() == 0;
-	if (!bFinal)
-	{
-		bFinal = true;
-		for (int32 j = ActivePlayer + 1; j < Balls.Num(); ++j) if (Balls[j] && Balls[j]->StunTurns <= 0) bFinal = false;
-	}
-	if (bFinal) return true;
-	// Final round, not the last turn: only if this KO took the sole lead (the shooter was not leading alone before it).
+	int32 TurnsLeft = 0;
+	for (int32 j = ActivePlayer + 1; j < Balls.Num(); ++j) if (Balls[j] && Balls[j]->StunTurns <= 0) ++TurnsLeft;
+	if (OrbsLeft() == 0 || TurnsLeft == 0) return true; // the match-winning KO
+	// Next-to-last turn of the match: only if this KO took the sole lead (the shooter was not leading alone before it).
+	if (TurnsLeft > 1) return false;
 	const int32 Before = Shooter->Score - (ResolveDeltas.IsValidIndex(ActivePlayer) ? ResolveDeltas[ActivePlayer] : 0);
 	for (int32 i = 0; i < Balls.Num(); ++i)
 	{

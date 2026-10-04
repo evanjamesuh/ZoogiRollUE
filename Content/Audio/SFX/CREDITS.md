@@ -1,6 +1,6 @@
 # Zoogi Roll SFX credits (Oct 4, 2026)
 
-All 13 anime-style SFX below are **original**, synthesized from scratch by `Scripts/synth_sfx.py` (Python, numpy/scipy:
+All 20 anime-style SFX below are **original**, synthesized from scratch by `Scripts/synth_sfx.py` (Python, numpy/scipy:
 oscillators, filtered noise, envelopes, a synthetic noise-burst reverb). No third-party samples and no CC0 packs were used,
 so there is nothing to attribute. They are project-owned and can be shipped and changed freely.
 Source WAVs: `SourceArt/Audio/SFX/*.wav` (48 kHz, 16-bit mono). Imported as `/Game/Audio/S_<Name>` by `Scripts/import_sfx.py`.
@@ -27,5 +27,11 @@ centroid, low-frequency share, the beat of silence before big hits) guided the e
 | S_StingFrost | Frost powered hit / infuse | soft low thud + random glassy partials 2-6 kHz + tinkle crackle + light hiss |
 | S_StingTitan | Titan powered hit / infuse | 40-90 Hz thump + low-passed crunch + ground rumble |
 | S_StingVoid | Void powered hit / infuse | reverse swell into a falling sine 420 -> 55 Hz through a flanger + low drone |
+| S_ClimaxRumble | the one climax per match (match-winning KO) | ~2.2 s deep rumble (low-passed noise + 38/57 Hz sines, throb that quickens, faint crackle creeping in) then 0.3 s silence; CritBoom lands right after with the impact flash |
+| S_CrowdWave1 / S_CrowdWave2 | victory screen, wave 1 then the denser wave 2 (~3 s later) | synthetic crowd texture: hundreds of short buzzy "cheer" grains (sawtooth + breath noise through two vowel formants, rising glides), filtered-noise claps and a murmur bed; grains get denser over time while each gets quieter (1/sqrt(density)), so it builds by density, not loudness. No recorded or synthesized speech |
+| S_RollLoop | per-Zoogi roll loop (looping) | seamless 2 s loop: brown-ish noise < 200 Hz + soft 200-700 Hz texture with an 11 Hz grain; runtime volume/pitch follow speed, heavier Zoogis deeper |
+| S_UiClick / S_UiConfirm / S_UiCancel | menu and Awaken buttons | soft 1.4 kHz tick with a 260 Hz body / two rising sine notes E5-B5 / two falling notes C5-G4, low-passed |
 
 Loudness: each file normalized to about -16 LUFS max momentary (EBU R128), true peak <= -1 dBTP (measured with ffmpeg ebur128).
+Very short files are true-peak limited first and end up quieter (UiClick -24.7, UiConfirm/UiCancel about -17.5 LUFS). Runtime
+volumes keep the crowd (0.45-0.5), roll loop (<= 0.3) and UI sounds (0.4-0.55) under the hits and the music.

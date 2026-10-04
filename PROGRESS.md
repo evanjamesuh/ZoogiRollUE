@@ -254,10 +254,23 @@ one Zoogi per player, no HP, deterministic crit, Guard = next opponent attack on
 - Pizza court (teammate's patch, applied as its own commit): Arabian Nights is now a pizza with 21 pepperoni/cheese
   toppings that pop when a Zoogi rolls over them (no collision; reset each match). Tomato planters unchanged.
 
+## Sound brief, part 2 (Oct 4, 2:40-3:00 PM)
+- **Climax, once per match:** the match-winning KO (the shooter's KO on the last turn leaves them the sole leader), or a KO
+  on the next-to-last turn that takes the sole lead. Music drops out completely, `ClimaxRumble` plays (2.2 s + 0.3 s
+  silence, Resolve waits for it), then a white impact frame (drawn even with Anime=Off) + `CritBoom` on the same frame, the
+  KO/Combo anime card, a camera kick and the music swells back over 1.6 s. Every other hit only ducks the music ~4.4 dB.
+  `-ZoogiClimaxTest` gives the first KO of any round the climax.
+- **Victory crowd:** `CrowdWave1` with the win sting, `CrowdWave2` (denser) 3 s later; a draw gets only wave 1.
+- **Roll loop:** one looping audio component per Zoogi (`AZoogiBall::TickRollSound`), volume/pitch follow speed, heavier
+  Zoogis deeper; fades out at rest or when knocked off.
+- **UI:** `UiConfirm` (Start / Rematch / Infuse / Guard / Save / aim confirm), `UiCancel` (cancel / menu / quit),
+  `UiClick` (everything else). Replaces HitClick on menu actions.
+- Pizza crust colour fix applied (crust puffs use SurfaceMID: GroundMID on instanced meshes fell back to grey).
+
 ## Command-line switches (for testing)
 `-ZoogiAuto` (all CPU, start at once), `-ZoogiPlayers=N`, `-ZoogiArena=0..6` (0 Meadow, 1 Frozen, 2 Volcanic, 3 Cosmic, 4 Arabian, 5 Tomb, 6 Night Circuit), `-ZoogiRounds=N`,
 `-ZoogiShots=<dir>` (event screenshots), `-ZoogiQuit=<sec>`, `-ZoogiMenuShot`, `-ZoogiHumanTest`,
-`-ZoogiCanvasMenu`, `-ZoogiRockTest`, `-ZoogiSfxVol=0..100`, `-ZoogiPowerTest` (3 charges each, CPUs always use powers), `-ZoogiPicks=4,5,6,0` (roster index per slot:
+`-ZoogiCanvasMenu`, `-ZoogiRockTest`, `-ZoogiClimaxTest`, `-ZoogiSfxVol=0..100`, `-ZoogiPowerTest` (3 charges each, CPUs always use powers), `-ZoogiPicks=4,5,6,0` (roster index per slot:
 0 Wolfgang, 1 Hotstreak, 2 Lars, 3 Pinpoint, 4 Bolt, 5 Wraps, 6 Nightshade).
 
 ## Scripts
