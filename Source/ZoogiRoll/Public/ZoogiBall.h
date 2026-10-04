@@ -9,6 +9,7 @@ class USphereComponent;
 class UStaticMeshComponent;
 class UPointLightComponent;
 class UPhysicalMaterial;
+class UZoogiArtifactComponent;
 
 /** A Zoogi marble: a Chaos-simulated sphere with the character model riding inside it. */
 UCLASS()
@@ -24,6 +25,14 @@ public:
 	/** Flat glowing ring under the marble in the player's colour (does not roll). */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<UStaticMeshComponent> Ring;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<UPointLightComponent> TurnLight;
+	/** Milestone "Awaken": artifact hand / infuse / guard / status and the transformation visuals. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<UZoogiArtifactComponent> Artifact;
+	/** Owner / team (one Zoogi per player for now; lets N Zoogis per player come later). */
+	UPROPERTY(BlueprintReadOnly) int32 TeamIndex = 0;
+	/** Mass with no artifact modifiers (Titan Core / guard scale this temporarily). */
+	float BaseMassKg = 10.f;
+	void SetMassScale(float Mul);
+	bool IsActiveTurn() const { return bActiveTurn; }
 
 	void InitZoogi(const FZoogiDef& InDef, int32 InPlayerIndex, bool bInCPU, UPhysicalMaterial* PhysMat, float InRollingDecel);
 	void Launch(const FVector2D& PlanarVelocity);
@@ -41,6 +50,7 @@ public:
 	UPROPERTY(BlueprintReadOnly) bool bCPU = false;
 	UPROPERTY(BlueprintReadOnly) int32 Score = 0;
 	float TrailClock = 0.f;
+	float SparkClock = 0.f;
 	UPROPERTY(BlueprintReadOnly) bool bOut = false;
 	UPROPERTY(BlueprintReadOnly) int32 LastHitPlayer = -1;
 	UPROPERTY(BlueprintReadOnly) FVector SpawnLocation = FVector::ZeroVector;

@@ -4,6 +4,7 @@
 #include "ZoogiOrb.h"
 #include "ZoogiGameMode.h"
 #include "ZoogiFX.h"
+#include "ZoogiArtifactComponent.h"
 #include "Engine/World.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -52,6 +53,13 @@ AZoogiBall::AZoogiBall()
 	TurnLight->SetIntensity(0.f);
 	TurnLight->SetAttenuationRadius(450.f);
 	TurnLight->SetCastShadows(false);
+
+	Artifact = CreateDefaultSubobject<UZoogiArtifactComponent>(TEXT("Artifact"));
+}
+
+void AZoogiBall::SetMassScale(float Mul)
+{
+	Sphere->SetMassOverrideInKg(NAME_None, BaseMassKg * FMath::Max(0.1f, Mul), true);
 }
 
 void AZoogiBall::BeginPlay()
@@ -93,7 +101,9 @@ void AZoogiBall::InitZoogi(const FZoogiDef& InDef, int32 InPlayerIndex, bool bIn
 	bCPU = bInCPU;
 	RollingDecel = InRollingDecel;
 	if (PhysMat) Sphere->SetPhysMaterialOverride(PhysMat);
-	Sphere->SetMassOverrideInKg(NAME_None, Def.MassRatio() * ZoogiConst::MassKg, true);
+	BaseMassKg = Def.MassRatio() * ZoogiConst::MassKg;
+	TeamIndex = InPlayerIndex;
+	Sphere->SetMassOverrideInKg(NAME_None, BaseMassKg, true);
 
 	const FString Id = Def.Id.ToString();
 	UStaticMesh* Mesh = ZoogiUtil::LoadMesh(FString::Printf(TEXT("/Game/Zoogis/%s/SM_%s.SM_%s"), *Id, *Id, *Id));
@@ -167,6 +177,7 @@ void AZoogiBall::SetActiveTurn(bool bActive)
 {
 	bActiveTurn = bActive;
 	TurnLight->SetIntensity(bActive ? 60.f : 0.f);
+	if (!bActive) TurnLight->SetLightColor(ZoogiUtil::PlayerColor(PlayerIndex));
 	if (RingMID) RingMID->SetScalarParameterValue(TEXT("Strength"), bActive ? 6.f : 1.5f);
 	Ring->SetRelativeScale3D(bActive ? FVector(1.45f, 1.45f, 0.01f) : FVector(1.2f, 1.2f, 0.01f));
 }
@@ -229,12 +240,29 @@ void AZoogiBall::Tick(float DeltaSeconds)
 		AZoogiGameMode* GM = GetWorld()->GetAuthGameMode<AZoogiGameMode>();
 		const float Spd = PlanarSpeed();
 		TrailClock += DeltaSeconds;
-		if (GM && GM->Phase == EZoogiPhase::Rolling && Spd > 250.f && TrailClock > 0.04f)
+		const bool bInfused = Artifact && Artifact->Infused != EZoogiArtifact::None; // artifact trail replaces the player puffs
+		if (GM && GM->Phase == EZoogiPhase::Rolling && Spd > 250.f && TrailClock > 0.04f && !bInfused)
 		{
 			TrailClock = 0.f;
 			const FVector L = BallLocation() - FVector(0, 0, ZoogiConst::ZoogiRadius - 3.f);
 			const float K = FMath::Clamp(Spd / 2000.f, 0.f, 1.f);
 			AZoogiFX::SpawnTrail(GetWorld(), L, ZoogiUtil::PlayerColor(PlayerIndex), 26.f + 22.f * K, 0.55f, 3.f + 4.f * K);
+		}
+	}
+	// Niagara sparkle trail: every Zoogi moving fast during a shot sheds a little burst of sparks in its player colour.
+	if (!bOut)
+	{
+		const float Spd = PlanarSpeed();
+		SparkClock += DeltaSeconds;
+		const AZoogiGameMode* GM = GetWorld()->GetAuthGameMode<AZoogiGameMode>();
+		if (GM && GM->Phase == EZoogiPhase::Rolling && Spd > 520.f && SparkClock > FMath::Lerp(0.11f, 0.05f, FMath::Clamp((Spd - 520.f) / 1800.f, 0.f, 1.f)))
+		{
+			SparkClock = 0.f;
+			static const TCHAR* Bursts[4] = { TEXT("NS_Burst_Blue"), TEXT("NS_Burst_Red"), TEXT("NS_Burst_Yellow"), TEXT("NS_Burst_Green") };
+			const FVector V = GetBallVelocity();
+			const FVector Back = -FVector(V.X, V.Y, 0.f).GetSafeNormal() * (ZoogiConst::ZoogiRadius * 0.8f);
+			const float K = FMath::Clamp(Spd / 2400.f, 0.f, 1.f);
+			AZoogiFX::Niagara(GetWorld(), Bursts[FMath::Clamp(PlayerIndex, 0, 3)], BallLocation() + Back - FVector(0, 0, ZoogiConst::ZoogiRadius * 0.5f), FRotator::ZeroRotator, 0.16f + 0.16f * K);
 		}
 	}
 	if (bActiveTurn && RingMID)
@@ -251,6 +279,11 @@ void AZoogiBall::OnSphereHit(UPrimitiveComponent* HitComp, AActor* OtherActor, U
 	AZoogiGameMode* G = GetWorld() ? GetWorld()->GetAuthGameMode<AZoogiGameMode>() : nullptr;
 	const int32 Shooter = G ? G->ActivePlayer : -1;
 	if (G && PlayerIndex == Shooter && (Cast<AZoogiBall>(OtherActor) || Cast<AZoogiOrb>(OtherActor))) G->OnShooterContact(this, OtherActor);
+	// Guard: the active attacker hit this guarded Zoogi.
+	if (G && PlayerIndex != Shooter && Artifact && Artifact->Guard != EZoogiArtifact::None)
+	{
+		if (AZoogiBall* Att = Cast<AZoogiBall>(OtherActor)) if (Att->PlayerIndex == Shooter) G->OnGuardedHit(this, Att);
+	}
 	// Impact spark on hard hits between marbles/orbs.
 	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
 	if ((Cast<AZoogiBall>(OtherActor) || Cast<AZoogiOrb>(OtherActor)) && NormalImpulse.Size() > 3500.f && Now - LastImpactFx > 0.15f)
