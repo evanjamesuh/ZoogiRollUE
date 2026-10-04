@@ -694,8 +694,8 @@ void AZoogiArena::AddBumper(const FVector2D& XY, float Radius, float Height, USt
 
 void AZoogiArena::BuildArabian()
 {
-	// RoundIsland kind="saturn", dressed as a PIZZA (Oct 4, Evan): melted-cheese floor over tomato sauce, a golden baked
-	// crust instead of the glowing gold lip, same dark underside. Floor collider and knockoff line are unchanged.
+	// RoundIsland kind="saturn", dressed as a PIZZA (Oct 4, Evan): melted-cheese floor with browned spots, bubbles and
+	// slice cuts, no rim lip, same dark underside. Floor collider and knockoff line are unchanged.
 	BuildIsland(ZoogiUtil::Hex(TEXT("#F2B544")), ZoogiUtil::Hex(TEXT("#E39A2E")), ZoogiUtil::Hex(TEXT("#B9773A")),
 		ZoogiUtil::Hex(TEXT("#1A120C")), ZoogiUtil::Hex(TEXT("#2E2016")), 0.3f);
 	RockPM = ZoogiPhysics::MakeMaterial(this, 0.3f, 0.5f, false);
@@ -718,39 +718,16 @@ void AZoogiArena::BuildArabian()
 		};
 		FRandomStream PizzaRng(2024);
 
-		// Crust: a toasted band just under the floor edge plus a ring of puffy ellipsoids. Each puff's inner edge is at
-		// the knockoff line and stays below Z = 0 there (about -2.5 cm), so nothing rises inside the court; the crust
-		// peaks ~+15 cm about 48 cm outside the line. No colliders: marbles fall off exactly where they did.
-		AddCylinder(FVector2D::ZeroVector, KR + 95.f, 50.f, -6.f, ZoogiUtil::GroundMID(this, ZoogiUtil::Hex(TEXT("#B8742F")), ZoogiUtil::Hex(TEXT("#8E5222")), 0.01f, 0.9f), false)->SetCastShadow(false);
-		// The puffs are ISMs, so they must use M_ZoogiSurface (SurfaceMID): M_ZoogiGround is not flagged "Used with
-		// Instanced Static Meshes" (Scripts/fix_material_usage.py only flags Surface/Glow/FX), so a GroundMID on an ISM
-		// falls back to the grey default material, which the purple night light turned slate grey. Two toasted shades
-		// (golden / deeper bake) stand in for the ground noise; a faint warm self-lit tint keeps them golden at night.
-		UInstancedStaticMeshComponent* Crust = MakeISM(ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#D9963F")), 0.55f, ZoogiUtil::Hex(TEXT("#FF9A40")), 0.12f));
-		UInstancedStaticMeshComponent* CrustDeep = MakeISM(ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#B8702A")), 0.6f, ZoogiUtil::Hex(TEXT("#FF8A30")), 0.09f));
-		UInstancedStaticMeshComponent* CrustChar = MakeISM(ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#6B3414")), 0.75f, ZoogiUtil::Hex(TEXT("#8A4A1E")), 0.03f));
-		const int32 Puffs = 40;
-		const float PuffR = KR + 48.f;
-		for (int32 i = 0; i < Puffs; ++i)
+		// Oct 4 (Evan): no crust ring and no sauce patches; the court edge is just the cheese floor ending cleanly (no lip).
+		// The removed layers' PizzaRng draws are still made (and discarded) so the browned spots and cheese bubbles below
+		// keep exactly the same layout. Toppings use their own stream (4242) and are unaffected either way.
+		for (int32 i = 0; i < 40; ++i) // was: 40 crust puffs (4 draws each) + a blister on ~75% of them (4 draws)
 		{
-			const float Deg = i * 360.f / Puffs + PizzaRng.FRandRange(-2.f, 2.f);
-			const float A = FMath::DegreesToRadians(Deg);
-			const float Len = 2.f * PI * PuffR / Puffs * PizzaRng.FRandRange(1.3f, 1.5f);
-			const float H = PizzaRng.FRandRange(44.f, 54.f);
-			const float Semi = PizzaRng.FRandRange(48.f, 50.f); // radial half-width
-			// Shade by index (no extra PizzaRng draws, so the floor dressing layout stays identical).
-			(((i * 7) % 5) < 2 ? CrustDeep : Crust)->AddInstance(FTransform(FRotator(0.f, Deg + 90.f, 0.f), FVector(FMath::Cos(A) * PuffR, FMath::Sin(A) * PuffR, -10.f), FVector(Len / 100.f, Semi / 50.f, H / 100.f)));
-			// Browned blister near the top of most puffs.
-			if (PizzaRng.FRand() < 0.75f)
-			{
-				const float BDeg = Deg + PizzaRng.FRandRange(-1.5f, 1.5f), BA = FMath::DegreesToRadians(BDeg);
-				const float BD = PuffR + PizzaRng.FRandRange(-12.f, 8.f);
-				const float S = PizzaRng.FRandRange(0.22f, 0.45f);
-				CrustChar->AddInstance(FTransform(FRotator(0.f, BDeg + 90.f + PizzaRng.FRandRange(-25.f, 25.f), 0.f), FVector(FMath::Cos(BA) * BD, FMath::Sin(BA) * BD, -10.f + H * 0.5f - 2.5f), FVector(S * 1.5f, S, 0.1f)));
-			}
+			for (int32 d = 0; d < 4; ++d) (void)PizzaRng.FRand();
+			if (PizzaRng.FRand() < 0.75f) { for (int32 d = 0; d < 4; ++d) (void)PizzaRng.FRand(); }
 		}
 
-		// Floor dressing: sauce showing through the cheese, browned spots and low cheese bubbles, clear of the spawn pads.
+		// Floor dressing: browned spots and low cheese bubbles, clear of the spawn pads.
 		auto FloorSpot = [&](float RMin, float RMax) -> FVector2D
 		{
 			FVector2D P = FVector2D::ZeroVector;
@@ -765,12 +742,10 @@ void AZoogiArena::BuildArabian()
 			}
 			return P;
 		};
-		UInstancedStaticMeshComponent* Sauce = MakeISM(ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#C2461F")), 0.45f));
-		for (int32 i = 0; i < 22; ++i)
+		for (int32 i = 0; i < 22; ++i) // was: 22 sauce patches (spot + 3 draws each); draws kept, nothing placed
 		{
-			const FVector2D P = FloorSpot(150.f, 1380.f);
-			const float S = PizzaRng.FRandRange(0.6f, 1.4f);
-			Sauce->AddInstance(FTransform(FRotator(0.f, PizzaRng.FRandRange(0.f, 360.f), 0.f), FVector(P.X, P.Y, 0.35f), FVector(S * PizzaRng.FRandRange(1.f, 1.6f), S, 0.012f)));
+			(void)FloorSpot(150.f, 1380.f);
+			for (int32 d = 0; d < 3; ++d) (void)PizzaRng.FRand();
 		}
 		UInstancedStaticMeshComponent* Browned = MakeISM(ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#A5612A")), 0.85f));
 		for (int32 i = 0; i < 36; ++i)
