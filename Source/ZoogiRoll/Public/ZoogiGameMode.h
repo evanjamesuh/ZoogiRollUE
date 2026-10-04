@@ -268,6 +268,8 @@ public:
 	float ResolveStart = 0.f;
 	/** Resolve banner ("P1 +100 KO   P2 -75") and per-player deltas for the HUD. */
 	FString ResolveSummary;
+	FString ResolveNotes;      // powered hit / crit / KO / guard lines for the Resolve panel
+	int32 TurnGuardBlocks = 0;
 	TArray<int32> ResolveDeltas;
 	void EmitAnime(FName Event, AZoogiBall* Who, EZoogiArtifact A, AActor* Focus, const FVector& Where, float Magnitude, bool bFreeze, int32 TargetPlayer = -1);
 	/** Titan Core (infused, while shooting) / guard mass. */

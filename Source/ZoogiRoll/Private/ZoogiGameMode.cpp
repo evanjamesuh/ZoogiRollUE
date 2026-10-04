@@ -265,6 +265,8 @@ void AZoogiGameMode::BeginTurn(int32 PlayerIdx)
 	EndPowers();
 	++TurnCounter;
 	Ledger.Reset();
+	TurnGuardBlocks = 0;
+	ResolveNotes.Reset();
 	bFreeAim = false;
 	AimCutDeg = 0.f;
 	AimPowerStep = 0;

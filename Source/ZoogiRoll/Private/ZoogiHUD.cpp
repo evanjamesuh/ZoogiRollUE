@@ -834,7 +834,7 @@ void AZoogiHUD::DrawAwaken(AZoogiGameMode* G)
 	if (AC->Drawn != EZoogiArtifact::None) Cards.Add({ 0, AC->Drawn });
 	for (int32 i = 0; i < AC->Hand.Num(); ++i) Cards.Add({ i + 1, AC->Hand[i] });
 	const float CW = 230.f * U, CH = 250.f * U, Gap = 18.f * U;
-	const float PW = FMath::Max(3, Cards.Num()) * (CW + Gap) + 40.f * U + 300.f * U;
+	const float PW = FMath::Max(3, Cards.Num()) * (CW + Gap) + 40.f * U + 400.f * U;
 	const float X0 = (W - PW) * 0.5f, Y0 = H - CH - 160.f * U;
 	Panel(X0, Y0 - 56.f * U, PW, CH + 96.f * U, GPanel);
 	Panel(X0, Y0 - 56.f * U, PW, 5.f * U, PC);
@@ -868,8 +868,17 @@ void AZoogiHUD::DrawAwaken(AZoogiGameMode* G)
 		if (!B->bCPU) Buttons.Add(Bt);
 		X += CW + Gap;
 	}
+	// Empty hand slots (hand of 2 + the drawn card), so the hand limit reads at a glance.
+	for (int32 e = Cards.Num(); e < 3; ++e)
+	{
+		Panel(X, Y0, CW, CH, FLinearColor(0.04f, 0.05f, 0.1f, 0.55f));
+		Panel(X + 10.f * U, Y0 + 10.f * U, CW - 20.f * U, 2.f * U, FLinearColor(0.3f, 0.35f, 0.45f, 0.5f));
+		Text(TEXT("HAND SLOT"), X + CW * 0.5f, Y0 + CH * 0.42f, FLinearColor(0.5f, 0.55f, 0.65f, 0.8f), 0.38f, true, false);
+		Text(TEXT("empty"), X + CW * 0.5f, Y0 + CH * 0.42f + 32.f * U, FLinearColor(0.45f, 0.5f, 0.6f, 0.7f), 0.32f, true, false);
+		X += CW + Gap;
+	}
 	// Right column: picked artifact's texts + INFUSE / GUARD / SAVE.
-	const float RX = X0 + PW - 320.f * U;
+	const float RX = X0 + PW - 410.f * U;
 	const EZoogiArtifact PA = Cards.Num() ? Cards[Cards.IndexOfByPredicate([Pick](const TPair<int32, EZoogiArtifact>& C) { return C.Key == Pick; })].Value : EZoogiArtifact::None;
 	if (PA != EZoogiArtifact::None)
 	{
@@ -882,25 +891,26 @@ void AZoogiHUD::DrawAwaken(AZoogiGameMode* G)
 			for (const FString& Wd : Words)
 			{
 				const FString Try = Line.IsEmpty() ? Wd : Line + TEXT(" ") + Wd;
-				if (TextSize(Try, 0.32f, false).X > MaxW && !Line.IsEmpty()) { Text(Line, X, Y, C, 0.32f, false, false); Y += 26.f * U; Line = Wd; }
+				if (TextSize(Try, 0.38f, false).X > MaxW && !Line.IsEmpty()) { Text(Line, X, Y, C, 0.38f, false, false); Y += 30.f * U; Line = Wd; }
 				else Line = Try;
 			}
-			if (!Line.IsEmpty()) { Text(Line, X, Y, C, 0.32f, false, false); Y += 26.f * U; }
+			if (!Line.IsEmpty()) { Text(Line, X, Y, C, 0.38f, false, false); Y += 30.f * U; }
 			return Y;
 		};
 		float TY = Y0;
 		Text(TEXT("INFUSE"), RX, TY, FLinearColor(1.f, 0.7f, 0.35f), 0.38f, false, false); TY += 28.f * U;
-		TY = Wrap(R.InfuseText, RX, TY, 300.f * U, FLinearColor(0.85f, 0.88f, 0.95f)) + 6.f * U;
+		TY = Wrap(R.InfuseText, RX, TY, 390.f * U, FLinearColor(0.85f, 0.88f, 0.95f)) + 6.f * U;
+		if (PA == Aff) { TY = Wrap(FString::Printf(TEXT("Affinity: %s fires with it"), *B->Def.Ability), RX, TY, 390.f * U, FLinearColor(1.f, 0.88f, 0.4f)) + 6.f * U; }
 		Text(TEXT("GUARD"), RX, TY, FLinearColor(0.55f, 0.8f, 1.f), 0.38f, false, false); TY += 28.f * U;
-		Wrap(R.GuardText, RX, TY, 300.f * U, FLinearColor(0.85f, 0.88f, 0.95f));
+		Wrap(R.GuardText, RX, TY, 390.f * U, FLinearColor(0.85f, 0.88f, 0.95f));
 	}
 	if (!B->bCPU)
 	{
 		const float BY = Y0 + CH - 56.f * U;
 		const bool bHas = PA != EZoogiArtifact::None;
-		Button(TEXT("INFUSE"), RX - 10.f * U, BY, 104.f * U, 56.f * U, "Infuse", Pick, FLinearColor(1.f, 0.5f, 0.15f), bHas);
-		Button(TEXT("GUARD"), RX + 102.f * U, BY, 104.f * U, 56.f * U, "Guard", Pick, FLinearColor(0.35f, 0.7f, 1.f), bHas);
-		Button(TEXT("SAVE"), RX + 214.f * U, BY, 96.f * U, 56.f * U, "Save", 0, FLinearColor(0.6f, 0.65f, 0.75f));
+		Button(TEXT("INFUSE"), RX - 10.f * U, BY, 130.f * U, 56.f * U, "Infuse", Pick, FLinearColor(1.f, 0.5f, 0.15f), bHas);
+		Button(TEXT("GUARD"), RX + 128.f * U, BY, 130.f * U, 56.f * U, "Guard", Pick, FLinearColor(0.35f, 0.7f, 1.f), bHas);
+		Button(TEXT("SAVE"), RX + 266.f * U, BY, 124.f * U, 56.f * U, "Save", 0, FLinearColor(0.6f, 0.65f, 0.75f));
 	}
 }
 
@@ -909,6 +919,7 @@ void AZoogiHUD::DrawArtifacts(AZoogiGameMode* G)
 	AZoogiBall* B = G->GetActiveBall();
 	if (!B || !B->Artifact || G->Phase == EZoogiPhase::GameOver) return;
 	if (G->Stage == EZoogiStage::Awaken && G->Phase == EZoogiPhase::Aiming && !G->bAwakenDone) return; // the Awaken panel shows it all
+	if (G->Stage == EZoogiStage::Resolve || G->Stage == EZoogiStage::End) return; // infusion already spent; the Resolve panel says what happened
 	UZoogiArtifactComponent* AC = B->Artifact;
 	const float W = Canvas->ClipX, H = Canvas->ClipY;
 	const float PW = 440.f * U, PH = 150.f * U;
@@ -945,12 +956,17 @@ void AZoogiHUD::DrawResolve(AZoogiGameMode* G)
 	if (G->Phase != EZoogiPhase::Resolving) return;
 	const float W = Canvas->ClipX, H = Canvas->ClipY;
 	const float A = FMath::Clamp(G->StageTime * 5.f, 0.f, 1.f);
-	const float Y = H * 0.36f;
+	// Lower third, so the settled court (centre) stays visible.
+	const float Y = H * 0.66f;
+	const bool bNotes = !G->ResolveNotes.IsEmpty();
 	const FVector2D TS = TextSize(G->ResolveSummary, 0.7f);
-	const float PW = FMath::Max(520.f * U, TS.X + 80.f * U);
-	Panel((W - PW) * 0.5f, Y, PW, 110.f * U, FLinearColor(0.02f, 0.03f, 0.08f, 0.8f * A));
+	const float NW = bNotes ? (float)TextSize(G->ResolveNotes, 0.42f, false).X : 0.f;
+	const float PW = FMath::Max3(520.f * U, (float)TS.X + 80.f * U, NW + 80.f * U);
+	const float PH = bNotes ? 150.f * U : 110.f * U;
+	Panel((W - PW) * 0.5f, Y, PW, PH, FLinearColor(0.02f, 0.03f, 0.08f, 0.8f * A));
 	Text(TEXT("RESOLVE"), W * 0.5f, Y + 8.f * U, FLinearColor(0.7f, 0.78f, 0.95f, A), 0.42f, true, false);
 	Text(G->ResolveSummary, W * 0.5f, Y + 42.f * U, FLinearColor(1.f, 0.95f, 0.8f, A), 0.7f, true);
+	if (bNotes) Text(G->ResolveNotes, W * 0.5f, Y + 110.f * U, G->bLastHitCrit ? FLinearColor(1.f, 0.85f, 0.4f, A) : FLinearColor(0.75f, 0.85f, 1.f, A), 0.42f, true, false);
 }
 
 void AZoogiHUD::DrawAnime(AZoogiGameMode* G)

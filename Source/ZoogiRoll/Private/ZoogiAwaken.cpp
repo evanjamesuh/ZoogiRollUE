@@ -453,6 +453,7 @@ void AZoogiGameMode::TickArtifacts(float Dt)
 			Att->SetPlanarVelocity(P);
 		}
 		AC->GuardFlash();
+		++TurnGuardBlocks;
 		AZoogiFX::Spawn(GetWorld(), V->BallLocation(), R.RimColor, 120.f, 0.35f, false, 12.f, V);
 		AZoogiFX::Niagara(GetWorld(), *R.AuraNiagara.ToString(), V->BallLocation(), FRotator::ZeroRotator, 0.8f);
 		AddPopup(FString::Printf(TEXT("GUARD  -%d%%"), FMath::RoundToInt((1.f - R.GuardKnockbackMul) * 100.f)), V->BallLocation() + FVector(0, 0, 150.f), R.CoreColor);
@@ -549,6 +550,17 @@ void AZoogiGameMode::DoResolve()
 			B->Artifact->ClearGuard();
 		}
 		RefreshArtifactMass(B, false);
+	}
+
+	// Notes for the Resolve panel.
+	{
+		TArray<FString> N;
+		if (ShotArtifact != EZoogiArtifact::None)
+			N.Add(bInfusedContact ? FString::Printf(TEXT("%s powered hit%s"), *ZoogiArtifacts::Name(ShotArtifact), bLastHitCrit ? TEXT("  CRITICAL") : TEXT("")) : FString::Printf(TEXT("%s missed"), *ZoogiArtifacts::Name(ShotArtifact)));
+		if (KOs > 0) N.Add(FString::Printf(TEXT("KO x%d"), KOs));
+		if (ShooterScores >= 2) N.Add(FString::Printf(TEXT("Combo x%d"), ShooterScores));
+		if (TurnGuardBlocks > 0) N.Add(FString::Printf(TEXT("Guard block x%d"), TurnGuardBlocks));
+		ResolveNotes = FString::Join(N, TEXT("     "));
 	}
 
 	// 3) Anime events for the outcome (final now).

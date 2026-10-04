@@ -94,7 +94,8 @@ void AZoogiGameMode::SetStage(EZoogiStage S)
 	const EZoogiStage Prev = Stage;
 	Stage = S;
 	StageTime = 0.f;
-	UE_LOG(LogZoogi, Log, TEXT("Phase %s -> %s (P%d)"), StageName(Prev), StageName(S), ActivePlayer + 1);
+	if (Prev != S) { UE_LOG(LogZoogi, Log, TEXT("Phase %s -> %s (P%d)"), StageName(Prev), StageName(S), ActivePlayer + 1); }
+	else { UE_LOG(LogZoogi, Log, TEXT("Phase %s (P%d)"), StageName(S), ActivePlayer + 1); }
 	switch (S)
 	{
 	case EZoogiStage::Draw:
