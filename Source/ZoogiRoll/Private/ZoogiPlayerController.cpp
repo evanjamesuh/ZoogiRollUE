@@ -8,6 +8,10 @@
 #include "ZoogiHUD.h"
 #include "ZoogiTargetMarker.h"
 #include "ZoogiAnimeSubsystem.h"
+#include "ZoogiAwakenWidget.h"
+#include "ZoogiArtifactComponent.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Widgets/SViewport.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Engine/World.h"
@@ -170,7 +174,8 @@ void AZoogiPlayerController::BeginPlay()
 	HoverMarker = GetWorld()->SpawnActor<AZoogiTargetMarker>(AZoogiTargetMarker::StaticClass(), FTransform::Identity, P);
 	LockMarker = GetWorld()->SpawnActor<AZoogiTargetMarker>(AZoogiTargetMarker::StaticClass(), FTransform::Identity, P);
 	bPowerTest = FParse::Param(FCommandLine::Get(), TEXT("ZoogiPowerTest"));
-	bHumanTest = FParse::Param(FCommandLine::Get(), TEXT("ZoogiHumanTest"));
+	bUiTest = FParse::Param(FCommandLine::Get(), TEXT("ZoogiUiTest"));
+	bHumanTest = bUiTest || FParse::Param(FCommandLine::Get(), TEXT("ZoogiHumanTest"));
 }
 
 FVector2D AZoogiPlayerController::GetCursor() const
@@ -245,6 +250,214 @@ void AZoogiPlayerController::UpdateHumanTest(float Dt)
 		else if (SimStep == 1 && T > 1.1f) { G->MenuAction(TEXT("AimNudge"), bFloorTurn ? -2 : 3); SimStep = 2; } // cut nudges
 		else if (SimStep == 2 && T > 1.4f) { if (!bFloorTurn) G->MenuAction(TEXT("AimPower"), 3); SimStep = 3; }
 		else if (SimStep == 3 && T > 2.0f) { bSimSpace = true; SimStep = 4; }                                       // confirm
+	}
+}
+
+// ------------------------------------------------------------------ scripted UMG test (-ZoogiUiTest)
+
+void AZoogiPlayerController::UiCheck(bool bOk, const FString& What)
+{
+	(bOk ? UiPass : UiFail)++;
+	UE_LOG(LogZoogi, Log, TEXT("UITEST %s: %s"), bOk ? TEXT("PASS") : TEXT("FAIL"), *What);
+}
+
+void AZoogiPlayerController::UpdateUiTest(float Dt)
+{
+	bSimClick = bSimTab = bSimSpace = false;
+	AZoogiGameMode* G = GM();
+	if (!G) return;
+	// The confirm check runs after the shot is away (P1 is no longer aiming by then).
+	if (UiConfirmFrame && GFrameCounter > UiConfirmFrame + 10)
+	{
+		// CommitLock leaves the Aim step for the Power-up beat; the shot itself fires a moment later.
+		UiCheck(!G->IsAimStep() || ShotsSeen > UiShotSnap, FString::Printf(TEXT("confirm via %s left the Aim step (BattleStep=%d, phase=%d)"), UiAct == TEXT("mouse") ? TEXT("CONFIRM button (mouse)") : TEXT("Space (key)"), (int32)G->BattleStep, (int32)G->Phase));
+		UiConfirmFrame = 0;
+	}
+	if (!G->IsHumanAiming()) { SimStep = 0; return; }
+	AZoogiHUD* Hud = Cast<AZoogiHUD>(GetHUD());
+	UZoogiAwakenWidget* W = Hud ? Hud->GetAwakenWidget() : nullptr;
+	if (!W) return;
+	W->TickQueuedClick();
+	const int32 Key = (int32)G->Stage * 10 + (G->Stage == EZoogiStage::Battle ? (int32)G->BattleStep : 0);
+	if (Key != SimKey)
+	{
+		if (G->Stage == EZoogiStage::Draw) ++SimTurn;
+		SimKey = Key;
+		SimStep = 0;
+	}
+	const float T = G->Stage == EZoogiStage::Battle ? G->StepTime : G->StageTime;
+	const bool bMouse = (SimTurn % 2) == 1;
+	const TCHAR* Via = bMouse ? TEXT("mouse") : TEXT("key");
+
+	auto ClickCtl = [&](FName A, int32 I) -> bool
+	{
+		FVector2D Abs, VP;
+		if (!W->FindControl(A, I, Abs)) { UiCheck(false, FString::Printf(TEXT("UMG control %s %d is on screen"), *A.ToString(), I)); return false; }
+		if (W->AbsToViewport(Abs, VP)) SimMouse = VP;
+		UE_LOG(LogZoogi, Log, TEXT("UITEST mouse click on %s %d at viewport (%.0f, %.0f), desktop (%.0f, %.0f)"), *A.ToString(), I, SimMouse.X, SimMouse.Y, Abs.X, Abs.Y);
+		W->QueueControlClick(A, I);
+		return true;
+	};
+	auto HoverCtl = [&](FName A, int32 I)
+	{
+		FVector2D Abs;
+		if (W->FindControl(A, I, Abs)) W->SynthHover(Abs);
+	};
+	auto PressKey = [&](const FKey& K)
+	{
+		if (!FSlateApplication::IsInitialized()) return;
+		FKeyEvent E(K, FModifierKeysState(), 0, false, 0, 0);
+		FSlateApplication::Get().ProcessKeyDownEvent(E);
+		FSlateApplication::Get().ProcessKeyUpEvent(E);
+		UE_LOG(LogZoogi, Log, TEXT("UITEST key %s"), *K.ToString());
+	};
+	auto BackgroundClick = [&](bool bAimBar, const FVector2D& Frac)
+	{
+		FVector2D Abs, VP;
+		if (!W->PanelPoint(bAimBar, Frac, Abs)) { UiCheck(false, TEXT("panel on screen for the background click")); return false; }
+		if (W->AbsToViewport(Abs, VP)) SimMouse = VP; // a leak would floor-aim right here
+		UiSnapFrame = GFrameCounter;
+		UE_LOG(LogZoogi, Log, TEXT("UITEST mouse click on %s background at viewport (%.0f, %.0f)"), bAimBar ? TEXT("aim bar") : TEXT("Awaken panel"), SimMouse.X, SimMouse.Y);
+		W->QueueClick(Abs, bAimBar ? TEXT("aim bar background") : TEXT("Awaken panel background"));
+		return true;
+	};
+	auto CardKey = [](int32 Card) { return Card == 0 ? EKeys::One : (Card == 1 ? EKeys::Two : EKeys::Three); };
+
+	if (G->Stage == EZoogiStage::Awaken && !G->bAwakenDone)
+	{
+		static const TCHAR* Seq[7] = { TEXT("Save"), TEXT("Save"), TEXT("Guard"), TEXT("Infuse"), TEXT("Save"), TEXT("Infuse"), TEXT("Guard") };
+		const FName Act = Seq[(FMath::Max(SimTurn, 1) - 1) % 7];
+		AZoogiBall* Me = G->GetActiveBall();
+		const int32 HandN = Me && Me->Artifact ? Me->Artifact->Hand.Num() : 0;
+		const bool bDrawn = Me && Me->Artifact && Me->Artifact->Drawn != EZoogiArtifact::None;
+		if (SimStep == 0 && T > 1.0f)
+		{
+			UiWantPick = (Act == TEXT("Infuse") && bDrawn) ? 0 : (HandN > 0 ? 1 : 0);
+			if (!bDrawn && UiWantPick == 0 && HandN > 0) UiWantPick = 1;
+			UiPickClickFrame = GFrameCounter;
+			if (bMouse) ClickCtl(TEXT("AwakenPick"), UiWantPick);
+			else PressKey(CardKey(UiWantPick));
+			SimStep = 1;
+		}
+		else if (SimStep == 1 && T > 1.3f)
+		{
+			// Mouse: the card button's OnClicked itself must have fired (the drawn card is pre-selected, so AwakenPick alone
+			// can pass without any click landing).
+			const bool bFired = !bMouse || W->FiredSince(UiPickClickFrame, TEXT("AwakenPick"), UiWantPick);
+			UiCheck(G->AwakenPick == UiWantPick && bFired, FString::Printf(TEXT("turn %d: pick card %d via %s (AwakenPick=%d, OnClicked %s)"), SimTurn, UiWantPick + 1, Via, G->AwakenPick, bMouse ? (bFired ? TEXT("fired") : TEXT("did NOT fire")) : TEXT("n/a")));
+			if (bMouse) G->TakeShot(FString::Printf(TEXT("umg_awaken_t%d"), SimTurn));
+			UiSnapPick = G->AwakenPick;
+			if (bMouse) BackgroundClick(false, FVector2D(0.006f, 0.5f)); // left margin, beside the first card
+			SimStep = 2;
+		}
+		else if (SimStep == 2 && T > 1.55f)
+		{
+			if (bMouse)
+			{
+				UiCheck(LastRawLMBFrame < UiSnapFrame, TEXT("Awaken panel background press swallowed by Slate (no LMB reached the game)"));
+				UiCheck(G->Stage == EZoogiStage::Awaken && !G->bAwakenDone && G->AwakenPick == UiSnapPick, TEXT("Awaken panel background press changed nothing"));
+				if (!bUiControlDone)
+				{
+					// Control: a press on open viewport (top middle, no UI there) does reach the game.
+					if (UGameViewportClient* VC = GetWorld()->GetGameViewport())
+						if (TSharedPtr<SViewport> VW = VC->GetGameViewportWidget())
+						{
+							const FGeometry& Geo = VW->GetCachedGeometry();
+							UiSnapFrame = GFrameCounter;
+							W->QueueClick(Geo.GetAbsolutePositionAtCoordinates(FVector2D(0.5f, 0.42f)), TEXT("other (SViewport)"));
+							UE_LOG(LogZoogi, Log, TEXT("UITEST control click on open viewport"));
+						}
+				}
+				HoverCtl(Act, G->AwakenPick < 0 ? 0 : (Act == TEXT("Save") ? 0 : G->AwakenPick));
+			}
+			SimStep = 3;
+		}
+		else if (SimStep == 3 && T > 1.85f)
+		{
+			if (bMouse && !bUiControlDone)
+			{
+				UiCheck(LastRawLMBFrame >= UiSnapFrame, TEXT("control: a press on open viewport does reach the game (the leak detector works)"));
+				bUiControlDone = true;
+			}
+			if (bMouse) G->TakeShot(FString::Printf(TEXT("umg_awaken_hover_t%d"), SimTurn));
+			SimStep = 4;
+		}
+		else if (SimStep == 4 && T > 2.0f)
+		{
+			UiAct = Act;
+			if (bMouse) ClickCtl(Act, Act == TEXT("Save") ? 0 : G->AwakenPick);
+			else PressKey(Act == TEXT("Save") ? EKeys::S : (Act == TEXT("Guard") ? EKeys::G : EKeys::I));
+			SimStep = 5;
+		}
+		return;
+	}
+	if (G->Stage == EZoogiStage::Awaken && G->bAwakenDone && SimStep == 5)
+	{
+		UiCheck(G->AwakenChoiceText.StartsWith(UiAct.ToString().ToUpper()), FString::Printf(TEXT("turn %d: %s via %s -> \"%s\""), SimTurn, *UiAct.ToString(), Via, *G->AwakenChoiceText));
+		SimStep = 6;
+		return;
+	}
+	if (!G->IsAimStep()) return;
+
+	if (SimStep == 0 && T > 0.6f)
+	{
+		if (bMouse) BackgroundClick(true, FVector2D(0.006f, 0.25f)); // left of << and above the button row
+		SimStep = 1;
+	}
+	else if (SimStep == 1 && T > 0.9f)
+	{
+		if (bMouse)
+		{
+			UiCheck(LastRawLMBFrame < UiSnapFrame, TEXT("aim-bar background press swallowed by Slate (no LMB reached the game)"));
+			UiCheck(!G->HasAim() && !G->bFreeAim, TEXT("aim-bar background press made no floor aim / lock"));
+			// Lock through the world pick (the same targeting code a real click uses).
+			bool bFound = false;
+			for (AActor* A : G->TargetCandidates())
+			{
+				FVector2D S;
+				if (ProjectWorldLocationToScreen(ActorCenter(A), S) && !(Hud && Hud->IsOverUI(S))) { SimMouse = S; bFound = true; break; }
+			}
+			if (bFound) bSimClick = true;
+		}
+		else PressKey(EKeys::Tab);
+		SimStep = 2;
+	}
+	else if (SimStep == 2 && T > 1.3f)
+	{
+		UiCheck(G->HasAim(), FString::Printf(TEXT("turn %d: lock via %s"), SimTurn, bMouse ? TEXT("world click") : TEXT("Tab (key)")));
+		UiSnapCut = G->AimCutDeg;
+		if (bMouse) ClickCtl(TEXT("AimNudge"), 5);
+		else PressKey(EKeys::Right);
+		SimStep = 3;
+	}
+	else if (SimStep == 3 && T > 1.6f)
+	{
+		UiCheck(FMath::Abs(G->AimCutDeg - UiSnapCut) > 0.5f, FString::Printf(TEXT("nudge via %s: cut %.1f -> %.1f deg"), bMouse ? TEXT(">> button") : TEXT("Right key"), UiSnapCut, G->AimCutDeg));
+		UiSnapPower = G->AimPowerStep;
+		if (bMouse) ClickCtl(TEXT("AimPower"), 3);
+		else PressKey(EKeys::Up);
+		SimStep = 4;
+	}
+	else if (SimStep == 4 && T > 1.9f)
+	{
+		const int32 Want = bMouse ? 3 : FMath::Min(UiSnapPower + 1, 3);
+		UiCheck(G->AimPowerStep == Want, FString::Printf(TEXT("power via %s: step %d -> %d"), bMouse ? TEXT("FULL button") : TEXT("Up key"), UiSnapPower, G->AimPowerStep));
+		if (bMouse) HoverCtl(TEXT("AimConfirm"), 0);
+		SimStep = 5;
+	}
+	else if (SimStep == 5 && T > 2.15f)
+	{
+		if (bMouse) G->TakeShot(FString::Printf(TEXT("umg_aim_t%d"), SimTurn));
+		SimStep = 6;
+	}
+	else if (SimStep == 6 && T > 2.4f)
+	{
+		UiShotSnap = ShotsSeen;
+		UiAct = bMouse ? TEXT("mouse") : TEXT("key");
+		if (bMouse) ClickCtl(TEXT("AimConfirm"), 0);
+		else PressKey(EKeys::SpaceBar);
+		UiConfirmFrame = GFrameCounter;
+		SimStep = 7;
 	}
 }
 
@@ -363,6 +576,7 @@ bool AZoogiPlayerController::FloorPoint(const FVector2D& Screen, FVector& Out) c
 
 void AZoogiPlayerController::OnShotFired(AZoogiBall* Ball)
 {
+	++ShotsSeen;
 	CamTarget = Ball;
 	FireKickAge = 0.f;
 	EndSlowMo();
@@ -370,6 +584,7 @@ void AZoogiPlayerController::OnShotFired(AZoogiBall* Ball)
 
 void AZoogiPlayerController::OnGameOver(AZoogiBall* Winner)
 {
+	if (bUiTest) UE_LOG(LogZoogi, Log, TEXT("UITEST SUMMARY: %d passed, %d failed"), UiPass, UiFail);
 	bMenuCam = true;
 	EndSlowMo();
 }
@@ -385,7 +600,8 @@ void AZoogiPlayerController::PlayerTick(float DeltaTime)
 	Super::PlayerTick(DeltaTime);
 	if (SlowMoUntil > 0.0 && GetWorld()->GetRealTimeSeconds() >= SlowMoUntil) EndSlowMo();
 	const float Dt = FMath::Min(DeltaTime, 0.05f);
-	if (bHumanTest) UpdateHumanTest(Dt);
+	if (bUiTest) UpdateUiTest(Dt);
+	else if (bHumanTest) UpdateHumanTest(Dt);
 	HandleInput(Dt);
 	UpdateCamera(Dt);
 	UpdateMarkers();
@@ -424,8 +640,16 @@ void AZoogiPlayerController::HandleInput(float Dt)
 	float RMX = 0.f, RMY = 0.f;
 	GetMousePosition(RMX, RMY);
 
+	// UMG controls (Awaken panel, aim bar) swallow their presses in Slate; as a second guard, a press the UI
+	// took this frame / last frame, or any press with the cursor over a UMG panel, never reaches world picking.
+	const bool bRawLMB = WasInputKeyJustPressed(EKeys::LeftMouseButton);
+	if (bRawLMB) LastRawLMBFrame = GFrameCounter;
+	const bool bOverUI = Hud && Hud->IsOverUI(Mouse);
+	const bool bUIClick = Hud && Hud->UIConsumedClick();
+	const bool bLMB = bRawLMB && !bOverUI && !bUIClick;
+
 	// Buttons (menu, results, in-match corner buttons).
-	if (WasInputKeyJustPressed(EKeys::LeftMouseButton) && Hud)
+	if (bLMB && Hud)
 	{
 		FName Action; int32 Index = 0;
 		if (Hud->HitTest(FVector2D(RMX, RMY), Action, Index))
@@ -448,7 +672,7 @@ void AZoogiPlayerController::HandleInput(float Dt)
 	{
 		if (Anime->IsBusy())
 		{
-			if (WasInputKeyJustPressed(EKeys::LeftMouseButton) || WasInputKeyJustPressed(EKeys::SpaceBar) || WasInputKeyJustPressed(EKeys::Escape)) Anime->Skip();
+			if (bLMB || WasInputKeyJustPressed(EKeys::SpaceBar) || WasInputKeyJustPressed(EKeys::Escape)) Anime->Skip();
 			HoverTarget.Reset();
 			return;
 		}
@@ -496,8 +720,8 @@ void AZoogiPlayerController::HandleInput(float Dt)
 		return;
 	}
 
-	HoverTarget = PickTarget(Mouse.X, Mouse.Y);
-	const bool bClick = WasInputKeyJustPressed(EKeys::LeftMouseButton) || bSimClick;
+	HoverTarget = bOverUI ? nullptr : PickTarget(Mouse.X, Mouse.Y);
+	const bool bClick = (bLMB || bSimClick) && !bOverUI && !bUIClick;
 	if (bClick)
 	{
 		if (HoverTarget.IsValid())
@@ -518,7 +742,7 @@ void AZoogiPlayerController::HandleInput(float Dt)
 	if (WasInputKeyJustPressed(EKeys::Up)) G->AimPowerStep = FMath::Clamp(G->AimPowerStep + 1, 0, 3);
 	if (WasInputKeyJustPressed(EKeys::Down)) G->AimPowerStep = FMath::Clamp(G->AimPowerStep - 1, 0, 3);
 	if (WasInputKeyJustPressed(EKeys::Tab) || bSimTab) G->CycleLock(false);
-	if (WasInputKeyJustPressed(EKeys::RightMouseButton)) G->ClearLock();
+	if (WasInputKeyJustPressed(EKeys::RightMouseButton) && !bOverUI) G->ClearLock();
 	if (WasInputKeyJustPressed(EKeys::SpaceBar) || WasInputKeyJustPressed(EKeys::Enter) || bSimSpace) G->CommitLock();
 }
 

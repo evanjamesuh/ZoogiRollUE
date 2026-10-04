@@ -1,4 +1,7 @@
 #include "ZoogiTopping.h"
+#include "Misc/Parse.h"
+#include "Misc/CommandLine.h"
+#include "ZoogiGameMode.h"
 #include "ZoogiRoll.h"
 #include "ZoogiTypes.h"
 #include "ZoogiBall.h"
@@ -223,6 +226,18 @@ void AZoogiTopping::Pop(const FVector& From, const FVector& Vel)
 	ZoogiUtil::PlaySfx(this, TEXT("HitClick"), 0.55f, bPep ? Rng.FRandRange(1.7f, 2.f) : Rng.FRandRange(1.4f, 1.6f));
 	SetActorTickEnabled(true);
 	UE_LOG(LogZoogi, Log, TEXT("Topping %s (%s) popped"), *GetName(), bPep ? TEXT("pepperoni") : TEXT("cheese"));
+	// -ZoogiPopShots (screenshot runs): capture the first pops mid-air (bits rising / at the top of their arc).
+	static const bool bPopShots = FParse::Param(FCommandLine::Get(), TEXT("ZoogiPopShots"));
+	static int32 PopShotCount = 0;
+	if (bPopShots && PopShotCount < 8)
+	{
+		if (AZoogiGameMode* G = GetWorld()->GetAuthGameMode<AZoogiGameMode>())
+		{
+			++PopShotCount;
+			G->TakeShotDelayed(FString::Printf(TEXT("pop%d_%s_a"), PopShotCount, bPep ? TEXT("pep") : TEXT("cheese")), 0.1f);
+			G->TakeShotDelayed(FString::Printf(TEXT("pop%d_%s_b"), PopShotCount, bPep ? TEXT("pep") : TEXT("cheese")), 0.25f);
+		}
+	}
 }
 
 void AZoogiTopping::Tick(float Dt)

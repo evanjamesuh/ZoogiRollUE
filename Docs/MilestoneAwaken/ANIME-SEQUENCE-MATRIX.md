@@ -115,3 +115,28 @@ Details are in the format table in ASSIGNMENT-UNREAL.md.
 - Placeholder (not authored; uses the fallback): 1
 - Not an anime event: 1
 - Placeholder (post-milestone): 1
+
+## Video cut-ins in the build now (Oct 4)
+
+The rows above are the authoring plan. Today the game plays three short video cut-ins, cut from Evan's own Zoogi Roll videos with their title text cropped out. Each cut-in is shown as a large framed card (74% of the screen width) over the frozen arena, with a white flash on impact events. All clips live in `Content/Anime/Movies/` and are listed in `Movies.csv`, which the game reads at start-up.
+
+| Clip | Length | Source (crop) | Plays for |
+|---|---|---|---|
+| `Anime_Any_Any_Infuse_01.mp4` | 2.0 s | map-select video 7.3-9.3 s (464x261 at y=470) | Every Infuse, any Zoogi and any artifact |
+| `Anime_Any_Any_Critical_01.mp4` | 2.0 s | main-bg video 15.0-17.0 s (464x261 at y=440) | Every Critical |
+| `Anime_Any_Any_KO_01.mp4` | 2.5 s | splash video 9.1-11.6 s (416x234 at y=330) | Every KO |
+| `Menu_Background.mp4` | 20.5 s, looped | main-bg video, full length | Main menu backdrop. It is cover-cropped and slightly darkened; `-ZoogiMenuArena` brings back the old live-arena backdrop |
+
+**Lookup.** For an event id `Anime_<Zoogi>_<Artifact>_<Event>_NN`, the game tries these clips in order and uses the first one that exists:
+1. the exact id
+2. `Anime_Any_<Artifact>_<Event>`
+3. `Anime_<Zoogi>_Any_<Event>`
+4. `Anime_Any_Any_<Event>`
+
+Dropping a better-matching mp4 into the folder (and adding it to `Movies.csv`) overrides the generic clip with no code change.
+
+**When a clip plays:**
+- Only when that event plays at Full length. That is the first time per id per match, and only in matches with a human player; CPU-only matches always use Short.
+- On screen for the clip's own length, clamped to 1.5-3 s.
+- Guard, GuardBlock and PoweredHit have no clip yet, so they keep the real-time Micro version.
+- `-ZoogiNoAnimeMovies` turns all video cut-ins off.

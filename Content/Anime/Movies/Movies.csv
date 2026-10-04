@@ -1,0 +1,5 @@
+File,Seconds,Plays for,Source (Evan's own Zoogi Roll art; trimmed with ffmpeg),Crop (source px),Notes
+Anime_Any_Any_Critical_01.mp4,2.0,"Critical (any Zoogi / artifact), first Full play per id per match",public/main-bg-video.mp4 15.0-17.0 s,"464x261 at y=440 (below the title), scaled to 1280x720","blue + gold energy streaks crossing over the sunset ridges"
+Anime_Any_Any_KO_01.mp4,2.5,"KO (any), first Full play per match",public/splash-video.mp4 9.1-11.6 s,"416x234 at y=330 (below the logo)","wolf vs fire-dragon face-off, lightning clash at ~0.9 s"
+Anime_Any_Any_Infuse_01.mp4,2.0,"Infuse (any artifact), first Full play per artifact per match",public/map-select-video.mp4 7.3-9.3 s,"464x261 at y=470 (below the title)","blue energy surge rising through the canyon"
+Menu_Background.mp4,20.5,"Main menu backdrop (looped)",public/main-bg-video.mp4 (full),"full 464x832 (vertical), cover-cropped to the window (centre band) and slightly darkened","ZOOGI ROLL ARENA title art"

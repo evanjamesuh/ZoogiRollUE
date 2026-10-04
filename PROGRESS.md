@@ -225,6 +225,23 @@ one Zoogi per player, no HP, deterministic crit, Guard = next opponent attack on
   New switches: `-ZoogiClassicPowers` (Oct 3 rules), `-ZoogiCinematic`, `-ZoogiAnime=Off|Short|Full` (auto runs without
   `-ZoogiShots` default to Off).
 
+## Milestone "Awaken": Definition of Done audit (Oct 4, 3:00 PM, checked against the code in this repo)
+Checklist: `Docs/MilestoneAwaken/ASSIGNMENT-UNREAL.md`, "Definition of done". A box is ticked only when there is evidence.
+Screenshot folders are on the box (`/workspace/zoogi-unreal/shots/...`).
+
+| # | Item | Status | Evidence / what is missing |
+|---|------|--------|----------------------------|
+| 1 | Step 0 inventory `Docs/MilestoneAwaken/UNREAL-INVENTORY.md` | **Missing** | File does not exist (folder has ASSIGNMENT-*, MILESTONE, REVIEW, matrix, refs only). |
+| 2 | 5 overlay MIs + 5 guard looks on all 7 Zoogis, GLB materials untouched; shots of each artifact on 2+ Zoogis | **Partial** | One procedural `M_ZoogiArtifact` (`Scripts/make_artifact_material.py`, commit ffcee15) with per-Zoogi dynamic instances via `SetOverlayMaterial` (`ZoogiArtifactComponent.cpp`), GLB materials untouched; guard = `GuardShell` sphere + mesh orbiters/plates. No `M_ZoogiArtifactOverlay` / `MI_Artifact_*` / `MI_Guard_*` assets, no MaskAmount/MPC. Shots `shots/aw1`, `aw2s` show some artifacts, not a 5x2 set. |
+| 3 | 20 Niagara systems (aura / trail / impact / guard x5) by script, readable on 7 arenas | **Missing** | `Content/FX` has NS_Burst x7, NS_Explosion, NS_Sparks, NS_Dust, NS_Debris only; no `make_artifact_fx.py`, no per-artifact UNiagaraComponents. |
+| 4 | Squash, pulse, spin, shell-expansion hooks; no limbs | **Partial** | `Pulse` / `ImpactPulse` / `GuardFlash` in `ZoogiArtifactComponent`; no squash, spin boost or shell expansion. No limbs (OK). |
+| 5 | Awaken UMG with mouse (Infuse / Guard / Save), no click-through to world picking | **Done (Oct 4, 3:20 PM)** | Was Canvas-drawn (panel backgrounds could click through). Now `UZoogiAwakenWidget` (UMG), see the section below; `-ZoogiUiTest` log + `shots/umg/`. Not yet tried by a person with a real mouse. |
+| 6 | Tactical camera default + small emphasis + Cinematic toggle | **Done** | `PTactical` profile (`ZoogiPlayerController.cpp`), `bCinematicCam`, CAM button / C key / `-ZoogiCinematic` (commit 1794c83); visible in `shots/aw1`, `aw5`. |
+| 7 | Physics for 5 Infuse + 5 Guard, driven by the DataAssets | **Partial** | All 10 effects implemented (`ZoogiAwaken.cpp`, `ZoogiArtifacts.cpp`, commit 8eb941b) and seen in logs (powered hits for all 5, guards). Data is a C++ default table with an optional `/Game/Data/DT_Artifacts` DataTable that does not exist; no DataAssets. |
+| 8 | Anime: real-time Micro `Anime_Any_Ember_Infuse_01`, Level Sequence Standard `Anime_Hotstreak_Ember_Critical_01`, Media `Anime_Any_Any_KO_01`; preload, transition, exact restore (logged) | **Partial** | Real-time Micro cards with freeze/restore and logged drift ("Anime unfreeze: restored ... max drift 0.00 cm", commit 181492f). Media: `Anime_Any_Any_KO_01.mp4` (cut from Evan's splash video) plays as a video cut-in on KO, plus Infuse and Critical clips (see "Anime video cut-ins" below, `shots/anime/`). Still missing: there is no Level Sequence. |
+| 9 | Packaged Win64 build plays all three | **Partial** | Packaged build plays the real-time placeholders and the mp4 (non-UFS staging of `Content/Anime`); no Level Sequence to play. |
+| 10 | Local commits only | **Done** | Every commit local on `C:\dev\ZoogiRollUnreal`; nothing pushed. |
+
 ## Destructible rocks + anime SFX (Oct 4, 2:00-2:45 PM)
 - **`AZoogiRock`** (`ZoogiRock.h/.cpp`, reusable by any arena via `InitRock(radius, height, yaw, colours, physmat, seed)`):
   C++ fallback, not Chaos Geometry Collection (no pre-fractured asset pipeline headless; Chaos fracture also would make the
@@ -286,10 +303,61 @@ Awakened / crit-grade hit), and so are the collider, events, SFX, popup, feed li
 - Dust material: `Scripts/make_dust_material.py` -> `/Game/Materials/M_ZoogiDust` (lit translucent, soft edge, depth fade).
   Without it the rock falls back to `NS_Dust`.
 
+## Awaken UMG controls (Oct 4, 3:00-3:50 PM)
+- **`UZoogiAwakenWidget`** (`ZoogiAwakenWidget.h/.cpp`) is a C++ UMG widget (CanvasPanel root, no Blueprint asset). It replaces the
+  Canvas-drawn Awaken panel and aim bar and keeps the same layout, fonts and colours.
+  - Awaken panel: the cards are buttons (click to pick) with procedural gem textures, then INFUSE / GUARD / SAVE, the
+    INFUSE / GUARD texts for the picked card, the rival-guards line and the key hints.
+  - Aim bar: << < > >>, AUTO / SOFT / MED / FULL, NEXT, CONFIRM and CANCEL, with a live info line.
+  - It is rebuilt only when its content changes.
+  - Both panels are `UBorder`s that swallow mouse presses, so a click on a panel background never reaches world picking.
+    `ZoogiPlayerController` also skips the world pick, hover and RMB clear-lock while the cursor is over a panel or a
+    control took the press.
+- `-ZoogiCanvasAwaken` brings back the old Canvas panel as a fallback.
+- **`-ZoogiUiTest`** runs a scripted match with P1 as the human player:
+  - Odd turns click through real Slate mouse events (move, press and release at the control's centre, after Slate's hit
+    test finds that control). Even turns use keys.
+  - Each turn picks a card, clicks the panel background (checks that nothing leaks into the game), clicks open viewport
+    once as a control, then Infuse / Guard / Save in rotation. Then: aim-bar background click, lock, nudge >>, power FULL,
+    CONFIRM.
+  - Every step is logged as `UITEST PASS/FAIL`, ending with `UITEST SUMMARY`. Shots: `umg_awaken_tN`,
+    `umg_awaken_hover_tN`, `umg_aim_tN`.
+  - A mouse pick passes only if the card button's OnClicked actually fired, because the drawn card is pre-selected.
+- **Results** (Oct 4, 3:43 PM, run `ui5`): **43 passed, 0 failed.**
+  - Earlier runs had 2 failures each: a synthetic click took the press but never fired, and once fired later on another
+    button. The likely cause is the test window losing OS focus to another app. The synthetic click now re-activates
+    Slate first if the app is inactive, and logs `UITEST note` when it does or when mouse capture is left over.
+  - Not yet tried by a person with a real mouse.
+
+## Anime video cut-ins + menu video (Oct 4, 3:30-3:50 PM)
+- `Content/Anime/Movies/` holds short clips cut from Evan's own Zoogi Roll videos, cropped below their title text and
+  scaled to 1280x720. `Movies.csv` lists them, and the game reads it at start-up:
+  - `Anime_Any_Any_Infuse_01.mp4` (2.0 s, map-select video)
+  - `Anime_Any_Any_Critical_01.mp4` (2.0 s, main-bg video)
+  - `Anime_Any_Any_KO_01.mp4` (2.5 s, splash video: wolf vs fire dragon)
+  - `Menu_Background.mp4` (main-bg video, looped)
+- `UZoogiAnimeSubsystem` picks a clip for each Full-length anime by trying, in order: the exact id,
+  `Anime_Any_<Artifact>_<Event>`, `Anime_<Zoogi>_Any_<Event>`, then `Anime_Any_Any_<Event>`.
+  - The clip plays inside the enlarged cut-in card (74% of the screen width), with a white flash on impact events.
+  - It stays on screen for the clip's own length, clamped to 1.5-3 s.
+  - Short plays and CPU-only matches keep the real-time card.
+  - `-ZoogiNoAnimeMovies` turns cut-ins off.
+  - The old test clip `Anime_Any_Ember_Infuse_01.mp4` is removed.
+- The main menu plays `Menu_Background.mp4` behind the menu, cover-cropped and slightly darkened, and it pauses while
+  the menu is hidden. `-ZoogiMenuArena` brings back the old live-arena backdrop.
+- Seen in run `anime2` (4 players with a human slot): Infuse cut-ins for all five artifacts, a KO cut-in and a Critical
+  cut-in (Pinpoint + Frost, 99%, 0.5 deg). Shots `anime_cutinN_<Event>` (first 2 per event) are in `shots/anime/`. The
+  full map is in `Docs/MilestoneAwaken/ANIME-SEQUENCE-MATRIX.md`, "Video cut-ins in the build now".
+
+## Pizza court: no crust (Oct 4, ~3:10 PM)
+- The crust ring and the sauce dots are gone (commit "Pizza: remove crust and sauce dots"). The court is the bare pizza
+  with 21 toppings.
+- `-ZoogiPopShots` takes `popN_<kind>_a/b` screenshots 0.1 s and 0.25 s after each of the first 8 topping pops.
+
 ## Command-line switches (for testing)
 `-ZoogiAuto` (all CPU, start at once), `-ZoogiPlayers=N`, `-ZoogiArena=0..6` (0 Meadow, 1 Frozen, 2 Volcanic, 3 Cosmic, 4 Arabian, 5 Tomb, 6 Night Circuit), `-ZoogiRounds=N`,
 `-ZoogiShots=<dir>` (event screenshots), `-ZoogiQuit=<sec>`, `-ZoogiMenuShot`, `-ZoogiHumanTest`,
-`-ZoogiCanvasMenu`, `-ZoogiRockTest`, `-ZoogiClimaxTest`, `-ZoogiSfxVol=0..100`, `-ZoogiPowerTest` (3 charges each, CPUs always use powers), `-ZoogiPicks=4,5,6,0` (roster index per slot:
+`-ZoogiCanvasMenu`, `-ZoogiCanvasAwaken`, `-ZoogiUiTest`, `-ZoogiPopShots`, `-ZoogiNoAnimeMovies`, `-ZoogiMenuArena`, `-ZoogiRockTest`, `-ZoogiClimaxTest`, `-ZoogiSfxVol=0..100`, `-ZoogiPowerTest` (3 charges each, CPUs always use powers), `-ZoogiPicks=4,5,6,0` (roster index per slot:
 0 Wolfgang, 1 Hotstreak, 2 Lars, 3 Pinpoint, 4 Bolt, 5 Wraps, 6 Nightshade).
 
 ## Scripts

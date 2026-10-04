@@ -107,6 +107,16 @@ protected:
 	void Unfreeze();
 	FZoogiAnimeRow DefaultRow(FName Event) const;
 	bool TryStartMovie(const FString& Id);
+	/** Cut-in clip for an event: the first existing Content/Anime/Movies/<id>.mp4 along the fallback chain
+	 *  (exact id, Any_<Artifact>, <Zoogi>_Any, Any_Any). Empty when none (or -ZoogiNoAnimeMovies). */
+	FString FindMovie(const FZoogiCombatEvent& E, const FString& ResolvedId) const;
+	void LoadMovieTable();
+	TMap<FString, float> MovieSeconds; // Content/Anime/Movies/Movies.csv
+	bool bMoviesOff = false;
+	bool bCutInShot = false;
+public:
+	FString CurrentMovie;
+protected:
 
 	TMap<FString, FZoogiAnimeRow> Rows;
 	FString RowsSource;

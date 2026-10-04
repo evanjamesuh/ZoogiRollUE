@@ -106,4 +106,20 @@ protected:
 	int32 SimStep = 0;
 	float SimClock = 0.f;
 	void UpdateHumanTest(float Dt);
+
+	// -ZoogiUiTest: P1 is human and plays through the UMG Awaken controls with synthesized Slate mouse events
+	// (odd turns) and synthesized key events (even turns); every step is verified and logged as UITEST PASS / FAIL.
+	bool bUiTest = false;
+	void UpdateUiTest(float Dt);
+	void UiCheck(bool bOk, const FString& What);
+	uint64 LastRawLMBFrame = 0;
+	uint64 UiSnapFrame = 0;
+	int32 UiPass = 0, UiFail = 0;
+	int32 ShotsSeen = 0, UiShotSnap = -1;
+	uint64 UiConfirmFrame = 0;
+	int32 UiSnapPick = 0, UiSnapPower = 0, UiWantPick = 0;
+	uint64 UiPickClickFrame = 0;
+	float UiSnapCut = 0.f;
+	bool bUiControlDone = false;
+	FName UiAct;
 };

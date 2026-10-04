@@ -91,6 +91,7 @@ void UZoogiAnimeSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 		Mode = EZoogiAnimeMode::Off; // balance streams: no anime pauses
 	}
 	LoadRows();
+	LoadMovieTable();
 }
 
 void UZoogiAnimeSubsystem::Deinitialize()
@@ -302,10 +303,59 @@ void UZoogiAnimeSubsystem::Start(const FZoogiCombatEvent& E)
 	Age = 0.f;
 	RealStart = FPlatformTime::Seconds();
 	if (E.bFreeze) Freeze();
-	bMovie = TryStartMovie(CurrentId);
+	// Cut-in clip (Evan's anime art, Content/Anime/Movies): only on Full plays, so repeats stay short real-time cards.
+	CurrentMovie = bShort ? FString() : FindMovie(E, CurrentId);
+	bMovie = !CurrentMovie.IsEmpty() && TryStartMovie(CurrentMovie);
+	bCutInShot = false;
+	if (bMovie)
+	{
+		const float* Secs = MovieSeconds.Find(CurrentMovie);
+		Length = FMath::Clamp(Secs ? *Secs : 2.f, 1.5f, 3.f);
+		SubCaption = FString::Printf(TEXT("%s   cut-in %s.mp4 %.1fs"), *CurrentId, *CurrentMovie, Length);
+	}
 	UE_LOG(LogZoogi, Log, TEXT("Anime START %s (%s, %s %.2fs%s%s)"), *CurrentId, *Row.Tier, bShort ? TEXT("Short") : TEXT("Full"), Length,
-		bFrozen ? TEXT(", world frozen") : TEXT(""), bMovie ? TEXT(", movie") : TEXT(""));
+		bFrozen ? TEXT(", world frozen") : TEXT(""), bMovie ? *FString::Printf(TEXT(", cut-in %s.mp4"), *CurrentMovie) : TEXT(""));
 	if (AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PC->OnAnimeStarted(Current);
+}
+
+void UZoogiAnimeSubsystem::LoadMovieTable()
+{
+	bMoviesOff = FParse::Param(FCommandLine::Get(), TEXT("ZoogiNoAnimeMovies"));
+	MovieSeconds.Reset();
+	FString Text;
+	if (FFileHelper::LoadFileToString(Text, *FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Anime/Movies/Movies.csv"))))
+	{
+		TArray<FString> Lines;
+		Text.ParseIntoArrayLines(Lines);
+		for (int32 i = 1; i < Lines.Num(); ++i)
+		{
+			FString File, Rest;
+			if (!Lines[i].Split(TEXT(","), &File, &Rest)) continue;
+			FString Secs;
+			Rest.Split(TEXT(","), &Secs, nullptr);
+			MovieSeconds.Add(FPaths::GetBaseFilename(File), FCString::Atof(*Secs));
+		}
+	}
+	UE_LOG(LogZoogi, Log, TEXT("Anime cut-in clips: %d listed in Movies.csv%s"), MovieSeconds.Num(), bMoviesOff ? TEXT(" (disabled: -ZoogiNoAnimeMovies)") : TEXT(""));
+}
+
+FString UZoogiAnimeSubsystem::FindMovie(const FZoogiCombatEvent& E, const FString& ResolvedId) const
+{
+	if (bMoviesOff) return FString();
+	const FString Z = E.ZoogiName.IsEmpty() ? FString(TEXT("Any")) : E.ZoogiName.Replace(TEXT(" "), TEXT(""));
+	const FString A = E.Artifact == EZoogiArtifact::None ? FString(TEXT("Any")) : ZoogiArtifacts::Key(E.Artifact);
+	const FString Ev = E.Event.ToString();
+	const FString Chain[5] = {
+		ResolvedId,
+		FString::Printf(TEXT("Anime_%s_%s_%s_01"), *Z, *A, *Ev),
+		FString::Printf(TEXT("Anime_Any_%s_%s_01"), *A, *Ev),
+		FString::Printf(TEXT("Anime_%s_Any_%s_01"), *Z, *Ev),
+		FString::Printf(TEXT("Anime_Any_Any_%s_01"), *Ev) };
+	for (const FString& Id : Chain)
+	{
+		if (FPaths::FileExists(FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Anime/Movies"), Id + TEXT(".mp4")))) return Id;
+	}
+	return FString();
 }
 
 bool UZoogiAnimeSubsystem::TryStartMovie(const FString& Id)
@@ -331,6 +381,15 @@ void UZoogiAnimeSubsystem::Tick(float DeltaTime)
 {
 	if (!bPlaying) return;
 	Age = (float)(FPlatformTime::Seconds() - RealStart);
+	// Screenshot runs: one capture in the middle of each of the first cut-ins (works while the world is frozen).
+	static int32 CutInShots = 0;
+	static TMap<FName, int32> CutInShotsPerEvent; // first 2 per event (Infuse comes up every turn and would use them all)
+	if (bMovie && !bCutInShot && Age > Length * 0.45f && CutInShots < 12 && CutInShotsPerEvent.FindOrAdd(Current.Event) < 2)
+	{
+		bCutInShot = true;
+		++CutInShotsPerEvent.FindOrAdd(Current.Event);
+		if (AZoogiGameMode* G = GetWorld()->GetAuthGameMode<AZoogiGameMode>()) G->TakeShot(FString::Printf(TEXT("anime_cutin%d_%s"), ++CutInShots, *Current.Event.ToString()));
+	}
 	if (Age >= Length) Finish(false);
 }
 
@@ -349,6 +408,7 @@ void UZoogiAnimeSubsystem::Finish(bool bSkipped)
 	bPlaying = false;
 	if (bMovie && MoviePlayer) MoviePlayer->Close();
 	bMovie = false;
+	CurrentMovie.Reset();
 	if (bFrozen) Unfreeze();
 	UE_LOG(LogZoogi, Log, TEXT("Anime END %s (%.2fs%s)"), *CurrentId, Age, bSkipped ? TEXT(", skipped") : TEXT(""));
 	if (AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PC->OnAnimeFinished();

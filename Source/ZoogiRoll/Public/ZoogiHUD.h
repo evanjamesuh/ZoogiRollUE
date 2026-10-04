@@ -7,6 +7,7 @@
 class AZoogiGameMode;
 class UFont;
 class UZoogiMenuWidget;
+class UZoogiAwakenWidget;
 
 struct FZoogiButton
 {
@@ -24,6 +25,12 @@ class ZOOGIROLL_API AZoogiHUD : public AHUD
 public:
 	virtual void DrawHUD() override;
 	bool HitTest(const FVector2D& Mouse, FName& OutAction, int32& OutIndex) const;
+	/** UMG Awaken controls (null with -ZoogiCanvasAwaken or before the first match frame). */
+	UZoogiAwakenWidget* GetAwakenWidget() const { return AwakenWidget; }
+	/** A UMG control / panel took a mouse press this frame (or the last): the controller must not world-pick it. */
+	bool UIConsumedClick() const;
+	/** Viewport pixel position over a visible UMG panel (no hover / pick through it). */
+	bool IsOverUI(const FVector2D& ViewportPos) const;
 
 protected:
 	void DrawMenu(AZoogiGameMode* G);
@@ -60,4 +67,8 @@ protected:
 	/** UMG main menu (the canvas menu is kept as a fallback behind -ZoogiCanvasMenu). */
 	UPROPERTY() TObjectPtr<UZoogiMenuWidget> MenuWidget;
 	int32 CanvasMenuMode = -1;
+	/** UMG Awaken panel + aim bar (Canvas versions kept behind -ZoogiCanvasAwaken). */
+	UPROPERTY() TObjectPtr<UZoogiAwakenWidget> AwakenWidget;
+	int32 CanvasAwakenMode = -1;
+	void UpdateAwakenWidget(AZoogiGameMode* G, bool bHide);
 };

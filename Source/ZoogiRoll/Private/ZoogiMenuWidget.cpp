@@ -18,6 +18,14 @@
 #include "Components/UniformGridSlot.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
+#include "Components/ScaleBox.h"
+#include "MediaPlayer.h"
+#include "MediaTexture.h"
+#include "FileMediaSource.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
+#include "Misc/Paths.h"
+#include "ZoogiRoll.h"
 #include "Engine/World.h"
 #include "Styling/CoreStyle.h"
 #include "Styling/SlateTypes.h"
@@ -249,7 +257,25 @@ void UZoogiMenuWidget::BuildContents()
 	if (!G || !Root) return;
 	BuiltRevision = G->MenuRevision;
 
-	// Soft vignette over the live arena behind the menu.
+	// Backdrop: Evan's anime title video, cover-cropped to the window (the centre band: sunset + Zoogi streaks, the
+	// title art at the top of the vertical clip is cropped away so it doesn't fight the menu title).
+	// -ZoogiMenuArena keeps the old look (live arena behind the menu).
+	if (EnsureBackdrop())
+	{
+		UScaleBox* Cover = WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass());
+		Cover->SetStretch(EStretch::ScaleToFill);
+		Cover->SetVisibility(ESlateVisibility::HitTestInvisible);
+		UImage* Vid = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
+		FSlateBrush VB;
+		VB.SetResourceObject(BackdropTexture);
+		VB.ImageSize = FVector2D(464.f, 832.f);
+		Vid->SetBrush(VB);
+		Vid->SetColorAndOpacity(FLinearColor(0.8f, 0.8f, 0.85f, 1.f));
+		Cover->AddChild(Vid);
+		if (UOverlaySlot* OS = Root->AddChildToOverlay(Cover)) { OS->SetHorizontalAlignment(HAlign_Fill); OS->SetVerticalAlignment(VAlign_Fill); }
+	}
+
+	// Soft vignette over the backdrop (or the live arena) behind the menu.
 	UBorder* Shade = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
 	Shade->SetBrushColor(FLinearColor(0.f, 0.015f, 0.05f, 0.4f));
 	Shade->SetVisibility(ESlateVisibility::HitTestInvisible);
@@ -338,4 +364,33 @@ void UZoogiMenuWidget::BuildContents()
 	// Quit, top right.
 	UButton* Quit = MakeButton(nullptr, TEXT("QUIT"), "Quit", 0, FLinearColor(0.9f, 0.3f, 0.3f), false, 130.f, 50.f, 20);
 	if (UOverlaySlot* OS = Root->AddChildToOverlay(Quit->GetParent())) { OS->SetHorizontalAlignment(HAlign_Right); OS->SetVerticalAlignment(VAlign_Top); OS->SetPadding(FMargin(0.f, 28.f, 30.f, 0.f)); }
+}
+
+bool UZoogiMenuWidget::EnsureBackdrop()
+{
+	if (BackdropState != 0) return BackdropState > 0;
+	BackdropState = -1;
+	if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiMenuArena"))) return false;
+	const FString Path = FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Anime/Movies/Menu_Background.mp4"));
+	if (!FPaths::FileExists(Path)) { UE_LOG(LogZoogi, Log, TEXT("Menu backdrop video missing (%s)"), *Path); return false; }
+	BackdropPlayer = NewObject<UMediaPlayer>(this);
+	BackdropPlayer->PlayOnOpen = true;
+	BackdropPlayer->SetLooping(true);
+	BackdropTexture = NewObject<UMediaTexture>(this);
+	BackdropTexture->AutoClear = true;
+	BackdropTexture->SetMediaPlayer(BackdropPlayer);
+	BackdropTexture->UpdateResource();
+	BackdropSource = NewObject<UFileMediaSource>(this);
+	BackdropSource->SetFilePath(Path);
+	const bool bOk = BackdropPlayer->OpenSource(BackdropSource);
+	UE_LOG(LogZoogi, Log, TEXT("Menu backdrop video: %s (%s)"), *Path, bOk ? TEXT("opened") : TEXT("failed"));
+	BackdropState = bOk ? 1 : -1;
+	return bOk;
+}
+
+void UZoogiMenuWidget::SetBackdropPlaying(bool bPlay)
+{
+	if (!BackdropPlayer || BackdropState <= 0) return;
+	if (bPlay && !BackdropPlayer->IsPlaying()) BackdropPlayer->Play();
+	else if (!bPlay && BackdropPlayer->IsPlaying()) BackdropPlayer->Pause();
 }

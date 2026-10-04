@@ -1,10 +1,12 @@
 #include "ZoogiHUD.h"
+#include "ZoogiRoll.h"
 #include "ZoogiGameMode.h"
 #include "ZoogiBall.h"
 #include "ZoogiPlayerController.h"
 #include "ZoogiTypes.h"
 #include "ZoogiArena.h"
 #include "ZoogiMenuWidget.h"
+#include "ZoogiAwakenWidget.h"
 #include "ZoogiOrb.h"
 #include "ZoogiArtifacts.h"
 #include "ZoogiArtifactComponent.h"
@@ -84,6 +86,32 @@ bool AZoogiHUD::Button(const FString& Label, float X, float Y, float W, float H,
 	return bHover;
 }
 
+void AZoogiHUD::UpdateAwakenWidget(AZoogiGameMode* G, bool bHide)
+{
+	if (CanvasAwakenMode < 0) CanvasAwakenMode = FParse::Param(FCommandLine::Get(), TEXT("ZoogiCanvasAwaken")) ? 1 : 0;
+	if (CanvasAwakenMode != 0 || !PlayerOwner) return;
+	if (!AwakenWidget)
+	{
+		if (bHide) return; // created lazily on the first match frame
+		AwakenWidget = CreateWidget<UZoogiAwakenWidget>(PlayerOwner, UZoogiAwakenWidget::StaticClass());
+		if (!AwakenWidget) return;
+		AwakenWidget->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
+		AwakenWidget->AddToViewport(5);
+		UE_LOG(LogZoogi, Log, TEXT("UMG Awaken controls up (Canvas fallback: -ZoogiCanvasAwaken)"));
+	}
+	AwakenWidget->Refresh(FApp::GetDeltaTime(), bHide);
+}
+
+bool AZoogiHUD::UIConsumedClick() const
+{
+	return AwakenWidget && AwakenWidget->ConsumedClickRecently();
+}
+
+bool AZoogiHUD::IsOverUI(const FVector2D& ViewportPos) const
+{
+	return AwakenWidget && AwakenWidget->IsOverPanels(ViewportPos);
+}
+
 bool AZoogiHUD::HitTest(const FVector2D& Mouse, FName& OutAction, int32& OutIndex) const
 {
 	for (const FZoogiButton& B : Buttons)
@@ -107,9 +135,10 @@ void AZoogiHUD::DrawHUD()
 	U = Canvas->ClipY / 1080.f;
 	Time += FApp::GetDeltaTime(); // real time: keeps animating while an anime freeze pauses the world
 	static const bool bNoHUD = FParse::Param(FCommandLine::Get(), TEXT("ZoogiNoHUD")); // clean captures (portraits)
-	if (bNoHUD && G->Phase != EZoogiPhase::Menu) return;
+	if (bNoHUD && G->Phase != EZoogiPhase::Menu) { UpdateAwakenWidget(G, true); return; }
 
 	if (CanvasMenuMode < 0) CanvasMenuMode = FParse::Param(FCommandLine::Get(), TEXT("ZoogiCanvasMenu")) ? 1 : 0;
+	UpdateAwakenWidget(G, G->Phase == EZoogiPhase::Menu);
 	if (G->Phase == EZoogiPhase::Menu)
 	{
 		if (CanvasMenuMode == 0 && PlayerOwner)
@@ -125,6 +154,7 @@ void AZoogiHUD::DrawHUD()
 				{
 					MenuWidget->SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 					MenuWidget->MarkDirty();
+					MenuWidget->SetBackdropPlaying(true);
 				}
 				MenuWidget->Refresh(GetWorld()->GetDeltaSeconds());
 				return;
@@ -133,7 +163,7 @@ void AZoogiHUD::DrawHUD()
 		DrawMenu(G);
 		return;
 	}
-	if (MenuWidget && MenuWidget->GetVisibility() != ESlateVisibility::Collapsed) MenuWidget->SetVisibility(ESlateVisibility::Collapsed);
+	if (MenuWidget && MenuWidget->GetVisibility() != ESlateVisibility::Collapsed) { MenuWidget->SetVisibility(ESlateVisibility::Collapsed); MenuWidget->SetBackdropPlaying(false); }
 	DrawMatch(G);
 	if (G->Phase == EZoogiPhase::GameOver) DrawResults(G);
 }
@@ -350,8 +380,11 @@ void AZoogiHUD::DrawMatch(AZoogiGameMode* G)
 
 	DrawStages(G);
 	DrawResolve(G);
-	if (G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Awaken) DrawAwaken(G);
-	if (G->IsHumanAiming() && G->IsAimStep()) DrawAimControls(G);
+	// Awaken panel / aim bar: UMG when it's up (AZoogiHUD::UpdateAwakenWidget), Canvas otherwise (-ZoogiCanvasAwaken).
+	const bool bUmgAwaken = AwakenWidget && AwakenWidget->ShowsAwaken();
+	const bool bUmgAim = AwakenWidget && AwakenWidget->ShowsAim();
+	if (G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Awaken && !bUmgAwaken) DrawAwaken(G);
+	if (G->IsHumanAiming() && G->IsAimStep() && !bUmgAim) DrawAimControls(G);
 	if (Letterbox < 0.3f) Text(TEXT("Awaken: click a card + INFUSE / GUARD / SAVE (I/G/S)   Aim: click target or floor, A/D cut, Up/Down power, SPACE confirm   RMB/Esc cancel   C camera   Ctrl+R restart"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.75f, 0.85f, 0.85f), 0.36f, false, false);
 	Button(TEXT("MENU"), W - 150.f * U, 24.f * U, 126.f * U, 46.f * U, "Menu", 0, GOrbBlue);
 	Button(G->bCinematicCam ? TEXT("CAM: CINE") : TEXT("CAM: TACT"), W - 340.f * U, 24.f * U, 176.f * U, 46.f * U, "CamStyle", 0, FLinearColor(0.6f, 0.9f, 0.6f), G->bCinematicCam);
@@ -1018,7 +1051,9 @@ void AZoogiHUD::DrawAnime(AZoogiGameMode* G)
 	const bool bImpact = Ev == TEXT("PoweredHit") || Ev == TEXT("Critical") || Ev == TEXT("GuardBlock") || Ev == TEXT("KO");
 	if (Anime->HasMovie() && Anime->MovieTexture)
 	{
-		const float MW = W * 0.62f, MH = MW * 9.f / 16.f;
+		// Cut-in clip (Evan's anime art): a big 16:9 card with a white flash on the first frames of impact events.
+		const float MW = W * 0.74f, MH = MW * 9.f / 16.f;
+		if (bImpact && Age < 0.08f) Panel(0, 0, W, H, FLinearColor(1.f, 1.f, 1.f, 0.6f * (1.f - Age / 0.08f)));
 		Panel((W - MW) * 0.5f - 6.f * U, (H - MH) * 0.5f - 6.f * U, MW + 12.f * U, MH + 12.f * U, FLinearColor(C.R, C.G, C.B, 0.9f * A));
 		DrawTexture(Anime->MovieTexture, (W - MW) * 0.5f, (H - MH) * 0.5f, MW, MH, 0.f, 0.f, 1.f, 1.f, FLinearColor(1, 1, 1, A));
 	}

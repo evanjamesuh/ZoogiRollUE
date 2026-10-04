@@ -88,7 +88,7 @@ void AZoogiGameMode::BeginPlay()
 	if (bAuto)
 	{
 		for (FZoogiPlayerSetup& P : MenuPlayers) P.bCPU = true;
-		if (FParse::Param(Cmd, TEXT("ZoogiHumanTest"))) MenuPlayers[0].bCPU = false;
+		if (FParse::Param(Cmd, TEXT("ZoogiHumanTest")) || FParse::Param(Cmd, TEXT("ZoogiUiTest"))) MenuPlayers[0].bCPU = false;
 		if (!bMenuShot)
 		{
 			StartMatch();

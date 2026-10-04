@@ -12,6 +12,9 @@ class UVerticalBox;
 class UHorizontalBox;
 class UPanelWidget;
 class UTextBlock;
+class UMediaPlayer;
+class UMediaTexture;
+class UFileMediaSource;
 
 /** Menu button that never takes keyboard focus (so SPACE / Esc keep reaching the game). */
 UCLASS()
@@ -49,6 +52,8 @@ public:
 	/** Called by the HUD every frame while the menu is up: rebuilds after a menu change, pulses the title. */
 	void Refresh(float DeltaSeconds);
 	void MarkDirty() { BuiltRevision = -1; }
+	/** Menu backdrop video (Content/Anime/Movies/Menu_Background.mp4, Evan's main-bg-video): play while the menu is up. */
+	void SetBackdropPlaying(bool bPlay);
 
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
@@ -63,5 +68,10 @@ protected:
 	UPROPERTY() TObjectPtr<UTextBlock> Title;
 	UPROPERTY() TArray<TObjectPtr<UZoogiMenuClick>> Clicks;
 	int32 BuiltRevision = -1;
+	bool EnsureBackdrop();
+	UPROPERTY() TObjectPtr<UMediaPlayer> BackdropPlayer;
+	UPROPERTY() TObjectPtr<UMediaTexture> BackdropTexture;
+	UPROPERTY() TObjectPtr<UFileMediaSource> BackdropSource;
+	int32 BackdropState = 0; // 0 untried, 1 ok, -1 unavailable
 	float Time = 0.f;
 };
