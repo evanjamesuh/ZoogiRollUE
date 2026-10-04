@@ -31,9 +31,21 @@ protected:
 	void DrawScoreboard(AZoogiGameMode* G);
 	void DrawAim(AZoogiGameMode* G);
 	void DrawPopups(AZoogiGameMode* G);
+	void DrawFlyers(AZoogiGameMode* G);
 	void DrawPower(AZoogiGameMode* G);
 	void DrawResults(AZoogiGameMode* G);
 	void DrawStages(AZoogiGameMode* G);
+	// Milestone "Awaken" (Canvas, like the rest of the in-match HUD)
+	void DrawAwaken(AZoogiGameMode* G);
+	void DrawAimControls(AZoogiGameMode* G);
+	void DrawPreview(AZoogiGameMode* G);
+	void DrawArtifacts(AZoogiGameMode* G);
+	void DrawAnime(AZoogiGameMode* G);
+	void DrawResolve(AZoogiGameMode* G);
+	/** Procedural gem icon per artifact (placeholder until Aura's icons land). */
+	void Gem(uint8 Artifact, float CX, float CY, float R, float Alpha = 1.f);
+	void WorldCircle(const FVector& C, float Radius, const FLinearColor& Col, float Thick);
+	void WorldArrow(const FVector& From, const FVector& To, const FLinearColor& Col, float Thick);
 
 	void Panel(float X, float Y, float W, float H, const FLinearColor& C);
 	void Text(const FString& S, float X, float Y, const FLinearColor& C, float Scale, bool bCenter = false, bool bBig = true);
