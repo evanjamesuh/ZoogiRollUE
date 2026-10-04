@@ -214,9 +214,15 @@ void AZoogiGameMode::PlanCPUAwaken()
 	const bool bAff = A == Aff;
 	const float Edge = EdgeDistance(Arena, B->BallLocation());
 	const bool bFull = AC->Drawn != EZoogiArtifact::None && AC->Hand.Num() >= UZoogiArtifactComponent::HandCap;
+	bool bLeader = B->Score > 0;
+	for (const AZoogiBall* O : Balls) if (O && O != B && O->Score >= B->Score) bLeader = false;
 	const TCHAR* Why = TEXT("");
 	if (bPowerTest || bRival || bAff) { Why = bPowerTest ? TEXT("test") : bAff ? TEXT("affinity") : TEXT("rival target"); AwakenInfuse(Pick); }
-	else if (Edge < 450.f && AC->Guard == EZoogiArtifact::None) { Why = TEXT("near the edge"); AwakenGuard(Pick); }
+	else if (AC->Guard == EZoogiArtifact::None && (Edge < 450.f || (bLeader && FMath::FRand() < 0.5f) || FMath::FRand() < 0.2f))
+	{
+		Why = Edge < 450.f ? TEXT("near the edge") : bLeader ? TEXT("protecting the lead") : TEXT("playing safe");
+		AwakenGuard(Pick);
+	}
 	else if (bFull || AC->Hand.Num() >= 1) { Why = bFull ? TEXT("hand full") : TEXT("hand stocked"); AwakenInfuse(Pick); }
 	else { Why = TEXT("orb target, saving"); AwakenSave(); }
 	UE_LOG(LogZoogi, Log, TEXT("CPU P%d Awaken decision: %s (%s, edge %.0f cm)"), B->PlayerIndex + 1, *AwakenChoiceText, Why, Edge);

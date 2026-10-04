@@ -334,6 +334,7 @@ void AZoogiPlayerController::OnAnimeStarted(const FZoogiCombatEvent& E)
 {
 	AnimeFocus = E.Focus;
 	AnimeYaw = Yaw + (E.Event == TEXT("Infuse") || E.Event == TEXT("Guard") ? 60.f : 35.f);
+	AnimeDistMul = (E.Event == TEXT("Guard") || E.Event == TEXT("GuardBlock")) ? 1.7f : 1.f; // the guard bubble is big: frame it from outside
 	bAnimeCam = AnimeFocus.IsValid();
 	EndSlowMo();
 }
@@ -668,7 +669,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		WantYaw = AnimeYaw;
 		WantPivot = F;
 		WantLook = F + FVector(0, 0, 15.f);
-		DistMul = 1.f - 0.18f * FMath::Clamp(Anime->Age / FMath::Max(Anime->Length, 0.1f), 0.f, 1.f);
+		DistMul = AnimeDistMul * (1.f - 0.18f * FMath::Clamp(Anime->Age / FMath::Max(Anime->Length, 0.1f), 0.f, 1.f));
 		ProbeFrom = F + FVector(0, 0, 60.f);
 	}
 	else if (bTac)
