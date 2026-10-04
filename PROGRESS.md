@@ -267,6 +267,25 @@ one Zoogi per player, no HP, deterministic crit, Guard = next opponent attack on
   `UiClick` (everything else). Replaces HitClick on menu actions.
 - Pizza crust colour fix applied (crust puffs use SurfaceMID: GroundMID on instanced meshes fell back to grey).
 
+## Rock realism pass (Oct 4, ~3:05 PM)
+Visual-only rework of `AZoogiRock`; the hit rules are unchanged (crack >= 900 cm/s; shatter >= 1600 on a cracked rock, or any
+Awakened / crit-grade hit), and so are the collider, events, SFX, popup, feed line and `ResetRocks()`.
+- Boulder and side stone are procedural meshes (`ProceduralMeshComponent` plugin): a lumpy ellipsoid with a few flat
+  weathered faces, seeded per rock, same footprint as before.
+- **Crack:** the boulder really splits along a jagged fracture through the impact point. One half tilts ~3 deg and slides
+  ~1.5 cm, so dark fracture faces show through the gap. Branching zigzag cracks (dark gap + lighter chipped edges, tapering)
+  hug the surface, and a flake pops off and leaves a dented fresh-stone scar. Flake + 4 pebbles + stone grit + a slow,
+  grey-brown lit dust puff. The old glowing sphere and spark FX are gone.
+- **Shatter:** angular shards in three size classes (darker fresh-break faces) fly on scripted arcs. They bounce, tumble
+  and slide to rest against the court plane, then big/far ones sink into the turf; small near ones stay as rubble. A heavy
+  dust cloud billows, hangs and settles. Rubble = sheared stump with a rough fresh top, 9 half-buried stones and a powder stain.
+- No debris has collision or a physics body (scripted motion only; one line trace per piece at first touchdown, to tell
+  turf from the island edge). Everything is hidden/rebuilt by `ResetRock()`. Per rock: ~16 mesh components + 2 instanced
+  grit sets + 14 dust spheres; ticks only while something moves.
+- While the rock FX play, the shooter's bright speed sparks are held for 0.6 s (`SparkClock`) so the stone debris reads.
+- Dust material: `Scripts/make_dust_material.py` -> `/Game/Materials/M_ZoogiDust` (lit translucent, soft edge, depth fade).
+  Without it the rock falls back to `NS_Dust`.
+
 ## Command-line switches (for testing)
 `-ZoogiAuto` (all CPU, start at once), `-ZoogiPlayers=N`, `-ZoogiArena=0..6` (0 Meadow, 1 Frozen, 2 Volcanic, 3 Cosmic, 4 Arabian, 5 Tomb, 6 Night Circuit), `-ZoogiRounds=N`,
 `-ZoogiShots=<dir>` (event screenshots), `-ZoogiQuit=<sec>`, `-ZoogiMenuShot`, `-ZoogiHumanTest`,
@@ -282,6 +301,7 @@ one Zoogi per player, no HP, deterministic crit, Guard = next opponent attack on
 * `Scripts/package.ps1` — packaged Win64 build into `Packaged/`.
 * `Scripts/synth_sfx.py <outdir>` — regenerates the 13 SFX WAVs (plain Python 3 + numpy/scipy, ffmpeg for loudness);
   `Scripts/import_sfx.py` imports them; `Scripts/make_rock_fx.py` makes `NS_Dust` / `NS_Debris`.
+* `Scripts/run_python.ps1 -Script Scripts\make_dust_material.py` — rock dust material `M_ZoogiDust` (headless, re-runnable).
 
 ## Known issues / notes
 * Real-mouse play has not been exercised by a person yet (the scripted virtual mouse uses the
