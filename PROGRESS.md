@@ -231,16 +231,44 @@ Screenshot folders are on the box (`/workspace/zoogi-unreal/shots/...`).
 
 | # | Item | Status | Evidence / what is missing |
 |---|------|--------|----------------------------|
-| 1 | Step 0 inventory `Docs/MilestoneAwaken/UNREAL-INVENTORY.md` | **Missing** | File does not exist (folder has ASSIGNMENT-*, MILESTONE, REVIEW, matrix, refs only). |
-| 2 | 5 overlay MIs + 5 guard looks on all 7 Zoogis, GLB materials untouched; shots of each artifact on 2+ Zoogis | **Partial** | One procedural `M_ZoogiArtifact` (`Scripts/make_artifact_material.py`, commit ffcee15) with per-Zoogi dynamic instances via `SetOverlayMaterial` (`ZoogiArtifactComponent.cpp`), GLB materials untouched; guard = `GuardShell` sphere + mesh orbiters/plates. No `M_ZoogiArtifactOverlay` / `MI_Artifact_*` / `MI_Guard_*` assets, no MaskAmount/MPC. Shots `shots/aw1`, `aw2s` show some artifacts, not a 5x2 set. |
+| 1 | Step 0 inventory `Docs/MilestoneAwaken/UNREAL-INVENTORY.md` | **Done (Oct 4, 4:40 PM)** | Written from the real project contents (commit dbd61dd). |
+| 2 | 5 overlay MIs + 5 guard looks on all 7 Zoogis, GLB materials untouched; shots of each artifact on 2+ Zoogis | **Mostly done (Oct 4, ~5 PM)** | One procedural `M_ZoogiArtifact` (`Scripts/make_artifact_material.py`, commit ffcee15) with per-Zoogi dynamic instances via `SetOverlayMaterial` (`ZoogiArtifactComponent.cpp`), GLB materials untouched; guard = `GuardShell` sphere + mesh orbiters/plates. No `M_ZoogiArtifactOverlay` / `MI_Artifact_*` / `MI_Guard_*` assets, no MaskAmount/MPC. Shots `shots/aw1`, `aw2s` show some artifacts, not a 5x2 set. **Update (Oct 4, ~5 PM): mostly done.** `Scripts/make_artifact_instances.py` makes `/Game/Materials/Artifacts/MI_Artifact_<Key>` (from `M_ZoogiArtifact`) and `MI_Guard_<Key>` (from `M_ZoogiFX`) for all 5 artifacts; the component builds its per-Zoogi dynamic instances from them (falls back to the base material if one is missing). Titan infuse also scales the model x1.04. Still missing: MaskAmount / MPC / mask textures, and a full 5x2 shot set. |
 | 3 | 20 Niagara systems (aura / trail / impact / guard x5) by script, readable on 7 arenas | **Missing** | `Content/FX` has NS_Burst x7, NS_Explosion, NS_Sparks, NS_Dust, NS_Debris only; no `make_artifact_fx.py`, no per-artifact UNiagaraComponents. |
-| 4 | Squash, pulse, spin, shell-expansion hooks; no limbs | **Partial** | `Pulse` / `ImpactPulse` / `GuardFlash` in `ZoogiArtifactComponent`; no squash, spin boost or shell expansion. No limbs (OK). |
+| 4 | Squash, pulse, spin, shell-expansion hooks; no limbs | **Done (Oct 4, ~5 PM)** | `AZoogiBall::PulseCore`, `Squash` (launch stretch, impact squash), `SpinBoost`, `Wobble`, `ShellExpand` (power-up pulse), visual only, physics sphere untouched; see "Awaken checklist pass" below. Subtle at the tactical camera distance; `-ZoogiHookDemo` shows them close up. No limbs (OK). |
 | 5 | Awaken UMG with mouse (Infuse / Guard / Save), no click-through to world picking | **Done (Oct 4, 3:20 PM)** | Was Canvas-drawn (panel backgrounds could click through). Now `UZoogiAwakenWidget` (UMG), see the section below; `-ZoogiUiTest` log + `shots/umg/`. Not yet tried by a person with a real mouse. |
 | 6 | Tactical camera default + small emphasis + Cinematic toggle | **Done** | `PTactical` profile (`ZoogiPlayerController.cpp`), `bCinematicCam`, CAM button / C key / `-ZoogiCinematic` (commit 1794c83); visible in `shots/aw1`, `aw5`. |
-| 7 | Physics for 5 Infuse + 5 Guard, driven by the DataAssets | **Partial** | All 10 effects implemented (`ZoogiAwaken.cpp`, `ZoogiArtifacts.cpp`, commit 8eb941b) and seen in logs (powered hits for all 5, guards). Data is a C++ default table with an optional `/Game/Data/DT_Artifacts` DataTable that does not exist; no DataAssets. |
+| 7 | Physics for 5 Infuse + 5 Guard, driven by the DataAssets | **Done (Oct 4, ~5 PM)** | All 10 effects implemented (`ZoogiAwaken.cpp`, `ZoogiArtifacts.cpp`, commit 8eb941b) and seen in logs (powered hits for all 5, guards). Data is a C++ default table with an optional `/Game/Data/DT_Artifacts` DataTable that does not exist; no DataAssets. **Update (Oct 4, ~5 PM): done.** Values now come from `/Game/Data/Artifacts/DA_Artifact_<Key>` DataAssets (`UZoogiArtifactData`, made by `Scripts/make_artifact_data.py`); DataTable and C++ table are fallbacks. A power test with DataAssets vs. `-ZoogiBuiltInArtifacts` gave identical rows (5/5, struct compare) and the same behaviour. |
 | 8 | Anime: real-time Micro `Anime_Any_Ember_Infuse_01`, Level Sequence Standard `Anime_Hotstreak_Ember_Critical_01`, Media `Anime_Any_Any_KO_01`; preload, transition, exact restore (logged) | **Partial** | Real-time Micro cards with freeze/restore and logged drift ("Anime unfreeze: restored ... max drift 0.00 cm", commit 181492f). Media: `Anime_Any_Any_KO_01.mp4` (cut from Evan's splash video) plays as a video cut-in on KO, plus Infuse and Critical clips (see "Anime video cut-ins" below, `shots/anime/`). Still missing: there is no Level Sequence. |
-| 9 | Packaged Win64 build plays all three | **Partial** | Packaged build of HEAD d00bb4d (Oct 4, 4:15 PM, `PACKAGE_EXIT=0`), smoke-tested: the real-time cards, the mp4 cut-ins (Infuse, KO, Critical, staged non-UFS from `Content/Anime`), the menu video, `-ZoogiUiTest` 43/0, rock crack/shatter, pizza (21 toppings) and the Cosmic backdrop all work. There is no Level Sequence to play. Note: `package.ps1` does not clear old staged movies, so a deleted clip stays in `Packaged/` until it is removed by hand. |
+| 9 | Packaged Win64 build plays all three | **Partial** | Packaged build of HEAD d00bb4d (Oct 4, 4:15 PM, `PACKAGE_EXIT=0`), smoke-tested: the real-time cards, the mp4 cut-ins (Infuse, KO, Critical, staged non-UFS from `Content/Anime`), the menu video, `-ZoogiUiTest` 43/0, rock crack/shatter, pizza (21 toppings) and the Cosmic backdrop all work. There is no Level Sequence to play. Note: `package.ps1` does not clear old staged movies, so a deleted clip stays in `Packaged/` until it is removed by hand. Repackaged Oct 4, 5:15 PM (HEAD 085421b): DataAssets, MIs and the Ember/Titan infuse clips work in the packaged game, see "Awaken checklist pass". |
 | 10 | Local commits only | **Done** | Every commit local on `C:\dev\ZoogiRollUnreal`; nothing pushed. |
+
+## Awaken checklist pass (Oct 4, 4:30-5:30 PM)
+- **Anime card caption:** the debug clip-id line under the anime cut-in title is gone; `-ZoogiAnimeDebug` brings it back.
+- **Zoogi hooks (visual only; the physics sphere is untouched):** `AZoogiBall::PulseCore`, `Squash(Amount, Dir)` (+ stretches
+  along Dir, - compresses, roughly volume-preserving, <= 0.15 s), `SpinBoost` (extra model spin that decays), `Wobble`, `ShellExpand`
+  (shell 1 -> 1.06 and back). Launch = stretch 0.08 x power + 360 deg x power spin boost; impact above 3000 impulse = squash
+  0.04-0.12 + wobble; every artifact power-up pulse = shell expansion. `ResetVisualHooks()` runs on respawn/placement.
+  `-ZoogiHookGain=<x>` scales them, `-ZoogiNoHooks` turns them off, `-ZoogiHookShots` logs each one with a screenshot.
+  `-ZoogiHookDemo` puts a close-up camera on P1 during its first turn and takes `hookdemo_*` shots (rest, squash, stretch,
+  shell expansion, spin before/after, wobble; the squash shot usually lands after its 0.075 s peak). At the tactical camera distance they are subtle on purpose; tune with the gain.
+- **Artifact DataAssets:** `UZoogiArtifactData` (one `FZoogiArtifactRow` per asset). Lookup order: `/Game/Data/Artifacts/DA_Artifact_<Key>`,
+  then `/Game/Data/DT_Artifacts`, then the C++ table (`-ZoogiBuiltInArtifacts` forces C++). The log has one `ArtifactRow` line per
+  artifact and an `Artifacts:` summary that says where each row came from and whether it matches the C++ defaults.
+  `Scripts/make_artifact_data.py` writes the 5 assets from the C++ defaults; `/Game/Data` is always cooked (`DefaultGame.ini`).
+  Checked: `-ZoogiPowerTest` 4-player matches with DataAssets vs. `-ZoogiBuiltInArtifacts` gave identical rows and the same
+  powered hits / infuses, 0 errors. No guard block came up in those runs (CPUs always infuse), so Guard values are only
+  checked by the struct compare.
+- **Artifact material instances:** `Scripts/make_artifact_instances.py` makes `/Game/Materials/Artifacts/MI_Artifact_<Key>`
+  (parent `M_ZoogiArtifact`) and `MI_Guard_<Key>` (parent `M_ZoogiFX`). `UZoogiArtifactComponent` builds its dynamic instances from
+  them (log: `Artifact material ...`) and falls back to the base material if one is missing. Titan infuse also scales the
+  model x1.04 (`AZoogiBall::SetModelScale`).
+- **Anime clips:** `Anime_Any_Ember_Infuse_01` (fire clip) and `Anime_Any_Titan_Infuse_01` (stone clip) are the old Infuse
+  variants 02/03, now tied to their artifacts (the artifact-specific id is looked up first). Frost/Storm/Void use `Anime_Any_Any_Infuse_01`.
+- **Packaged build (Oct 4, 5:15 PM, HEAD 085421b, `PACKAGE_EXIT=0`):** no stale staged movies (the 10 files in
+  `Packaged/.../Content/Anime/Movies` match `Content/Anime/Movies`). Smoke runs of `Packaged/Windows/ZoogiRoll.exe`
+  (`-ZoogiAuto -ZoogiPowerTest -ZoogiAnime=Full -ZoogiHumanTest`, Meadow and Cosmic): `Artifacts: ... 5/5 from data, 5 identical`
+  (the DataAssets are cooked), `MI_Artifact_*` instances load, and the cut-ins play `Anime_Any_Ember_Infuse_01.mp4` for Ember,
+  `Anime_Any_Titan_Infuse_01.mp4` for Titan, `Anime_Any_Any_Infuse_01.mp4` for Frost/Storm/Void, plus `KO_02` / `Critical_02` / `Critical_03` variants. Exit code 0.
 
 ## Destructible rocks + anime SFX (Oct 4, 2:00-2:45 PM)
 - **`AZoogiRock`** (`ZoogiRock.h/.cpp`, reusable by any arena via `InitRock(radius, height, yaw, colours, physmat, seed)`):
@@ -364,7 +392,7 @@ Awakened / crit-grade hit), and so are the collider, events, SFX, popup, feed li
 ## Command-line switches (for testing)
 `-ZoogiAuto` (all CPU, start at once), `-ZoogiPlayers=N`, `-ZoogiArena=0..6` (0 Meadow, 1 Frozen, 2 Volcanic, 3 Cosmic, 4 Arabian, 5 Tomb, 6 Night Circuit), `-ZoogiRounds=N`,
 `-ZoogiShots=<dir>` (event screenshots), `-ZoogiQuit=<sec>`, `-ZoogiMenuShot`, `-ZoogiHumanTest`,
-`-ZoogiCanvasMenu`, `-ZoogiCanvasAwaken`, `-ZoogiUiTest`, `-ZoogiPopShots`, `-ZoogiNoAnimeMovies`, `-ZoogiMenuArena`, `-ZoogiRockTest`, `-ZoogiClimaxTest`, `-ZoogiSfxVol=0..100`, `-ZoogiPowerTest` (3 charges each, CPUs always use powers), `-ZoogiPicks=4,5,6,0` (roster index per slot:
+`-ZoogiCanvasMenu`, `-ZoogiCanvasAwaken`, `-ZoogiUiTest`, `-ZoogiPopShots`, `-ZoogiNoAnimeMovies`, `-ZoogiMenuArena`, `-ZoogiRockTest`, `-ZoogiClimaxTest`, `-ZoogiSfxVol=0..100`, `-ZoogiPowerTest` (3 charges each, CPUs always use powers), `-ZoogiAnimeDebug` (show the clip-id caption on anime cards), `-ZoogiHookGain=<x>` (scale the squash/spin/wobble/shell hooks, default 1), `-ZoogiNoHooks`, `-ZoogiHookShots` (log hooks + screenshots), `-ZoogiHookDemo` (close-up camera on P1 during its first turn, shots of each hook), `-ZoogiBuiltInArtifacts` (ignore the DataAssets/DataTable, use the C++ table), `-ZoogiPicks=4,5,6,0` (roster index per slot:
 0 Wolfgang, 1 Hotstreak, 2 Lars, 3 Pinpoint, 4 Bolt, 5 Wraps, 6 Nightshade).
 
 ## Scripts
@@ -377,6 +405,7 @@ Awakened / crit-grade hit), and so are the collider, events, SFX, popup, feed li
 * `Scripts/synth_sfx.py <outdir>` — regenerates the 13 SFX WAVs (plain Python 3 + numpy/scipy, ffmpeg for loudness);
   `Scripts/import_sfx.py` imports them; `Scripts/make_rock_fx.py` makes `NS_Dust` / `NS_Debris`.
 * `Scripts/run_python.ps1 -Script Scripts\make_dust_material.py` — rock dust material `M_ZoogiDust` (headless, re-runnable).
+* `Scripts/make_artifact_data.py`, `Scripts/make_artifact_instances.py` — artifact DataAssets / material instances (headless, re-runnable).
 
 ## Known issues / notes
 * Real-mouse play has not been exercised by a person yet (the scripted virtual mouse uses the
