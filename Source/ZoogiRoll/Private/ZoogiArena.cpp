@@ -12,7 +12,9 @@
 #include "Components/ExponentialHeightFogComponent.h"
 #include "Components/VolumetricCloudComponent.h"
 #include "Components/PostProcessComponent.h"
+#include "GameFramework/RotatingMovementComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/Texture.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
@@ -611,23 +613,27 @@ void AZoogiArena::BuildCosmic()
 	BuildRim(Rim, ZoogiUtil::Hex(TEXT("#6D28D9")), ZoogiUtil::Hex(TEXT("#A78BFA")), 0.8f);
 	// Glowing lip ring.
 	AddCylinder(FVector2D::ZeroVector, ZoogiConst::KnockoffRadius + 15.f, 20.f, -2.f, ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#7C4DFF")), 5.f), false);
-	// Star field: tiny emissive spheres on a huge shell.
+	// Animated "space journey" backdrop (nebula sky, star streaks, drifting planets). Falls back to the
+	// old static star shell if the /Game/Env/Cosmic assets are missing (or with -ZoogiNoSpaceBackdrop, for A/B tests).
 	FRandomStream Rng(42);
-	UStaticMesh* SphereMesh = ZoogiUtil::BasicShape(TEXT("Sphere"));
-	UInstancedStaticMeshComponent* Stars = NewObject<UInstancedStaticMeshComponent>(this);
-	Stars->SetStaticMesh(SphereMesh);
-	Stars->SetMobility(EComponentMobility::Movable);
-	Stars->SetupAttachment(Root);
-	Stars->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	Stars->SetCastShadow(false);
-	Stars->RegisterComponent();
-	Stars->SetMaterial(0, ZoogiUtil::GlowMID(this, FLinearColor(0.9f, 0.9f, 1.f), 30.f));
-	for (int32 i = 0; i < 1500; ++i)
+	if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiNoSpaceBackdrop")) || !AddSpaceBackdrop())
 	{
-		const FVector Dir = Rng.VRand();
-		Stars->AddInstance(FTransform(FRotator::ZeroRotator, Dir * Rng.FRandRange(60000.f, 90000.f), FVector(Rng.FRandRange(2.5f, 7.f))));
+		UStaticMesh* SphereMesh = ZoogiUtil::BasicShape(TEXT("Sphere"));
+		UInstancedStaticMeshComponent* Stars = NewObject<UInstancedStaticMeshComponent>(this);
+		Stars->SetStaticMesh(SphereMesh);
+		Stars->SetMobility(EComponentMobility::Movable);
+		Stars->SetupAttachment(Root);
+		Stars->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Stars->SetCastShadow(false);
+		Stars->RegisterComponent();
+		Stars->SetMaterial(0, ZoogiUtil::GlowMID(this, FLinearColor(0.9f, 0.9f, 1.f), 30.f));
+		for (int32 i = 0; i < 1500; ++i)
+		{
+			const FVector Dir = Rng.VRand();
+			Stars->AddInstance(FTransform(FRotator::ZeroRotator, Dir * Rng.FRandRange(60000.f, 90000.f), FVector(Rng.FRandRange(2.5f, 7.f))));
+		}
+		Built.Add(Stars);
 	}
-	Built.Add(Stars);
 	UStaticMesh* Crystal = ZoogiUtil::LoadMesh(TEXT("/Game/Env/AlienCrystal/SM_AlienCrystal.SM_AlienCrystal"));
 	for (int32 i = 0; i < 10; ++i)
 	{
@@ -636,6 +642,120 @@ void AZoogiArena::BuildCosmic()
 		BuildIslet(FVector(FMath::Cos(A) * D, FMath::Sin(A) * D, Rng.FRandRange(-1500.f, 800.f)), Rng.FRandRange(300.f, 600.f),
 			ZoogiUtil::Hex(TEXT("#2A2550")), ZoogiUtil::Hex(TEXT("#3F3A7A")), ZoogiUtil::Hex(TEXT("#15122B")), Crystal, 2, 500.f, Rng);
 	}
+}
+
+// Cosmic "space journey" backdrop. Assets: /Game/Env/Cosmic (Scripts/make_cosmic_backdrop.py, cooked via /Game/Env).
+// Cost: one sky sphere draw (unlit, 2 texture reads), one ISM draw of small additive streak quads whose motion is
+// all World Position Offset on the GPU (no CPU/tick cost), two translucent planet quads on a slowly rotating pivot.
+// Readability: the sky is dimmed straight under the board (NadirDim) and the streaks fade out within ~28-63 m of
+// the arena centre, so nothing moves directly behind the play area.
+namespace ZoogiCosmic
+{
+	static constexpr int32 StreakCount = 600;
+	static constexpr float StreakRange = 26000.f;   // must match M_CosmicStreak "Range"
+	static constexpr float SkyRadius = 90000.f;
+	static constexpr float PlanetYawRate = 0.5f;    // deg/s (sky: far nebula ~0.22, near wisps ~0.43; streaks fastest)
+}
+
+bool AZoogiArena::AddSpaceBackdrop()
+{
+	UMaterialInterface* SkyMat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Env/Cosmic/M_CosmicSky.M_CosmicSky"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	UMaterialInterface* StreakMat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Env/Cosmic/M_CosmicStreak.M_CosmicStreak"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	UMaterialInterface* PlanetMat = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Env/Cosmic/M_CosmicPlanet.M_CosmicPlanet"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	UTexture* PlanetA = LoadObject<UTexture>(nullptr, TEXT("/Game/Env/Cosmic/T_CosmicPlanetA.T_CosmicPlanetA"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	UTexture* PlanetB = LoadObject<UTexture>(nullptr, TEXT("/Game/Env/Cosmic/T_CosmicPlanetB.T_CosmicPlanetB"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	if (!SkyMat)
+	{
+		UE_LOG(LogZoogi, Warning, TEXT("Cosmic backdrop: /Game/Env/Cosmic/M_CosmicSky missing, using the static star shell"));
+		return false;
+	}
+	auto NoGI = [](UPrimitiveComponent* C)
+	{
+		C->SetCastShadow(false);
+		C->bAffectDistanceFieldLighting = false;
+		C->bAffectDynamicIndirectLighting = false;
+		C->bVisibleInRayTracing = false;
+		C->SetReceivesDecals(false);
+	};
+
+	// 1) Nebula sky sphere (view-direction mapped, so it reads as infinitely far).
+	UStaticMeshComponent* Sky = NewObject<UStaticMeshComponent>(this);
+	Sky->SetStaticMesh(ZoogiUtil::BasicShape(TEXT("Sphere")));
+	Sky->SetMobility(EComponentMobility::Movable);
+	Sky->SetupAttachment(Root);
+	Sky->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	NoGI(Sky);
+	Sky->SetRelativeScale3D(FVector(ZoogiCosmic::SkyRadius / 50.f));
+	Sky->RegisterComponent();
+	Sky->SetMaterial(0, SkyMat);
+	Built.Add(Sky);
+
+	// 2) Star streaks flowing past the arena (crossed quads so they read from high and low cameras).
+	if (StreakMat)
+	{
+		UInstancedStaticMeshComponent* S = NewObject<UInstancedStaticMeshComponent>(this);
+		S->SetStaticMesh(ZoogiUtil::BasicShape(TEXT("Plane")));
+		S->SetMobility(EComponentMobility::Movable);
+		S->SetupAttachment(Root);
+		S->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		NoGI(S);
+		S->SetBoundsScale(2.5f); // WPO slides instances up to Range/2 along the travel axis
+		S->RegisterComponent();
+		S->SetMaterial(0, StreakMat);
+		FRandomStream R(97);
+		const float Half = ZoogiCosmic::StreakRange * 0.5f;
+		for (int32 i = 0; i < ZoogiCosmic::StreakCount; ++i)
+		{
+			FVector P;
+			do
+			{
+				// Weighted below the horizon: the Tactical camera looks down ~55 deg, so that is the visible backdrop.
+				P = FVector(R.FRandRange(-Half, Half), R.FRandRange(-16000.f, 16000.f), R.FRandRange(-12000.f, 3500.f));
+			} while (FVector(P.X * 0.35f, P.Y, P.Z + 400.f).Size() < 3400.f);
+			const FVector Scale(R.FRandRange(1.5f, 4.5f), R.FRandRange(0.3f, 0.7f), 1.f); // plane is 100 cm
+			S->AddInstance(FTransform(FRotator(0.f, 0.f, (i & 1) ? 90.f : 0.f), P, Scale));
+		}
+		Built.Add(S);
+	}
+
+	// 3) Distant planets on a slowly turning pivot (moves faster than the nebula -> parallax).
+	if (PlanetMat)
+	{
+		USceneComponent* Pivot = NewObject<USceneComponent>(this);
+		Pivot->SetMobility(EComponentMobility::Movable);
+		Pivot->SetupAttachment(Root);
+		Pivot->RegisterComponent();
+		Built.Add(Pivot);
+		auto AddPlanet = [&](UTexture* Tex, float YawDeg, float ElevDeg, float Dist, float Size, float Bright)
+		{
+			UStaticMeshComponent* C = NewObject<UStaticMeshComponent>(this);
+			C->SetStaticMesh(ZoogiUtil::BasicShape(TEXT("Plane")));
+			C->SetMobility(EComponentMobility::Movable);
+			C->SetupAttachment(Pivot);
+			C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			NoGI(C);
+			const FVector N = FRotator(ElevDeg, YawDeg, 0.f).Vector();
+			C->SetRelativeLocation(N * Dist);
+			C->SetRelativeRotation(FRotationMatrix::MakeFromZX(-N, FVector::UpVector).Rotator());
+			C->SetRelativeScale3D(FVector(Size / 100.f));
+			C->RegisterComponent();
+			UMaterialInstanceDynamic* MID = UMaterialInstanceDynamic::Create(PlanetMat, this);
+			if (Tex) MID->SetTextureParameterValue(TEXT("Tex"), Tex);
+			MID->SetScalarParameterValue(TEXT("Bright"), Bright);
+			C->SetMaterial(0, MID);
+			Built.Add(C);
+		};
+		AddPlanet(PlanetA, 10.f, -36.f, 52000.f, 13000.f, 0.7f); // low enough to drift through the Tactical view
+		AddPlanet(PlanetB, 190.f, -42.f, 46000.f, 4000.f, 0.7f);
+		URotatingMovementComponent* Spin = NewObject<URotatingMovementComponent>(this);
+		Spin->bAutoRegisterUpdatedComponent = false;
+		Spin->RotationRate = FRotator(0.f, ZoogiCosmic::PlanetYawRate, 0.f);
+		Spin->RegisterComponent();
+		Spin->SetUpdatedComponent(Pivot);
+		Built.Add(Spin);
+	}
+	UE_LOG(LogZoogi, Log, TEXT("Cosmic backdrop: sky %s, streaks %s, planets %s"), *GetNameSafe(SkyMat), *GetNameSafe(StreakMat), *GetNameSafe(PlanetMat));
+	return true;
 }
 
 // ------------------------------------------------------------------ shared helpers for the night arenas
@@ -694,8 +814,8 @@ void AZoogiArena::AddBumper(const FVector2D& XY, float Radius, float Height, USt
 
 void AZoogiArena::BuildArabian()
 {
-	// RoundIsland kind="saturn", dressed as a PIZZA (Oct 4, Evan): melted-cheese floor with browned spots, bubbles and
-	// slice cuts, no rim lip, same dark underside. Floor collider and knockoff line are unchanged.
+	// RoundIsland kind="saturn", dressed as a PIZZA (Oct 4, Evan): melted-cheese floor over tomato sauce, a golden baked
+	// crust instead of the glowing gold lip, same dark underside. Floor collider and knockoff line are unchanged.
 	BuildIsland(ZoogiUtil::Hex(TEXT("#F2B544")), ZoogiUtil::Hex(TEXT("#E39A2E")), ZoogiUtil::Hex(TEXT("#B9773A")),
 		ZoogiUtil::Hex(TEXT("#1A120C")), ZoogiUtil::Hex(TEXT("#2E2016")), 0.3f);
 	RockPM = ZoogiPhysics::MakeMaterial(this, 0.3f, 0.5f, false);
@@ -718,16 +838,39 @@ void AZoogiArena::BuildArabian()
 		};
 		FRandomStream PizzaRng(2024);
 
-		// Oct 4 (Evan): no crust ring and no sauce patches; the court edge is just the cheese floor ending cleanly (no lip).
-		// The removed layers' PizzaRng draws are still made (and discarded) so the browned spots and cheese bubbles below
-		// keep exactly the same layout. Toppings use their own stream (4242) and are unaffected either way.
-		for (int32 i = 0; i < 40; ++i) // was: 40 crust puffs (4 draws each) + a blister on ~75% of them (4 draws)
+		// Crust: a toasted band just under the floor edge plus a ring of puffy ellipsoids. Each puff's inner edge is at
+		// the knockoff line and stays below Z = 0 there (about -2.5 cm), so nothing rises inside the court; the crust
+		// peaks ~+15 cm about 48 cm outside the line. No colliders: marbles fall off exactly where they did.
+		AddCylinder(FVector2D::ZeroVector, KR + 95.f, 50.f, -6.f, ZoogiUtil::GroundMID(this, ZoogiUtil::Hex(TEXT("#B8742F")), ZoogiUtil::Hex(TEXT("#8E5222")), 0.01f, 0.9f), false)->SetCastShadow(false);
+		// The puffs are ISMs, so they must use M_ZoogiSurface (SurfaceMID): M_ZoogiGround is not flagged "Used with
+		// Instanced Static Meshes" (Scripts/fix_material_usage.py only flags Surface/Glow/FX), so a GroundMID on an ISM
+		// falls back to the grey default material, which the purple night light turned slate grey. Two toasted shades
+		// (golden / deeper bake) stand in for the ground noise; a faint warm self-lit tint keeps them golden at night.
+		UInstancedStaticMeshComponent* Crust = MakeISM(ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#D9963F")), 0.55f, ZoogiUtil::Hex(TEXT("#FF9A40")), 0.12f));
+		UInstancedStaticMeshComponent* CrustDeep = MakeISM(ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#B8702A")), 0.6f, ZoogiUtil::Hex(TEXT("#FF8A30")), 0.09f));
+		UInstancedStaticMeshComponent* CrustChar = MakeISM(ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#6B3414")), 0.75f, ZoogiUtil::Hex(TEXT("#8A4A1E")), 0.03f));
+		const int32 Puffs = 40;
+		const float PuffR = KR + 48.f;
+		for (int32 i = 0; i < Puffs; ++i)
 		{
-			for (int32 d = 0; d < 4; ++d) (void)PizzaRng.FRand();
-			if (PizzaRng.FRand() < 0.75f) { for (int32 d = 0; d < 4; ++d) (void)PizzaRng.FRand(); }
+			const float Deg = i * 360.f / Puffs + PizzaRng.FRandRange(-2.f, 2.f);
+			const float A = FMath::DegreesToRadians(Deg);
+			const float Len = 2.f * PI * PuffR / Puffs * PizzaRng.FRandRange(1.3f, 1.5f);
+			const float H = PizzaRng.FRandRange(44.f, 54.f);
+			const float Semi = PizzaRng.FRandRange(48.f, 50.f); // radial half-width
+			// Shade by index (no extra PizzaRng draws, so the floor dressing layout stays identical).
+			(((i * 7) % 5) < 2 ? CrustDeep : Crust)->AddInstance(FTransform(FRotator(0.f, Deg + 90.f, 0.f), FVector(FMath::Cos(A) * PuffR, FMath::Sin(A) * PuffR, -10.f), FVector(Len / 100.f, Semi / 50.f, H / 100.f)));
+			// Browned blister near the top of most puffs.
+			if (PizzaRng.FRand() < 0.75f)
+			{
+				const float BDeg = Deg + PizzaRng.FRandRange(-1.5f, 1.5f), BA = FMath::DegreesToRadians(BDeg);
+				const float BD = PuffR + PizzaRng.FRandRange(-12.f, 8.f);
+				const float S = PizzaRng.FRandRange(0.22f, 0.45f);
+				CrustChar->AddInstance(FTransform(FRotator(0.f, BDeg + 90.f + PizzaRng.FRandRange(-25.f, 25.f), 0.f), FVector(FMath::Cos(BA) * BD, FMath::Sin(BA) * BD, -10.f + H * 0.5f - 2.5f), FVector(S * 1.5f, S, 0.1f)));
+			}
 		}
 
-		// Floor dressing: browned spots and low cheese bubbles, clear of the spawn pads.
+		// Floor dressing: sauce showing through the cheese, browned spots and low cheese bubbles, clear of the spawn pads.
 		auto FloorSpot = [&](float RMin, float RMax) -> FVector2D
 		{
 			FVector2D P = FVector2D::ZeroVector;
@@ -742,10 +885,12 @@ void AZoogiArena::BuildArabian()
 			}
 			return P;
 		};
-		for (int32 i = 0; i < 22; ++i) // was: 22 sauce patches (spot + 3 draws each); draws kept, nothing placed
+		UInstancedStaticMeshComponent* Sauce = MakeISM(ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#C2461F")), 0.45f));
+		for (int32 i = 0; i < 22; ++i)
 		{
-			(void)FloorSpot(150.f, 1380.f);
-			for (int32 d = 0; d < 3; ++d) (void)PizzaRng.FRand();
+			const FVector2D P = FloorSpot(150.f, 1380.f);
+			const float S = PizzaRng.FRandRange(0.6f, 1.4f);
+			Sauce->AddInstance(FTransform(FRotator(0.f, PizzaRng.FRandRange(0.f, 360.f), 0.f), FVector(P.X, P.Y, 0.35f), FVector(S * PizzaRng.FRandRange(1.f, 1.6f), S, 0.012f)));
 		}
 		UInstancedStaticMeshComponent* Browned = MakeISM(ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#A5612A")), 0.85f));
 		for (int32 i = 0; i < 36; ++i)

@@ -383,3 +383,31 @@ Awakened / crit-grade hit), and so are the collider, events, SFX, popup, feed li
   Zoogi per match make single matches noisy. Wraps is still the weakest; Hotstreak the strongest.
   Radii/speeds at the top of `ZoogiPowers.cpp`.
 * Island edge collision is the engine cylinder's convex hull (a many-sided polygon close to r=15.5).
+
+## Cosmic: animated "space journey" backdrop (Oct 4, 4:05 PM)
+  - [x] Aura could NOT be used: Aura is installed/enabled, its MCP servers start (61 inspector + 97 editor tools listed via
+        a stdio client), but every call returns "No valid session token found" and the editor log says
+        `Aura Session Token not found - launching client for login` / `401 User not authenticated`. Evan has to sign in
+        once in the Aura window (Aura.exe / app.tryaura.dev) with his paid/trial account; no Aura credits were used.
+  - [x] Built without Aura (procedural, `Scripts/cosmic/*.py` + `Scripts/make_cosmic_backdrop.py`, assets in `/Game/Env/Cosmic`,
+        cooked via the existing `/Game/Env` DirectoriesToAlwaysCook):
+        * `T_CosmicNebula` 4096x2048 equirect panorama (domain-warped noise nebula in purple/blue/cyan/magenta/orange,
+          ~9000 baked stars; alpha = "near wisps" mask). BC7, no mips, 8 MB.
+        * `M_CosmicSky` on a 900 m sphere: sampled from the view direction (reads as infinitely far), far layer drifts
+          ~0.22 deg/s, near-wisp layer ~0.43 deg/s (parallax), dimmed straight under the board (NadirDim 0.7).
+        * `M_CosmicStreak`: 600 additive star-streak quads in one ISM; all motion is World Position Offset on the GPU
+          (PerInstanceRandom phase/speed/tint, no tick/CPU), fade out within 28-63 m of the arena centre so nothing moves
+          right behind the play area. Not Niagara (Niagara authoring needed Aura's vfx_agent); same look, cheaper.
+        * Two planets (`T_CosmicPlanetA` ringed gas giant, `T_CosmicPlanetB` ice moon, `M_CosmicPlanet` translucent quads)
+          on a pivot turning 0.5 deg/s (URotatingMovementComponent), below the horizon so they drift through the Tactical view.
+        * Replaces the old 1500-sphere star shell (kept as fallback if the assets are missing; `-ZoogiNoSpaceBackdrop` for A/B).
+  - [x] Perf A/B (1600x900 windowed, uncapped, 1200 frames each, `run_cosmic_perf_on/off.log` + Saved/Profiling/CSV):
+        GPU 5.48 ms with vs 5.37 ms without (+0.1 ms); BasePass is lower (0.62 vs 0.74, the sphere stars are gone),
+        translucency +0.02 ms. No new lights, shadows, volumetrics or Lumen contributors (sky/streaks/planets have
+        distance-field / dynamic-indirect lighting off).
+  - [x] Verified in `-game -ZoogiArena=3` runs (c1-c5): board and Zoogis read clearly against the darker backdrop; streaks
+        visibly move between frames 1 s apart. Box: `shots/cosmic/cosmic_backdrop_wide.jpg`, `_t1.jpg`, `_t2.jpg`,
+        `_motion_crop_t1_t2.jpg`, `_aim2.jpg`, `_gameover_lowcam.jpg`.
+  - Tuning knobs: material params (M_CosmicSky Bright / NearStr / NadirDim / RateFar / RateNear; M_CosmicStreak Bright /
+    Speed / ClearR / FadeW / ColA / ColB) and `ZoogiCosmic::` constants + planet placement in `AZoogiArena::AddSpaceBackdrop`.
+  - Note: the packaged build needs a re-cook to pick this up (not packaged by this task).

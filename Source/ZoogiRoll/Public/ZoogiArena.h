@@ -67,6 +67,8 @@ protected:
 	void BuildFrozen();
 	void BuildVolcanic();
 	void BuildCosmic();
+	/** Cosmic: animated space-journey backdrop (nebula sky sphere, GPU star streaks, drifting planets). False if assets are missing. */
+	bool AddSpaceBackdrop();
 	void BuildArabian();
 	void BuildTomb();
 	void BuildNeon();
