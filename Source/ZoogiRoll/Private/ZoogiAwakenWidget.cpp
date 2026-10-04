@@ -31,7 +31,7 @@ namespace
 	// Same colours / metrics as the Canvas HUD (ZoogiHUD.cpp), in 1080p units (UMG's DPI curve is 1.0 at 1080p,
 	// the Canvas HUD's U is 1.0 at 1080p, so the two stay the same size at every resolution).
 	const FLinearColor GPanelCol(0.02f, 0.03f, 0.08f, 0.72f);
-	const float CW = 230.f, CH = 250.f, Gap = 18.f;
+	const float AwCW = 230.f, AwCH = 250.f, AwGap = 18.f;
 
 	FSlateFontInfo HudFontU(float Scale, bool bBig)
 	{
@@ -312,8 +312,8 @@ void UZoogiAwakenWidget::BuildAwaken(AZoogiGameMode* G)
 	TArray<TPair<int32, EZoogiArtifact>> Cards;
 	if (AC->Drawn != EZoogiArtifact::None) Cards.Add({ 0, AC->Drawn });
 	for (int32 i = 0; i < AC->Hand.Num(); ++i) Cards.Add({ i + 1, AC->Hand[i] });
-	const float PW = FMath::Max(3, Cards.Num()) * (CW + Gap) + 40.f + 400.f;
-	const float PH = CH + 96.f;
+	const float PW = FMath::Max(3, Cards.Num()) * (AwCW + AwGap) + 40.f + 400.f;
+	const float PH = AwCH + 96.f;
 	const float Y0 = 56.f; // panel-local top of the cards
 
 	AwakenPanel = MakePanel(GPanelCol);
@@ -343,7 +343,7 @@ void UZoogiAwakenWidget::BuildAwaken(AZoogiGameMode* G)
 		PlaceText(P, Line, FVector2D(PW - 24.f, 16.f), 0.36f, Guards.IsEmpty() ? FLinearColor(0.55f, 0.6f, 0.7f) : FLinearColor(0.55f, 0.8f, 1.f), false, 1.f);
 	}
 	{
-		const float FY = Y0 + CH + 6.f;
+		const float FY = Y0 + AwCH + 6.f;
 		if (!B->bCPU) PlaceText(P, TEXT("keys:  1-3 pick card    I infuse    G guard    S save      (or click)"), FVector2D(24.f, FY), 0.32f, FLinearColor(0.55f, 0.6f, 0.72f), false);
 		if (bFullHand)
 		{
@@ -374,7 +374,7 @@ void UZoogiAwakenWidget::BuildAwaken(AZoogiGameMode* G)
 			Style.SetPressedPadding(FMargin(0.f));
 			Btn->SetStyle(Style);
 			if (UButtonSlot* S = Cast<UButtonSlot>(Btn->AddChild(Card))) { S->SetPadding(FMargin(0.f)); S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); }
-			Place(P, Btn, FVector2D(X, Y0), FVector2D(CW, CH));
+			Place(P, Btn, FVector2D(X, Y0), FVector2D(AwCW, AwCH));
 			UZoogiAwakenClick* Ck = NewObject<UZoogiAwakenClick>(this);
 			Ck->Owner = this;
 			Ck->Action = TEXT("AwakenPick");
@@ -388,7 +388,7 @@ void UZoogiAwakenWidget::BuildAwaken(AZoogiGameMode* G)
 		{
 			UBorder* Plate = MakePanel(Bg, bSel ? R.RimColor : FLinearColor::Transparent, bSel ? 4.f : 0.f);
 			Plate->SetContent(Card);
-			Place(P, Plate, FVector2D(X, Y0), FVector2D(CW, CH));
+			Place(P, Plate, FVector2D(X, Y0), FVector2D(AwCW, AwCH));
 		}
 		if (UTexture2D* Tex = GemTexture((uint8)C.Value))
 		{
@@ -398,27 +398,27 @@ void UZoogiAwakenWidget::BuildAwaken(AZoogiGameMode* G)
 			GB.ImageSize = FVector2D(160.f, 160.f);
 			Img->SetBrush(GB);
 			Img->SetVisibility(ESlateVisibility::HitTestInvisible);
-			Place(Card, Img, FVector2D(CW * 0.5f, 82.f), FVector2D(160.f, 160.f), FVector2D(0.5f, 0.5f));
+			Place(Card, Img, FVector2D(AwCW * 0.5f, 82.f), FVector2D(160.f, 160.f), FVector2D(0.5f, 0.5f));
 			if (bSel) SelGem = Img;
 		}
 		PlaceText(Card, FString::Printf(TEXT("%s%s"), B->bCPU ? TEXT("") : *FString::Printf(TEXT("[%d] "), C.Key + 1), C.Key == 0 ? TEXT("NEW") : *FString::Printf(TEXT("SAVED %d"), C.Key)),
 			FVector2D(12.f, 8.f), 0.34f, C.Key == 0 ? FLinearColor(1.f, 0.85f, 0.3f) : FLinearColor(0.7f, 0.75f, 0.85f), false);
-		if (bFullHand && C.Key == 1) PlaceText(Card, TEXT("discarded on SAVE"), FVector2D(CW * 0.5f, CH - 28.f), 0.3f, FLinearColor(1.f, 0.55f, 0.35f), false, 0.5f);
-		if (C.Value == Aff) PlaceText(Card, TEXT("AFFINITY"), FVector2D(CW - 12.f, 8.f), 0.34f, FLinearColor(1.f, 0.9f, 0.4f), false, 1.f);
-		PlaceText(Card, R.DisplayName, FVector2D(CW * 0.5f, 150.f), 0.5f, FLinearColor::White, true, 0.5f);
-		PlaceText(Card, ZoogiArtifacts::Key(C.Value).ToUpper(), FVector2D(CW * 0.5f, 192.f), 0.36f, R.RimColor, false, 0.5f);
-		X += CW + Gap;
+		if (bFullHand && C.Key == 1) PlaceText(Card, TEXT("discarded on SAVE"), FVector2D(AwCW * 0.5f, AwCH - 28.f), 0.3f, FLinearColor(1.f, 0.55f, 0.35f), false, 0.5f);
+		if (C.Value == Aff) PlaceText(Card, TEXT("AFFINITY"), FVector2D(AwCW - 12.f, 8.f), 0.34f, FLinearColor(1.f, 0.9f, 0.4f), false, 1.f);
+		PlaceText(Card, R.DisplayName, FVector2D(AwCW * 0.5f, 150.f), 0.5f, FLinearColor::White, true, 0.5f);
+		PlaceText(Card, ZoogiArtifacts::Key(C.Value).ToUpper(), FVector2D(AwCW * 0.5f, 192.f), 0.36f, R.RimColor, false, 0.5f);
+		X += AwCW + AwGap;
 	}
 	for (int32 e = Cards.Num(); e < 3; ++e)
 	{
 		UBorder* EmptySlot = MakePanel(FLinearColor(0.04f, 0.05f, 0.1f, 0.55f));
 		UCanvasPanel* SC = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass());
 		EmptySlot->SetContent(SC);
-		Place(P, EmptySlot, FVector2D(X, Y0), FVector2D(CW, CH));
-		Place(SC, MakePanel(FLinearColor(0.3f, 0.35f, 0.45f, 0.5f)), FVector2D(10.f, 10.f), FVector2D(CW - 20.f, 2.f));
-		PlaceText(SC, TEXT("HAND SLOT"), FVector2D(CW * 0.5f, CH * 0.42f), 0.38f, FLinearColor(0.5f, 0.55f, 0.65f, 0.8f), false, 0.5f);
-		PlaceText(SC, TEXT("empty"), FVector2D(CW * 0.5f, CH * 0.42f + 32.f), 0.32f, FLinearColor(0.45f, 0.5f, 0.6f, 0.7f), false, 0.5f);
-		X += CW + Gap;
+		Place(P, EmptySlot, FVector2D(X, Y0), FVector2D(AwCW, AwCH));
+		Place(SC, MakePanel(FLinearColor(0.3f, 0.35f, 0.45f, 0.5f)), FVector2D(10.f, 10.f), FVector2D(AwCW - 20.f, 2.f));
+		PlaceText(SC, TEXT("HAND SLOT"), FVector2D(AwCW * 0.5f, AwCH * 0.42f), 0.38f, FLinearColor(0.5f, 0.55f, 0.65f, 0.8f), false, 0.5f);
+		PlaceText(SC, TEXT("empty"), FVector2D(AwCW * 0.5f, AwCH * 0.42f + 32.f), 0.32f, FLinearColor(0.45f, 0.5f, 0.6f, 0.7f), false, 0.5f);
+		X += AwCW + AwGap;
 	}
 	// Right column: picked artifact's texts + INFUSE / GUARD / SAVE.
 	const float RX = PW - 410.f;
@@ -429,7 +429,7 @@ void UZoogiAwakenWidget::BuildAwaken(AZoogiGameMode* G)
 		const FZoogiArtifactRow& R = ZoogiArtifacts::Get(PA);
 		UVerticalBox* V = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
 		V->SetVisibility(ESlateVisibility::HitTestInvisible);
-		Place(P, V, FVector2D(RX, Y0), FVector2D(392.f, CH - 62.f));
+		Place(P, V, FVector2D(RX, Y0), FVector2D(392.f, AwCH - 62.f));
 		auto Add = [&](const FString& S, const FLinearColor& Col, bool bWrap, float Bottom)
 		{
 			UTextBlock* T = MakeText(S, 0.38f, Col, false);
@@ -444,7 +444,7 @@ void UZoogiAwakenWidget::BuildAwaken(AZoogiGameMode* G)
 	}
 	if (!B->bCPU)
 	{
-		const float BY = Y0 + CH - 56.f;
+		const float BY = Y0 + AwCH - 56.f;
 		const bool bHas = PA != EZoogiArtifact::None;
 		MakeButton(P, TEXT("INFUSE"), FVector2D(RX - 10.f, BY), FVector2D(130.f, 56.f), TEXT("Infuse"), Pick, FLinearColor(1.f, 0.5f, 0.15f), bHas, bHas);
 		MakeButton(P, TEXT("GUARD"), FVector2D(RX + 128.f, BY), FVector2D(130.f, 56.f), TEXT("Guard"), Pick, FLinearColor(0.35f, 0.7f, 1.f), bHas, bHas);
