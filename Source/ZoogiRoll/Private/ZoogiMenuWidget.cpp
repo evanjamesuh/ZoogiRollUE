@@ -296,6 +296,18 @@ void UZoogiMenuWidget::BuildContents()
 		if (UHorizontalBoxSlot* HS = Top->AddChildToHorizontalBox(NB)) HS->SetVerticalAlignment(VAlign_Center);
 	}
 	MakeButton(Top, TEXT("+"), "Rounds", G->MenuRounds + 1, GMenuOrbBlue, false, 50.f, 50.f, 26);
+	// SFX volume (Oct 4): 0-100 % in steps of 25.
+	{
+		const int32 Vol = FMath::RoundToInt(ZoogiUtil::GetSfxVolume() * 100.f);
+		Label(Top, TEXT("SFX"), 60.f);
+		MakeButton(Top, TEXT("-"), "SfxVol", FMath::Max(0, Vol - 25), GMenuOrbBlue, false, 50.f, 50.f, 26);
+		USizeBox* VB = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
+		VB->SetWidthOverride(90.f);
+		UTextBlock* VT = MakeText(VB, FString::Printf(TEXT("%d%%"), Vol), 24, FLinearColor::White);
+		VT->SetJustification(ETextJustify::Center);
+		if (UHorizontalBoxSlot* HS = Top->AddChildToHorizontalBox(VB)) HS->SetVerticalAlignment(VAlign_Center);
+		MakeButton(Top, TEXT("+"), "SfxVol", FMath::Min(100, Vol + 25), GMenuOrbBlue, false, 50.f, 50.f, 26);
+	}
 
 	// Player cards.
 	UHorizontalBox* Cards = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());

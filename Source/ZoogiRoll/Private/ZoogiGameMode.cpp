@@ -3,6 +3,7 @@
 #include "ZoogiBall.h"
 #include "ZoogiOrb.h"
 #include "ZoogiArena.h"
+#include "ZoogiRock.h"
 #include "ZoogiClone.h"
 #include "ZoogiFX.h"
 #include "ZoogiPhysics.h"
@@ -20,6 +21,7 @@
 #include "HAL/FileManager.h"
 #include "UnrealClient.h"
 #include "Components/AudioComponent.h"
+#include "TimerManager.h"
 #include "Sound/SoundBase.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
 
@@ -53,6 +55,11 @@ void AZoogiGameMode::BeginPlay()
 	bMenuShot = FParse::Param(Cmd, TEXT("ZoogiMenuShot"));
 	bArtifactMode = !FParse::Param(Cmd, TEXT("ZoogiClassicPowers"));
 	bCinematicCam = FParse::Param(Cmd, TEXT("ZoogiCinematic"));
+	bRockTest = FParse::Param(Cmd, TEXT("ZoogiRockTest"));
+	{
+		int32 Vol = 100;
+		if (FParse::Value(Cmd, TEXT("ZoogiSfxVol="), Vol)) ZoogiUtil::SetSfxVolume(Vol / 100.f);
+	}
 	FParse::Value(Cmd, TEXT("ZoogiShots="), ShotDir);
 	FParse::Value(Cmd, TEXT("ZoogiQuit="), QuitAfter);
 	int32 NumPlayers = 0;
@@ -123,6 +130,7 @@ void AZoogiGameMode::MenuAction(FName Action, int32 Index)
 		SpawnOrbs();
 	}
 	else if (Action == "Rounds") MenuRounds = FMath::Clamp(Index, 1, 30);
+	else if (Action == "SfxVol") ZoogiUtil::SetSfxVolume(FMath::Clamp(Index, 0, 100) / 100.f);
 	else if (Action == "Start") StartMatch();
 	else if (Action == "Power") { if (!bArtifactMode) TryPower(); }
 	// Milestone "Awaken": Awaken actions and clickable aiming (Canvas HUD buttons -> here).
@@ -216,6 +224,7 @@ void AZoogiGameMode::StartMatch()
 {
 	ClearMatch();
 	if (Arena->GetTheme() != MenuArena) Arena->Build(MenuArena);
+	Arena->ResetRocks(); // destructible rocks come back every match
 	SpawnOrbs();
 	const TArray<FZoogiDef>& Roster = ZoogiUtil::Roster();
 	for (int32 i = 0; i < MenuNumPlayers; ++i)
@@ -597,7 +606,9 @@ void AZoogiGameMode::FireShot(const FVector2D& Velocity)
 	AZoogiBall* Ball = GetActiveBall();
 	if (!Ball) return;
 	Ball->Launch(Velocity);
-	ZoogiUtil::PlaySfx(this, TEXT("Launch"), FMath::Clamp(Velocity.Size() / 2500.f, 0.3f, 1.f), FMath::Lerp(0.85f, 1.2f, FMath::Clamp(Velocity.Size() / 3600.f, 0.f, 1.f)));
+	// Oct 4 SFX: anime dash whoosh (pitch / level follow the launch speed), the old launch thump underneath.
+	ZoogiUtil::PlaySfx(this, TEXT("Dash"), FMath::Clamp(Velocity.Size() / 2200.f, 0.35f, 1.f), FMath::Lerp(0.9f, 1.15f, FMath::Clamp(Velocity.Size() / 3600.f, 0.f, 1.f)));
+	ZoogiUtil::PlaySfx(this, TEXT("Launch"), FMath::Clamp(Velocity.Size() / 2500.f, 0.3f, 1.f) * 0.45f, FMath::Lerp(0.85f, 1.2f, FMath::Clamp(Velocity.Size() / 3600.f, 0.f, 1.f)));
 	OnArmedShot(Ball);
 	Phase = EZoogiPhase::Rolling;
 	bShotImpacted = false;
@@ -774,6 +785,16 @@ void AZoogiGameMode::PlanCPUShot()
 	const float ErrDeg = FMath::FRandRange(-1.f, 1.f) * (100.f - Me->Def.Control) / 12.f;
 	BestDir = BestDir.GetRotated(ErrDeg);
 	BestFrac = FMath::Clamp(BestFrac * FMath::FRandRange(0.96f, 1.04f), 0.25f, 1.f);
+	// -ZoogiRockTest: hard straight shot at the nearest standing rock (screenshots of cracking / shattering).
+	if (bRockTest && Arena)
+	{
+		if (AZoogiRock* R = Arena->NearestStandingRock(B))
+		{
+			BestDir = (FVector2D(R->GetActorLocation()) - B).GetSafeNormal();
+			BestFrac = R->GetState() == EZoogiRockState::Intact ? 0.6f : 0.97f; // medium shot cracks, the hard one shatters
+			UE_LOG(LogZoogi, Log, TEXT("RockTest: P%d aims at %s at %.0f%%"), ActivePlayer + 1, *R->GetName(), BestFrac * 100.f);
+		}
+	}
 	const float PullLen = BestFrac * ZoogiConst::FullPull / ZoogiConst::DragScale;
 	CPUTargetPull = FVector(BestDir.X, BestDir.Y, 0.f) * PullLen;
 	Me->AimYaw = FVector(BestDir.X, BestDir.Y, 0.f).Rotation().Yaw;
@@ -923,4 +944,21 @@ void AZoogiGameMode::Tick(float DeltaSeconds)
 	default:
 		break;
 	}
+}
+
+void AZoogiGameMode::OnRockEvent(AZoogiRock* Rock, bool bShattered, AZoogiBall* By, const FVector& PopupAt)
+{
+	AddPopup(bShattered ? TEXT("SHATTERED!") : TEXT("CRACK!"), PopupAt, bShattered ? FLinearColor(1.f, 0.8f, 0.5f) : FLinearColor(0.85f, 0.7f, 0.5f));
+	if (By) AddFeed(FString::Printf(TEXT("P%d %s  %s a rock"), By->PlayerIndex + 1, *By->Def.Name, bShattered ? TEXT("shattered") : TEXT("cracked")), FLinearColor(0.75f, 0.6f, 0.42f));
+	if (bShattered) { TakeShotDelayed(TEXT("rock_shatter"), 0.12f); TakeShotDelayed(TEXT("rock_shatter_after"), 1.1f); TakeShotDelayed(TEXT("rock_rubble"), 3.4f); }
+	else { TakeShotDelayed(TEXT("rock_crack"), 0.1f); TakeShotDelayed(TEXT("rock_crack_after"), 0.9f); }
+}
+
+void AZoogiGameMode::DuckMusic(float Seconds)
+{
+	if (!MusicComp) return;
+	MusicComp->AdjustVolume(0.05f, 0.6f); // ~-4.4 dB duck under big hits (team brief: duck 3-6 dB, never mute; full silence is saved for one climax)
+	FTimerHandle H;
+	TWeakObjectPtr<UAudioComponent> M = MusicComp;
+	GetWorldTimerManager().SetTimer(H, FTimerDelegate::CreateLambda([M]() { if (M.IsValid()) M->AdjustVolume(0.6f, 1.f); }), Seconds, false);
 }

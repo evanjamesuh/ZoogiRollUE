@@ -128,7 +128,13 @@ void AZoogiGameMode::SetBattleStep(EZoogiBattleStep S)
 	UE_LOG(LogZoogi, Log, TEXT("Battle step: %s (P%d)"), StepName(S), ActivePlayer + 1);
 	if (S == EZoogiBattleStep::PowerUp)
 	{
-		ZoogiUtil::PlaySfx(this, TEXT("Arm"), 0.8f, 0.7f);
+		// Anime held-pose beat: a breath-in swell that cuts to ~0.1 s of silence right before the launch whoosh.
+		// The asset is 0.75 s; skip into it so it ends with this step (0.45 s tactical, 0.8 s awakened).
+		{
+			const AZoogiBall* Sh = GetActiveBall();
+			const bool bAw = Sh && Sh->Artifact && Sh->Artifact->Infused != EZoogiArtifact::None;
+			ZoogiUtil::PlaySfx(this, TEXT("Inhale"), bAw ? 0.9f : 0.55f, 1.f, FMath::Max(0.f, 0.75f - BattleDuration()));
+		}
 		if (AZoogiBall* B = GetActiveBall()) if (B->Artifact) B->Artifact->Pulse(B->Artifact->Infused != EZoogiArtifact::None ? 1.2f : 0.5f);
 	}
 	if (AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PC->OnBattleStep(S);

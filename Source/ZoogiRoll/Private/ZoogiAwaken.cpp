@@ -162,7 +162,6 @@ bool AZoogiGameMode::AwakenInfuse(int32 Pick)
 	AZoogiFX::Spawn(GetWorld(), B->BallLocation(), C, 200.f, 0.6f, false, 10.f, B);
 	AZoogiFX::Spawn(GetWorld(), B->BallLocation() - FVector(0, 0, ZoogiConst::ZoogiRadius - 3.f), C, 260.f, 0.7f, true, 8.f);
 	AZoogiFX::Niagara(GetWorld(), *ZoogiArtifacts::Get(A).AuraNiagara.ToString(), B->BallLocation(), FRotator::ZeroRotator, 0.9f);
-	ZoogiUtil::PlaySfx(this, TEXT("Arm"), 0.9f, 0.9f);
 	UE_LOG(LogZoogi, Log, TEXT("Awaken: P%d %s INFUSES %s%s"), B->PlayerIndex + 1, *B->Def.Name, *ZoogiArtifacts::Name(A), bAff ? TEXT(" (affinity)") : TEXT(""));
 	EmitAnime(TEXT("Infuse"), B, A, B, B->BallLocation(), 1.f, false);
 	return true;
@@ -182,7 +181,6 @@ bool AZoogiGameMode::AwakenGuard(int32 Pick)
 	AddPopup(FString::Printf(TEXT("GUARD  %s"), *ZoogiArtifacts::Name(A).ToUpper()), B->BallLocation() + FVector(0, 0, 160.f), C);
 	AddFeed(FString::Printf(TEXT("P%d %s  guards with %s (next opponent attack)"), B->PlayerIndex + 1, *B->Def.Name, *ZoogiArtifacts::Name(A)), C);
 	AZoogiFX::Spawn(GetWorld(), B->BallLocation(), C, 130.f, 0.6f, false, 6.f, B);
-	ZoogiUtil::PlaySfx(this, TEXT("Arm"), 0.7f, 0.7f);
 	UE_LOG(LogZoogi, Log, TEXT("Awaken: P%d %s GUARDS with %s (turn %d)"), B->PlayerIndex + 1, *B->Def.Name, *ZoogiArtifacts::Name(A), TurnCounter);
 	EmitAnime(TEXT("Guard"), B, A, B, B->BallLocation(), 1.f, false);
 	return true;
@@ -215,6 +213,7 @@ void AZoogiGameMode::PlanCPUAwaken()
 	if (!B || !B->Artifact || bAwakenDone) return;
 	UZoogiArtifactComponent* AC = B->Artifact;
 	if (AC->Drawn == EZoogiArtifact::None && AC->Hand.Num() == 0) { AwakenSave(); return; }
+	if (bRockTest) { AwakenSave(); UE_LOG(LogZoogi, Log, TEXT("CPU P%d Awaken decision: SAVE (rock test)"), B->PlayerIndex + 1); return; }
 	// Prefer the affinity artifact wherever it is.
 	const EZoogiArtifact Aff = ZoogiArtifacts::Affinity(B->Def.Id);
 	int32 Pick = AC->Drawn != EZoogiArtifact::None ? 0 : 1;

@@ -1,0 +1,31 @@
+# Zoogi Roll SFX credits (Oct 4, 2026)
+
+All 13 anime-style SFX below are **original**, synthesized from scratch by `Scripts/synth_sfx.py` (Python, numpy/scipy:
+oscillators, filtered noise, envelopes, a synthetic noise-burst reverb). No third-party samples and no CC0 packs were used,
+so there is nothing to attribute. They are project-owned and can be shipped and changed freely.
+Source WAVs: `SourceArt/Audio/SFX/*.wav` (48 kHz, 16-bit mono). Imported as `/Game/Audio/S_<Name>` by `Scripts/import_sfx.py`.
+
+Design brief: the movie team's `TEAM-NOTES-fight-and-victory.md` (3-6 stacked layers per hit, weight in a soft low end with one small
+bright layer, sound on the impact-flash frame, duck music 3-6 dB rather than muting).
+
+Style reference only: Evan's "naruto video examples" (official Naruto / Boruto anime clips). **No audio from those clips is
+cut, extracted, sampled, or shipped.** The movie team's *measurements* of them (transient timing, attack/decay, spectral
+centroid, low-frequency share, the beat of silence before big hits) guided the envelopes and the timing.
+
+| Asset | Used for | How it was made |
+|---|---|---|
+| S_Dash | launch whoosh / dash | band-pass noise sweeping 450 Hz -> 3.8 kHz, 230 ms rise, faint rising tone |
+| S_HitCrack | Zoogi-vs-Zoogi impact (volume scales with impact) | soft low thump 180 -> 70 Hz + mid "boing" + squish noise + mid crack + tiny 3.1 kHz tick, soft clip, small room |
+| S_CritBoom | crit / KO / combo (+ ~4.4 dB music duck) | on the flash frame: distorted low boom + sub drop 110 -> 32 Hz + mid punch + small crack + crackle accent + long low rumble |
+| S_Inhale | power-up wind-up before a launch | breath-in noise swell (low-pass opening 300 Hz -> 3 kHz) + rising tone, hard cut, 0.11 s silence |
+| S_AwakenCharge | Infuse (Awaken) | low 55/110 Hz charge hum under a detuned saw chord sweeping 200 -> 760 Hz with accelerating tremolo; sparkle + two-note chime + low boom at release |
+| S_GuardClang | Guard / guard block | soft low "whomp" + 120 Hz thud under six inharmonic metal partials (quiet top partials) + click |
+| S_RockCrack | rock cracks | dry knock + gritty crackle burst + pebble ticks |
+| S_RockShatter | rock shatters | low thump + broadband crunch + thinning debris rattle (~1.6 s) |
+| S_StingEmber | Ember powered hit / infuse | low-passed "whoomp" + falling roar + ember crackle |
+| S_StingStorm | Storm powered hit / infuse | jittery ~95 Hz square buzz + arcing crackle + snap |
+| S_StingFrost | Frost powered hit / infuse | soft low thud + random glassy partials 2-6 kHz + tinkle crackle + light hiss |
+| S_StingTitan | Titan powered hit / infuse | 40-90 Hz thump + low-passed crunch + ground rumble |
+| S_StingVoid | Void powered hit / infuse | reverse swell into a falling sine 420 -> 55 Hz through a flanger + low drone |
+
+Loudness: each file normalized to about -16 LUFS max momentary (EBU R128), true peak <= -1 dBTP (measured with ffmpeg ebur128).

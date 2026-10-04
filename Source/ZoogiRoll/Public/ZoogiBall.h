@@ -43,6 +43,8 @@ public:
 	bool IsAtRest() const;
 	float PlanarSpeed() const;
 	FVector GetBallVelocity() const;
+	/** Velocity sampled at the start of this frame's tick (before this frame's physics step): the approach velocity for hit events. */
+	FVector PrevVelocity = FVector::ZeroVector;
 	FVector BallLocation() const;
 
 	UPROPERTY(BlueprintReadOnly) FZoogiDef Def;

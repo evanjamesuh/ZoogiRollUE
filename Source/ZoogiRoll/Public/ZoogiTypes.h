@@ -115,7 +115,12 @@ namespace ZoogiUtil
 	ZOOGIROLL_API bool IsArmedPower(EZoogiPower Power);
 
 	/** Plays /Game/Audio/S_<Name> as a 2D sound (no-op if missing or with -NoSound). */
-	ZOOGIROLL_API void PlaySfx(const UObject* WorldContext, const TCHAR* Name, float Volume = 1.f, float Pitch = 1.f);
+	/** 2D SFX from /Game/Audio/S_<Name>. StartTime skips into the sound (e.g. so a wind-up ends exactly on the launch).
+	 *  Plays as a UI sound so anime freezes (game paused) don't swallow it. Scaled by the SFX volume setting. */
+	ZOOGIROLL_API void PlaySfx(const UObject* WorldContext, const TCHAR* Name, float Volume = 1.f, float Pitch = 1.f, float StartTime = 0.f);
+	/** SFX volume setting 0..1 (menu "SFX" row, or -ZoogiSfxVol=0..100). */
+	ZOOGIROLL_API float GetSfxVolume();
+	ZOOGIROLL_API void SetSfxVolume(float V);
 	ZOOGIROLL_API class USoundBase* LoadSound(const TCHAR* Name);
 
 	ZOOGIROLL_API UStaticMesh* BasicShape(const TCHAR* Name); // Sphere, Cube, Cylinder, Cone, Plane

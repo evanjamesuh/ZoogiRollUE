@@ -161,6 +161,14 @@ void AZoogiHUD::DrawMenu(AZoogiGameMode* G)
 	Button(TEXT("-"), X0 + 720.f * U, Y, 56.f * U, 52.f * U, "Rounds", G->MenuRounds - 1, GOrbBlue);
 	Text(FString::FromInt(G->MenuRounds), X0 + 815.f * U, Y + 6.f * U, FLinearColor::White, 0.75f, true);
 	Button(TEXT("+"), X0 + 856.f * U, Y, 56.f * U, 52.f * U, "Rounds", G->MenuRounds + 1, GOrbBlue);
+	{
+		const int32 Vol = FMath::RoundToInt(ZoogiUtil::GetSfxVolume() * 100.f);
+		const float SY = Y - 100.f * U; // just above the panel, right side
+		Text(TEXT("SFX"), X0 + PW - 330.f * U, SY + 8.f * U, FLinearColor(0.7f, 0.8f, 1.f), 0.6f);
+		Button(TEXT("-"), X0 + PW - 250.f * U, SY, 56.f * U, 52.f * U, "SfxVol", FMath::Max(0, Vol - 25), GOrbBlue);
+		Text(FString::Printf(TEXT("%d%%"), Vol), X0 + PW - 140.f * U, SY + 6.f * U, FLinearColor::White, 0.6f, true);
+		Button(TEXT("+"), X0 + PW - 90.f * U, SY, 56.f * U, 52.f * U, "SfxVol", FMath::Min(100, Vol + 25), GOrbBlue);
+	}
 	Y += 80.f * U;
 
 	const TArray<FZoogiDef>& Roster = ZoogiUtil::Roster();

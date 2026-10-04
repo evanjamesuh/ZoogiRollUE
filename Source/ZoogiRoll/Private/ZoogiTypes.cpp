@@ -198,9 +198,14 @@ namespace
 	}
 }
 
-void ZoogiUtil::PlaySfx(const UObject* WorldContext, const TCHAR* Name, float Volume, float Pitch)
+static float GSfxVolume = 1.f;
+float ZoogiUtil::GetSfxVolume() { return GSfxVolume; }
+void ZoogiUtil::SetSfxVolume(float V) { GSfxVolume = FMath::Clamp(V, 0.f, 1.f); }
+
+void ZoogiUtil::PlaySfx(const UObject* WorldContext, const TCHAR* Name, float Volume, float Pitch, float StartTime)
 {
-	if (USoundBase* S = LoadSound(Name)) UGameplayStatics::PlaySound2D(WorldContext, S, FMath::Min(Volume * SfxTrim(Name), 3.f), Pitch);
+	if (GSfxVolume <= 0.001f) return;
+	if (USoundBase* S = LoadSound(Name)) UGameplayStatics::PlaySound2D(WorldContext, S, FMath::Min(Volume * SfxTrim(Name) * GSfxVolume, 3.f), Pitch, StartTime, nullptr, nullptr, true);
 }
 
 UStaticMesh* ZoogiUtil::BasicShape(const TCHAR* Name)

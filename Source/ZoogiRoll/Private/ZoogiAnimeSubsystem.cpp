@@ -1,4 +1,5 @@
 #include "ZoogiAnimeSubsystem.h"
+#include "ZoogiTypes.h"
 #include "ZoogiRoll.h"
 #include "ZoogiGameMode.h"
 #include "ZoogiBall.h"
@@ -209,8 +210,34 @@ FString UZoogiAnimeSubsystem::ResolveId(const FZoogiCombatEvent& E, const FZoogi
 	return E.Artifact == EZoogiArtifact::None ? Chain[3] : Chain[1];
 }
 
+void UZoogiAnimeSubsystem::PlayEventSfx(const FZoogiCombatEvent& E)
+{
+	const FString Ev = E.Event.ToString();
+	auto Sting = [&](float Vol)
+	{
+		switch (E.Artifact)
+		{
+		case EZoogiArtifact::Ember: ZoogiUtil::PlaySfx(this, TEXT("StingEmber"), Vol); break;
+		case EZoogiArtifact::Storm: ZoogiUtil::PlaySfx(this, TEXT("StingStorm"), Vol); break;
+		case EZoogiArtifact::Frost: ZoogiUtil::PlaySfx(this, TEXT("StingFrost"), Vol); break;
+		case EZoogiArtifact::Titan: ZoogiUtil::PlaySfx(this, TEXT("StingTitan"), Vol); break;
+		case EZoogiArtifact::Void: ZoogiUtil::PlaySfx(this, TEXT("StingVoid"), Vol); break;
+		default: break;
+		}
+	};
+	AZoogiGameMode* G = GetWorld() ? GetWorld()->GetAuthGameMode<AZoogiGameMode>() : nullptr;
+	if (Ev == TEXT("Infuse")) { ZoogiUtil::PlaySfx(this, TEXT("AwakenCharge"), 0.9f); Sting(0.35f); }
+	else if (Ev == TEXT("Guard")) ZoogiUtil::PlaySfx(this, TEXT("GuardClang"), 0.75f, 0.92f);
+	else if (Ev == TEXT("GuardBlock")) ZoogiUtil::PlaySfx(this, TEXT("GuardClang"), 1.f, 1.1f);
+	else if (Ev == TEXT("PoweredHit")) Sting(0.9f);
+	else if (Ev == TEXT("Critical")) { ZoogiUtil::PlaySfx(this, TEXT("CritBoom"), 1.f); Sting(0.55f); if (G) G->DuckMusic(1.4f); }
+	else if (Ev == TEXT("KO")) { ZoogiUtil::PlaySfx(this, TEXT("CritBoom"), 0.8f, 0.9f); if (G) G->DuckMusic(1.1f); }
+	else if (Ev == TEXT("Combo")) { ZoogiUtil::PlaySfx(this, TEXT("CritBoom"), 0.7f, 1.12f); if (G) G->DuckMusic(1.f); }
+}
+
 void UZoogiAnimeSubsystem::Emit(const FZoogiCombatEvent& E)
 {
+	PlayEventSfx(E);
 	const FString Id = ResolveId(E, nullptr);
 	if (Mode == EZoogiAnimeMode::Off)
 	{

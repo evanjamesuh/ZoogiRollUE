@@ -46,6 +46,10 @@ public:
 	/** True if a ball of the given radius rolling straight From -> To would hit a solid pad or post (Night Circuit). */
 	bool IsPathBlocked(const FVector2D& From, const FVector2D& To, float Radius) const;
 	bool IsNeon() const { return Theme == EZoogiArena::Neon; }
+	/** Destructible rocks placed by this arena (Meadow rim). Restored at match start. */
+	void ResetRocks();
+	const TArray<TObjectPtr<class AZoogiRock>>& GetRocks() const { return Rocks; }
+	class AZoogiRock* NearestStandingRock(const FVector2D& From) const;
 
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> Root;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UDirectionalLightComponent> Sun;
@@ -77,7 +81,7 @@ protected:
 
 	/** Floating island: top disc, rim band and a craggy underside. */
 	void BuildIsland(const FLinearColor& TopA, const FLinearColor& TopB, const FLinearColor& Band, const FLinearColor& RockA, const FLinearColor& RockB, float FloorFriction);
-	void BuildRim(const TArray<FVector4>& Marks, const FLinearColor& A, const FLinearColor& B, float Restitution);
+	void BuildRim(const TArray<FVector4>& Marks, const FLinearColor& A, const FLinearColor& B, float Restitution, bool bDestructible = false);
 	void BuildPads();
 	void BuildIslet(const FVector& Center, float Radius, const FLinearColor& TopA, const FLinearColor& TopB, const FLinearColor& Rock, UStaticMesh* Tree, int32 TreeCount, float TreeHeight, FRandomStream& Rng);
 	void ScatterInstances(UStaticMesh* Mesh, UMaterialInterface* Mat, int32 Count, float RMin, float RMax, FVector2D ScaleRange, float ZOffset, FRandomStream& Rng, bool bFlatten = false);
@@ -90,6 +94,7 @@ protected:
 	UStaticMeshComponent* AddTree(UStaticMesh* Tree, const FVector& Base, float Height, float Yaw);
 
 	UPROPERTY() TArray<TObjectPtr<UActorComponent>> Built;
+	UPROPERTY() TArray<TObjectPtr<class AZoogiRock>> Rocks;
 	UPROPERTY() TObjectPtr<UPhysicalMaterial> FloorPM;
 	UPROPERTY() TObjectPtr<UPhysicalMaterial> RockPM;
 	EZoogiArena Theme = EZoogiArena::Meadow;

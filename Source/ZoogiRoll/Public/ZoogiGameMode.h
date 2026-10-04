@@ -312,6 +312,13 @@ public:
 	AActor* GetLockTarget() const;
 	/** The active shooter touched something (hit or Bolt overlap). */
 	void OnShooterContact(AZoogiBall* Shooter, AActor* Other);
+	/** Destructible rocks (AZoogiRock): popup, feed line and automation screenshots. */
+	void OnRockEvent(class AZoogiRock* Rock, bool bShattered, AZoogiBall* By, const FVector& PopupAt);
+	float GetShotSpeed() const { return ShotSpeed; }
+	/** Dips the music for a big hit (the beat of silence around the boom), back up after Seconds. */
+	void DuckMusic(float Seconds);
+	/** -ZoogiRockTest: CPUs aim at the nearest standing rock and always SAVE (crack first, shatter on the second hit). */
+	bool bRockTest = false;
 	UPROPERTY() TArray<TObjectPtr<AZoogiClone>> Clones;
 
 	// ---- automation / screenshots (command line: -ZoogiAuto -ZoogiPlayers=4 -ZoogiArena=1 -ZoogiShots=<dir> -ZoogiQuit=<sec> -ZoogiMenuShot)

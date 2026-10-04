@@ -1,4 +1,5 @@
 #include "ZoogiArena.h"
+#include "ZoogiRock.h"
 #include "ZoogiRoll.h"
 #include "ZoogiPhysics.h"
 #include "Components/StaticMeshComponent.h"
@@ -161,6 +162,8 @@ void AZoogiArena::Clear()
 		if (C) C->DestroyComponent();
 	}
 	Built.Reset();
+	for (AZoogiRock* R : Rocks) if (IsValid(R)) R->Destroy();
+	Rocks.Reset();
 	SolidBoxes.Reset();
 	SolidPosts.Reset();
 }
@@ -428,9 +431,44 @@ void AZoogiArena::BuildIsland(const FLinearColor& TopA, const FLinearColor& TopB
 	}
 }
 
-void AZoogiArena::BuildRim(const TArray<FVector4>& Marks, const FLinearColor& A, const FLinearColor& B, float Restitution)
+void AZoogiArena::ResetRocks()
+{
+	for (AZoogiRock* R : Rocks) if (IsValid(R)) R->ResetRock();
+}
+
+AZoogiRock* AZoogiArena::NearestStandingRock(const FVector2D& From) const
+{
+	AZoogiRock* Best = nullptr;
+	float BestD = TNumericLimits<float>::Max();
+	for (AZoogiRock* R : Rocks)
+	{
+		if (!IsValid(R) || !R->IsStanding()) continue;
+		const float D = FVector2D::Distance(From, FVector2D(R->GetActorLocation()));
+		if (D < BestD) { BestD = D; Best = R; }
+	}
+	return Best;
+}
+
+void AZoogiArena::BuildRim(const TArray<FVector4>& Marks, const FLinearColor& A, const FLinearColor& B, float Restitution, bool bDestructible)
 {
 	RockPM = ZoogiPhysics::MakeMaterial(this, 0.3f, Restitution, false);
+	if (bDestructible)
+	{
+		// Destructible boulders (AZoogiRock): same footprint / look as the static ones below.
+		int32 Seed = 11;
+		for (const FVector4& M : Marks)
+		{
+			const float Ang = FMath::DegreesToRadians(M.X);
+			const FVector P(FMath::Cos(Ang) * M.Y * 100.f, FMath::Sin(Ang) * M.Y * 100.f, 0.f);
+			FActorSpawnParameters SP;
+			SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			AZoogiRock* R = GetWorld()->SpawnActor<AZoogiRock>(AZoogiRock::StaticClass(), FTransform(P), SP);
+			if (!R) continue;
+			R->InitRock(M.Z * 100.f, M.W * 100.f, M.X, A, B, RockPM, Seed++);
+			Rocks.Add(R);
+		}
+		return;
+	}
 	UMaterialInterface* Mat = ZoogiUtil::GroundMID(this, A, B, 0.02f, 0.85f);
 	UStaticMesh* SphereMesh = ZoogiUtil::BasicShape(TEXT("Sphere"));
 	for (const FVector4& M : Marks)
@@ -488,8 +526,10 @@ void AZoogiArena::BuildMeadow()
 	// roundRim.ts GRASS_RIM: angle, distance, radius, height
 	TArray<FVector4> Rim = {
 		FVector4(32, 13.35, 1.15, 0.85), FVector4(70, 13.5, 1.05, 0.72), FVector4(152, 13.25, 1.2, 0.9),
-		FVector4(196, 13.45, 1.1, 0.78), FVector4(250, 13.3, 1.22, 0.88), FVector4(332, 13.4, 1.08, 0.7) };
-	BuildRim(Rim, ZoogiUtil::Hex(TEXT("#7C7F73")), ZoogiUtil::Hex(TEXT("#4F7A3A")), 0.55f);
+		FVector4(196, 13.45, 1.1, 0.78), FVector4(250, 13.3, 1.22, 0.88), FVector4(332, 13.4, 1.08, 0.7),
+		// Oct 4: two smaller rim stones in the widest gaps (110 / 291 deg), off the spawn-to-centre lanes.
+		FVector4(111, 13.3, 0.8, 0.6), FVector4(291, 13.3, 0.8, 0.6) };
+	BuildRim(Rim, ZoogiUtil::Hex(TEXT("#7C7F73")), ZoogiUtil::Hex(TEXT("#4F7A3A")), 0.55f, true); // destructible (AZoogiRock)
 
 	FRandomStream Rng(77);
 	UStaticMesh* SphereMesh = ZoogiUtil::BasicShape(TEXT("Sphere"));

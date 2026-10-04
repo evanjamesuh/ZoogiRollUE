@@ -4,6 +4,7 @@
 #include "ZoogiOrb.h"
 #include "ZoogiGameMode.h"
 #include "ZoogiFX.h"
+#include "ZoogiRock.h"
 #include "ZoogiArtifactComponent.h"
 #include "Engine/World.h"
 #include "Components/SphereComponent.h"
@@ -219,6 +220,7 @@ void AZoogiBall::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	if (bOut) return;
+	PrevVelocity = GetBallVelocity();
 	ZoogiPhysics::ApplyRolling(Sphere, ZoogiConst::ZoogiRadius, RollingDecel, DeltaSeconds, ZoogiConst::FullLaunchSpeed);
 
 	// Keep the ring flat on the floor under the marble.
@@ -284,6 +286,8 @@ void AZoogiBall::OnSphereHit(UPrimitiveComponent* HitComp, AActor* OtherActor, U
 	{
 		if (AZoogiBall* Att = Cast<AZoogiBall>(OtherActor)) if (Att->PlayerIndex == Shooter) G->OnGuardedHit(this, Att);
 	}
+	// Destructible rocks take the hit (crack / shatter thresholds live in AZoogiRock).
+	if (AZoogiRock* Rock = Cast<AZoogiRock>(OtherActor)) Rock->OnBallHit(this, NormalImpulse, Hit.ImpactPoint);
 	// Impact spark on hard hits between marbles/orbs.
 	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
 	if ((Cast<AZoogiBall>(OtherActor) || Cast<AZoogiOrb>(OtherActor)) && NormalImpulse.Size() > 3500.f && Now - LastImpactFx > 0.15f)
@@ -298,7 +302,13 @@ void AZoogiBall::OnSphereHit(UPrimitiveComponent* HitComp, AActor* OtherActor, U
 			AZoogiFX::Niagara(GetWorld(), TEXT("NS_Sparks"), Hit.ImpactPoint, FRotationMatrix::MakeFromX(N).Rotator(), 1.f);
 			AZoogiFX::Niagara(GetWorld(), TEXT("NS_Sparks"), Hit.ImpactPoint, FRotationMatrix::MakeFromX(-N).Rotator(), 1.f);
 		}
-		ZoogiUtil::PlaySfx(this, TEXT("Clack"), FMath::Clamp(NormalImpulse.Size() / 15000.f, 0.25f, 1.f), FMath::FRandRange(0.9f, 1.15f) * (Cast<AZoogiOrb>(OtherActor) ? 1.25f : 1.f));
+		// Zoogi vs Zoogi: the sharp anime "crack" (once per pair, from the lower index); orbs keep the clack.
+		if (AZoogiBall* OB = Cast<AZoogiBall>(OtherActor))
+		{
+			if (PlayerIndex < OB->PlayerIndex || Now - OB->LastImpactFx > 0.15f)
+				ZoogiUtil::PlaySfx(this, TEXT("HitCrack"), FMath::Clamp(NormalImpulse.Size() / 14000.f, 0.35f, 1.f), FMath::FRandRange(0.94f, 1.08f));
+		}
+		else ZoogiUtil::PlaySfx(this, TEXT("Clack"), FMath::Clamp(NormalImpulse.Size() / 15000.f, 0.25f, 1.f), FMath::FRandRange(0.9f, 1.15f) * 1.25f);
 	}
 	const int32 Credit = (PlayerIndex == Shooter) ? PlayerIndex : LastHitPlayer;
 	if (AZoogiBall* Other = Cast<AZoogiBall>(OtherActor))

@@ -69,6 +69,10 @@ public:
 	virtual bool IsTickableWhenPaused() const override { return true; }
 
 	void Emit(const FZoogiCombatEvent& E);
+	/** Oct 4 anime SFX: every combat event plays its sound at emission (also with Anime=Off), real-time and
+	 *  independent of the simulation. Crit / KO / Combo boom assets open with a ~0.12 s silent beat (the held-pose
+	 *  micro-pause before the hit lands) and dip the music. */
+	void PlayEventSfx(const FZoogiCombatEvent& E);
 	/** A sequence is playing (gameplay waits before the next phase change). */
 	bool IsBusy() const { return bPlaying; }
 	/** Click / Space: skip (after the minimum 0.3 s). */
