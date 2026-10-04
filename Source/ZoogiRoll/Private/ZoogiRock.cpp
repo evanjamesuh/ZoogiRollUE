@@ -141,7 +141,8 @@ void AZoogiRock::OnBallHit(AZoogiBall* Ball, const FVector& NormalImpulse, const
 	if (G && Ball->PlayerIndex == G->ActivePlayer && G->Phase == EZoogiPhase::Rolling)
 	{
 		const bool bAwakened = Ball->Artifact && Ball->Artifact->Infused != EZoogiArtifact::None;
-		const bool bCritGrade = G->GetShotSpeed() > 1.f && V.Size2D() >= 0.9f * G->GetShotSpeed() && CutDeg <= 5.f; // same rule as crits
+		// Crit-grade = the crit rule (>= 90% of its launch speed at contact, <= 5 deg cut) on a hard hit; a soft straight tap only cracks.
+		const bool bCritGrade = G->GetShotSpeed() > 1.f && V.Size2D() >= 0.9f * G->GetShotSpeed() && CutDeg <= 5.f && Vn >= ShatterSpeed;
 		bStrong = bAwakened || bCritGrade;
 	}
 	FVector Dir = -NormalImpulse.GetSafeNormal2D(); // impulse pushes the ball away from the rock: debris flies the other way

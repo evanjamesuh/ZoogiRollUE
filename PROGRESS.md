@@ -214,13 +214,50 @@ one Zoogi per player, no HP, deterministic crit, Guard = next opponent attack on
         (mass 1.17 -> 1.03).
   - [x] Night Circuit CPU planning: rails count as "no edge" (only the corner mouths knock off) and pads / posts in the shot
         path or the target's exit path make a plan expensive (CPUs used to plan through them; whole matches ended 0-0).
+  - [x] Balance sample 5 (28 matches, Defense 62 only): Pinpoint 49%, Hotstreak 46%, Lars 32%, Wolfgang 17%, Nightshade 13%,
+        Wraps 12%, Bolt 7%. Points per turn showed Hotstreak's Ember-affinity turns at 91 (highest), Bolt's affinity turns at 25
+        (half his plain infused turns) and Nightshade's at -1 -> Ember affinity burst x0.3, Bolt affinity stuns on impact,
+        Nightshade's stun no longer freezes the knocked target (artifact rules).
+  - [x] Balance sample 6 (28 matches, 1:51 PM package): Nightshade 49%, Lars 38%, Wolfgang 33%, Hotstreak 16%, Pinpoint 15%,
+        Bolt 14%, Wraps 12% (3 all-zero matches excluded, none on Night Circuit any more). Affinity turns now: Hotstreak 56 pts
+        (was 91), Bolt 54 (was 25); Nightshade affinity still ~0. With 12-14 games per Zoogi the noise is about +-25%, so the
+        leader changes every sample (Hotstreak -> Pinpoint -> Nightshade); no further change made.
   New switches: `-ZoogiClassicPowers` (Oct 3 rules), `-ZoogiCinematic`, `-ZoogiAnime=Off|Short|Full` (auto runs without
   `-ZoogiShots` default to Off).
+
+## Destructible rocks + anime SFX (Oct 4, 2:00-2:45 PM)
+- **`AZoogiRock`** (`ZoogiRock.h/.cpp`, reusable by any arena via `InitRock(radius, height, yaw, colours, physmat, seed)`):
+  C++ fallback, not Chaos Geometry Collection (no pre-fractured asset pipeline headless; Chaos fracture also would make the
+  outcome depend on debris physics). Solid invisible cylinder collider + squashed-sphere visual + side stone.
+  - Contact speed = the ball's approach velocity (sampled before the physics step) along the contact normal.
+  - >= 900 cm/s (full launch 3600): **crack** (darker, shrinks 5%, side stone breaks into 3 chips, 4 crack lines, debris FX,
+    `RockCrack`). A cracked rock hit again >= 1600 cm/s, or any **strong** hit (active shooter Awakened/Infused, or a
+    crit-grade hit: >= 90% of its launch speed, <= 5 deg cut, >= 1600 cm/s) **shatters**: collider off, 8 chunks on scripted
+    ballistic arcs (no physics bodies, floor bounce, shrink-fade, gone by 3 s), 4 flat rubble pebbles without collision,
+    dust ring + `NS_Dust` + `NS_Debris`, `RockShatter`, light camera kick (`OnImpact(0.35)`), popup + feed line.
+  - Deterministic: debris is cosmetic and seeded; nothing it does touches the marbles, so the result is settled by the
+    marble physics before any anime sequence plays. 11 small mesh parts per rock, ticks only while chunks fly.
+  - Meadow rim boulders are rocks now (+2 new ones at 111 / 291 deg, rim only, clear of the shot lanes). `Arena->ResetRocks()`
+    at match start restores them. Note: a shattered rim rock no longer stops a marble at that edge.
+  - `-ZoogiRockTest`: CPUs always SAVE and shoot the nearest standing rock (60% power if intact, 97% if cracked).
+- **SFX**: 13 original sounds made by `Scripts/synth_sfx.py` (numpy/scipy, seeded; list + recipes in
+  `Content/Audio/SFX/CREDITS.md`). Nothing sampled; the Naruto/Boruto refs were only used for timing/style (movie team's
+  measurements + `TEAM-NOTES-fight-and-victory.md`). About -16 LUFS max momentary, true peak <= -1 dBTP. Imported as
+  `/Game/Audio/S_<Name>` by `Scripts/import_sfx.py` (a harmless "BINKA decoder" ensure in the commandlet makes PY_EXIT=1;
+  all 13 assets import and save).
+  - Wiring: launch = Inhale wind-up (ends with a 0.11 s held-pose beat) + Dash whoosh; Zoogi-vs-Zoogi hard hit = HitCrack
+    (orbs keep Clack); crit/KO/combo = CritBoom on the impact frame + ~4.4 dB music duck; Infuse = AwakenCharge + artifact
+    stinger; Guard / guard block = GuardClang; powered hit = artifact stinger (Ember / Storm / Frost / Titan / Void); rocks =
+    RockCrack / RockShatter. Played from `UZoogiAnimeSubsystem::PlayEventSfx` (also with Anime=Off) as UI sounds so they
+    play through anime freezes.
+  - SFX volume: new SFX -/+ row in the menu (steps of 25%), `-ZoogiSfxVol=0..100`.
+- Pizza court (teammate's patch, applied as its own commit): Arabian Nights is now a pizza with 21 pepperoni/cheese
+  toppings that pop when a Zoogi rolls over them (no collision; reset each match). Tomato planters unchanged.
 
 ## Command-line switches (for testing)
 `-ZoogiAuto` (all CPU, start at once), `-ZoogiPlayers=N`, `-ZoogiArena=0..6` (0 Meadow, 1 Frozen, 2 Volcanic, 3 Cosmic, 4 Arabian, 5 Tomb, 6 Night Circuit), `-ZoogiRounds=N`,
 `-ZoogiShots=<dir>` (event screenshots), `-ZoogiQuit=<sec>`, `-ZoogiMenuShot`, `-ZoogiHumanTest`,
-`-ZoogiCanvasMenu`, `-ZoogiPowerTest` (3 charges each, CPUs always use powers), `-ZoogiPicks=4,5,6,0` (roster index per slot:
+`-ZoogiCanvasMenu`, `-ZoogiRockTest`, `-ZoogiSfxVol=0..100`, `-ZoogiPowerTest` (3 charges each, CPUs always use powers), `-ZoogiPicks=4,5,6,0` (roster index per slot:
 0 Wolfgang, 1 Hotstreak, 2 Lars, 3 Pinpoint, 4 Bolt, 5 Wraps, 6 Nightshade).
 
 ## Scripts
@@ -230,6 +267,8 @@ one Zoogi per player, no HP, deterministic crit, Guard = next opponent attack on
 * `Scripts/glb_unwebp.py` — strip EXT_texture_webp from a GLB (run with Python + Pillow).
 * `Scripts/make_fx.py`, `Scripts/import_audio.py` — FX material / audio import (headless).
 * `Scripts/package.ps1` — packaged Win64 build into `Packaged/`.
+* `Scripts/synth_sfx.py <outdir>` — regenerates the 13 SFX WAVs (plain Python 3 + numpy/scipy, ffmpeg for loudness);
+  `Scripts/import_sfx.py` imports them; `Scripts/make_rock_fx.py` makes `NS_Dust` / `NS_Debris`.
 
 ## Known issues / notes
 * Real-mouse play has not been exercised by a person yet (the scripted virtual mouse uses the
@@ -238,7 +277,7 @@ one Zoogi per player, no HP, deterministic crit, Guard = next opponent attack on
   falls back to 1 compile action; builds still take ~1 min.
 * CPU players are simple (pick one of the 3 best orb/rival shots, aim error from Control stat).
 * Sound has not been listened to on the PC (all automated runs use -NoSound so nothing played while
-  Evan was working). Music volume is 0.35; tune in `AZoogiGameMode::PlayMusic`.
+  Evan was working), including the new anime SFX; levels were set by measurement only. Music volume is 0.35; tune in `AZoogiGameMode::PlayMusic`.
 * Power balance: tuned from two 20-match all-CPU samples (`FinalScores:` log line); CPU-only data, and 2-3 shots per
   Zoogi per match make single matches noisy. Wraps is still the weakest; Hotstreak the strongest.
   Radii/speeds at the top of `ZoogiPowers.cpp`.
