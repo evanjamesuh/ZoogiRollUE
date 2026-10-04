@@ -7,6 +7,7 @@
 #include "ZoogiArena.h"
 #include "ZoogiHUD.h"
 #include "ZoogiTargetMarker.h"
+#include "ZoogiAnimeSubsystem.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "Engine/World.h"
@@ -40,7 +41,7 @@ namespace ZoogiCamTune
 		float Blend;      // seconds to blend INTO this profile from whatever was before
 	};
 
-	enum EProfile { PDraw, PStandby, PMain, PBattle, PEnd, PFollow, PMenu, PTargetCU, PCount };
+	enum EProfile { PDraw, PStandby, PMain, PBattle, PEnd, PFollow, PMenu, PTargetCU, PTactical, PAnime, PCount };
 
 	static const FProfile Profiles[PCount] = {
 		// Name       Pitch  Dist   FOV   Dutch PosLag Blend YawW  Zeta  Vign  DOF   Sat   Contr  Gain                                 BlendIn
@@ -52,7 +53,17 @@ namespace ZoogiCamTune
 		{ TEXT("Follow"),  55.f, 2400.f, 90.f, 0.f, 2.5f, 3.f,  3.f, 1.0f, 0.25f, 0.0f,  1.05f, 1.02f, FLinearColor(1.00f, 1.00f, 1.00f), 0.40f }, // shot follow (first part of End)
 		{ TEXT("Menu"),    38.f, 3600.f, 90.f, 0.f, 2.f,  1.f,  2.f, 1.0f, 0.20f, 0.0f,  1.00f, 1.00f, FLinearColor(1.00f, 1.00f, 1.00f), 0.60f },
 		{ TEXT("TargetCU"),  9.f,  640.f, 40.f, -5.f, 14.f, 9.f, 12.f, 0.9f, 0.80f, 1.0f, 1.25f, 1.16f, FLinearColor(1.10f, 0.96f, 0.92f), 0.28f }, // Battle beat 1 (long locks): tight on the target
+		{ TEXT("Tactical"), 55.f, 2300.f, 80.f, 0.f, 3.f, 4.f,  3.f, 1.0f, 0.18f, 0.0f,  1.00f, 1.00f, FLinearColor(1.00f, 1.00f, 1.00f), 0.50f }, // default (Oct 4): readable high view, small emphasis
+		{ TEXT("Anime"),    12.f,  520.f, 50.f, -6.f, 12.f, 10.f, 10.f, 0.9f, 0.60f, 1.0f, 1.30f, 1.15f, FLinearColor(1.08f, 1.00f, 0.95f), 0.18f }, // anime placeholder close shot
 	};
+	// Tactical camera emphasis (fractions of the Tactical boom).
+	constexpr float TacDrawZoom = 0.78f;      // Draw / Awaken: slight zoom on the active Zoogi
+	constexpr float TacAimLook = 0.4f;        // Aim: look between the shooter (0) and the aim point (1)
+	constexpr float TacPowerZoom = 0.86f;     // PowerUp: small push-in
+	constexpr float TacRollTrack = 0.55f;     // Rolling: track the shooter this much (rest = arena centre)
+	constexpr float TacResolveDist = 1.18f;   // Resolve / End: auto-return to the whole-arena view
+	constexpr float TacShake = 0.4f;          // shake scale vs cinematic
+	constexpr float TacFovPunch = 3.f;
 
 	// Draw hero shot: side angle, push-in and orbit sweep.
 	constexpr float DrawSideYaw = 100.f;      // start this far around from the aim heading
@@ -177,9 +188,15 @@ void AZoogiPlayerController::UpdateHumanTest(float Dt)
 	bSimClick = bSimTab = bSimSpace = false;
 	AZoogiGameMode* G = GM();
 	if (!G || !G->IsHumanAiming()) { SimStep = 0; return; }
-	if (G->Stage != SimStage) { SimStage = G->Stage; SimStep = 0; }
+	const int32 Key = (int32)G->Stage * 10 + (G->Stage == EZoogiStage::Battle ? (int32)G->BattleStep : 0);
+	if (Key != SimKey)
+	{
+		if (G->Stage == EZoogiStage::Draw) ++SimTurn;
+		SimKey = Key;
+		SimStep = 0;
+	}
 	SimClock += Dt;
-	const float T = G->StageTime;
+	const float T = G->Stage == EZoogiStage::Battle ? G->StepTime : G->StageTime;
 	auto Aim = [&](bool bWantBall)
 	{
 		// Move the virtual cursor onto the nearest orb (or rival Zoogi).
@@ -187,20 +204,44 @@ void AZoogiPlayerController::UpdateHumanTest(float Dt)
 		{
 			if ((Cast<AZoogiBall>(A) != nullptr) != bWantBall) continue;
 			FVector2D S;
-			if (ProjectWorldLocationToScreen(ActorCenter(A), S)) { SimMouse = S; return; }
+			if (ProjectWorldLocationToScreen(ActorCenter(A), S)) { SimMouse = S; return true; }
 		}
+		return false;
 	};
-	if (G->Stage == EZoogiStage::Standby)
+	if (G->Stage == EZoogiStage::Awaken)
 	{
-		if (SimStep == 0 && T > 0.45f) { Aim(false); SimStep = 1; }
-		else if (SimStep == 1 && T > 0.75f) { Aim(false); bSimClick = true; SimStep = 2; }  // soft lock
+		// Alternate Infuse / Guard / Save through the HUD actions, like clicking the buttons.
+		if (SimStep == 0 && T > 0.8f)
+		{
+			const int32 Mode = SimTurn % 3;
+			G->MenuAction(Mode == 2 ? FName(TEXT("Save")) : Mode == 1 ? FName(TEXT("Guard")) : FName(TEXT("Infuse")), -1);
+			SimStep = 1;
+		}
 	}
-	else if (G->Stage == EZoogiStage::Main)
+	else if (G->IsAimStep())
 	{
-		if (SimStep == 0 && T > 0.7f) { bSimTab = true; SimStep = 1; }                     // Tab cycles the lock
-		else if (SimStep == 1 && T > 1.4f) { Aim(true); SimStep = 2; }
-		else if (SimStep == 2 && T > 1.7f) { Aim(true); bSimClick = true; SimStep = 3; }   // switch lock to a rival
-		else if (SimStep == 3 && T > 2.6f) { bSimSpace = true; SimStep = 4; }              // fire
+		const bool bFloorTurn = SimTurn % 2 == 0;
+		if (SimStep == 0 && T > 0.5f)
+		{
+			if (bFloorTurn)
+			{
+				// Floor click: a point toward the arena centre (free aim, stops on the point).
+				if (AZoogiBall* Me = G->GetActiveBall())
+				{
+					FVector L = Me->BallLocation();
+					FVector Dir = FVector(-L.X, -L.Y, 0.f).GetSafeNormal();
+					if (Dir.IsNearlyZero()) Dir = FVector(1, 0, 0);
+					FVector2D S;
+					if (ProjectWorldLocationToScreen(L + Dir * 700.f - FVector(0, 0, ZoogiConst::ZoogiRadius), S)) SimMouse = S;
+				}
+			}
+			else if (!Aim(true)) Aim(false);
+			bSimClick = true;
+			SimStep = 1;
+		}
+		else if (SimStep == 1 && T > 1.1f) { G->MenuAction(TEXT("AimNudge"), bFloorTurn ? -2 : 3); SimStep = 2; } // cut nudges
+		else if (SimStep == 2 && T > 1.4f) { if (!bFloorTurn) G->MenuAction(TEXT("AimPower"), 3); SimStep = 3; }
+		else if (SimStep == 3 && T > 2.0f) { bSimSpace = true; SimStep = 4; }                                       // confirm
 	}
 }
 
@@ -209,9 +250,16 @@ void AZoogiPlayerController::UpdateHumanTest(float Dt)
 void AZoogiPlayerController::OnTurnStarted(AZoogiBall* Ball)
 {
 	CamTarget = Ball;
+	const bool bFromMenu = bMenuCam;
 	bMenuCam = false;
 	HoverTarget.Reset();
-	if (Ball)
+	AZoogiGameMode* G = GM();
+	if (Ball) TacYaw = Ball->AimYaw;
+	if (Ball && G && !G->bCinematicCam && !bFromMenu)
+	{
+		DrawBaseYaw = Ball->AimYaw; // tactical: no hard cut, the camera glides to the next shooter
+	}
+	else if (Ball)
 	{
 		DrawBaseYaw = Ball->AimYaw;
 		// Hard cut into the hero shot (C18).
@@ -228,21 +276,26 @@ void AZoogiPlayerController::OnTurnStarted(AZoogiBall* Ball)
 
 void AZoogiPlayerController::OnStageChanged(EZoogiStage Stage)
 {
-	if (Stage == EZoogiStage::Standby) StandbyYaw = Yaw;
-	if (Stage == EZoogiStage::Battle)
+	if (Stage == EZoogiStage::Awaken) StandbyYaw = Yaw;
+	if (Stage == EZoogiStage::End || Stage == EZoogiStage::Resolve) EndSlowMo();
+}
+
+void AZoogiPlayerController::OnBattleStep(EZoogiBattleStep Step)
+{
+	AZoogiGameMode* G = GM();
+	if (!G) return;
+	if (Step == EZoogiBattleStep::PowerUp)
 	{
 		SwingAge = 0.f;
 		bWhip = false;
 		LockPunchAge = 0.f;
-		AZoogiGameMode* G = GM();
-		if (G && G->AllAtRestPublic())
+		if (G->bCinematicCam && G->AllAtRestPublic())
 		{
 			// Slow-mo dip on the lock moment: everything is at rest, so physics outcomes are unaffected.
 			UGameplayStatics::SetGlobalTimeDilation(this, ZoogiCamTune::SlowMoScale);
 			SlowMoUntil = GetWorld()->GetRealTimeSeconds() + ZoogiCamTune::SlowMoTime;
 		}
 	}
-	if (Stage == EZoogiStage::End) EndSlowMo();
 }
 
 void AZoogiPlayerController::EndSlowMo()
@@ -260,9 +313,48 @@ void AZoogiPlayerController::OnImpact(float Strength)
 	if (bMenuCam) return;
 	ImpactAge = 0.f;
 	ImpactStrength = FMath::Clamp(Strength, 0.f, 1.f);
+	AZoogiGameMode* G = GM();
+	if (G && !G->bCinematicCam) { ImpactStrength *= TacShake; return; } // tactical: light shake, no hit-stop for normal hits
 	// Hit-stop: a few frames of near-freeze (uniform time scale, so the physics outcome is the same).
 	UGameplayStatics::SetGlobalTimeDilation(this, HitStopScale);
 	SlowMoUntil = GetWorld()->GetRealTimeSeconds() + HitStopTime * (0.5f + 0.5f * ImpactStrength);
+}
+
+void AZoogiPlayerController::OnPoweredHit(bool bCrit)
+{
+	using namespace ZoogiCamTune;
+	if (bMenuCam) return;
+	ImpactAge = 0.f;
+	ImpactStrength = bCrit ? 1.f : 0.7f;
+	UGameplayStatics::SetGlobalTimeDilation(this, HitStopScale);
+	SlowMoUntil = GetWorld()->GetRealTimeSeconds() + HitStopTime * (bCrit ? 1.6f : 1.f);
+}
+
+void AZoogiPlayerController::OnAnimeStarted(const FZoogiCombatEvent& E)
+{
+	AnimeFocus = E.Focus;
+	AnimeYaw = Yaw + (E.Event == TEXT("Infuse") || E.Event == TEXT("Guard") ? 60.f : 35.f);
+	bAnimeCam = AnimeFocus.IsValid();
+	EndSlowMo();
+}
+
+void AZoogiPlayerController::OnAnimeFinished()
+{
+	bAnimeCam = false;
+	AnimeFocus.Reset();
+}
+
+bool AZoogiPlayerController::FloorPoint(const FVector2D& Screen, FVector& Out) const
+{
+	FVector O, D;
+	if (!DeprojectScreenPositionToWorld(Screen.X, Screen.Y, O, D) || D.Z > -0.02f) return false;
+	AZoogiGameMode* G = GM();
+	const AZoogiBall* Me = G ? G->GetActiveBall() : nullptr;
+	const float Z = Me ? Me->BallLocation().Z - ZoogiConst::ZoogiRadius : 0.f;
+	const float T = (Z - O.Z) / D.Z;
+	if (T <= 0.f) return false;
+	Out = O + D * T;
+	return true;
 }
 
 void AZoogiPlayerController::OnShotFired(AZoogiBall* Ball)
@@ -347,27 +439,51 @@ void AZoogiPlayerController::HandleInput(float Dt)
 		return;
 	}
 
+	// Anime placeholder playing: click / Space / Esc skips (after 0.3 s), nothing else.
+	if (UZoogiAnimeSubsystem* Anime = GetWorld()->GetSubsystem<UZoogiAnimeSubsystem>())
+	{
+		if (Anime->IsBusy())
+		{
+			if (WasInputKeyJustPressed(EKeys::LeftMouseButton) || WasInputKeyJustPressed(EKeys::SpaceBar) || WasInputKeyJustPressed(EKeys::Escape)) Anime->Skip();
+			HoverTarget.Reset();
+			return;
+		}
+	}
+
 	AZoogiBall* Active = G->GetActiveBall();
 	const bool bHumanTurn = Active && !Active->bCPU;
-	const bool bPickStage = G->IsHumanAiming() && (G->Stage == EZoogiStage::Standby || G->Stage == EZoogiStage::Main);
+	const bool bPickStage = G->IsHumanAiming() && G->IsAimStep();
+	const bool bAwaken = G->IsHumanAiming() && G->Stage == EZoogiStage::Awaken && !G->bAwakenDone;
 
 	if (WasInputKeyJustPressed(EKeys::Escape))
 	{
-		if (bPickStage && G->TargetLock.IsValid()) G->ClearLock(); // Esc clears the lock first
+		if (bPickStage && G->HasAim()) G->ClearLock(); // Esc cancels the aim first
 		else G->ReturnToMenu();
 		return;
 	}
 	if (WasInputKeyJustPressed(EKeys::R) && IsInputKeyDown(EKeys::LeftControl)) { G->StartMatch(); return; }
+	if (WasInputKeyJustPressed(EKeys::C)) G->MenuAction(TEXT("CamStyle"), 0);
 
-	// Power: E / Q (SPACE now fires the locked shot).
-	if (bHumanTurn)
+	// Classic powers (-ZoogiClassicPowers): E / Q.
+	if (bHumanTurn && !G->bArtifactMode)
 	{
 		if (WasInputKeyJustPressed(EKeys::E) || WasInputKeyJustPressed(EKeys::Q)) G->TryPower();
 		if (bHumanTest && bPowerTest && Active->Charges > 0 && G->CanUsePower() && !G->bPowerArmed)
 		{
 			const bool bArmed = ZoogiUtil::IsArmedPower(Active->Def.PowerKind);
-			if ((bArmed && G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Main && G->StageTime > 0.3f) || (!bArmed && G->Phase == EZoogiPhase::Rolling && G->PhaseTime > 0.4f)) G->TryPower();
+			if ((bArmed && G->IsAimStep() && G->StepTime > 0.3f) || (!bArmed && G->Phase == EZoogiPhase::Rolling && G->PhaseTime > 0.4f)) G->TryPower();
 		}
+	}
+
+	// Awaken keys: 1-3 pick the card, I / G / S = Infuse / Guard / Save.
+	if (bAwaken)
+	{
+		if (WasInputKeyJustPressed(EKeys::One)) G->MenuAction(TEXT("AwakenPick"), 0);
+		if (WasInputKeyJustPressed(EKeys::Two)) G->MenuAction(TEXT("AwakenPick"), 1);
+		if (WasInputKeyJustPressed(EKeys::Three)) G->MenuAction(TEXT("AwakenPick"), 2);
+		if (WasInputKeyJustPressed(EKeys::I)) G->MenuAction(TEXT("Infuse"), -1);
+		if (WasInputKeyJustPressed(EKeys::G)) G->MenuAction(TEXT("Guard"), -1);
+		if (WasInputKeyJustPressed(EKeys::S)) G->MenuAction(TEXT("Save"), -1);
 	}
 
 	if (!bPickStage)
@@ -378,15 +494,28 @@ void AZoogiPlayerController::HandleInput(float Dt)
 
 	HoverTarget = PickTarget(Mouse.X, Mouse.Y);
 	const bool bClick = WasInputKeyJustPressed(EKeys::LeftMouseButton) || bSimClick;
-	const bool bStandby = G->Stage == EZoogiStage::Standby;
-	if (bClick && HoverTarget.IsValid())
+	if (bClick)
 	{
-		if (!bStandby && HoverTarget.Get() == G->TargetLock.Get() && !G->bSoftLock) G->CommitLock(); // click the locked target again = fire
-		else G->LockOn(HoverTarget.Get(), bStandby);
+		if (HoverTarget.IsValid())
+		{
+			if (HoverTarget.Get() == G->TargetLock.Get() && !G->bSoftLock && !G->bFreeAim) G->CommitLock(); // click the locked target again = confirm
+			else G->LockOn(HoverTarget.Get(), false);
+		}
+		else
+		{
+			FVector P;
+			if (FloorPoint(Mouse, P)) G->SetFreeAim(P); // click the floor: free (angled) aim at that point
+		}
 	}
-	if (WasInputKeyJustPressed(EKeys::Tab) || bSimTab) G->CycleLock(bStandby);
+	// Nudges: Left / Right (or A / D) = 2 deg cut, Shift = 10 deg. Up / Down = power step.
+	const int32 NudgeMul = IsInputKeyDown(EKeys::LeftShift) ? 5 : 1;
+	if (WasInputKeyJustPressed(EKeys::Left) || WasInputKeyJustPressed(EKeys::A)) G->NudgeAim(-NudgeMul); // + = clockwise seen from above (turns right on screen)
+	if (WasInputKeyJustPressed(EKeys::Right) || WasInputKeyJustPressed(EKeys::D)) G->NudgeAim(NudgeMul);
+	if (WasInputKeyJustPressed(EKeys::Up)) G->AimPowerStep = FMath::Clamp(G->AimPowerStep + 1, 0, 3);
+	if (WasInputKeyJustPressed(EKeys::Down)) G->AimPowerStep = FMath::Clamp(G->AimPowerStep - 1, 0, 3);
+	if (WasInputKeyJustPressed(EKeys::Tab) || bSimTab) G->CycleLock(false);
 	if (WasInputKeyJustPressed(EKeys::RightMouseButton)) G->ClearLock();
-	if (WasInputKeyJustPressed(EKeys::SpaceBar) || bSimSpace) G->CommitLock();
+	if (WasInputKeyJustPressed(EKeys::SpaceBar) || WasInputKeyJustPressed(EKeys::Enter) || bSimSpace) G->CommitLock();
 }
 
 // ------------------------------------------------------------------ markers
@@ -492,14 +621,31 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	const FVector SL = Shooter ? Shooter->BallLocation() : FVector::ZeroVector;
 	AActor* Lock = (G->TargetLock.IsValid() && !G->bSoftLock) ? G->TargetLock.Get() : nullptr;
 	const FVector TL = Lock ? ActorCenter(Lock) : FVector::ZeroVector;
-	const float T = G->StageTime;
+	// Stage -> camera: cinematic keeps the Oct 3 profiles (Draw hero, Awaken overview, Aim OTS, PowerUp battle swing,
+	// Rolling follow then aerial, Resolve / End aerial); tactical uses one profile with small emphasis moves.
+	enum class ECine { Draw, Standby, Main, Battle, End };
+	ECine Cine = ECine::End;
+	float T = G->StageTime;
+	switch (G->Stage)
+	{
+	case EZoogiStage::Draw: Cine = ECine::Draw; break;
+	case EZoogiStage::Awaken: Cine = ECine::Standby; break;
+	case EZoogiStage::Battle:
+		T = G->StepTime;
+		Cine = G->BattleStep == EZoogiBattleStep::Aim ? ECine::Main : G->BattleStep == EZoogiBattleStep::PowerUp ? ECine::Battle : ECine::End;
+		break;
+	default: Cine = ECine::End; T = 99.f; break;
+	}
+	UZoogiAnimeSubsystem* Anime = GetWorld()->GetSubsystem<UZoogiAnimeSubsystem>();
+	const bool bAnimeShot = bAnimeCam && Anime && Anime->IsBusy() && AnimeFocus.IsValid();
+	const bool bTac = !G->bCinematicCam;
 
 	// Lock changes in Main swing (switching = whip-pan).
 	if (G->LockSerial != SeenLockSerial)
 	{
 		const bool bHadLock = SeenLockSerial >= 0 && SwingAge < 100.f;
 		SeenLockSerial = G->LockSerial;
-		if (Lock && G->Stage == EZoogiStage::Main) { bWhip = bHadLock; SwingAge = 0.f; }
+		if (Lock && G->IsAimStep()) { bWhip = bHadLock; SwingAge = 0.f; }
 	}
 	SwingAge += Dt;
 	LockPunchAge += Dt;
@@ -512,9 +658,65 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	FVector WantPivot = SL, WantLook = SL;
 	float PitchOff = 0.f, DistMul = 1.f;
 	FVector ProbeFrom = SL + FVector(0, 0, 60.f);
-	switch (G->Stage)
+	if (bAnimeShot)
 	{
-	case EZoogiStage::Draw:
+		PIdx = PAnime;
+		const FVector F = ActorCenter(AnimeFocus.Get());
+		WantYaw = AnimeYaw;
+		WantPivot = F;
+		WantLook = F + FVector(0, 0, 15.f);
+		DistMul = 1.f - 0.18f * FMath::Clamp(Anime->Age / FMath::Max(Anime->Length, 0.1f), 0.f, 1.f);
+		ProbeFrom = F + FVector(0, 0, 60.f);
+	}
+	else if (bTac)
+	{
+		PIdx = PTactical;
+		const FVector C0(0.f, 0.f, SL.Z);
+		FVector AimP = C0;
+		bool bHasAim = false;
+		if (Lock) { AimP = TL; bHasAim = true; }
+		else if (G->bFreeAim) { AimP = FVector(G->FreeAimPoint.X, G->FreeAimPoint.Y, SL.Z); bHasAim = true; }
+		const bool bSettled = G->Stage == EZoogiStage::Resolve || G->Stage == EZoogiStage::End;
+		if (G->Phase == EZoogiPhase::Aiming && !bSettled)
+		{
+			FVector D = (bHasAim ? AimP : C0) - SL;
+			D.Z = 0.f;
+			if (D.Size() > 150.f) TacYaw = FMath::RadiansToDegrees(FMath::Atan2(D.Y, D.X));
+		}
+		WantYaw = TacYaw;
+		DistMul = Scale;
+		if (G->Stage == EZoogiStage::Draw || G->Stage == EZoogiStage::Awaken)
+		{
+			WantPivot = SL;
+			DistMul = TacDrawZoom * Scale;
+		}
+		else if (G->Stage == EZoogiStage::Battle && G->BattleStep == EZoogiBattleStep::Aim)
+		{
+			WantPivot = FMath::Lerp(SL, AimP, TacAimLook);
+		}
+		else if (G->Stage == EZoogiStage::Battle && G->BattleStep == EZoogiBattleStep::PowerUp)
+		{
+			WantPivot = FMath::Lerp(SL, AimP, 0.3f);
+			DistMul = TacPowerZoom * Scale;
+		}
+		else if (G->Phase == EZoogiPhase::Rolling)
+		{
+			const bool bGone = !Shooter || Shooter->bOut || SL.Z < -600.f;
+			WantPivot = bGone ? C0 : FMath::Lerp(C0, SL, TacRollTrack);
+			DistMul = 1.05f * Scale;
+		}
+		else
+		{
+			WantPivot = FVector(0.f, 0.f, SL.Z);
+			DistMul = TacResolveDist * Scale;
+			if (G->Arena && G->Arena->IsNeon()) WantYaw = TacYaw = (FMath::Abs(FRotator::NormalizeAxis(Yaw - 90.f)) <= 90.f ? 90.f : -90.f);
+		}
+		WantLook = WantPivot;
+		ProbeFrom = WantPivot + FVector(0, 0, 150.f);
+	}
+	else switch (Cine)
+	{
+	case ECine::Draw:
 	{
 		PIdx = PDraw;
 		const float Dur = Shooter && Shooter->bCPU ? ZoogiStageTune::DrawCPU : ZoogiStageTune::DrawHuman;
@@ -525,7 +727,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		WantLook = SL + FVector(0, 0, 25.f);
 		break;
 	}
-	case EZoogiStage::Standby:
+	case ECine::Standby:
 	{
 		PIdx = PStandby;
 		StandbyYaw += StandbyDrift * Dt;
@@ -536,7 +738,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		ProbeFrom = FVector(0, 0, 200.f);
 		break;
 	}
-	case EZoogiStage::Main:
+	case ECine::Main:
 	{
 		PIdx = PMain;
 		if (Lock)
@@ -554,7 +756,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		}
 		break;
 	}
-	case EZoogiStage::Battle:
+	case ECine::Battle:
 	{
 		// Long locks: two-beat camera. Beat 1 sits tight on the target (who's about to get hit), then whips
 		// back to the shooter's shoulder for the release.
@@ -611,7 +813,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		}
 		break;
 	}
-	case EZoogiStage::End:
+	case ECine::End:
 	default:
 	{
 		const bool bGone = !Shooter || Shooter->bOut || Shooter->BallLocation().Z < -600.f;
@@ -666,7 +868,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	const bool bBlending = ProfileAge < BlendDur;
 	// Yaw: spring (underdamped in Battle = arc sweep with overshoot and settle; whip on switches).
 	float W = P.YawFreq, Z = P.YawZeta;
-	if (G->Stage == EZoogiStage::Main && bWhip && SwingAge < WhipTime) { W = WhipFreq; Z = WhipZeta; }
+	if (G->IsAimStep() && bWhip && SwingAge < WhipTime) { W = WhipFreq; Z = WhipZeta; }
 	if (bBlending && PIdx != PBattle)
 	{
 		// Battle keeps its spring arc swing; every other profile eases in on the clock.
@@ -748,7 +950,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	// Lock impulse shake (Battle).
 	if (LockPunchAge < 2.f)
 	{
-		const float A = ShakeDeg * FMath::Exp(-ShakeDecay * LockPunchAge);
+		const float A = ShakeDeg * (bTac ? TacShake : 1.f) * FMath::Exp(-ShakeDecay * LockPunchAge);
 		Rot.Pitch += A * FMath::Sin(LockPunchAge * 47.f);
 		Rot.Yaw += A * FMath::Sin(LockPunchAge * 31.f + 1.3f);
 	}
@@ -760,8 +962,8 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	}
 	float FinalFov = Fov;
 	if (ImpactAge < 0.3f) FinalFov -= ImpactFovPunch * ImpactStrength * FMath::Sin(PI * ImpactAge / 0.3f);
-	if (LockPunchAge < LockFovPunchTime) FinalFov -= LockFovPunch * FMath::Sin(PI * LockPunchAge / LockFovPunchTime);
-	if (FireKickAge < 2.f) FinalFov += FireFovKick * FMath::Exp(-FireKickDecay * FireKickAge) * FMath::Min(1.f, FireKickAge * 12.f);
+	if (LockPunchAge < LockFovPunchTime) FinalFov -= (bTac ? TacFovPunch : LockFovPunch) * FMath::Sin(PI * LockPunchAge / LockFovPunchTime);
+	if (FireKickAge < 2.f) FinalFov += FireFovKick * (bTac ? 0.3f : 1.f) * FMath::Exp(-FireKickDecay * FireKickAge) * FMath::Min(1.f, FireKickAge * 12.f);
 	Cam->SetActorLocation(Loc);
 	Cam->SetActorRotation(Rot);
 	Cam->GetCameraComponent()->SetFieldOfView(FMath::Clamp(FinalFov, 30.f, 120.f));

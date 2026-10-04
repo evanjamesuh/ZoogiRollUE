@@ -8,11 +8,12 @@
 class ACameraActor;
 class AZoogiBall;
 class AZoogiTargetMarker;
+struct FZoogiCombatEvent;
 
 /**
- * Lock-on targeting input (click / Tab / Space / RMB / Esc) and the per-stage camera director:
- * every turn stage (Draw, Standby, Main, Battle, End) has its own camera profile (ZoogiCamTune in the .cpp),
- * blended with spring-arm lag and a collision probe.
+ * Targeting / clickable aiming input (click target or floor, arrows nudge, Space confirm, RMB / Esc cancel) and the camera director.
+ * Default camera = Tactical (Evan Oct 4): one readable high view with small emphasis moves; -ZoogiCinematic / the CAM button
+ * restores the per-phase cinematic profiles (ZoogiCamTune in the .cpp). Anime placeholders get their own close shot.
  */
 UCLASS()
 class ZOOGIROLL_API AZoogiPlayerController : public APlayerController
@@ -32,6 +33,11 @@ public:
 	void OnStageChanged(EZoogiStage Stage);
 	/** First contact of a shot: brief hit-stop, shake and FOV punch scaled by Strength (0..1). */
 	void OnImpact(float Strength);
+	void OnBattleStep(EZoogiBattleStep Step);
+	/** Infused first contact: hit-stop (tactical camera only stops for powered hits), bigger punch on crits. */
+	void OnPoweredHit(bool bCrit);
+	void OnAnimeStarted(const FZoogiCombatEvent& E);
+	void OnAnimeFinished();
 
 	AActor* GetHoverTarget() const { return HoverTarget.Get(); }
 	FVector2D GetCursor() const;
@@ -65,6 +71,11 @@ protected:
 	float MenuOrbit = 0.f;
 	float DrawBaseYaw = 0.f;
 	float StandbyYaw = 0.f;
+	float TacYaw = 0.f;            // tactical camera heading (set per turn, follows the aim gently)
+	float AnimeYaw = 0.f;
+	TWeakObjectPtr<AActor> AnimeFocus;
+	bool bAnimeCam = false;
+	bool FloorPoint(const FVector2D& Screen, FVector& Out) const;
 	// Phase-to-phase blend: pose snapshot taken when the camera profile changes.
 	struct FCamPose { float Yaw = 0.f, Pitch = 0.f, Dist = 0.f, Fov = 90.f, Dutch = 0.f; FVector Pivot = FVector::ZeroVector, Look = FVector::ZeroVector; };
 	FCamPose BlendFrom;
@@ -88,7 +99,8 @@ protected:
 	bool bPowerTest = false;
 	FVector2D SimMouse = FVector2D::ZeroVector;
 	bool bSimClick = false, bSimTab = false, bSimSpace = false;
-	EZoogiStage SimStage = EZoogiStage::End;
+	int32 SimKey = -1;
+	int32 SimTurn = 0;
 	int32 SimStep = 0;
 	float SimClock = 0.f;
 	void UpdateHumanTest(float Dt);
