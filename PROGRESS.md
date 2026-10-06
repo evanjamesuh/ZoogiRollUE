@@ -15,6 +15,55 @@ The web game at `C:\dev\ZoogiRollUE` is read-only reference and is never modifie
 4. Or play the packaged build (no editor needed): `C:\dev\ZoogiRollUnreal\Packaged\Windows\ZoogiRoll.exe`
    (rebuild it with `powershell -File C:\dev\ZoogiRollUnreal\Scripts\package.ps1`, ~2-4 min).
 
+## 2v2 Competitive Combo mode (Oct 6, Part 4 of Evan's development package)
+Classic is unchanged and still the default. **Menu -> MODE: 2v2 COMBO -> START MATCH** (or `-ZoogiCombo` on the command line).
+TEAM A = P1 + P2, TEAM B = P3 + P4 (any four Zoogis from the roster; team slots read `ZoogiUtil::Roster()` - no
+character names in the 2v2 code, so the new roster drops in). A team with one human is played entirely by that human.
+Code: `ZoogiCombo.cpp` (rules, ring-outs, resolve, guard reactions, demo director), `ZoogiComboArena.cpp/.h`
+(prototype props), hooks in GameMode / Targeting / Awaken / Powers / Ball / HUD / AwakenWidget / MenuWidget / PlayerController.
+
+**How to play (team turn = DRAW -> AWAKEN -> BATTLE -> RESOLVE -> END TURN)**
+1. AWAKEN as before (pick card, I / G / S = Infuse / Guard / Save). **Q** (or the Q SWITCH button) swaps to your
+   teammate; the drawn card / infusion moves with the selection. Stunned Zoogis sit the team turn out.
+2. BATTLE (no flick): click an enemy / orb / teammate to lock, or click the floor to aim at a point; A/D = 2 deg cut.
+   Pick the force with **1 CONTROL / 2 DRIVE / 3 LAUNCH** (or the aim-bar buttons, Up/Down cycles), **SPACE** confirms.
+   CONTROL = soft, stops on the point (~4-10 m/s); DRIVE = standard (~14.5 m/s); LAUNCH = max (~27 m/s, 1.15x mass,
+   breaks Guards). SPD/PWR/CTL nudge the speed (+-few %).
+3. Preview is limited: initial path + first predicted collision + first major rebound (wall bank -> next contact).
+4. Hitting your teammate = **ALLY BUMP** (redirect only: no damage, no artifact effect, no ring-out credit).
+5. RESOLVE: if the shot earned a trigger (ALLY BUMP, BANK SETUP, AIRBORNE SETUP, ORB RELAY, GUARD BREAK, POWER SETUP,
+   TERRAIN SETUP) and the team gauge has 30, **PARTNER FOLLOW-UP!** appears: **F** accept (partner shoots straight away,
+   1.08x speed) or **X** skip. One per team turn. CPU partners always accept.
+6. Ring Marks (two gold squares by each name): 1st ring-out -> Recovery Gate (south) returns the Zoogi at Resolve;
+   2nd -> KNOCKED OUT for the round. Both teammates KO = MATCH OVER. At the round limit: most Ring Marks, then score.
+
+**Combo Gauge** (per team, 0-100, top-right panel): bank setup +15, ALLY BUMP +25, ORB OUT +20, ORB RELAY +30,
+GUARD BREAK +20, airborne interception +20, terrain setup +15, power setup +10, enemy ring-out +15, Guard Reaction
++15 (defender). Follow-up costs 30. Tuning: `ZoogiComboTune` in `ZoogiGameMode.h`.
+**Guard**: a prepared Guard hit by CONTROL/DRIVE = **Guard Reaction** (knockback -40%, one edge save at the rim,
+breaks an incoming follow-up, guard consumed); LAUNCH or a critical = **GUARD BREAK** (no damping, attacker trigger).
+Guards last until the end of the opponent's team turn.
+**Arena Orbs** are neutral and never destroyed: ORB OUT = +50 (star +100, relay finish +25) + 1 Resonance + 25 Arena
+Control, respawn at home on Resolve. 3 Resonance = +1 artifact draw for the team. First team to 50 Arena Control
+triggers the **Resonance Shift** (bumpers swell 70 -> 105 cm and kick 800 cm/s); every 100 control = +30 gauge.
+
+**Prototype arena = Meadow** (`AZoogiComboArena`, spawned only in 2v2): curved ricochet wall (195-245 deg, r 11.5 m),
+launch ramp (x -7.6..-5.4 m, y 2.9..5.1 m), raised platform (7.5, 9 m), 3 bumpers, Recovery Gate (south rim),
+damageable floor section (x -1.5..2.5 m, y 2..6 m) NORMAL -> DAMAGED (tilts + raised edge) -> CRACKED (raised lip,
+acts as a bank face / launch lip) on heavy landings / impacts.
+
+**Verification runs** (`Scripts\run_demo.ps1 -Name comboN -Quit 220 -Rounds 6 -Extra "-ZoogiComboDemo=N"`; the demo
+director plays all four Zoogis through the same calls as the HUD; shots in `Saved\Shots\comboN`, copies on the box
+in `/workspace/zoogi-unreal/shots/combo2v2/`):
+* Demo 1 = First Definition of Done: P1 DRIVE -> curved wall bank -> ALLY BUMP into P2 (BANK SETUP + ALLY BUMP, gauge 40)
+  -> PARTNER FOLLOW-UP -> P2 hits P3 -> RING OUT (mark 1) -> Recovery Gate -> later DRIVE into P3's Guard = Guard
+  Reaction -> LAUNCH -> second ring-out KO -> Resolve -> turns advance -> MATCH OVER.
+* Demo 2 = Orb Relay: P1 CONTROL sends an orb to P2 (ORB RELAY +30) -> follow-up -> P2 knocks it out; more ORB OUTs ->
+  Resonance Shift at 50 control, Resonance surge at 3.
+* Demo 3 = Reactive Terrain: DRIVE over the ramp -> airborne -> landing DAMAGES the section; second -> CRACKED; TEAM B
+  then banks off the cracked lip (changed geometry).
+* CPU smoke (`-ZoogiCombo`, all CPU): CPUs pick forces, take follow-ups and finish the match.
+
 ### Controls (lock-on targeting, since 4:20 PM Oct 3 — the drag-back slingshot was removed)
 * Menu (UMG, `ZoogiMenuWidget.cpp`): pick 2-4 players, each player's Zoogi (< >) on its card (power,
   stat bars, mass), HUMAN/CPU, rounds and one of 7 arenas, then START MATCH. (`-ZoogiCanvasMenu` = old canvas menu.)
