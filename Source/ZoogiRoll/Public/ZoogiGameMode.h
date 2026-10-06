@@ -473,6 +473,7 @@ public:
 	int32 DemoStep = 0;
 	float DemoClock = 0.f;
 	float DemoFUAt = -1.f;
+	float BankLogAt = -1.f;
 	int32 DemoSeenTurn = -1;
 	bool bDemoShotFired = false;
 	void TickComboDemo(float Dt);

@@ -539,7 +539,9 @@ void AZoogiGameMode::ComboOnBallHit(AZoogiBall* Self, AActor* Other, UPrimitiveC
 		if (OtherComp && !OtherComp->ComponentHasTag(TEXT("ZBumper")) && FMath::Abs(Hit.ImpactNormal.Z) < 0.6f && !bShotContact && !bShotBanked)
 		{
 			bShotBanked = true;
-			UE_LOG(LogZoogi, Log, TEXT("Bank: P%d off %s (%s)"), SI + 1, Other ? *Other->GetName() : TEXT("?"), OtherComp->ComponentTags.Num() ? *OtherComp->ComponentTags[0].ToString() : TEXT("rim"));
+			BankLogAt = Clock + 0.12f;
+			UE_LOG(LogZoogi, Log, TEXT("Bank: P%d off %s (%s) at (%.0f, %.0f), in %.0f cm/s heading %.1f deg, normal %.1f deg"), SI + 1, Other ? *Other->GetName() : TEXT("?"), OtherComp->ComponentTags.Num() ? *OtherComp->ComponentTags[0].ToString() : TEXT("rim"),
+				Self->BallLocation().X, Self->BallLocation().Y, FVector2D(Self->PrevVelocity).Size(), FMath::RadiansToDegrees(FMath::Atan2(Self->PrevVelocity.Y, Self->PrevVelocity.X)), FMath::RadiansToDegrees(FMath::Atan2(Hit.ImpactNormal.Y, Hit.ImpactNormal.X)));
 		}
 		return;
 	}
@@ -611,6 +613,12 @@ void AZoogiGameMode::ComboTick(float Dt)
 	PendingKicks.Reset();
 
 	AZoogiBall* Shooter = GetActiveBall();
+	if (BankLogAt > 0.f && Clock >= BankLogAt && Shooter)
+	{
+		BankLogAt = -1.f;
+		const FVector V = Shooter->GetBallVelocity();
+		UE_LOG(LogZoogi, Log, TEXT("Bank out: P%d at (%.0f, %.0f) %.0f cm/s heading %.1f deg"), Shooter->PlayerIndex + 1, Shooter->BallLocation().X, Shooter->BallLocation().Y, FVector2D(V).Size(), FMath::RadiansToDegrees(FMath::Atan2(V.Y, V.X)));
+	}
 	FCollisionQueryParams Q(SCENE_QUERY_STAT(ZoogiComboAir), false);
 	for (AZoogiBall* B : Balls) if (B) Q.AddIgnoredActor(B);
 	for (AZoogiOrb* O : Orbs) if (O) Q.AddIgnoredActor(O);
@@ -862,6 +870,12 @@ void AZoogiGameMode::ComboResolve()
 	{
 		UE_LOG(LogZoogi, Log, TEXT("COMBO resolve: %s shot, triggers [%s], gauge A %.0f B %.0f%s"), bInFollowUp ? TEXT("follow-up") : TEXT("main"), *TriggerNames(ShotTriggers), ComboEnergy[0], ComboEnergy[1], bComboMatchOver ? TEXT(", MATCH OVER") : TEXT(""));
 	}
+	{
+		FString Pos;
+		for (const AZoogiBall* B : Balls) if (B) Pos += FString::Printf(TEXT(" P%d(%.0f,%.0f)%s"), B->PlayerIndex + 1, B->BallLocation().X, B->BallLocation().Y, B->bOut ? TEXT("out") : TEXT(""));
+		UE_LOG(LogZoogi, Log, TEXT("COMBO positions:%s"), *Pos);
+		if (ComboDemo > 0) ComboShot(FString::Printf(TEXT("t%d%s_resolve"), TurnCounter, bInFollowUp ? TEXT("fu") : TEXT("")), 0.2f);
+	}
 	if (ShotTriggers) ResolveNotes += FString::Printf(TEXT("%s%s"), ResolveNotes.IsEmpty() ? TEXT("") : TEXT("     "), *TriggerNames(ShotTriggers));
 }
 
@@ -932,7 +946,7 @@ void AZoogiGameMode::DemoStage()
 	auto PutOrb = [this](int32 i, float X, float Y) { if (Orbs.IsValidIndex(i) && Orbs[i]) { const FVector L(X, Y, ZoogiConst::OrbRadius + 1.f); Orbs[i]->Respawn(L); if (ComboOrbHome.IsValidIndex(i)) ComboOrbHome[i] = L; } };
 	if (ComboDemo == 1)
 	{
-		Put(0, -900.f, 100.f); Put(1, -350.f, -770.f); Put(2, 250.f, -1150.f); Put(3, 900.f, 300.f);
+		Put(0, -900.f, 100.f); Put(1, -700.f, -640.f); Put(2, 250.f, -1150.f); Put(3, 900.f, 300.f);
 		PutOrb(3, 100.f, 850.f); PutOrb(5, 650.f, 100.f);
 	}
 	else if (ComboDemo == 2)
