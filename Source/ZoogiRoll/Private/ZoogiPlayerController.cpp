@@ -714,6 +714,26 @@ void AZoogiPlayerController::HandleInput(float Dt)
 		if (WasInputKeyJustPressed(EKeys::S)) G->MenuAction(TEXT("Save"), -1);
 	}
 
+	// 2v2 Combo: Partner Follow-Up prompt (F / Enter accept, X / Backspace skip); Q switches to the partner Zoogi.
+	if (G->bComboMode)
+	{
+		AZoogiBall* Partner = G->PartnerOf(Active);
+		if (G->bFollowUpOffered && Partner && !Partner->bCPU)
+		{
+			if (WasInputKeyJustPressed(EKeys::F) || WasInputKeyJustPressed(EKeys::Enter) || WasInputKeyJustPressed(EKeys::SpaceBar)) G->MenuAction(TEXT("FollowUp"), 0);
+			else if (WasInputKeyJustPressed(EKeys::X) || WasInputKeyJustPressed(EKeys::BackSpace)) G->MenuAction(TEXT("FollowSkip"), 0);
+		}
+		if (bHumanTurn && G->CanComboSelect() && WasInputKeyJustPressed(EKeys::Q)) G->MenuAction(TEXT("ComboSelect"), -1);
+		if (bPickStage)
+		{
+			if (WasInputKeyJustPressed(EKeys::One)) G->MenuAction(TEXT("ComboForce"), 0);
+			if (WasInputKeyJustPressed(EKeys::Two)) G->MenuAction(TEXT("ComboForce"), 1);
+			if (WasInputKeyJustPressed(EKeys::Three)) G->MenuAction(TEXT("ComboForce"), 2);
+			if (WasInputKeyJustPressed(EKeys::Up)) G->MenuAction(TEXT("ComboForce"), FMath::Min(2, (int32)G->ComboForce + 1));
+			if (WasInputKeyJustPressed(EKeys::Down)) G->MenuAction(TEXT("ComboForce"), FMath::Max(0, (int32)G->ComboForce - 1));
+		}
+	}
+
 	if (!bPickStage)
 	{
 		HoverTarget.Reset();
@@ -739,8 +759,8 @@ void AZoogiPlayerController::HandleInput(float Dt)
 	const int32 NudgeMul = IsInputKeyDown(EKeys::LeftShift) ? 5 : 1;
 	if (WasInputKeyJustPressed(EKeys::Left) || WasInputKeyJustPressed(EKeys::A)) G->NudgeAim(-NudgeMul); // + = clockwise seen from above (turns right on screen)
 	if (WasInputKeyJustPressed(EKeys::Right) || WasInputKeyJustPressed(EKeys::D)) G->NudgeAim(NudgeMul);
-	if (WasInputKeyJustPressed(EKeys::Up)) G->AimPowerStep = FMath::Clamp(G->AimPowerStep + 1, 0, 3);
-	if (WasInputKeyJustPressed(EKeys::Down)) G->AimPowerStep = FMath::Clamp(G->AimPowerStep - 1, 0, 3);
+	if (WasInputKeyJustPressed(EKeys::Up) && !G->bComboMode) G->AimPowerStep = FMath::Clamp(G->AimPowerStep + 1, 0, 3);
+	if (WasInputKeyJustPressed(EKeys::Down) && !G->bComboMode) G->AimPowerStep = FMath::Clamp(G->AimPowerStep - 1, 0, 3);
 	if (WasInputKeyJustPressed(EKeys::Tab) || bSimTab) G->CycleLock(false);
 	if (WasInputKeyJustPressed(EKeys::RightMouseButton) && !bOverUI) G->ClearLock();
 	if (WasInputKeyJustPressed(EKeys::SpaceBar) || WasInputKeyJustPressed(EKeys::Enter) || bSimSpace) G->CommitLock();

@@ -35,14 +35,18 @@ public:
 	void Build();
 
 	// Layout (cm, floor top at Z = 0).
-	static constexpr float WallR = 1150.f, WallA0 = 195.f, WallA1 = 245.f, WallH = 85.f;
+	static constexpr float WallR = 1150.f;
+	static constexpr float WallA0 = 195.f;
+	static constexpr float WallA1 = 245.f;
+	static constexpr float WallH = 85.f;
 	static FVector2D RampMin() { return FVector2D(-760.f, 290.f); }
 	static FVector2D RampMax() { return FVector2D(-540.f, 510.f); }
 	static constexpr float RampH = 45.f;
 	static FVector2D SectionMin() { return FVector2D(-150.f, 200.f); }
 	static FVector2D SectionMax() { return FVector2D(250.f, 600.f); }
 	static FVector2D PlatformXY() { return FVector2D(750.f, 900.f); }
-	static constexpr float PlatformR = 200.f, PlatformH = 55.f;
+	static constexpr float PlatformR = 200.f;
+	static constexpr float PlatformH = 55.f;
 	static FVector2D GateXY() { return FVector2D(0.f, -1450.f); }
 	static FVector GateReturn() { return FVector(0.f, -1180.f, 52.f); }
 	static const TArray<FVector2D>& BumperXY();

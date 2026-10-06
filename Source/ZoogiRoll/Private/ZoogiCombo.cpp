@@ -2,8 +2,8 @@
 // Team turns (DRAW -> AWAKEN -> BATTLE -> RESOLVE -> END), CONTROL / DRIVE / LAUNCH forces, Ally Bump,
 // per-team Combo Gauge, one Partner Follow-Up per team turn, Guard Reaction / Guard Break, Ring Marks with the
 // Recovery Gate, neutral Arena Orbs (ORB OUT = score + Resonance + Arena Control, then respawn), reactive terrain.
-#include "ZoogiGameMode.h"
 #include "ZoogiCombo.h"
+#include "ZoogiGameMode.h"
 #include "ZoogiRoll.h"
 #include "ZoogiBall.h"
 #include "ZoogiOrb.h"
