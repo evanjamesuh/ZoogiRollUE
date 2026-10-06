@@ -257,7 +257,7 @@ void AZoogiGameMode::ComboResetShot()
 	bShotContact = false;
 	bFollowUpBroken = false;
 	ShotTerrainWhat.Reset();
-	ComboForce = EZoogiForce::Drive;
+	if (!bCPUPlanned) ComboForce = EZoogiForce::Drive; // keep a CPU's planned force
 	for (FBallAir& S : AirState) S.bTerrainLaunch = false;
 }
 
@@ -953,8 +953,8 @@ void AZoogiGameMode::DemoStage()
 	}
 	else if (ComboDemo == 2)
 	{
-		Put(0, -900.f, -600.f); Put(1, -150.f, 50.f); Put(2, 1000.f, -100.f); Put(3, 800.f, 500.f);
-		PutOrb(0, -550.f, -300.f); PutOrb(2, 250.f, -250.f);
+		Put(0, -500.f, 1150.f); Put(1, -350.f, 250.f); Put(2, 1000.f, -100.f); Put(3, 800.f, 500.f);
+		PutOrb(0, -350.f, 750.f); PutOrb(4, 150.f, 1000.f); PutOrb(2, 250.f, -250.f);
 	}
 	else if (ComboDemo == 3)
 	{
