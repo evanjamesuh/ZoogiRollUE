@@ -447,3 +447,45 @@ Awakened / crit-grade hit), and so are the collider, events, SFX, popup, feed li
   - Tuning knobs: material params (M_CosmicSky Bright / NearStr / NadirDim / RateFar / RateNear; M_CosmicStreak Bright /
     Speed / ClearR / FadeW / ColA / ColB) and `ZoogiCosmic::` constants + planet placement in `AZoogiArena::AddSpaceBackdrop`.
   - Note: the packaged build needs a re-cook to pick this up (not packaged by this task).
+
+## Aura pass: Cosmic nebula/planets + custom anime cut-ins (Oct 4, 4:16-4:45 PM)
+- Aura MCP is working again (`get_headless_status` -> `editor_connected`). Aura `generate_images` made 10 stills (all in
+  `Saved/generated_images`, copied to `SourceArt/Cosmic/aura/` and `SourceArt/Anime/`; SourceArt is gitignored):
+  `cosmic_nebula_a/_b` (landscape), `cosmic_planet_ringed/_icemoon` (square, transparent), and `anime_critical_a/_b`,
+  `anime_infuse_a/_b`, `anime_ko_a/_b` (landscape; glowing limbless marble Zoogis, no faces/animals/text).
+- Cosmic (commit `4a191c3`): `Scripts/cosmic/build_aura_nebula.py` builds a 4096x2048 equirect from the two nebula stills
+  (side by side, 512 px smoothstep cross-fades at both seams, mirror-extended vertically, faded to the poles, lower half dimmed,
+  highlight roll-off, pole-corrected stars, alpha = the old procedural near-wisps mask), mean level about the same as the
+  procedural sky. Planet A = Aura ringed gas giant (1024), planet B = Aura ice moon (512). Reimported with the usual
+  `make_cosmic_backdrop.py`; no code change. The procedural PNGs are kept as `SourceArt/Cosmic/T_Cosmic*_proc.png`
+  (copy them back over `T_Cosmic*.png` and rerun the script to revert). Streaks unchanged (no Niagara swap).
+- Anime (commit `73b84fe`): `Anime_Any_Any_Critical_01` (2.0 s), `_Infuse_01` (2.0 s), `_KO_01` (2.5 s) in
+  `Content/Anime/Movies` are now unique custom clips made only from the Aura stills (no Replit footage), rendered by
+  `Scripts/anime/make_cutins.py <png dir> <out dir>` (PIL + ffmpeg, 1280x720, 24 fps, H.264 High):
+  Critical = slow push + star glint -> white flash -> golden starburst with punch-out zoom, shake, shock rings;
+  Infuse = rolling push into an energy spiral with converging rings -> blue flash -> tilt up a charged aura pillar with rising lines;
+  KO = black/white impact frames -> marble blasted off the arena edge with horizontal speed lines and shake -> flash -> push into the
+  twilight sky as it streaks away, star twinkle. Movies.csv keeps the same ids/lengths (source columns updated).
+- Menu_Background.mp4 unchanged: no animal faces (checked at 1-2 fps over all 20.5 s); the floating spheres carry abstract
+  swirl patterns, and the big white/teal one (~1 s, 5.5 s, 12 s) loosely reads like a mask but is not an animal.
+- Tested: `-game -ZoogiArena=3 -ZoogiAnime=Full -ZoogiHumanTest -ZoogiPowerTest -ZoogiPlayers=4` (run_cosmic_aura4.log):
+  Infuse cut-ins x3 and the KO cut-in played from the new mp4s; Critical did not come up in the test matches (same file format).
+  Shots: box `shots/cosmic/aura_*.jpg`, `shots/anime/nodog_*.png`, contact sheets `shots/anime/contact_{Critical,Infuse,KO}.png`.
+
+## Cracks build, packaged build, open-in-editor (Oct 6, 3:42-4:00 PM)
+- Rock/crack work: every rock patch is in. `git apply --check -R` passes for `rock-real-2.patch` (commit d1ddf48) and
+  `crust-fix.patch`. `rock-real.patch` (7e9c225) is superseded by pass 2. `rock2_progress.patch` = the "Pass 2" note
+  already in this file. No `rock-real-3.patch` exists on the PC or on the box, so there was nothing new to apply.
+  `build.ps1`: up to date, BUILD_EXIT=0.
+- Verified: `run_demo.ps1 -Name rockreal3 -Quit 150 -Players 2 -Arena 0 -Rounds 3 -Extra "-ZoogiRockTest"`: 4 rocks
+  CRACKED, ZoogiRock_5 SHATTERED (8 chunks) on its second hard hit. Shots in `Saved/Shots/rockreal3` (box
+  `shots/cracks/rockreal3_*.png` + `contact_rockreal3.jpg`).
+- Packaged: `Scripts/package.ps1` PACKAGE_EXIT=0. `Packaged/Windows/ZoogiRoll.exe` is from 3:52 PM Oct 6 (the cook was
+  incremental: the Cosmic Aura nebula/planet assets from Oct 4 4:35 PM were already cooked and are in the pak).
+  Smoke test: packaged `-ZoogiAuto -ZoogiArena=3` loads the Cosmic backdrop (M_CosmicSky / streaks / planets) and plays.
+  Desktop "ZoogiRoll - Shortcut" (OneDrive Desktop) -> `Packaged\Windows\ZoogiRoll.exe`.
+- Editor: Desktop shortcut **"Open Zoogi Roll in Unreal"** -> `UE_5.6\...\UnrealEditor.exe "C:\dev\ZoogiRollUnreal\ZoogiRoll.uproject"`.
+  `.uproject` EngineAssociation 5.6 (Version Selector association OK). Test-opened: editor up in 33 s on `/Game/Maps/Meadow`,
+  no missing-module prompt, no `Error:` lines, then closed cleanly (`LogExit: Exiting.`). The Aura plugin (1.1.0) loads.
+  Its "project requires update (SupportedTargetPlatforms)" nag is silenced by adding `"SupportedTargetPlatforms": ["Win64","Mac"]`
+  to the Aura entry in the .uproject. Note for Evan: `Docs/OPEN_IN_UNREAL.md`.
