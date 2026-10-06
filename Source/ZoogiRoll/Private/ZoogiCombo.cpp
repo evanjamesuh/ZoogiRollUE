@@ -185,6 +185,8 @@ void AZoogiGameMode::ComboStartMatch()
 		if (!B) continue;
 		B->InitZoogi(Roster[S.ZoogiIndex % Roster.Num()], i, S.bCPU, BallPM, Arena->GetRollingDecel());
 		B->TeamIndex = TeamOfIndex(i);
+		// A team with a human in it is played by that human (they pick either Zoogi each team turn).
+		if (B->bCPU && !MenuPlayers[i ^ 1].bCPU) { B->bCPU = false; UE_LOG(LogZoogi, Log, TEXT("COMBO: P%d is controlled by the human teammate P%d"), i + 1, (i ^ 1) + 1); }
 		B->RingMarks = 2;
 		B->bKnockedOut = false;
 		B->SpawnLocation = L;
@@ -1156,7 +1158,8 @@ void AZoogiGameMode::TickComboDemo(float Dt)
 			else if (bTeamA && T == 1 && bInFollowUp && Balls.IsValidIndex(2) && IsValidTarget(Balls[2]))
 			{
 				// Definition of Done: the partner launches at enemy Zoogi C.
-				if (!DemoAimRingOut(Balls[2], EZoogiForce::Launch)) UE_LOG(LogZoogi, Warning, TEXT("ComboDemo: follow-up line on P3 is not clean"));
+				// DRIVE when it is enough (less follow-through), LAUNCH otherwise.
+				if (!DemoAimRingOut(Balls[2], EZoogiForce::Drive) && !DemoAimRingOut(Balls[2], EZoogiForce::Launch)) UE_LOG(LogZoogi, Warning, TEXT("ComboDemo: follow-up line on P3 is not clean"));
 			}
 			else if (bTeamA && T == 3 && !bInFollowUp) RingOutBest(EZoogiForce::Drive, true); // DRIVE into a prepared Guard -> Guard Reaction
 			else if (bTeamA) RingOutBest(EZoogiForce::Launch, !bInFollowUp);

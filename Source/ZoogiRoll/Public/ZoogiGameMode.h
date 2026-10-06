@@ -44,7 +44,7 @@ namespace ZoogiComboTune
 	constexpr float FollowUpSpeedMul = 1.08f;
 	constexpr float GaugeMax = 100.f;
 	constexpr float FollowUpCost = 30.f;
-	constexpr float EBank = 15.f, EAllyBump = 25.f, EOrbOut = 20.f, ERelay = 25.f, EGuardBreak = 20.f, EAirborne = 20.f, ETerrain = 15.f, EPower = 10.f, ERingOut = 15.f, EGuardReaction = 15.f;
+	constexpr float EBank = 15.f, EAllyBump = 25.f, EOrbOut = 20.f, ERelay = 30.f, EGuardBreak = 20.f, EAirborne = 20.f, ETerrain = 15.f, EPower = 10.f, ERingOut = 15.f, EGuardReaction = 15.f;
 	constexpr float AllyBumpMinSpeed = 250.f; // relative normal speed for a "meaningful" teammate redirect
 	constexpr float RelayRadius = 450.f;      // relayed orb ends this close to the partner (or touches it)
 	constexpr float AirborneHeight = 18.f;    // gap under the ball that counts as airborne
