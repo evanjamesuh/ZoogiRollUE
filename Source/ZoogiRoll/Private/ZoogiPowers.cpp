@@ -67,7 +67,7 @@ TArray<AActor*> AZoogiGameMode::LiveTargets(const AZoogiBall* Except) const
 {
 	TArray<AActor*> Out;
 	for (AZoogiOrb* O : Orbs) if (O && !O->bOut) Out.Add(O);
-	for (AZoogiBall* B : Balls) if (B && B != Except && !B->bOut) Out.Add(B);
+	for (AZoogiBall* B : Balls) if (B && B != Except && !B->bOut && !IsAlly(B, Except)) Out.Add(B);
 	return Out;
 }
 
@@ -246,6 +246,7 @@ void AZoogiGameMode::OnArmedShot(AZoogiBall* Ball)
 
 void AZoogiGameMode::OnShooterContact(AZoogiBall* Shooter, AActor* Other)
 {
+	if (IsAlly(Shooter, Other)) return; // 2v2: friendly contact is a redirect (Ally Bump), never an attack
 	// First contact of the shot: impact flash in the shooter's colour, hit-stop and camera kick.
 	if (Phase == EZoogiPhase::Rolling && Shooter && Other && !bShotImpacted)
 	{

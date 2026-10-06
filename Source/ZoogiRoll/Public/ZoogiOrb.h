@@ -25,6 +25,8 @@ public:
 
 	void InitOrb(UPhysicalMaterial* PhysMat, float InRollingDecel);
 	void SetOut();
+	/** 2v2 Combo: neutral Arena Orbs are never destroyed; after ORB OUT they come back here. */
+	void Respawn(const FVector& Location);
 	bool IsAtRest() const;
 	FVector OrbLocation() const;
 

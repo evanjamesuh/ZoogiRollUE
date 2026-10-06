@@ -77,8 +77,16 @@ const FZoogiDef* ZoogiUtil::FindZoogi(FName Id)
 	return nullptr;
 }
 
+static bool GComboColors = false;
+void ZoogiUtil::SetComboColors(bool bOn) { GComboColors = bOn; }
+
 FLinearColor ZoogiUtil::PlayerColor(int32 PlayerIndex)
 {
+	if (GComboColors)
+	{
+		static const FLinearColor Team[] = { Hex(TEXT("#38BDF8")), Hex(TEXT("#818CF8")), Hex(TEXT("#F43F5E")), Hex(TEXT("#FB923C")) };
+		return Team[FMath::Abs(PlayerIndex) % 4];
+	}
 	static const FLinearColor Colors[] = {
 		Hex(TEXT("#38BDF8")), // P1 sky
 		Hex(TEXT("#F43F5E")), // P2 rose

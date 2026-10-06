@@ -99,6 +99,8 @@ namespace ZoogiUtil
 	ZOOGIROLL_API const TArray<FZoogiDef>& Roster();
 	ZOOGIROLL_API const FZoogiDef* FindZoogi(FName Id);
 	ZOOGIROLL_API FLinearColor PlayerColor(int32 PlayerIndex);
+	/** 2v2 Combo: team palette (A = sky / indigo, B = rose / orange) instead of the four free-for-all colours. */
+	ZOOGIROLL_API void SetComboColors(bool bOn);
 	ZOOGIROLL_API FString ArenaName(EZoogiArena Arena);
 
 	/** MID of /Game/Materials/M_ZoogiSurface (or the engine BasicShapeMaterial if the project material is missing). */

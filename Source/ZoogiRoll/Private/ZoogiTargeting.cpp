@@ -287,6 +287,18 @@ FVector2D AZoogiGameMode::ComputeShotVelocity(float& OutFraction, float& OutImpa
 		OutImpactSpeed = Impact;
 	}
 	Dir = Dir.GetRotated(AimCutDeg);
+	if (bComboMode)
+	{
+		// 2v2 Combo: the chosen force sets the speed (CONTROL soft / stop on the point, DRIVE standard, LAUNCH max).
+		OutFraction = ComboForceFraction(BaseFrac);
+		const FVector2D CV = Dir * ZoogiConst::LaunchSpeedForPull(OutFraction);
+		if (!bFreeAim && TargetLock.IsValid())
+		{
+			const float Gap = FMath::Max(0.f, FVector::Dist2D(TargetPos(TargetLock.Get()), Me->BallLocation()) - ZoogiConst::ZoogiRadius - TargetRadius(TargetLock.Get()));
+			OutImpactSpeed = FMath::Sqrt(FMath::Max(0.f, CV.SizeSquared() - 2.f * Decel * Gap));
+		}
+		return CV;
+	}
 	const FVector2D V = PowerStepVelocity(Dir, BaseFrac, OutFraction);
 	if (AimPowerStep > 0 && !bFreeAim && TargetLock.IsValid())
 	{
@@ -329,8 +341,9 @@ void AZoogiGameMode::UpdatePreview()
 	AZoogiBall* Me = GetActiveBall();
 	if (!Me || !bAimActive) return;
 	float Frac = 0.f;
-	const FVector2D V = PullToVelocity(GetEffectivePull(), Frac);
+	FVector2D V = PullToVelocity(GetEffectivePull(), Frac);
 	if (V.IsNearlyZero()) return;
+	if (bComboMode) V *= ComboShotMul(Me);
 	const float Speed = V.Size();
 	const float Decel = Arena ? Arena->GetRollingDecel() : ZoogiConst::RollingDecel;
 	FVector Dir(V.X / Speed, V.Y / Speed, 0.f);
@@ -375,8 +388,9 @@ void AZoogiGameMode::UpdatePreview()
 		if (Reach > 20.f && GetWorld()->SweepSingleByChannel(Hit, From, From + Dir * Reach, FQuat::Identity, ECC_WorldStatic, FCollisionShape::MakeSphere(ZoogiConst::ZoogiRadius - 8.f), Q) && !Hit.bStartPenetrating)
 		{
 			FVector N = Hit.ImpactNormal;
+			const bool bSlope = FMath::Abs(N.Z) > 0.5f; // ramp / tilted floor top: rolls up, not a bank
 			N.Z = 0.f;
-			if (N.Normalize() && FVector::DotProduct(N, Dir) < -0.15f)
+			if (!bSlope && N.Normalize() && FVector::DotProduct(N, Dir) < -0.15f)
 			{
 				BankAt = Hit.Distance;
 				BankDir = (Dir - 2.f * FVector::DotProduct(Dir, N) * N).GetSafeNormal2D();
@@ -387,9 +401,38 @@ void AZoogiGameMode::UpdatePreview()
 		}
 	}
 
+	// 2v2 Combo: after the bank, the first predicted collision on the rebound line (wall -> ally / rival / orb).
+	FVector ContactFrom = Preview.Start, ContactDir = Dir;
+	float ContactT = BestT;
+	float PathLen = Preview.bContact ? BestT : Stop;
+	if (bComboMode && Preview.bBank && BankAt >= 0.f)
+	{
+		const FVector2D B0 = FVector2D(Preview.Start) + FVector2D(Dir) * BankAt;
+		const FVector2D BD(BankDir.X, BankDir.Y);
+		const float Reach = FMath::Max(0.f, (Stop - BankAt) * 0.75f);
+		float Best2 = Reach;
+		for (AActor* A : TargetCandidates())
+		{
+			const FVector2D P(TargetPos(A));
+			const float R = ZoogiConst::ZoogiRadius + TargetRadius(A);
+			const float Along = FVector2D::DotProduct(P - B0, BD);
+			if (Along <= 0.f) continue;
+			const float Perp2 = (P - B0).SizeSquared() - Along * Along;
+			if (Perp2 > R * R) continue;
+			const float T2 = Along - FMath::Sqrt(FMath::Max(0.f, R * R - Perp2));
+			if (T2 > 0.f && T2 < Best2) { Best2 = T2; Preview.bContact = true; Preview.ContactActor = A; }
+		}
+		if (Preview.bContact)
+		{
+			ContactFrom = FVector(B0.X, B0.Y, Preview.Start.Z);
+			ContactDir = BankDir;
+			ContactT = Best2;
+			PathLen = BankAt + Best2 / 0.75f;
+		}
+	}
+
 	// Path points (ground level).
 	const FVector G0 = Preview.Start - FVector(0, 0, ZoogiConst::ZoogiRadius - 4.f);
-	const float PathLen = Preview.bContact ? BestT : Stop;
 	const int32 Dots = FMath::Clamp(FMath::RoundToInt(PathLen / 55.f), 2, 48);
 	for (int32 i = 1; i <= Dots; ++i)
 	{
@@ -412,12 +455,15 @@ void AZoogiGameMode::UpdatePreview()
 	if (Preview.bContact && Preview.ContactActor.IsValid())
 	{
 		AActor* A = Preview.ContactActor.Get();
-		Preview.Ghost = Preview.Start + Dir * BestT;
+		const FVector Dir0 = Dir;
+		Dir = ContactDir;
+		Preview.Ghost = ContactFrom + Dir * ContactT;
 		FVector N = TargetPos(A) - Preview.Ghost;
 		N.Z = 0.f;
 		N = N.GetSafeNormal();
 		Preview.TargetDir = N;
 		Preview.CutDeg = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(N, Dir), -1.f, 1.f)));
+		(void)Dir0;
 		// Shooter keeps the tangential part (90 deg rule), plus a bit of follow-through for heavier shooters.
 		const float M1 = Me->Def.MassRatio();
 		const float M2 = Cast<AZoogiBall>(A) ? Cast<AZoogiBall>(A)->Def.MassRatio() : ZoogiConst::OrbMassRatio;
@@ -483,6 +529,7 @@ void AZoogiGameMode::TickStages(float Dt)
 		}
 		break;
 	case EZoogiStage::Resolve:
+		if (bComboMode && ComboHoldResolve()) break; // Partner Follow-Up decision / match over
 		if (StageTime >= ResolveMin && !bAnimeBusy) SetStage(EZoogiStage::End);
 		break;
 	case EZoogiStage::End:

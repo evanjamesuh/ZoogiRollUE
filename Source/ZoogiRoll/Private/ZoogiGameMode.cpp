@@ -11,6 +11,7 @@
 #include "ZoogiHUD.h"
 #include "ZoogiArtifactComponent.h"
 #include "ZoogiAnimeSubsystem.h"
+#include "ZoogiCombo.h"
 #include "Engine/World.h"
 #include "Components/SphereComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -85,10 +86,14 @@ void AZoogiGameMode::BeginPlay()
 	Phase = EZoogiPhase::Menu;
 	PlayMusic(TEXT("MenuMusic"));
 
+	// 2v2 Competitive Combo: -ZoogiCombo (mode), -ZoogiComboDemo=1|2|3 (scripted verification runs, implies -ZoogiCombo).
+	FParse::Value(Cmd, TEXT("ZoogiComboDemo="), ComboDemo);
+	if (FParse::Param(Cmd, TEXT("ZoogiCombo")) || ComboDemo > 0) ComboSetMode(true);
 	if (bAuto)
 	{
 		for (FZoogiPlayerSetup& P : MenuPlayers) P.bCPU = true;
 		if (FParse::Param(Cmd, TEXT("ZoogiHumanTest")) || FParse::Param(Cmd, TEXT("ZoogiUiTest"))) MenuPlayers[0].bCPU = false;
+		if (ComboDemo > 0) for (FZoogiPlayerSetup& P : MenuPlayers) P.bCPU = false; // the demo director plays every Zoogi through the human controls
 		if (!bMenuShot)
 		{
 			StartMatch();
@@ -119,7 +124,12 @@ bool AZoogiGameMode::IsHumanAiming() const
 void AZoogiGameMode::MenuAction(FName Action, int32 Index)
 {
 	const int32 RosterNum = ZoogiUtil::Roster().Num();
-	if (Action == "Players") MenuNumPlayers = FMath::Clamp(Index, 2, 4);
+	if (Action == "Players") MenuNumPlayers = bComboMode ? 4 : FMath::Clamp(Index, 2, 4);
+	else if (Action == "Mode") ComboSetMode(Index == 1);
+	else if (Action == "ComboSelect") ComboSelect(Index);
+	else if (Action == "ComboForce") { if (IsAimStep()) ComboSetForce((EZoogiForce)FMath::Clamp(Index, 0, 2)); }
+	else if (Action == "FollowUp") ComboAcceptFollowUp();
+	else if (Action == "FollowSkip") ComboDeclineFollowUp();
 	else if (Action == "ZoogiNext" && MenuPlayers.IsValidIndex(Index)) MenuPlayers[Index].ZoogiIndex = (MenuPlayers[Index].ZoogiIndex + 1) % RosterNum;
 	else if (Action == "ZoogiPrev" && MenuPlayers.IsValidIndex(Index)) MenuPlayers[Index].ZoogiIndex = (MenuPlayers[Index].ZoogiIndex + RosterNum - 1) % RosterNum;
 	else if (Action == "ToggleCPU" && MenuPlayers.IsValidIndex(Index)) MenuPlayers[Index].bCPU = !MenuPlayers[Index].bCPU;
@@ -150,7 +160,7 @@ void AZoogiGameMode::MenuAction(FName Action, int32 Index)
 	else if (Action == "Rematch") StartMatch();
 	else if (Action == "Quit") UKismetSystemLibrary::QuitGame(this, GetWorld()->GetFirstPlayerController(), EQuitPreference::Quit, false);
 	// UI sounds (team brief: short, soft, rounded, never harsh when repeated): confirm / cancel / click.
-	if (Action == "Start" || Action == "Rematch" || Action == "Infuse" || Action == "Guard" || Action == "Save" || Action == "AimConfirm")
+	if (Action == "Start" || Action == "Rematch" || Action == "Infuse" || Action == "Guard" || Action == "Save" || Action == "AimConfirm" || Action == "FollowUp")
 		ZoogiUtil::PlaySfx(this, TEXT("UiConfirm"), 0.4f);
 	else if (Action == "AimCancel" || Action == "Menu" || Action == "Quit")
 		ZoogiUtil::PlaySfx(this, TEXT("UiCancel"), 0.4f);
@@ -182,6 +192,10 @@ void AZoogiGameMode::ClearMatch()
 	bClimaxHitPending = false;
 	ClimaxLeft = 0.f;
 	ClimaxFlashAt = -100.f;
+	if (ComboArena) { ComboArena->Destroy(); ComboArena = nullptr; }
+	Callouts.Reset();
+	PendingKicks.Reset();
+	bFollowUpOffered = false;
 	if (UZoogiAnimeSubsystem* Anime = GetWorld()->GetSubsystem<UZoogiAnimeSubsystem>()) Anime->ResetMatch();
 }
 
@@ -233,6 +247,8 @@ void AZoogiGameMode::SpawnOrbs()
 
 void AZoogiGameMode::StartMatch()
 {
+	if (bComboMode) { ComboStartMatch(); return; }
+	ZoogiUtil::SetComboColors(false);
 	ClearMatch();
 	if (Arena->GetTheme() != MenuArena) Arena->Build(MenuArena);
 	Arena->ResetRocks(); // destructible rocks come back every match
@@ -315,6 +331,11 @@ void AZoogiGameMode::BeginTurn(int32 PlayerIdx)
 	SetStage(EZoogiStage::Draw);
 
 	Banner = FString::Printf(TEXT("P%d  %s%s"), PlayerIdx + 1, *Ball->Def.Name, Ball->bCPU ? TEXT("  (CPU)") : TEXT(""));
+	if (bComboMode)
+	{
+		ComboResetShot();
+		Banner = FString::Printf(TEXT("%s  P%d  %s%s"), *TeamName(ComboTeam), PlayerIdx + 1, *Ball->Def.Name, Ball->bCPU ? TEXT("  (CPU)") : TEXT(""));
+	}
 	ZoogiUtil::PlaySfx(this, TEXT("Turn"), 0.45f);
 	BannerTime = 0.f;
 	if (AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PC->OnTurnStarted(Ball);
@@ -322,6 +343,7 @@ void AZoogiGameMode::BeginTurn(int32 PlayerIdx)
 
 void AZoogiGameMode::EndTurn()
 {
+	if (bComboMode) { ComboEndTurn(); return; }
 	if (AZoogiBall* Shooter = GetActiveBall())
 	{
 		int32 Moved = 0;
@@ -417,6 +439,7 @@ bool AZoogiGameMode::IsClimaxMoment(const AZoogiBall* Shooter, int32 KOs) const
 {
 	if (bClimaxUsed || !Shooter || KOs <= 0 || !Balls.IsValidIndex(ActivePlayer)) return false;
 	if (bClimaxTest) return true;
+	if (bComboMode) return bComboMatchOver && ComboWinner == Shooter->TeamIndex; // the match-winning knock-out
 	if (RoundNumber < MenuRounds) return false;
 	// Shooter must be the sole leader after this turn's ledger.
 	for (const AZoogiBall* B : Balls) if (B && B != Shooter && B->Score >= Shooter->Score) return false;
@@ -552,6 +575,7 @@ static FVector EdgePoint(const FVector& L, const AZoogiArena* Arena)
 
 void AZoogiGameMode::CheckKnockoffs()
 {
+	if (bComboMode) { ComboCheckKnockoffs(); return; }
 	for (AZoogiOrb* O : Orbs)
 	{
 		if (!O || O->bOut) continue;
@@ -680,6 +704,7 @@ bool AZoogiGameMode::ReleaseAim()
 		AddPopup(TEXT("BOUND - WEAK SHOT"), Ball->BallLocation() + FVector(0, 0, 120.f), FLinearColor(0.9f, 0.78f, 0.55f));
 	}
 	if (Ball) ApplyStatusOnShot(Ball, V);
+	if (bComboMode && Ball) ComboModifyShot(Ball, V);
 	FireShot(V);
 	SetBattleStep(EZoogiBattleStep::Rolling);
 	return true;
@@ -733,7 +758,7 @@ void AZoogiGameMode::PlanCPUShot()
 	bCPUUsePower = !bArtifactMode && Me->Charges > 0 && (bPowerTest || FMath::FRand() < (Me->Charges >= 2 ? 0.8f : 0.5f));
 	const EZoogiPower MyPower = Me->Def.PowerKind;
 	const bool bHuntRivals = bCPUUsePower && (MyPower == EZoogiPower::ShadowStun || MyPower == EZoogiPower::StaticShock || MyPower == EZoogiPower::BandageBind);
-	for (AZoogiBall* Other : Balls) if (Other && Other != Me && !Other->bOut) Cands.Add({ FVector2D(Other->BallLocation()), bHuntRivals ? 100.f : 40.f, Other->Def.MassRatio(), ZoogiConst::ZoogiRadius, Other });
+	for (AZoogiBall* Other : Balls) if (Other && Other != Me && !Other->bOut && !IsAlly(Me, Other)) Cands.Add({ FVector2D(Other->BallLocation()), bHuntRivals ? 100.f : 40.f, Other->Def.MassRatio(), ZoogiConst::ZoogiRadius, Other });
 
 	auto Blocked = [&](const FVector2D& From, const FVector2D& To, const FVector2D& Ignore)
 	{
@@ -879,6 +904,7 @@ void AZoogiGameMode::PlanCPUShot()
 			UE_LOG(LogZoogi, Log, TEXT("RockTest: P%d aims at %s at %.0f%%"), ActivePlayer + 1, *R->GetName(), BestFrac * 100.f);
 		}
 	}
+	if (bComboMode) ComboPlanCPUForce(BestFrac);
 	const float PullLen = BestFrac * ZoogiConst::FullPull / ZoogiConst::DragScale;
 	CPUTargetPull = FVector(BestDir.X, BestDir.Y, 0.f) * PullLen;
 	Me->AimYaw = FVector(BestDir.X, BestDir.Y, 0.f).Rotation().Yaw;
@@ -891,6 +917,7 @@ void AZoogiGameMode::PlanCPUShot()
 void AZoogiGameMode::TakeShot(const FString& Name)
 {
 	if (ShotDir.IsEmpty() || ShotsTaken.Contains(Name)) return;
+	if (ComboDemo > 0 && !Name.StartsWith(TEXT("cd"))) return; // combo demo runs keep only their own captures
 	ShotsTaken.Add(Name);
 	const FString Path = FPaths::Combine(ShotDir, FString::Printf(TEXT("%02d_%s.png"), ShotSeq++, *Name));
 	FScreenshotRequest::RequestScreenshot(Path, true, false);
@@ -962,6 +989,7 @@ void AZoogiGameMode::Tick(float DeltaSeconds)
 		FPlatformMisc::RequestExit(false);
 	}
 
+	if (bComboMode && (Phase == EZoogiPhase::Aiming || Phase == EZoogiPhase::Rolling || Phase == EZoogiPhase::Resolving)) ComboTick(Dt);
 	switch (Phase)
 	{
 	case EZoogiPhase::Aiming:

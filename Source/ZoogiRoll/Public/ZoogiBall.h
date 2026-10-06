@@ -60,6 +60,12 @@ public:
 	/** Heading the camera and aim use at the start of this player's turn. */
 	UPROPERTY(BlueprintReadOnly) float AimYaw = 0.f;
 	UPROPERTY(BlueprintReadOnly) int32 KnockOuts = 0;
+	/** 2v2 Combo: Ring Marks (2 = two diamonds). First ring-out -> Recovery Gate return, second -> knocked out for the round. */
+	UPROPERTY(BlueprintReadOnly) int32 RingMarks = 2;
+	UPROPERTY(BlueprintReadOnly) bool bKnockedOut = false;
+	bool bPendingRecovery = false;
+	/** Guard Reaction: the next push over the edge this turn is caught at the rim. */
+	bool bEdgeSave = false;
 	UPROPERTY(BlueprintReadOnly) int32 OrbsScored = 0;
 	float RollingDecel = ZoogiConst::RollingDecel;
 

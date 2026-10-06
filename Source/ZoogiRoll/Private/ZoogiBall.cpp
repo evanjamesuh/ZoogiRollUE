@@ -516,6 +516,7 @@ void AZoogiBall::OnSphereHit(UPrimitiveComponent* HitComp, AActor* OtherActor, U
 	AZoogiGameMode* G = GetWorld() ? GetWorld()->GetAuthGameMode<AZoogiGameMode>() : nullptr;
 	const int32 Shooter = G ? G->ActivePlayer : -1;
 	if (G && PlayerIndex == Shooter && (Cast<AZoogiBall>(OtherActor) || Cast<AZoogiOrb>(OtherActor))) G->OnShooterContact(this, OtherActor);
+	if (G && G->bComboMode) G->ComboOnBallHit(this, OtherActor, OtherComp, NormalImpulse, Hit);
 	// Guard: the active attacker hit this guarded Zoogi.
 	if (G && PlayerIndex != Shooter && Artifact && Artifact->Guard != EZoogiArtifact::None)
 	{

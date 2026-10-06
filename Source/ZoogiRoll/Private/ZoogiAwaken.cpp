@@ -445,6 +445,7 @@ void AZoogiGameMode::OnGuardedHit(AZoogiBall* Victim, AZoogiBall* Attacker)
 {
 	if (!bArtifactMode || !Victim || !Attacker || !Victim->Artifact || Victim->Artifact->Guard == EZoogiArtifact::None) return;
 	if (Phase != EZoogiPhase::Rolling) return;
+	if (IsAlly(Victim, Attacker)) return; // 2v2: a teammate bump never triggers the guard
 	const float Now = GetWorld()->GetTimeSeconds();
 	if (Now - Victim->Artifact->LastGuardHitTime < 0.25f) return; // same contact, a few frames later
 	Victim->Artifact->LastGuardHitTime = Now;
@@ -464,6 +465,7 @@ void AZoogiGameMode::TickArtifacts(float Dt)
 		if (G == EZoogiArtifact::None) continue;
 		const FZoogiArtifactRow& R = ZoogiArtifacts::Get(G);
 		AZoogiBall* Att = AC->GuardAttacker.Get();
+		if (bComboMode && ComboGuardBreak(V, Att)) continue; // LAUNCH / crit shatters the guard: full knockback
 		const FVector VV = V->GetBallVelocity();
 		V->SetPlanarVelocity(FVector(VV.X, VV.Y, 0.f) * R.GuardKnockbackMul);
 		if (Att && !Att->bOut)
@@ -490,6 +492,7 @@ void AZoogiGameMode::TickArtifacts(float Dt)
 		UE_LOG(LogZoogi, Log, TEXT("Guard block: P%d %s (%s) took %.0f%% knockback from P%d"), V->PlayerIndex + 1, *V->Def.Name, *ZoogiArtifacts::Name(G),
 			R.GuardKnockbackMul * 100.f, Att ? Att->PlayerIndex + 1 : 0);
 		EmitAnime(TEXT("GuardBlock"), V, G, V, V->BallLocation(), 1.f, true, Att ? Att->PlayerIndex : -1);
+		if (bComboMode) ComboGuardReaction(V, Att); // Guard Reaction extras; the guard is consumed
 	}
 
 	// Void Shard gravity well.
@@ -572,7 +575,7 @@ void AZoogiGameMode::DoResolve()
 	for (AZoogiBall* B : Balls)
 	{
 		if (!B || !B->Artifact) continue;
-		if (B->Artifact->Guard != EZoogiArtifact::None && B->Artifact->GuardSetTurn < TurnCounter)
+		if (!bComboMode && B->Artifact->Guard != EZoogiArtifact::None && B->Artifact->GuardSetTurn < TurnCounter) // combo: guards expire at the end of the team turn
 		{
 			UE_LOG(LogZoogi, Log, TEXT("Guard expired on P%d (%s)"), B->PlayerIndex + 1, *ZoogiArtifacts::Name(B->Artifact->Guard));
 			B->Artifact->ClearGuard();
@@ -590,6 +593,8 @@ void AZoogiGameMode::DoResolve()
 		if (TurnGuardBlocks > 0) N.Add(FString::Printf(TEXT("Guard block x%d"), TurnGuardBlocks));
 		ResolveNotes = FString::Join(N, TEXT("     "));
 	}
+
+	if (bComboMode) ComboResolve(); // relay, Recovery Gate, orb respawn, Resonance / Arena Control, follow-up offer
 
 	// 3) Anime events for the outcome (final now).
 	if (Shooter)

@@ -102,6 +102,19 @@ void AZoogiOrb::SetOut()
 	Glow->SetIntensity(0.f);
 }
 
+void AZoogiOrb::Respawn(const FVector& Location)
+{
+	bOut = false;
+	LastHitBy = -1;
+	SetActorHiddenInGame(false);
+	Sphere->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	SetActorLocation(Location, false, nullptr, ETeleportType::ResetPhysics);
+	Sphere->SetSimulatePhysics(true);
+	Sphere->SetPhysicsLinearVelocity(FVector::ZeroVector);
+	Sphere->SetPhysicsAngularVelocityInRadians(FVector::ZeroVector);
+	Glow->SetIntensity(bStar ? 12.f : 7.f);
+}
+
 bool AZoogiOrb::IsAtRest() const
 {
 	if (bOut) return true;

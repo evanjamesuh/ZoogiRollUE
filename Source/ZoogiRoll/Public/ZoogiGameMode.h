@@ -10,7 +10,59 @@ class AZoogiBall;
 class AZoogiOrb;
 class AZoogiArena;
 class AZoogiClone;
+class AZoogiComboArena;
 class UPhysicalMaterial;
+
+/** 2v2 Competitive Combo (Evan's package Part 4): the three movement forces of the Battle input. */
+enum class EZoogiForce : uint8
+{
+	Control, // low power, high accuracy: orb passes, redirects, precision setups
+	Drive,   // balanced standard competitive force
+	Launch   // maximum momentum: ring-outs, aerial attacks, heavy collisions; less forgiving
+};
+
+/** Partner Follow-Up triggers (bit flags, one shot can set several). */
+namespace ZoogiComboTrigger
+{
+	constexpr uint32 AllyBump = 1 << 0;
+	constexpr uint32 BankSetup = 1 << 1;
+	constexpr uint32 AirborneSetup = 1 << 2;
+	constexpr uint32 OrbRelay = 1 << 3;
+	constexpr uint32 GuardBreak = 1 << 4;
+	constexpr uint32 PowerSetup = 1 << 5;
+	constexpr uint32 TerrainSetup = 1 << 6;
+	constexpr int32 Num = 7;
+}
+
+/** 2v2 Combo tuning (cm, cm/s, gauge points). */
+namespace ZoogiComboTune
+{
+	constexpr float ControlMaxFrac = 0.50f;  // CONTROL: stops on the aim point / arrives soft, capped at this pull fraction
+	constexpr float DriveFrac = 0.60f;       // DRIVE: ~14 m/s
+	constexpr float LaunchFrac = 0.90f;      // LAUNCH: ~26 m/s
+	constexpr float LaunchMassMul = 1.15f;   // LAUNCH: heavier collisions
+	constexpr float FollowUpSpeedMul = 1.08f;
+	constexpr float GaugeMax = 100.f;
+	constexpr float FollowUpCost = 30.f;
+	constexpr float EBank = 15.f, EAllyBump = 25.f, EOrbOut = 20.f, ERelay = 25.f, EGuardBreak = 20.f, EAirborne = 20.f, ETerrain = 15.f, EPower = 10.f, ERingOut = 15.f, EGuardReaction = 15.f;
+	constexpr float AllyBumpMinSpeed = 250.f; // relative normal speed for a "meaningful" teammate redirect
+	constexpr float RelayRadius = 450.f;      // relayed orb ends this close to the partner (or touches it)
+	constexpr float AirborneHeight = 18.f;    // gap under the ball that counts as airborne
+	constexpr float ControlOrbOut = 25.f;     // Arena Control per ORB OUT
+	constexpr float ControlRingOut = 15.f;
+	constexpr float ShiftAtControl = 50.f;    // Resonance Shift: first team to 50 Arena Control
+	constexpr int32 ResonanceSurge = 3;       // 3 Resonance -> +1 artifact draw
+	constexpr int32 OrbScore = 50;
+	constexpr int32 RelayFinishBonus = 25;
+	constexpr int32 RingOutScore = 100;
+}
+
+struct FZoogiCallout
+{
+	FString Text;
+	FLinearColor Color = FLinearColor::White;
+	float Age = 0.f;
+};
 
 /** Coarse match state. Aiming covers Draw / Awaken / Battle aim, Rolling the launched shot, Resolving the Resolve phase. */
 UENUM(BlueprintType)
@@ -339,6 +391,94 @@ public:
 	/** -ZoogiRockTest: CPUs aim at the nearest standing rock and always SAVE (crack first, shatter on the second hit). */
 	bool bRockTest = false;
 	UPROPERTY() TArray<TObjectPtr<AZoogiClone>> Clones;
+
+	// ---- 2v2 Competitive Combo (ZoogiCombo.cpp). Classic stays the default; -ZoogiCombo or the menu MODE row turns it on.
+	bool bComboMode = false;
+	EZoogiForce ComboForce = EZoogiForce::Drive;   // chosen force for the current aim
+	EZoogiForce ComboShotForce = EZoogiForce::Drive; // force of the shot in flight
+	int32 ComboTeam = 0;                // team taking the current team turn (0 = A: P1+P2, 1 = B: P3+P4)
+	int32 ComboNextPick[2] = { 0, 0 };  // which teammate is pre-selected next team turn
+	float ComboEnergy[2] = { 0.f, 0.f };
+	int32 ComboResonance[2] = { 0, 0 };
+	float ArenaControl[2] = { 0.f, 0.f };
+	int32 ComboOrbOuts[2] = { 0, 0 };
+	bool bFollowUpUsed = false;         // one Partner Follow-Up per team turn
+	bool bFollowUpOffered = false;
+	bool bInFollowUp = false;
+	bool bFollowUpBroken = false;
+	float FollowUpOfferAt = 0.f;
+	uint32 ShotTriggers = 0;            // follow-up triggers earned by this shot
+	uint32 OfferTriggers = 0;
+	bool bComboMatchOver = false;
+	int32 ComboWinner = -1;
+	FString ComboOverReason;
+	TArray<FZoogiCallout> Callouts;
+	TArray<FVector> ComboOrbHome;
+	UPROPERTY() TObjectPtr<AZoogiComboArena> ComboArena;
+	static int32 TeamOfIndex(int32 PlayerIdx) { return PlayerIdx / 2; }
+	static FString TeamName(int32 Team) { return Team == 0 ? TEXT("TEAM A") : TEXT("TEAM B"); }
+	static FLinearColor TeamColor(int32 Team);
+	static const TCHAR* ForceName(EZoogiForce F);
+	static FString TriggerNames(uint32 Mask);
+	bool IsAlly(const AActor* A, const AActor* B) const;
+	AZoogiBall* PartnerOf(const AZoogiBall* B) const;
+	int32 TeamAlive(int32 Team) const;
+	int32 TeamScore(int32 Team) const;
+	void ComboSetMode(bool bOn);
+	void ComboStartMatch();
+	void ComboBeginTeamTurn(int32 Team);
+	void ComboBeginShot(int32 PlayerIdx);
+	void ComboResetShot();
+	bool ComboSelect(int32 PlayerIdx);
+	bool CanComboSelect() const;
+	void ComboSetForce(EZoogiForce F);
+	bool ComboAcceptFollowUp();
+	bool ComboDeclineFollowUp();
+	void ComboEndTurn();
+	void ComboFinish(int32 WinTeam, const FString& Why);
+	void ComboAddEnergy(int32 Team, float Amount, const FString& Why);
+	void ComboTrigger(uint32 Flag, float Energy, const FVector& Where);
+	void ComboCallout(const FString& Text, const FLinearColor& Color);
+	void ComboOnBallHit(AZoogiBall* Self, AActor* Other, UPrimitiveComponent* OtherComp, const FVector& NormalImpulse, const FHitResult& Hit);
+	void ComboModifyShot(AZoogiBall* Ball, FVector2D& V);
+	float ComboShotMul(const AZoogiBall* Ball) const;
+	float ComboForceFraction(float BaseFrac) const;
+	void ComboTick(float Dt);
+	void ComboCheckKnockoffs();
+	void ComboResolve();
+	bool ComboHoldResolve();
+	/** Guard hit in combo: true if the guard was BROKEN (no damping). Otherwise the reaction extras are applied (after the default damping). */
+	bool ComboGuardBreak(AZoogiBall* Victim, AZoogiBall* Attacker);
+	void ComboGuardReaction(AZoogiBall* Victim, AZoogiBall* Attacker);
+	void ComboSpawnOrbs();
+	void ComboPlanCPUForce(float& Frac);
+	// per-shot combo tracking
+	TWeakObjectPtr<AZoogiOrb> RelayOrb;
+	TWeakObjectPtr<AZoogiOrb> FollowRelayOrb;
+	TWeakObjectPtr<AZoogiBall> BumpedAlly;
+	bool bRelayTouched = false;
+	bool bShotBanked = false;
+	bool bShotTerrain = false;        // ramp / lip launch or bumper kick before the contact
+	bool bShotContact = false;
+	FString ShotTerrainWhat;
+	int32 ComboMainShooter = 0;
+	struct FBallAir { bool bAir = false; float AirTime = 0.f; bool bTerrainLaunch = false; float LastBumpAt = -10.f; float PrevVz = 0.f; FName GroundTag; };
+	void ComboOnFloorChanged(AZoogiBall* By);
+	TArray<FBallAir> AirState; // by player index
+	struct FPendingKick { TWeakObjectPtr<AZoogiBall> Ball; FVector Dir; float Speed; };
+	TArray<FPendingKick> PendingKicks;
+	// -ZoogiComboDemo=1 (Definition of Done), 2 (Orb Relay + Resonance Shift), 3 (Reactive Terrain): scripted inputs through the same calls the HUD uses.
+	int32 ComboDemo = 0;
+	int32 DemoTurn = 0;      // team turns seen
+	int32 DemoStep = 0;
+	float DemoClock = 0.f;
+	int32 DemoSeenTurn = -1;
+	bool bDemoShotFired = false;
+	void TickComboDemo(float Dt);
+	bool DemoAimBankInto(AZoogiBall* Into, float AngFrom, float AngTo, float R);
+	bool DemoAimRingOut(AActor* Target, EZoogiForce F);
+	void DemoStage();
+	FString ComboShot(const FString& Name, float Delay = 0.f);
 
 	// ---- automation / screenshots (command line: -ZoogiAuto -ZoogiPlayers=4 -ZoogiArena=1 -ZoogiShots=<dir> -ZoogiQuit=<sec> -ZoogiMenuShot)
 	FString ShotDir;
