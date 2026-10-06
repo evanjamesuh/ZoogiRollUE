@@ -567,8 +567,8 @@ void AZoogiGameMode::ComboOnBallHit(AZoogiBall* Self, AActor* Other, UPrimitiveC
 	// Enemy Zoogi or Arena Orb.
 	if (bShotBanked && !bShotContact) ComboTrigger(ZoogiComboTrigger::BankSetup, ZoogiComboTune::EBank, Mid);
 	if (bShotTerrain && !bShotContact) ComboTrigger(ZoogiComboTrigger::TerrainSetup, ZoogiComboTune::ETerrain, Mid);
-	const bool bMeAir = AirState.IsValidIndex(SI) && AirState[SI].bAir;
-	const bool bThemAir = OB && AirState.IsValidIndex(OB->PlayerIndex) && AirState[OB->PlayerIndex].bAir;
+	const bool bMeAir = AirState.IsValidIndex(SI) && AirState[SI].bAir && AirState[SI].bTerrainLaunch;  // launched off ramp / lip / platform
+	const bool bThemAir = OB && AirState.IsValidIndex(OB->PlayerIndex) && AirState[OB->PlayerIndex].bAir && AirState[OB->PlayerIndex].AirTime > 0.2f;
 	if (bMeAir || bThemAir)
 	{
 		UE_LOG(LogZoogi, Log, TEXT("Airborne interception: P%d %s hits %s"), SI + 1, bMeAir ? TEXT("(airborne)") : TEXT(""), *TargetName(Other));
@@ -1018,7 +1018,7 @@ namespace
 		for (const AZoogiOrb* O : G->Orbs)
 		{
 			if (!O || O == T || O->bOut) continue;
-			if (SegBlock(S, Ghost, FVector2D(O->OrbLocation()), ZoogiConst::ZoogiRadius + ZoogiConst::OrbRadius + 5.f) || SegBlock(P, Exit, FVector2D(O->OrbLocation()), TR + ZoogiConst::OrbRadius + 10.f)) Score += 3000.f;
+			if (SegBlock(S, Ghost, FVector2D(O->OrbLocation()), ZoogiConst::ZoogiRadius + ZoogiConst::OrbRadius + 5.f) || SegBlock(P, Exit, FVector2D(O->OrbLocation()), TR + ZoogiConst::OrbRadius + 10.f)) Score += 5000.f;
 		}
 		if (G->Arena)
 			for (const AZoogiRock* Rk : G->Arena->GetRocks())
@@ -1045,6 +1045,10 @@ namespace
 		const float VT = VHit * FMath::Sqrt(FMath::Max(0.f, 1.f - CosC * CosC)) + VHit * 0.15f;
 		const float TEdge = G->Arena ? G->Arena->DistanceToEdge(Ghost, Tang.IsNearlyZero() ? D : Tang) : 1000.f;
 		if (VT * VT / (2.f * Decel) > TEdge - 150.f) Score += 4000.f;
+		// Follow-through: the shooter keeps ~18% of the normal speed (heavier LAUNCH); it must stop before the rim.
+		const float VF = VHit * CosC * 0.18f;
+		const float FEdge = G->Arena ? G->Arena->DistanceToEdge(Ghost, N) : 1000.f;
+		if (VF * VF / (2.f * Decel) + 60.f > FEdge - 140.f) Score += 4000.f;
 		return Score + FMath::Abs(Cut) * 6.f;
 	}
 }
@@ -1149,7 +1153,13 @@ void AZoogiGameMode::TickComboDemo(float Dt)
 		if (ComboDemo == 1)
 		{
 			if (bTeamA && T == 1 && !bInFollowUp) { ComboSetForce(EZoogiForce::Drive); DemoAimBankInto(Balls[1], AZoogiComboArena::WallA0 + 1.f, AZoogiComboArena::WallA1 - 1.f, AZoogiComboArena::WallR - 12.f); ComboSetForce(EZoogiForce::Drive); }
-			else if (bTeamA) RingOutBest(T == 5 && !bInFollowUp ? EZoogiForce::Drive : EZoogiForce::Launch, !bInFollowUp);
+			else if (bTeamA && T == 1 && bInFollowUp && Balls.IsValidIndex(2) && IsValidTarget(Balls[2]))
+			{
+				// Definition of Done: the partner launches at enemy Zoogi C.
+				if (!DemoAimRingOut(Balls[2], EZoogiForce::Launch)) UE_LOG(LogZoogi, Warning, TEXT("ComboDemo: follow-up line on P3 is not clean"));
+			}
+			else if (bTeamA && T == 3 && !bInFollowUp) RingOutBest(EZoogiForce::Drive, true); // DRIVE into a prepared Guard -> Guard Reaction
+			else if (bTeamA) RingOutBest(EZoogiForce::Launch, !bInFollowUp);
 			else Harmless();
 		}
 		else if (ComboDemo == 2)
