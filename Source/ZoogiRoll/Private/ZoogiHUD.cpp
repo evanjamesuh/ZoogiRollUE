@@ -251,8 +251,8 @@ void AZoogiHUD::DrawScoreboard(AZoogiGameMode* G)
 		if (Flash > 0.f) Panel(X + 6.f * U, Y, 388.f * U, RowH - 6.f * U, FLinearColor(1.f, 1.f, 1.f, 0.35f * Flash));
 		Panel(X + 6.f * U, Y, 8.f * U, RowH - 6.f * U, PC);
 		Text(FString::Printf(TEXT("P%d %s%s"), B->PlayerIndex + 1, *B->Def.Name, B->bCPU ? TEXT(" (CPU)") : TEXT("")), X + 26.f * U, Y + 4.f * U, bActive ? FLinearColor::White : FLinearColor(0.8f, 0.85f, 0.95f), 0.55f);
-		FString Status = G->bComboMode ? FString::Printf(TEXT("%s        "), *AZoogiGameMode::TeamName(B->TeamIndex)) : FString::Printf(TEXT("orbs %d  KOs %d  "), B->OrbsScored, B->KnockOuts);
-		if (G->bComboMode) RingMarks(B->RingMarks, X + 108.f * U, Y + 35.f * U, 13.f * U, B->bKnockedOut);
+		FString Status = G->bComboMode ? FString::Printf(TEXT("%s   "), *AZoogiGameMode::TeamName(B->TeamIndex)) : FString::Printf(TEXT("orbs %d  KOs %d  "), B->OrbsScored, B->KnockOuts);
+		if (G->bComboMode) RingMarks(B->RingMarks, X + 262.f * U, Y + 12.f * U, 13.f * U, B->bKnockedOut);
 		if (G->bArtifactMode && B->Artifact)
 		{
 			Status += FString::Printf(TEXT("hand %d"), B->Artifact->Hand.Num());
