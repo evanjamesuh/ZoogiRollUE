@@ -456,6 +456,7 @@ void UZoogiAwakenWidget::BuildAwaken(AZoogiGameMode* G)
 
 FString UZoogiAwakenWidget::AimSignature(AZoogiGameMode* G) const
 {
+	if (G->bComboMode) return FString::Printf(TEXT("c%d|%d|%d|%d"), (int32)G->ComboForce, G->HasAim() ? 1 : 0, G->ActivePlayer, G->CanComboSelect() ? 1 : 0);
 	return FString::Printf(TEXT("%d|%d"), G->AimPowerStep, G->HasAim() ? 1 : 0);
 }
 
@@ -483,10 +484,24 @@ void UZoogiAwakenWidget::BuildAim(AZoogiGameMode* G)
 	MakeButton(P, TEXT("<"), FVector2D(X, BY), FVector2D(56.f, BH), TEXT("AimNudge"), -1, Acc, false); X += 62.f;
 	MakeButton(P, TEXT(">"), FVector2D(X, BY), FVector2D(56.f, BH), TEXT("AimNudge"), 1, Acc, false); X += 62.f;
 	MakeButton(P, TEXT(">>"), FVector2D(X, BY), FVector2D(62.f, BH), TEXT("AimNudge"), 5, Acc, false); X += 84.f;
+	if (G->bComboMode)
+	{
+		// 2v2 Combo: no power steps - pick the force (1 / 2 / 3); SWITCH hands the shot to the partner (Q).
+		static const TCHAR* ForceNames[3] = { TEXT("1 CONTROL"), TEXT("2 DRIVE"), TEXT("3 LAUNCH") };
+		static const FLinearColor ForceCols[3] = { FLinearColor(0.45f, 0.9f, 1.f), FLinearColor(1.f, 0.8f, 0.3f), FLinearColor(1.f, 0.4f, 0.3f) };
+		for (int32 i = 0; i < 3; ++i) { MakeButton(P, ForceNames[i], FVector2D(X, BY), FVector2D(128.f, BH), TEXT("ComboForce"), i, ForceCols[i], (int32)G->ComboForce == i); X += 134.f; }
+		X += 18.f;
+		if (G->CanComboSelect()) MakeButton(P, TEXT("Q SWITCH"), FVector2D(X, BY), FVector2D(110.f, BH), TEXT("ComboSelect"), -1, Acc, false);
+		else MakeButton(P, TEXT("NEXT"), FVector2D(X, BY), FVector2D(110.f, BH), TEXT("AimNext"), 0, Acc, false);
+		X += 118.f;
+	}
+	else
+	{
 	static const TCHAR* PowerNames[4] = { TEXT("AUTO"), TEXT("SOFT"), TEXT("MED"), TEXT("FULL") };
 	for (int32 i = 0; i < 4; ++i) { MakeButton(P, PowerNames[i], FVector2D(X, BY), FVector2D(96.f, BH), TEXT("AimPower"), i, FLinearColor(1.f, 0.8f, 0.3f), G->AimPowerStep == i); X += 102.f; }
 	X += 18.f;
 	MakeButton(P, TEXT("NEXT"), FVector2D(X, BY), FVector2D(110.f, BH), TEXT("AimNext"), 0, Acc, false); X += 118.f;
+	}
 	MakeButton(P, TEXT("CONFIRM"), FVector2D(X, BY), FVector2D(170.f, BH), TEXT("AimConfirm"), 0, FLinearColor(0.35f, 1.f, 0.45f), G->HasAim()); X += 178.f;
 	MakeButton(P, TEXT("CANCEL"), FVector2D(X, BY), FVector2D(150.f, BH), TEXT("AimCancel"), 0, FLinearColor(1.f, 0.4f, 0.35f), false);
 	bBuildingAim = false;
@@ -545,7 +560,8 @@ void UZoogiAwakenWidget::Refresh(float DeltaSeconds, bool bHideAll)
 			float Frac = 0.f, Impact = 0.f;
 			if (G->HasAim()) G->ComputeShotVelocity(Frac, Impact);
 			const FString Info = G->HasAim()
-				? FString::Printf(TEXT("%s   cut %+.0f deg   power %d%%%s"), G->bFreeAim ? TEXT("FLOOR AIM") : *G->TargetName(G->TargetLock.Get()), G->AimCutDeg, FMath::RoundToInt(Frac * 100.f),
+				? FString::Printf(TEXT("%s   cut %+.0f deg   %s%s"), G->bFreeAim ? TEXT("FLOOR AIM") : *G->TargetName(G->TargetLock.Get()), G->AimCutDeg,
+					G->bComboMode ? *FString::Printf(TEXT("%s  %.0f cm/s"), AZoogiGameMode::ForceName(G->ComboForce), FVector2D(G->ComputeShotVelocity(Frac, Impact)).Size() * G->ComboShotMul(G->GetActiveBall())) : *FString::Printf(TEXT("power %d%%"), FMath::RoundToInt(Frac * 100.f)),
 					G->Preview.bContact ? *FString::Printf(TEXT("   contact cut %.0f deg"), G->Preview.CutDeg) : TEXT(""))
 				: FString(TEXT("Click a rival / orb to lock on, or the floor to aim at a point"));
 			AimInfo->SetText(FText::FromString(Info));

@@ -1,4 +1,5 @@
 #include "ZoogiHUD.h"
+#include "ZoogiCombo.h"
 #include "ZoogiRoll.h"
 #include "ZoogiGameMode.h"
 #include "ZoogiBall.h"
@@ -250,7 +251,8 @@ void AZoogiHUD::DrawScoreboard(AZoogiGameMode* G)
 		if (Flash > 0.f) Panel(X + 6.f * U, Y, 388.f * U, RowH - 6.f * U, FLinearColor(1.f, 1.f, 1.f, 0.35f * Flash));
 		Panel(X + 6.f * U, Y, 8.f * U, RowH - 6.f * U, PC);
 		Text(FString::Printf(TEXT("P%d %s%s"), B->PlayerIndex + 1, *B->Def.Name, B->bCPU ? TEXT(" (CPU)") : TEXT("")), X + 26.f * U, Y + 4.f * U, bActive ? FLinearColor::White : FLinearColor(0.8f, 0.85f, 0.95f), 0.55f);
-		FString Status = FString::Printf(TEXT("orbs %d  KOs %d  "), B->OrbsScored, B->KnockOuts);
+		FString Status = G->bComboMode ? FString::Printf(TEXT("%s        "), *AZoogiGameMode::TeamName(B->TeamIndex)) : FString::Printf(TEXT("orbs %d  KOs %d  "), B->OrbsScored, B->KnockOuts);
+		if (G->bComboMode) RingMarks(B->RingMarks, X + 108.f * U, Y + 35.f * U, 13.f * U, B->bKnockedOut);
 		if (G->bArtifactMode && B->Artifact)
 		{
 			Status += FString::Printf(TEXT("hand %d"), B->Artifact->Hand.Num());
@@ -258,7 +260,8 @@ void AZoogiHUD::DrawScoreboard(AZoogiGameMode* G)
 			if (B->Artifact->Status != EZoogiStatus::None) Status += FString::Printf(TEXT("  %s"), ZoogiArtifacts::StatusName(B->Artifact->Status));
 		}
 		else for (int32 c = 0; c < 3; ++c) Status += c < B->Charges ? TEXT("*") : TEXT("-");
-		if (B->bOut) Status += TEXT("  OUT");
+		if (B->bKnockedOut) Status += TEXT("  KO");
+		else if (B->bOut) Status += TEXT("  OUT");
 		if (B->StunTurns > 0) Status += TEXT("  STUNNED");
 		if (B->BoundShots > 0) Status += TEXT("  BOUND");
 		Text(Status, X + 26.f * U, Y + 32.f * U, (B->StunTurns > 0 || B->BoundShots > 0) ? FLinearColor(0.85f, 0.7f, 1.f) : FLinearColor(0.65f, 0.72f, 0.85f), 0.38f, false, false);
@@ -304,7 +307,9 @@ void AZoogiHUD::DrawMatch(AZoogiGameMode* G)
 	DrawScoreboard(G);
 
 	// Top centre: round, orbs left, turn banner.
-	const FString Info = FString::Printf(TEXT("ROUND %d / %d     ORBS LEFT %d"), FMath::Min(G->RoundNumber, G->MenuRounds), G->MenuRounds, G->OrbsLeft());
+	const FString Info = G->bComboMode
+		? FString::Printf(TEXT("2v2 COMBO   ROUND %d / %d     TEAM A %d  -  %d TEAM B"), FMath::Min(G->RoundNumber, G->MenuRounds), G->MenuRounds, G->TeamScore(0), G->TeamScore(1))
+		: FString::Printf(TEXT("ROUND %d / %d     ORBS LEFT %d"), FMath::Min(G->RoundNumber, G->MenuRounds), G->MenuRounds, G->OrbsLeft());
 	Panel(W * 0.5f - 260.f * U, 20.f * U, 520.f * U, 46.f * U, GPanel);
 	Text(Info, W * 0.5f, 28.f * U, GOrbBlue, 0.55f, true);
 	if (AZoogiBall* B = G->GetActiveBall())
@@ -380,12 +385,14 @@ void AZoogiHUD::DrawMatch(AZoogiGameMode* G)
 
 	DrawStages(G);
 	DrawResolve(G);
+	if (G->bComboMode) DrawCombo(G);
 	// Awaken panel / aim bar: UMG when it's up (AZoogiHUD::UpdateAwakenWidget), Canvas otherwise (-ZoogiCanvasAwaken).
 	const bool bUmgAwaken = AwakenWidget && AwakenWidget->ShowsAwaken();
 	const bool bUmgAim = AwakenWidget && AwakenWidget->ShowsAim();
 	if (G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Awaken && !bUmgAwaken) DrawAwaken(G);
 	if (G->IsHumanAiming() && G->IsAimStep() && !bUmgAim) DrawAimControls(G);
-	if (Letterbox < 0.3f) Text(TEXT("Awaken: click a card + INFUSE / GUARD / SAVE (I/G/S)   Aim: click target or floor, A/D cut, Up/Down power, SPACE confirm   RMB/Esc cancel   C camera   Ctrl+R restart"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.75f, 0.85f, 0.85f), 0.36f, false, false);
+	if (Letterbox < 0.3f && G->bComboMode) Text(TEXT("2v2 COMBO   Awaken: card + I / G / S   Battle: Q switch Zoogi, click target / floor, A/D cut, 1 CONTROL 2 DRIVE 3 LAUNCH, SPACE confirm   Follow-Up: F accept / X skip   C camera"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.75f, 0.85f, 0.85f), 0.36f, false, false);
+	else if (Letterbox < 0.3f) Text(TEXT("Awaken: click a card + INFUSE / GUARD / SAVE (I/G/S)   Aim: click target or floor, A/D cut, Up/Down power, SPACE confirm   RMB/Esc cancel   C camera   Ctrl+R restart"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.75f, 0.85f, 0.85f), 0.36f, false, false);
 	Button(TEXT("MENU"), W - 150.f * U, 24.f * U, 126.f * U, 46.f * U, "Menu", 0, GOrbBlue);
 	Button(G->bCinematicCam ? TEXT("CAM: CINE") : TEXT("CAM: TACT"), W - 340.f * U, 24.f * U, 176.f * U, 46.f * U, "CamStyle", 0, FLinearColor(0.6f, 0.9f, 0.6f), G->bCinematicCam);
 	DrawAnime(G);
@@ -595,13 +602,19 @@ void AZoogiHUD::DrawResults(AZoogiGameMode* G)
 	Y += 150.f * U;
 	TArray<AZoogiBall*> Sorted;
 	for (AZoogiBall* B : G->Balls) Sorted.Add(B);
-	Sorted.Sort([](const AZoogiBall& A, const AZoogiBall& B) { return A.Score > B.Score; });
+	if (G->bComboMode)
+	{
+		const int32 WT = G->ComboWinner;
+		Sorted.Sort([WT](const AZoogiBall& A, const AZoogiBall& B) { const bool WA = A.TeamIndex == WT, WB = B.TeamIndex == WT; return WA != WB ? WA : (A.TeamIndex != B.TeamIndex ? A.TeamIndex < B.TeamIndex : A.Score > B.Score); });
+		Text(FString::Printf(TEXT("%s     TEAM A %d  -  %d TEAM B"), *G->ComboOverReason, G->TeamScore(0), G->TeamScore(1)), W * 0.5f, Y - 40.f * U, FLinearColor(0.8f, 0.85f, 0.95f), 0.42f, true, false);
+	}
+	else Sorted.Sort([](const AZoogiBall& A, const AZoogiBall& B) { return A.Score > B.Score; });
 	const int32 Top = Sorted.Num() ? Sorted[0]->Score : 0;
 	for (int32 i = 0; i < Sorted.Num(); ++i)
 	{
 		AZoogiBall* B = Sorted[i];
 		const FLinearColor PC = ZoogiUtil::PlayerColor(B->PlayerIndex);
-		const bool bWin = B->Score == Top && G->Balls.IsValidIndex(G->WinnerIndex) && B->PlayerIndex == G->WinnerIndex;
+		const bool bWin = G->bComboMode ? B->TeamIndex == G->ComboWinner : (B->Score == Top && G->Balls.IsValidIndex(G->WinnerIndex) && B->PlayerIndex == G->WinnerIndex);
 		const float RX = X0 + 30.f * U, RW = PW - 60.f * U;
 		Panel(RX, Y, RW, RowH, bWin ? FLinearColor(PC.R * 0.25f, PC.G * 0.25f, PC.B * 0.25f, 0.95f) : FLinearColor(0.05f, 0.07f, 0.14f, 0.92f));
 		Panel(RX, Y, 8.f * U, RowH, PC);
@@ -614,7 +627,8 @@ void AZoogiHUD::DrawResults(AZoogiGameMode* G)
 		else Panel(PX, PY, PS, PS, B->Def.Color);
 		const float TX = PX + PS + 20.f * U;
 		Text(FString::Printf(TEXT("P%d  %s"), B->PlayerIndex + 1, *B->Def.Name.ToUpper()), TX, Y + 12.f * U, FLinearColor::White, 0.62f);
-		Text(FString::Printf(TEXT("%d orbs   %d KOs%s"), B->OrbsScored, B->KnockOuts, B->bCPU ? TEXT("   CPU") : TEXT("")), TX, Y + 50.f * U, FLinearColor(0.72f, 0.78f, 0.9f), 0.42f, false, false);
+		Text(G->bComboMode ? FString::Printf(TEXT("%s   %d orbs   %d ring-outs   %s%s"), *AZoogiGameMode::TeamName(B->TeamIndex), B->OrbsScored, B->KnockOuts, B->bKnockedOut ? TEXT("KNOCKED OUT") : *FString::Printf(TEXT("%d ring mark%s"), B->RingMarks, B->RingMarks == 1 ? TEXT("") : TEXT("s")), B->bCPU ? TEXT("   CPU") : TEXT(""))
+			: FString::Printf(TEXT("%d orbs   %d KOs%s"), B->OrbsScored, B->KnockOuts, B->bCPU ? TEXT("   CPU") : TEXT("")), TX, Y + 50.f * U, FLinearColor(0.72f, 0.78f, 0.9f), 0.42f, false, false);
 		if (bWin)
 		{
 			// Gold WINNER badge, pulsing gently.
@@ -1091,4 +1105,102 @@ void AZoogiHUD::DrawAnime(AZoogiGameMode* G)
 	Panel((W - BW) * 0.5f, H * 0.9f, BW * FMath::Clamp(Age / Len, 0.f, 1.f), 6.f * U, FLinearColor(C.R, C.G, C.B, A));
 	if (Age > 0.3f) Button(TEXT("SKIP"), W - 190.f * U, H * 0.9f - 10.f * U, 150.f * U, 52.f * U, "AnimeSkip", 0, FLinearColor(0.8f, 0.85f, 0.95f));
 	if (Age > 0.3f) Text(TEXT("tap / click / SPACE to skip"), W * 0.5f, H * 0.9f + 14.f * U, FLinearColor(0.8f, 0.85f, 0.95f, 0.7f * A), 0.32f, true, false);
+}
+
+// ------------------------------------------------------------------ 2v2 Combo
+
+void AZoogiHUD::RingMarks(int32 Marks, float X, float Y, float S, bool bKO)
+{
+	for (int32 i = 0; i < 2; ++i)
+	{
+		const float MX = X + i * (S + 8.f * U);
+		const bool bOn = i < Marks && !bKO;
+		const FLinearColor C = bOn ? FLinearColor(1.f, 0.85f, 0.3f) : FLinearColor(0.45f, 0.45f, 0.5f, 0.9f);
+		Panel(MX, Y, S, S, C);
+		if (!bOn) Panel(MX + 3.f * U, Y + 3.f * U, S - 6.f * U, S - 6.f * U, FLinearColor(0.05f, 0.06f, 0.1f, 0.95f));
+	}
+}
+
+void AZoogiHUD::DrawCombo(AZoogiGameMode* G)
+{
+	const float W = Canvas->ClipX, H = Canvas->ClipY;
+	const bool bCine = G->bCinematicCam && (G->Stage == EZoogiStage::Draw || G->IsPowerUpStep());
+	UZoogiAnimeSubsystem* Anime = GetWorld()->GetSubsystem<UZoogiAnimeSubsystem>();
+	const bool bAnime = Anime && Anime->bPlaying;
+	if (G->Phase == EZoogiPhase::GameOver) return;
+
+	if (!bCine && !bAnime)
+	{
+		// Team panel (top right, under the camera / menu buttons).
+		const float PW = 560.f * U, PH = 212.f * U;
+		const float X0 = W - PW - 24.f * U, Y0 = 84.f * U;
+		Panel(X0, Y0, PW, PH, GPanel);
+		for (int32 t = 0; t < 2; ++t)
+		{
+			const float RY = Y0 + 10.f * U + t * 82.f * U;
+			const FLinearColor TC = AZoogiGameMode::TeamColor(t);
+			const bool bTurn = G->ComboTeam == t;
+			if (bTurn) Panel(X0 + 6.f * U, RY - 4.f * U, PW - 12.f * U, 78.f * U, FLinearColor(TC.R, TC.G, TC.B, 0.18f));
+			Panel(X0 + 6.f * U, RY - 4.f * U, 6.f * U, 78.f * U, TC);
+			FString Names;
+			for (AZoogiBall* B : G->Balls) if (B && B->TeamIndex == t) Names += FString::Printf(TEXT("%s%s"), Names.IsEmpty() ? TEXT("") : TEXT(" + "), *B->Def.Name);
+			Text(FString::Printf(TEXT("%s  %s"), *AZoogiGameMode::TeamName(t), bTurn ? TEXT("- TURN") : TEXT("")), X0 + 22.f * U, RY, TC + FLinearColor(0.25f, 0.25f, 0.25f, 0.f), 0.5f);
+			Text(Names, X0 + 250.f * U, RY + 4.f * U, FLinearColor(0.8f, 0.85f, 0.95f), 0.36f, false, false);
+			// Combo Gauge with the follow-up cost tick.
+			const float BX = X0 + 22.f * U, BY = RY + 36.f * U, BW = 300.f * U, BH = 16.f * U;
+			const float E = G->ComboEnergy[t];
+			const bool bReady = E >= ZoogiComboTune::FollowUpCost;
+			Panel(BX, BY, BW, BH, FLinearColor(0.08f, 0.1f, 0.18f, 0.95f));
+			const float Glow = bReady ? 0.15f * (0.5f + 0.5f * FMath::Sin(Time * 6.f)) : 0.f;
+			Panel(BX, BY, BW * FMath::Clamp(E / ZoogiComboTune::GaugeMax, 0.f, 1.f), BH, FLinearColor(FMath::Min(1.f, TC.R + Glow), FMath::Min(1.f, TC.G + Glow), FMath::Min(1.f, TC.B + Glow), 1.f));
+			const float TickX = BX + BW * ZoogiComboTune::FollowUpCost / ZoogiComboTune::GaugeMax;
+			Panel(TickX - 1.5f * U, BY - 4.f * U, 3.f * U, BH + 8.f * U, FLinearColor(1.f, 0.9f, 0.4f, 0.95f));
+			Text(FString::Printf(TEXT("COMBO %.0f"), E), BX + BW + 12.f * U, BY - 4.f * U, bReady ? FLinearColor(1.f, 0.9f, 0.4f) : FLinearColor(0.75f, 0.8f, 0.9f), 0.4f);
+			Text(FString::Printf(TEXT("RESONANCE %d/3    ARENA CONTROL %.0f"), G->ComboResonance[t], G->ArenaControl[t]), BX, BY + 20.f * U, FLinearColor(0.75f, 0.65f, 1.f), 0.34f, false, false);
+			if (bTurn)
+			{
+				const FString FU = G->bInFollowUp ? TEXT("FOLLOW-UP IN PLAY") : (G->bFollowUpUsed ? TEXT("FOLLOW-UP USED") : (bReady ? TEXT("FOLLOW-UP READY") : TEXT("")));
+				if (!FU.IsEmpty()) Text(FU, X0 + PW - 20.f * U - TextSize(FU, 0.34f, false).X, BY + 20.f * U, FLinearColor(1.f, 0.85f, 0.35f), 0.34f, false, false);
+			}
+		}
+		const FString Floor = G->ComboArena ? AZoogiComboArena::FloorStateName(G->ComboArena->GetFloorState()) : TEXT("-");
+		const bool bShift = G->ComboArena && G->ComboArena->IsShifted();
+		Text(FString::Printf(TEXT("FLOOR SECTION: %s      RESONANCE SHIFT: %s"), *Floor, bShift ? TEXT("ACTIVE (bumpers swell)") : *FString::Printf(TEXT("at %.0f control"), ZoogiComboTune::ShiftAtControl)),
+			X0 + 22.f * U, Y0 + PH - 30.f * U, FLinearColor(1.f, 0.7f, 0.4f), 0.34f, false, false);
+
+		// Callouts under the panel (newest on top).
+		float CY = Y0 + PH + 12.f * U;
+		for (const FZoogiCallout& C : G->Callouts)
+		{
+			const float A = FMath::Clamp((4.5f - C.Age) / 0.6f, 0.f, 1.f) * FMath::Clamp(C.Age * 8.f, 0.f, 1.f);
+			if (A <= 0.f) continue;
+			const float TW = TextSize(C.Text, 0.42f, true).X + 30.f * U;
+			const float CX = W - 24.f * U - TW + (1.f - FMath::Clamp(C.Age * 6.f, 0.f, 1.f)) * 60.f * U;
+			Panel(CX, CY, TW, 40.f * U, FLinearColor(0.02f, 0.03f, 0.08f, 0.8f * A));
+			Panel(CX + TW - 6.f * U, CY, 6.f * U, 40.f * U, FLinearColor(C.Color.R, C.Color.G, C.Color.B, A));
+			Text(C.Text, CX + 12.f * U, CY + 6.f * U, FLinearColor(C.Color.R * 0.35f + 0.65f, C.Color.G * 0.35f + 0.65f, C.Color.B * 0.35f + 0.65f, A), 0.42f);
+			CY += 46.f * U;
+		}
+	}
+
+	// Partner Follow-Up prompt.
+	if (G->bFollowUpOffered && !bAnime)
+	{
+		AZoogiBall* P = G->PartnerOf(G->GetActiveBall());
+		const float PW = 760.f * U, PH = 190.f * U;
+		const float X0 = (W - PW) * 0.5f, Y0 = H * 0.56f;
+		const FLinearColor TC = AZoogiGameMode::TeamColor(G->ComboTeam);
+		const float Pulse = 0.5f + 0.5f * FMath::Sin(Time * 6.f);
+		Panel(X0, Y0, PW, PH, FLinearColor(0.02f, 0.03f, 0.08f, 0.92f));
+		Panel(X0, Y0, PW, 6.f * U, FLinearColor::LerpUsingHSV(TC, FLinearColor(1.f, 0.85f, 0.3f), Pulse));
+		Text(TEXT("PARTNER FOLLOW-UP!"), W * 0.5f, Y0 + 16.f * U, FLinearColor(1.f, 0.85f, 0.3f), 0.9f, true);
+		Text(FString::Printf(TEXT("%s   ->   %s acts now      cost %.0f  (gauge %.0f)"), *AZoogiGameMode::TriggerNames(G->OfferTriggers), P ? *P->Def.Name.ToUpper() : TEXT("PARTNER"), ZoogiComboTune::FollowUpCost, G->ComboEnergy[G->ComboTeam]),
+			W * 0.5f, Y0 + 72.f * U, FLinearColor(0.85f, 0.9f, 1.f), 0.42f, true, false);
+		if (P && !P->bCPU)
+		{
+			Button(TEXT("F  ACCEPT"), W * 0.5f - 250.f * U, Y0 + 112.f * U, 240.f * U, 60.f * U, "FollowUp", 0, FLinearColor(0.35f, 1.f, 0.45f), true);
+			Button(TEXT("X  SKIP"), W * 0.5f + 10.f * U, Y0 + 112.f * U, 240.f * U, 60.f * U, "FollowSkip", 0, FLinearColor(1.f, 0.45f, 0.35f));
+		}
+		else Text(TEXT("CPU partner takes the follow-up..."), W * 0.5f, Y0 + 124.f * U, FLinearColor(0.75f, 0.8f, 0.9f), 0.45f, true, false);
+	}
 }

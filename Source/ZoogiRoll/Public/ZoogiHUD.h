@@ -49,6 +49,9 @@ protected:
 	void DrawArtifacts(AZoogiGameMode* G);
 	void DrawAnime(AZoogiGameMode* G);
 	void DrawResolve(AZoogiGameMode* G);
+	/** 2v2 Combo: team gauges, Resonance / Arena Control, floor state, callouts, Partner Follow-Up prompt. */
+	void DrawCombo(AZoogiGameMode* G);
+	void RingMarks(int32 Marks, float X, float Y, float S, bool bKO);
 	/** Procedural gem icon per artifact (placeholder until Aura's icons land). */
 	void Gem(uint8 Artifact, float CX, float CY, float R, float Alpha = 1.f);
 	void WorldCircle(const FVector& C, float Radius, const FLinearColor& Col, float Thick);

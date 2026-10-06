@@ -293,7 +293,8 @@ void UZoogiMenuWidget::BuildContents()
 		Title->SetFont(F);
 	}
 	if (UVerticalBoxSlot* VS = Main->AddChildToVerticalBox(Title)) VS->SetHorizontalAlignment(HAlign_Center);
-	UTextBlock* Sub = MakeText(nullptr, TEXT("lock on  -  fire  -  knock orbs and rivals off the edge  -  gold stars charge your power"), 18, GInk, false);
+	UTextBlock* Sub = MakeText(nullptr, G->bComboMode ? TEXT("2v2 COMBO  -  TEAM A: P1 + P2   vs   TEAM B: P3 + P4  -  bank, bump, relay, Partner Follow-Up  -  Meadow prototype arena")
+		: TEXT("lock on  -  fire  -  knock orbs and rivals off the edge  -  gold stars charge your power"), 18, G->bComboMode ? FLinearColor(1.f, 0.85f, 0.4f) : GInk, false);
 	if (UVerticalBoxSlot* VS = Main->AddChildToVerticalBox(Sub)) { VS->SetHorizontalAlignment(HAlign_Center); VS->SetPadding(FMargin(0.f, 0.f, 0.f, 18.f)); }
 
 	// Players + rounds.
@@ -310,7 +311,10 @@ void UZoogiMenuWidget::BuildContents()
 		Sp->SetSize(FVector2D(W, 1.f));
 		Box->AddChildToHorizontalBox(Sp);
 	};
-	Label(Top, TEXT("PLAYERS"), 0.f);
+	Label(Top, TEXT("MODE"), 0.f);
+	MakeButton(Top, TEXT("CLASSIC"), "Mode", 0, GMenuOrbBlue, !G->bComboMode, 130.f, 50.f, 20); Gap(Top, 8.f);
+	MakeButton(Top, TEXT("2v2 COMBO"), "Mode", 1, FLinearColor(1.f, 0.75f, 0.25f), G->bComboMode, 150.f, 50.f, 20);
+	Label(Top, TEXT("PLAYERS"), 50.f);
 	for (int32 n = 2; n <= 4; ++n) { MakeButton(Top, FString::FromInt(n), "Players", n, GMenuOrbBlue, G->MenuNumPlayers == n, 64.f, 50.f, 24); Gap(Top, 8.f); }
 	Label(Top, TEXT("ROUNDS"), 60.f);
 	MakeButton(Top, TEXT("-"), "Rounds", G->MenuRounds - 1, GMenuOrbBlue, false, 50.f, 50.f, 26);

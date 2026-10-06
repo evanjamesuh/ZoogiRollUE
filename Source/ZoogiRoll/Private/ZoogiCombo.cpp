@@ -791,6 +791,7 @@ void AZoogiGameMode::ComboResolve()
 	{
 		if (!B || !B->bPendingRecovery) continue;
 		B->bPendingRecovery = false;
+		if (AirState.IsValidIndex(B->PlayerIndex)) AirState[B->PlayerIndex] = FBallAir();
 		const FVector P = FindFreeSpot(AZoogiComboArena::GateReturn());
 		B->PlaceAt(P, 90.f);
 		B->LastHitPlayer = -1;
@@ -853,7 +854,6 @@ void AZoogiGameMode::ComboResolve()
 			bFollowUpOffered = true;
 			FollowUpOfferAt = Clock;
 			ComboCallout(FString::Printf(TEXT("PARTNER FOLLOW-UP READY  (%s)"), *TriggerNames(ShotTriggers)), FLinearColor(1.f, 0.85f, 0.3f));
-			ComboShot(TEXT("followup_offer"), 0.5f);
 		}
 		UE_LOG(LogZoogi, Log, TEXT("COMBO resolve: setup %s, %s gauge %.0f / cost %.0f, partner %s -> follow-up %s"), *TriggerNames(ShotTriggers), *TeamName(ComboTeam), ComboEnergy[ComboTeam], ZoogiComboTune::FollowUpCost,
 			bPartnerOk ? TEXT("ready") : TEXT("unavailable"), bFollowUpOffered ? TEXT("OFFERED") : TEXT("not offered"));
@@ -932,7 +932,7 @@ void AZoogiGameMode::DemoStage()
 	auto PutOrb = [this](int32 i, float X, float Y) { if (Orbs.IsValidIndex(i) && Orbs[i]) { const FVector L(X, Y, ZoogiConst::OrbRadius + 1.f); Orbs[i]->Respawn(L); if (ComboOrbHome.IsValidIndex(i)) ComboOrbHome[i] = L; } };
 	if (ComboDemo == 1)
 	{
-		Put(0, -700.f, 400.f); Put(1, -350.f, -770.f); Put(2, 250.f, -1150.f); Put(3, 900.f, 300.f);
+		Put(0, -900.f, 100.f); Put(1, -350.f, -770.f); Put(2, 250.f, -1150.f); Put(3, 900.f, 300.f);
 		PutOrb(3, 100.f, 850.f); PutOrb(5, 650.f, 100.f);
 	}
 	else if (ComboDemo == 2)
@@ -1076,10 +1076,13 @@ void AZoogiGameMode::TickComboDemo(float Dt)
 		else AwakenSave();
 		return;
 	}
-	// Resolve: take the offered Partner Follow-Up.
-	if (Phase == EZoogiPhase::Resolving && bFollowUpOffered && Clock - FollowUpOfferAt > 1.6f)
+	// Resolve: the Partner Follow-Up prompt appears (after any anime card) -> capture it -> accept.
+	if (Phase == EZoogiPhase::Resolving && bFollowUpOffered)
 	{
-		ComboAcceptFollowUp();
+		UZoogiAnimeSubsystem* Anime = GetWorld()->GetSubsystem<UZoogiAnimeSubsystem>();
+		if ((Anime && Anime->IsBusy()) || ClimaxLeft > 0.f || Clock - FollowUpOfferAt < 0.8f) { DemoFUAt = -1.f; return; }
+		if (DemoFUAt < 0.f) { DemoFUAt = Clock; ComboShot(FString::Printf(TEXT("t%d_followup_prompt"), T), 0.25f); }
+		else if (Clock - DemoFUAt > 1.0f) { DemoFUAt = -1.f; ComboAcceptFollowUp(); }
 		return;
 	}
 	if (!IsAimStep()) return;
@@ -1116,8 +1119,18 @@ void AZoogiGameMode::TickComboDemo(float Dt)
 					if (S < Best) { Best = S; BestShooter = Sh->PlayerIndex; BestT = Tg; }
 				}
 			}
+			if (!BestT || Best >= 4000.f)
+			{
+				// No clean line this turn: reposition softly instead of gifting a self ring-out.
+				UE_LOG(LogZoogi, Log, TEXT("ComboDemo: no ring-out line (best %.0f), P%d repositions with CONTROL"), Best, ActivePlayer + 1);
+				const FVector L = GetActiveBall()->BallLocation();
+				const FVector P = L + (FVector(0, 0, L.Z) - L).GetSafeNormal2D() * 220.f;
+				SetFreeAim(FVector(P.X, P.Y, L.Z - ZoogiConst::ZoogiRadius));
+				ComboSetForce(EZoogiForce::Control);
+				return;
+			}
 			if (BestShooter != ActivePlayer) ComboSelect(BestShooter);
-			if (BestT) DemoAimRingOut(BestT, F);
+			DemoAimRingOut(BestT, F);
 		};
 		if (ComboDemo == 1)
 		{
