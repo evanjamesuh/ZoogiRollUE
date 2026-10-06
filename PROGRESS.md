@@ -3,6 +3,22 @@
 Project: `C:\dev\ZoogiRollUnreal\ZoogiRoll.uproject` (C++ module `ZoogiRoll`, Chaos physics).
 The web game at `C:\dev\ZoogiRollUE` is read-only reference and is never modified.
 
+## Latest 2v2 build — Tue Oct 6, 6:58 PM CT (commit 9f4c60c)
+Packaged Development Win64 to `Packaged\Windows\ZoogiRoll.exe` (also updates the editor DLL so opening the `.uproject` in UE 5.6 picks up the same code). Local git only — never pushed.
+
+**What's in this build**
+* Full 2v2 Competitive Combo mode (PDF Part 4) on Meadow: team turns DRAW→AWAKEN→BATTLE→RESOLVE→END, CONTROL/DRIVE/LAUNCH, Ally Bump, Combo Gauge + Partner Follow-Up, Guard Reaction / Guard Break, Ring Marks + Recovery Gate, neutral Arena Orbs (ORB OUT → Resonance / Arena Control → respawn), Resonance Shift, damageable floor NORMAL→DAMAGED→CRACKED.
+* Menu **MODE: CLASSIC | 2v2 COMBO**. Roster-agnostic (team slots read `ZoogiUtil::Roster()`).
+* Verified: Demo 1 DoD (bank→Ally Bump→Follow-Up→ring-out→Recovery Gate→Guard Reaction→KO), Demo 2 Orb Relay + RELAY FINISH + Resonance Shift, Demo 3 reactive terrain, CPU smoke.
+
+**Try it**
+1. Desktop **ZoogiRoll** shortcut → packaged exe, or open `ZoogiRoll.uproject` and Press Play.
+2. Menu → **2v2 COMBO** → START MATCH (or launch with `-ZoogiCombo`).
+3. Battle: Q switch Zoogi, 1/2/3 force, SPACE confirm; Follow-Up F accept / X skip.
+
+Screenshots: `/workspace/zoogi-unreal/shots/combo2v2/` (demo1_definition_of_done, demo2_orb_relay, demo3_reactive_terrain, cpu_match).
+
+
 ## How to open and play
 1. Double-click `C:\dev\ZoogiRollUnreal\ZoogiRoll.uproject` (UE 5.6). It is already built
    (`Binaries\Win64\UnrealEditor-ZoogiRoll.dll`). If UE asks to rebuild, say Yes, or run
