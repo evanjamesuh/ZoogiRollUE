@@ -14,7 +14,7 @@ unreal.AssetRegistryHelpers.get_asset_registry().scan_paths_synchronous(['/Niaga
 REPORT = []
 GSCALE = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fbx_scale.json')))
 SKIP_MESH = ('Golem', 'Dragon')  # demo character / skinned dragon, not part of the effect
-SKIP_MAT = ('Mask.mat', 'Sky.mat', 'MaskRock.mat')  # Unity stencil-mask tricks of the portal
+SKIP_MAT = ('Mask.mat', 'Sky.mat', 'MaskRock.mat', 'Fringe.mat', 'Portal1.mat', 'DecalCollision1.mat')  # + portal surface (renders solid white without stencil), atlas decal (ring grid)  # Unity stencil-mask tricks of the portal
 def mesh_scale(mesh, name, s, cap):
     # Unity size = FBX native * meta globalScale; then clamp the final diameter (cm) for Zoogi readability
     gs = GSCALE.get(os.path.splitext(os.path.basename(name or ''))[0].replace(' ', '_'), 1.0)
@@ -79,10 +79,21 @@ def build_unlit(name, additive):
     t = tex(m, 'Tex', -50, 0); C(uv, '', t, 'UVs')
     mk = tex(m, 'MaskTex', -50, 300); C(tc, '', mk, 'UVs')
     pc = E(m, unreal.MaterialExpressionParticleColor, -50, 550)
+    # soft radial edge (kills square sprite borders on alpha-less textures); RadialMask=0 for meshes/decals
+    half = E(m, unreal.MaterialExpressionConstant2Vector, -800, 900); half.set_editor_property('r', 0.5); half.set_editor_property('g', 0.5)
+    dv = op(m, unreal.MaterialExpressionSubtract, tc, half, -650, 900)
+    ln = E(m, unreal.MaterialExpressionLength, -500, 900); C(dv, '', ln, '')
+    two = E(m, unreal.MaterialExpressionConstant, -500, 1000); two.set_editor_property('r', 2.0)
+    l2 = op(m, MUL, ln, two, -350, 950)
+    oneR = E(m, unreal.MaterialExpressionOneMinus, -200, 950); C(l2, '', oneR, '')
+    satR = E(m, unreal.MaterialExpressionSaturate, -50, 950); C(oneR, '', satR, '')
+    rm = scalar(m, 'RadialMask', 1.0, -50, 1050)
+    oneC = E(m, unreal.MaterialExpressionConstant, -50, 1150); oneC.set_editor_property('r', 1.0)
+    rad = E(m, unreal.MaterialExpressionLinearInterpolate, 100, 1000); C(oneC, '', rad, 'A'); C(satR, '', rad, 'B'); C(rm, '', rad, 'Alpha')
     tint = vec(m, 'Tint', unreal.LinearColor(1, 1, 1, 1), -50, 700)
     inten = scalar(m, 'Intensity', 1.0, -50, 850)
     rgb1 = op(m, MUL, t, pc, 250, 0, 'RGB', 'RGB'); rgb2 = op(m, MUL, rgb1, tint, 400, 0, '', 'RGB'); rgb = op(m, MUL, rgb2, inten, 550, 0)
-    a1 = op(m, MUL, t, mk, 250, 300, 'A', 'R'); a2 = op(m, MUL, a1, pc, 400, 300, '', 'A'); a = op(m, MUL, a2, tint, 550, 300, '', 'A')
+    a1 = op(m, MUL, t, mk, 250, 300, 'A', 'R'); a2 = op(m, MUL, a1, pc, 400, 300, '', 'A'); a3 = op(m, MUL, a2, tint, 550, 300, '', 'A'); a = op(m, MUL, a3, rad, 650, 300)
     if additive:
         # KriptoFX additive textures are mostly black-backed RGB; alpha-less PNGs import with A=1, so RGB carries the shape.
         em = op(m, MUL, rgb, a, 750, 100)
@@ -92,7 +103,9 @@ def build_unlit(name, additive):
         d = E(m, unreal.MaterialExpressionDotProduct, 250, 450); C(t, 'RGB', d, 'A')
         third = E(m, unreal.MaterialExpressionConstant3Vector, 100, 500); third.set_editor_property('constant', unreal.LinearColor(1.0, 1.0, 1.0, 1))
         C(third, '', d, 'B')
-        sat = E(m, unreal.MaterialExpressionSaturate, 400, 450); C(d, '', sat, '')
+        thr = E(m, unreal.MaterialExpressionConstant, 250, 550); thr.set_editor_property('r', 0.15)
+        d2 = op(m, unreal.MaterialExpressionSubtract, d, thr, 330, 450)
+        sat = E(m, unreal.MaterialExpressionSaturate, 400, 450); C(d2, '', sat, '')
         lum = scalar(m, 'LumaAlpha', 1.0, 400, 550)
         lerp = E(m, unreal.MaterialExpressionLinearInterpolate, 550, 500)
         one = E(m, unreal.MaterialExpressionConstant, 400, 650); one.set_editor_property('r', 1.0)
@@ -263,7 +276,11 @@ def build_prefab(eff, pf):
         if not t: t = unreal.load_asset('/Niagara/DefaultAssets/DefaultSpriteTexture') if EAL.does_asset_exist('/Niagara/DefaultAssets/DefaultSpriteTexture') else None
         fb = e.get('flipbook') or [1, 1]
         bl = blend_of(m)
-        params = {'Tex': t, 'TilesX': fb[0] if fb[0] <= 16 else 1, 'TilesY': fb[1] if fb[1] <= 16 else 1, 'Intensity': 1.5 if bl == 'blend' else 3.0,
+        _small = prefab.startswith('Effect6') or prefab.endswith('_Hand')
+        if _small and bl == 'blend' and max(tint[:3]) < 0.05: bl = 'add'; tint = [0.7, 0.4, 1.4, 1]
+        if eff == 'Effect17' and max(tint[:3]) < 0.05: bl = 'add'; tint = [1.4, 0.35, 0.08, 1]
+        if eff == 'Effect3': bl = 'add'; tint = [1.6, 0.55, 0.12, 1] if max(tint[:3]) < 0.3 else tint   # fire skin lost its dragon emitter mesh: glow additively
+        params = {'Tex': t, 'TilesX': fb[0] if fb[0] <= 16 else 1, 'TilesY': fb[1] if fb[1] <= 16 else 1, 'Intensity': 1.5 if bl == 'blend' else (6.0 if _small else 3.0),
                   'MaskTex': tex_asset(eff, (m.get('tex') or {}).get('_CutoutTex'))}
         mi = make_mi(eff, prefab, '%s_%s_%s' % (bl, os.path.basename(m.get('path', 'x')), os.path.basename((m.get('tex') or {}).get('_MainTex') or '')), bl, params)
         col = lc(tint)
@@ -273,6 +290,12 @@ def build_prefab(eff, pf):
         en = uname(nm)
         smin = max(2.0, size[0]); smax = max(smin, size[1])
         if mode == 1: smin = max(smin, 3.0); smax = max(smax, 5.0)   # stretched sparks: keep them visible as dots
+        small = prefab.startswith('Effect6') or prefab.endswith('_Hand')
+        if small:   # tiny/short effects: make readable at Zoogi scale
+            smin = max(12.0, smin * 2.0); smax = max(smin * 1.5, smax * 2.0); life = (max(0.8, life[0]), max(1.0, life[1]))
+        if eff == 'Effect3': smin = max(smin, 40.0); smax = max(smax, 80.0)
+        smax = min(smax, 220.0); smin = min(smin, smax)   # giant smoke cards read as upright planes at Zoogi scale
+
         if loop and rate > 0 and nburst <= 0:
             addem(sysa, 'Fountain', en)
             L.set_niagara_float(sysa, en, 'SpawnRate.SpawnRate', min(rate, 150.0))
@@ -314,7 +337,8 @@ def build_prefab(eff, pf):
     for (mpath, matpath), lst in groups.items():
         mat = (lst[0].get('mats') or [None])[0] or {}
         is_decal = 'Decal' in (mat.get('shader') or '') or mpath == 'PLANE'
-        if any(k in (mpath or '') for k in SKIP_MESH) or os.path.basename(matpath or '') in SKIP_MAT: skipped.append('%s %s (not part of effect / stencil)' % (mpath, matpath)); continue
+        if any(k in (mpath or '') for k in SKIP_MESH) or re.sub(r'[^A-Za-z0-9.]', '', os.path.basename(matpath or '')) in SKIP_MAT: skipped.append('%s %s (not part of effect / stencil)' % (mpath, matpath)); continue
+        if is_decal: skipped.append('%s (ground decal plane: template mesh orientation is random, rendered upright)' % matpath); continue
         mesh = unreal.load_asset('/Engine/BasicShapes/Plane') if is_decal else mesh_asset(eff, mpath)
         if not mesh: skipped.append('%s (mesh missing)' % mpath); continue
         texs = mat.get('tex') or {}
@@ -330,7 +354,7 @@ def build_prefab(eff, pf):
             bl = blend_of(mat) if not is_decal else ('add' if '_BLENDMODE_ADD' in (mat.get('keywords') or '') else 'blend')
             mi = make_mi(eff, prefab, 'Static_%s_%s' % (bl, os.path.basename(matpath or 'x')), bl,
                          {'Tex': t, 'MaskTex': tex_asset(eff, texs.get('_Mask')) if is_decal else None, 'Tint': lc(tint), 'Intensity': 2.0,
-                          'PanV': 0.6 if 'tornado' in (mpath or '').lower() else 0.0, 'LumaAlpha': 0.0 if is_decal else 1.0})
+                          'PanV': 0.6 if 'tornado' in (mpath or '').lower() else 0.0, 'LumaAlpha': 0.0 if is_decal else 1.0, 'RadialMask': 0.0})
         # place: icicles spread in a ring (8 groups), everything else at the recentred position
         cnt = len(lst)
         sc = lst[0].get('scale') or {'x': 1, 'y': 1, 'z': 1}
