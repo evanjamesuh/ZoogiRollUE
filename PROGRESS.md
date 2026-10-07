@@ -1,10 +1,49 @@
-# Zoogi Roll — Unreal Engine 5.6 rebuild: progress log
+# Zoogi Roll â€” Unreal Engine 5.6 rebuild: progress log
 
 Project: `C:\dev\ZoogiRollUnreal\ZoogiRoll.uproject` (C++ module `ZoogiRoll`, Chaos physics).
 The web game at `C:\dev\ZoogiRollUE` is read-only reference and is never modified.
 
+## Frozen Ring polish round 3c: Tue Oct 6, 11:39 PM CT (merge ca9baa5, code 3bba5c7)
+Packaged Development Win64 at **11:39 PM CT**, giving `Packaged\Windows\ZoogiRoll.exe` (exe written 11:39:37 PM CT, ~334 MB). Desktop **ZoogiRoll** / **ZoogiRoll - Shortcut** retargeted to the new exe. Local git only, never pushed. Editor DLL rebuilt 11:36 PM CT. **No Aura** in code paths (SM_AuraFrz_* unused; generated assets left on disk under Content/AuraModelGen and .Aura/).
+
+### Look / stage
+* Open curved wooden bleachers, **no roof**, 6 stepped rows, snow caps, low side/back walls, facade windows, lamp posts. Split into 3 breakable `stand` sections (HP 160) with stepped `ZStand` colliders. One snow pine beside each stand.
+* Bigger elliptic islets (r 640 x stretch 1.4), walkable floor colliders, snow lip rails (`islet_rail`, HP 90) open at the bridge landing (+/-14 deg).
+* Rollable wood bridges with deck + rail colliders (`ZBridge`/`ZRail`, Grow forming).
+* Arena Orbs on each bleacher islet apron (`ExtraOrbSpots`; classic orb count 18 -> **22**).
+* Layered jagged mountain ridges; brighter floor rune glow (2.5); sun light-shaft bloom (sun rays). Aurora panorama kept from r2.
+* **Crater slab hook** (`AZoogiFloorScars::SpawnCraterSlabs(Loc, Normal, Power, Mat)`): placeholder tilted ice-slab ring on CRATER; ready for A&P CraterSlab data.
+
+### Gameplay / damage (halved thresholds)
+* HitSpeedMin 500->**250**, HitDamagePerSpeed 1/42->**1/21** (ArenaPiece). Rock CrackSpeed 900->**450**, ShatterSpeed 1600->**800**. Pillars remain unbreakable.
+* Worked example icewall HP 120: old Damaged ~1357 cm/s, Cracked ~3272; new Damaged ~679, Cracked ~1636. A normal shot ~1980 cm/s now deals ~88 (cracks a wall / damages a stand).
+* `-ZoogiFrozenPlayTest` harness (wall / stand / bridge / lip / ring-out). Show run: 52 shots.
+
+### Aura note
+* Generated Aura assets left unused (do not delete). Earlier ~10:39-10:44 PM package from another agent may have cooked r3b Aura code/assets; **this** package is Aura-free in code.
+* Reverted Aura swap to daec51c-level procedural kit (not literal 32bdc94) then rebuilt as r3c; FloorScars SetScar rate-limit fix kept.
+
+### Shots (agent box)
+* Side-by-sides: `/workspace/zoogi-unreal/shots/arenas/frozen-buzzy/r3c_sbs_{hero,threequarter,topdown,hub}.jpg`
+* Game only: `r3c_hero.jpg`, `r3c_threequarter.jpg`, `r3c_topdown.jpg`, `r3c_hub.jpg`, `r3c_stands_close_{W,E}.jpg`, `r3c_stands_mid_SE.jpg`, `r3c_stands_side_W.jpg`
+* Prior review: `r3_stands_before_*.jpg`, `r3_*.jpg`
+
+## Bible characters + phase expressions: Tue Oct 6, packaged 9:48 PM CT (commit bbd99b6)
+Packaged Development Win64 `Packaged\Windows\ZoogiRoll.exe` (exe written 9:48 PM CT). Packaged smoke test (picks 4-7) passed: Sera rune seal fired and the match reached game over. Local git only, never pushed. One leftover: in the 9:48 exe Master Orin's shell has the darker 0.6 granite tint. The lighter 0.9 tint (`MI_MasterOrin_Shell`) is imported and committed and will be in the next package.
+The 8 Buzzy "Master Asset Bible" characters replace the old 7 (Wolfgang, Hotstreak, Lars, Pinpoint, Bolt, Wraps, Nightshade retired). Roster order is also the menu order and the `-ZoogiPicks` indices: 0 Blue, 1 Tavi, 2 Vex, 3 Moss, 4 Master Orin, 5 Sera, 6 Luma, 7 Dark Zoogy. Collision radius, physics, the mass formula and the turn/phase logic are unchanged. The 2v2 Combo needed no change because it is roster-agnostic. Full details are in `Docs/BIBLE_CHARACTERS.md`.
+* **Powers follow personality, and stats/mass come with the power.** Vex: Rival Blast (Explosion, from Hotstreak). Master Orin: Granite Bind (Bandage Bind, from Wraps; heaviest). Luma: Hype Shock (Static Shock, from Bolt). Dark Zoogy: Shadow Stun (from Nightshade). Moss: Tactical Lock (Lock-On, from Pinpoint). Blue: Resonance Rebound (Ricochet, from Lars). Tavi: Friend Squad (Wolf Pack, amber echo clones of Tavi). **Sera: Rune Seal**, a new small variant: Shadow Stun's 460 cm pulse applies Bandage Bind's curse (rivals' next 2 shots are weak) with no freeze. Artifact affinity is derived from the power.
+* **Models:** `/Game/Characters/Bible/<Asset>/SM_<Asset>` + `SM_<Asset>_Nubs` + `MI_<Asset>_<Slot>`. The masters are in `/Game/Characters/Bible/Materials`. To re-import: `.\Scripts\run_python.ps1 Scripts\import_bible_characters.py import_bible` (source `SourceArt/Characters/Bible`; set env `ZOOGI_BIBLE_FORCE=1` to rebuild the masters). Portraits: `Art/Portraits/T_Portrait_<id>.png` â†’ `Scripts\import_portraits.py`.
+* **Flipper nubs** are visual only and a separate mesh. To hide them everywhere, set `ShowFlipperNubs=False` under `[ZoogiRoll.Characters]` in `Config/DefaultGame.ini` (`-ZoogiNoNubs` hides them for one run).
+* **Expressions** (`UZoogiExpressionComponent`, one per Zoogi) use a 12-cell eye atlas per character: neutral (blinks), focused (Aim), determined (PowerUp / Infuse / Partner Follow-Up), excited (Rolling / landed hit), dizzy (hard hit / stunned), worried (edge / incoming / bumped), ko (falling out), happy (KO credit / orb / win), sad (lose / bound), guard (Awaken Guard / braced) and flourish (Draw, Ally Bump, idle personality beat).
+  * Each character also gets nub motion, core glow and small hops/wobbles. Dark Zoogy's visor optic pulses.
+  * Settled Zoogis turn their face to the camera (`FaceCamera`, `FaceMaxTiltDeg` in the same ini section).
+  * Log lines look like `Expr P1 Blue -> focused (aim)`. `-ZoogiExprDemo` photographs every expression.
+* **In-game face legibility:** at the 50Â° camera the eye atlases are a game-only build, with thicker strokes, a light halo behind the eyes and low window glow. Colour maps are forced to sRGB/`TC_Default` because UE's normal-map auto-detection had turned Blue's atlas into BC5 (green/yellow eyes). Nanite is off on these meshes because it caused holes in the decals. Orin's granite gets a warm `Tint`, and Dark Zoogy's optic slits are bigger and brighter.
+* **Verified (editor runs):** every character's 12 expressions were captured via `-ZoogiExprDemo`. Expressions change by phase in matches and in 2v2 Combo. With `-ZoogiClassicPowers -ZoogiPowerTest` these powers fired: Blue ricochet, Tavi wolf pack, Vex explosion, Moss Tactical Lock, Sera rune seal, Dark Zoogy shadow stun. Orin Granite Bind and Luma Hype Shock armed and fired but didn't land a hit in that run. Note that the default artifact mode never uses character powers.
+* Shots on the agent box: `/workspace/zoogi-unreal/characters-bible/{compare_all.jpg,expr_contact.jpg,expr_contact_ingame.jpg}` and `/workspace/zoogi-unreal/shots/bible/`.
+
 ## Frozen Ring polish round 2: Tue Oct 6, 9:45 PM CT (merge 39f4ef4, code 32bdc94)
-Packaged Development Win64 at **9:41–9:43 PM CT**, giving `Packaged\Windows\ZoogiRoll.exe` (exe written 9:42 PM CT, 334 MB). The editor DLL was rebuilt at 9:31 PM CT. Local git only, never pushed. A packaged smoke run (`-ZoogiCombo -ZoogiArena=1`) confirmed that forming completes in 2.6 s (colliders on) and the Recovery Gate returns players. Classic Frozen ran to game over with a ring-out crash on a bridge.
+Packaged Development Win64 at **9:41â€“9:43 PM CT**, giving `Packaged\Windows\ZoogiRoll.exe` (exe written 9:42 PM CT, 334 MB). The editor DLL was rebuilt at 9:31 PM CT. Local git only, never pushed. A packaged smoke run (`-ZoogiCombo -ZoogiArena=1`) confirmed that forming completes in 2.6 s (colliders on) and the Recovery Gate returns players. Classic Frozen ran to game over with a ring-out crash on a bridge.
 * Look: the aurora and rainbow sky panorama is rebuilt from the Buzzy hero image with feathered seams. The snow rim is raised and lumpy. A bright cyan boundary ring and the hub rune circles and spokes are added. Cliffs and the underside are paler, and the mountains sit further out and lower, fading into a pale haze (fog starts at 90 m so the court stays crisp).
 * Forming: the 4 hub pillars now break through the floor at 1.3/1.4/1.5/1.6 s with a +14 cm overshoot and are settled by 2.6 s, following the timing in `reskin-incoming/02-frozen-ring/animations/forming/forming_spec.md`.
 * Destruction: floor craters are now art-scale (charcoal crater plus a cyan crack web, no bloom blow-out). The black 2v2 hex-section slab when damaged or cracked is fixed. A ring-out with no piece in its flight cone now damages the nearest rim piece.
@@ -13,28 +52,28 @@ Packaged Development Win64 at **9:41–9:43 PM CT**, giving `Packaged\Windows\Zo
 * Side-by-sides: `/workspace/zoogi-unreal/shots/arenas/frozen-buzzy/r2_*.jpg` on the agent box.
 
 ## Frozen Ring rebuilt from the Buzzy art (round 1): Tue Oct 6, 8:45 PM CT (merge 5bd6ea3, code 4386d51)
-Packaged Development Win64 at **8:40–8:43 PM CT**, giving `Packaged\Windows\ZoogiRoll.exe` (exe written 8:41 PM CT, 334 MB). The editor DLL was rebuilt at 8:38 PM CT. Branch `frozen-buzzy` was merged into `main` locally and never pushed. A packaged smoke run (`-ZoogiCombo -ZoogiArena=1`) confirmed that Frozen 2v2 forms the stage (84 pieces in 2.6 s, colliders switch on once each piece settles) and that the Recovery Gate returns players. A Meadow regression smoke run is unchanged.
+Packaged Development Win64 at **8:40â€“8:43 PM CT**, giving `Packaged\Windows\ZoogiRoll.exe` (exe written 8:41 PM CT, 334 MB). The editor DLL was rebuilt at 8:38 PM CT. Branch `frozen-buzzy` was merged into `main` locally and never pushed. A packaged smoke run (`-ZoogiCombo -ZoogiArena=1`) confirmed that Frozen 2v2 forms the stage (84 pieces in 2.6 s, colliders switch on once each piece settles) and that the Recovery Gate returns players. A Meadow regression smoke run is unchanged.
 
-**What's new on FROZEN RING** (menu ARENA → Frozen Ring, Classic or 2v2 COMBO)
-* Rebuilt to match Evan's Buzzy Frozen Ring art. Textures are derived from the Buzzy images (`Scripts/arenas/gen_frozen.py` → `T_Frozen*`, `M_FrozenPiece`, `M_FrozenDecal`). The scene has a glowing icy court with cyan Resonance runes, a snowy rim with ice blocks, curved bank walls and arches, four snow-roof pavilion stands on floating islets with bridges, frozen cliffs with icicles, mountains, an aurora sky, and the hub of 4 ice-stone pillars with ember/frost/storm/titan orbs on a rune floor.
+**What's new on FROZEN RING** (menu ARENA â†’ Frozen Ring, Classic or 2v2 COMBO)
+* Rebuilt to match Evan's Buzzy Frozen Ring art. Textures are derived from the Buzzy images (`Scripts/arenas/gen_frozen.py` â†’ `T_Frozen*`, `M_FrozenPiece`, `M_FrozenDecal`). The scene has a glowing icy court with cyan Resonance runes, a snowy rim with ice blocks, curved bank walls and arches, four snow-roof pavilion stands on floating islets with bridges, frozen cliffs with icicles, mountains, an aurora sky, and the hub of 4 ice-stone pillars with ember/frost/storm/titan orbs on a rune floor.
 * **Stage forming intro** (`UZoogiStageForming`, reusable): the arena assembles in about 2.6 s at match start. SKIP with click, Space, Enter or Esc. The 4 hub pillars rise out of the floor. No piece has collision until it has settled.
-* **Destruction everywhere except the pillars** (`AZoogiArenaPiece`): walls, arches, stands, bridges, rim blocks, ramp, platform, bumpers and rocks all go intact → damaged → cracked → broken. Damage comes from impacts, the power hook (Ember/Frost/Storm/Titan, extensible) and ring-out crashes. The floor gets scars (cracks → cyan craters). The 4 pillars and their orbs are unbreakable. Fairness: broken pieces never block a path or trap a Zoogi, and the floor collider stays intact.
+* **Destruction everywhere except the pillars** (`AZoogiArenaPiece`): walls, arches, stands, bridges, rim blocks, ramp, platform, bumpers and rocks all go intact â†’ damaged â†’ cracked â†’ broken. Damage comes from impacts, the power hook (Ember/Frost/Storm/Titan, extensible) and ring-out crashes. The floor gets scars (cracks â†’ cyan craters). The 4 pillars and their orbs are unbreakable. Fairness: broken pieces never block a path or trap a Zoogi, and the floor collider stays intact.
 * 2v2 COMBO on Frozen: bank wall, ramp and hex platform, 3 ice-crystal bumpers, a damageable hex-ice section, the Recovery Gate, and Arena Orb sockets.
 * Debug flags: `-ZoogiFormShots`, `-ZoogiDamageShots`, `-ZoogiNoForm`, `-ZoogiFormSlow=N`, `-ZoogiShowcaseWait=N`.
 * Side-by-sides (Buzzy on the left, game on the right): `/workspace/zoogi-unreal/shots/arenas/frozen-buzzy/` on the agent box.
 
-## Latest 2v2 build — Tue Oct 6, 7:02 PM CT (commit cc39942)
-Packaged Development Win64 at **7:00–7:01 PM CT** → `Packaged\Windows\ZoogiRoll.exe` (bootstrap) + `ZoogiRoll\Binaries\Win64\ZoogiRoll.exe` (349 MB). Editor DLL `Binaries\Win64\UnrealEditor-ZoogiRoll.dll` is current (6:59 PM CT). Desktop **ZoogiRoll** / **ZoogiRoll - Shortcut** already point at the packaged exe; **Open Zoogi Roll in Unreal** opens the `.uproject`. Local git only — never pushed. Packaged smoke (`-ZoogiCombo`) confirmed Mode: 2v2 COMBO + Meadow props.
+## Latest 2v2 build â€” Tue Oct 6, 7:02 PM CT (commit cc39942)
+Packaged Development Win64 at **7:00â€“7:01 PM CT** â†’ `Packaged\Windows\ZoogiRoll.exe` (bootstrap) + `ZoogiRoll\Binaries\Win64\ZoogiRoll.exe` (349 MB). Editor DLL `Binaries\Win64\UnrealEditor-ZoogiRoll.dll` is current (6:59 PM CT). Desktop **ZoogiRoll** / **ZoogiRoll - Shortcut** already point at the packaged exe; **Open Zoogi Roll in Unreal** opens the `.uproject`. Local git only â€” never pushed. Packaged smoke (`-ZoogiCombo`) confirmed Mode: 2v2 COMBO + Meadow props.
 
 **What's in this build (PDF Part 4 complete)**
-* 2v2 Competitive Combo on Meadow: team turns DRAW→AWAKEN→BATTLE→RESOLVE→END, CONTROL/DRIVE/LAUNCH (no flick), Ally Bump, Combo Gauge + Partner Follow-Up (cost 30), Guard Reaction / Guard Break, Ring Marks + Recovery Gate, neutral Arena Orbs (ORB OUT → Resonance / Arena Control → respawn; Orb Relay + RELAY FINISH), Resonance Shift (bumpers swell at 50 control), damageable floor NORMAL→DAMAGED→CRACKED.
-* Menu **MODE: CLASSIC | 2v2 COMBO**. Roster-agnostic (`ZoogiUtil::Roster()` / `Def.Name` only — no hardcoded character names in 2v2 logic/UI).
-* Verified demos: DoD (bank→Ally Bump→Follow-Up→ring-out→Recovery Gate→Guard Reaction→KO), Orb Relay + Resonance Shift, reactive terrain, CPU smoke. Shots: `/workspace/zoogi-unreal/shots/combo2v2/`.
+* 2v2 Competitive Combo on Meadow: team turns DRAWâ†’AWAKENâ†’BATTLEâ†’RESOLVEâ†’END, CONTROL/DRIVE/LAUNCH (no flick), Ally Bump, Combo Gauge + Partner Follow-Up (cost 30), Guard Reaction / Guard Break, Ring Marks + Recovery Gate, neutral Arena Orbs (ORB OUT â†’ Resonance / Arena Control â†’ respawn; Orb Relay + RELAY FINISH), Resonance Shift (bumpers swell at 50 control), damageable floor NORMALâ†’DAMAGEDâ†’CRACKED.
+* Menu **MODE: CLASSIC | 2v2 COMBO**. Roster-agnostic (`ZoogiUtil::Roster()` / `Def.Name` only â€” no hardcoded character names in 2v2 logic/UI).
+* Verified demos: DoD (bankâ†’Ally Bumpâ†’Follow-Upâ†’ring-outâ†’Recovery Gateâ†’Guard Reactionâ†’KO), Orb Relay + Resonance Shift, reactive terrain, CPU smoke. Shots: `/workspace/zoogi-unreal/shots/combo2v2/`.
 
 **Try it now**
-1. Double-click Desktop **ZoogiRoll** (packaged), or **Open Zoogi Roll in Unreal** → Play.
-2. Menu → **2v2 COMBO** → START MATCH (or `-ZoogiCombo`).
-3. Keys: Awaken I/G/S · Battle Q switch · 1 CONTROL / 2 DRIVE / 3 LAUNCH · A/D cut · SPACE confirm · Follow-Up F / X · C camera.
+1. Double-click Desktop **ZoogiRoll** (packaged), or **Open Zoogi Roll in Unreal** â†’ Play.
+2. Menu â†’ **2v2 COMBO** â†’ START MATCH (or `-ZoogiCombo`).
+3. Keys: Awaken I/G/S Â· Battle Q switch Â· 1 CONTROL / 2 DRIVE / 3 LAUNCH Â· A/D cut Â· SPACE confirm Â· Follow-Up F / X Â· C camera.
 
 ## How to open and play
 1. Double-click `C:\dev\ZoogiRollUnreal\ZoogiRoll.uproject` (UE 5.6). It is already built
@@ -97,7 +136,7 @@ in `/workspace/zoogi-unreal/shots/combo2v2/`):
   then banks off the cracked lip (changed geometry).
 * CPU smoke (`-ZoogiCombo`, all CPU): CPUs pick forces, take follow-ups and finish the match.
 
-### Controls (lock-on targeting, since 4:20 PM Oct 3 — the drag-back slingshot was removed)
+### Controls (lock-on targeting, since 4:20 PM Oct 3 â€” the drag-back slingshot was removed)
 * Menu (UMG, `ZoogiMenuWidget.cpp`): pick 2-4 players, each player's Zoogi (< >) on its card (power,
   stat bars, mass), HUMAN/CPU, rounds and one of 7 arenas, then START MATCH. (`-ZoogiCanvasMenu` = old canvas menu.)
 * Every turn runs through five stages, shown in the phase tracker at the top with a banner on each change:
@@ -158,10 +197,10 @@ CPU players use powers too (about half the time they have a charge).
 * Camera: per-phase duel cameras (see Controls above); the alpha-camera-spec drag/aim pose was replaced.
 
 ## Milestones
-- [x] **1. Project + build** — C++ project created, `.gitignore`, local git repo. Builds with
+- [x] **1. Project + build** â€” C++ project created, `.gitignore`, local git repo. Builds with
   `Build.bat ZoogiRollEditor Win64 Development` (0 errors). Headless editor (`UnrealEditor-Cmd
   -run=pythonscript`) opens it with 0 errors.
-- [x] **2. Import** — Interchange glTF import via Python (`Scripts/setup_content.py`): Wolfgang,
+- [x] **2. Import** â€” Interchange glTF import via Python (`Scripts/setup_content.py`): Wolfgang,
   Hotstreak, Pinpoint, Bolt, Wraps, Lars, Nightshade, orb, 5 stylized scenery props.
   The Zoogi GLBs require `EXT_texture_webp`, which UE's glTF importer rejects, so
   `Scripts/glb_unwebp.py` rewrites copies (webp -> png) into `SourceArt/Zoogis` first (originals untouched).
@@ -171,14 +210,14 @@ CPU players use powers too (about half the time they have a charge).
   The web Meadow arena is drawn in code (no GLB), so the UE Meadow is also built in code:
   floating grass island (radius 15.5 u), six rim boulders at the GRASS_RIM spots with cylinder
   colliders, flowers, start pads, and floating forest islets using the imported trees.
-- [x] **3. Playable Meadow match** — everything listed above (pawns, shooting, trajectory +
+- [x] **3. Playable Meadow match** â€” everything listed above (pawns, shooting, trajectory +
   power meter, Chaos bounce/roll, orbs, knock-off scoring, settle-based turns, 2-4 hotseat,
   alpha camera, HUD with scoreboard/turn banner/popups, results screen) plus CPU opponents.
-- [x] **4. Verification** — `Scripts/run_demo.ps1` runs the game with `-ZoogiAuto` (CPU players)
+- [x] **4. Verification** â€” `Scripts/run_demo.ps1` runs the game with `-ZoogiAuto` (CPU players)
   and saves screenshots on gameplay events. `-ZoogiHumanTest` drives P1 with a scripted virtual
   mouse and keys through the real lock-on input path (soft lock, Tab, switch, Space). Screenshots are
   mirrored to the box at `/workspace/zoogi-unreal/shots/`.
-- [x] **4b. Packaged build** — `Scripts/package.ps1` (BuildCookRun, Development, ~2 min) ->
+- [x] **4b. Packaged build** â€” `Scripts/package.ps1` (BuildCookRun, Development, ~2 min) ->
   `Packaged\Windows\ZoogiRoll.exe` (~0.9 GB). Verified with a 4-CPU auto match (screenshots `shots/pkg1`).
 - [~] **5. More** (in progress)
   - [x] All 7 Zoogi powers + gold star orbs/charges + CPU power use + HUD power panel (`ZoogiPowers.cpp`).
@@ -190,7 +229,7 @@ CPU players use powers too (about half the time they have a charge).
   - [x] Arabian Nights (desert island, palace islets with domes/minarets, lanterns, crescent moon),
     Pharaoh's Tomb (sandstone court, obelisks, torches, sarcophagus islets) and Night Circuit
     (rectangular 24x16 m neon court with rails, corner mouths, solid pads/posts, centre channels,
-    synthwave skyline) — all 7 web arenas now selectable. Night Circuit uses arena-shape queries
+    synthwave skyline) â€” all 7 web arenas now selectable. Night Circuit uses arena-shape queries
     (`IsOffCourt`, `DistanceToEdge`, `IsSpotClear`) for orbs, CPU aim and the trajectory line.
   - [x] Proper UMG main menu built in C++ (`UZoogiMenuWidget`, no Blueprint asset): title, players/rounds,
     one card per player with Zoogi, power description and stat bars, arena grid, START / QUIT.
@@ -478,16 +517,16 @@ Awakened / crit-grade hit), and so are the collider, events, SFX, popup, feed li
 0 Wolfgang, 1 Hotstreak, 2 Lars, 3 Pinpoint, 4 Bolt, 5 Wraps, 6 Nightshade).
 
 ## Scripts
-* `Scripts/build.ps1` — compile the editor target (log: `Saved/Logs/build.log`).
-* `Scripts/run_python.ps1 -Script Scripts\setup_content.py` — headless import/material setup.
-* `Scripts/run_demo.ps1` — scripted demo run + screenshots.
-* `Scripts/glb_unwebp.py` — strip EXT_texture_webp from a GLB (run with Python + Pillow).
-* `Scripts/make_fx.py`, `Scripts/import_audio.py` — FX material / audio import (headless).
-* `Scripts/package.ps1` — packaged Win64 build into `Packaged/`.
-* `Scripts/synth_sfx.py <outdir>` — regenerates the 13 SFX WAVs (plain Python 3 + numpy/scipy, ffmpeg for loudness);
+* `Scripts/build.ps1` â€” compile the editor target (log: `Saved/Logs/build.log`).
+* `Scripts/run_python.ps1 -Script Scripts\setup_content.py` â€” headless import/material setup.
+* `Scripts/run_demo.ps1` â€” scripted demo run + screenshots.
+* `Scripts/glb_unwebp.py` â€” strip EXT_texture_webp from a GLB (run with Python + Pillow).
+* `Scripts/make_fx.py`, `Scripts/import_audio.py` â€” FX material / audio import (headless).
+* `Scripts/package.ps1` â€” packaged Win64 build into `Packaged/`.
+* `Scripts/synth_sfx.py <outdir>` â€” regenerates the 13 SFX WAVs (plain Python 3 + numpy/scipy, ffmpeg for loudness);
   `Scripts/import_sfx.py` imports them; `Scripts/make_rock_fx.py` makes `NS_Dust` / `NS_Debris`.
-* `Scripts/run_python.ps1 -Script Scripts\make_dust_material.py` — rock dust material `M_ZoogiDust` (headless, re-runnable).
-* `Scripts/make_artifact_data.py`, `Scripts/make_artifact_instances.py` — artifact DataAssets / material instances (headless, re-runnable).
+* `Scripts/run_python.ps1 -Script Scripts\make_dust_material.py` â€” rock dust material `M_ZoogiDust` (headless, re-runnable).
+* `Scripts/make_artifact_data.py`, `Scripts/make_artifact_instances.py` â€” artifact DataAssets / material instances (headless, re-runnable).
 
 ## Known issues / notes
 * Real-mouse play has not been exercised by a person yet (the scripted virtual mouse uses the

@@ -251,6 +251,14 @@ void AZoogiGameMode::SpawnOrbs()
 			Orbs.Add(O);
 		}
 	}
+	// Arena-provided orb spots off the main disc (Frozen: one on each bleacher islet's apron, reached over the bridges).
+	if (Arena)
+		for (const FVector& L : Arena->ExtraOrbSpots)
+			if (AZoogiOrb* O = GetWorld()->SpawnActor<AZoogiOrb>(AZoogiOrb::StaticClass(), FTransform(L)))
+			{
+				O->InitOrb(OrbPM, Decel);
+				Orbs.Add(O);
+			}
 }
 
 void AZoogiGameMode::StartMatch()

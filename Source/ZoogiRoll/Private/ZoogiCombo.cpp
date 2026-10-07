@@ -169,6 +169,15 @@ void AZoogiGameMode::ComboSpawnOrbs()
 		Orbs.Add(O);
 		ComboOrbHome.Add(L);
 	}
+	// Arena Orbs out on the arena's extra spots (Frozen bleacher islets), respawning there like the others.
+	if (Arena)
+		for (const FVector& L : Arena->ExtraOrbSpots)
+			if (AZoogiOrb* O = GetWorld()->SpawnActor<AZoogiOrb>(AZoogiOrb::StaticClass(), FTransform(L)))
+			{
+				O->InitOrb(OrbPM, Decel);
+				Orbs.Add(O);
+				ComboOrbHome.Add(L);
+			}
 }
 
 void AZoogiGameMode::ComboStartMatch()

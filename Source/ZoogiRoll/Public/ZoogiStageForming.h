@@ -39,6 +39,8 @@ public:
 	void AddComponent(USceneComponent* C, EZoogiFormStyle Style, const FVector& Offset, float Delay, float Duration, float Overshoot = 0.f);
 	/** Scalar parameter ramp (e.g. floor GlowStrength 0 -> target). */
 	void AddParamRamp(UMaterialInstanceDynamic* M, FName Param, float From, float To, float Delay, float Duration);
+	/** One-shot pulse 0 -> Peak (over Rise) -> hold -> 0 (over Fall): forming VFX such as the pillar floor-break ring. Ends (and skips) at 0. */
+	void AddParamPulse(UMaterialInstanceDynamic* M, FName Param, float Peak, float Delay, float Rise, float Hold, float Fall);
 
 	/** Puts everything at its start pose and starts the clock. TimeScale > 1 slows it down (shots). */
 	void Begin(float TimeScale = 1.f);
@@ -70,6 +72,7 @@ protected:
 		TWeakObjectPtr<UMaterialInstanceDynamic> M;
 		FName Param;
 		float From = 0.f, To = 1.f, Delay = 0.f, Duration = 1.f;
+		float Peak = 0.f, Hold = 0.f, Fall = 0.f; // Fall > 0: pulse (From = To = 0)
 	};
 	void Pose(FEntry& E, float T);
 	void Settle(FEntry& E);
