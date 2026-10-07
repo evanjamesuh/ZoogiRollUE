@@ -569,42 +569,6 @@ void AZoogiArena::BuildIslet(const FVector& Center, float Radius, const FLinearC
 	}
 }
 
-void AZoogiArena::BuildMeadow()
-{
-	BuildIsland(ZoogiUtil::Hex(TEXT("#3F8A2C")), ZoogiUtil::Hex(TEXT("#55A336")), ZoogiUtil::Hex(TEXT("#6B4A2B")),
-		ZoogiUtil::Hex(TEXT("#6E5B4A")), ZoogiUtil::Hex(TEXT("#4A3B30")), 0.3f);
-
-	// roundRim.ts GRASS_RIM: angle, distance, radius, height
-	TArray<FVector4> Rim = {
-		FVector4(32, 13.35, 1.15, 0.85), FVector4(70, 13.5, 1.05, 0.72), FVector4(152, 13.25, 1.2, 0.9),
-		FVector4(196, 13.45, 1.1, 0.78), FVector4(250, 13.3, 1.22, 0.88), FVector4(332, 13.4, 1.08, 0.7),
-		// Oct 4: two smaller rim stones in the widest gaps (110 / 291 deg), off the spawn-to-centre lanes.
-		FVector4(111, 13.3, 0.8, 0.6), FVector4(291, 13.3, 0.8, 0.6) };
-	BuildRim(Rim, ZoogiUtil::Hex(TEXT("#7C7F73")), ZoogiUtil::Hex(TEXT("#4F7A3A")), 0.55f, true); // destructible (AZoogiRock)
-
-	FRandomStream Rng(77);
-	UStaticMesh* SphereMesh = ZoogiUtil::BasicShape(TEXT("Sphere"));
-	UStaticMesh* ConeMesh = ZoogiUtil::BasicShape(TEXT("Cone"));
-	// Grass tufts and flowers (visual only).
-	ScatterInstances(ConeMesh, ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#7BC843")), 0.9f), 260, 300.f, 1500.f, FVector2D(0.07f, 0.12f), 0.f, Rng);
-	ScatterInstances(SphereMesh, ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#FDE047")), 0.6f, ZoogiUtil::Hex(TEXT("#FDE047")), 0.4f), 120, 700.f, 1480.f, FVector2D(0.08f, 0.12f), 4.f, Rng, true);
-	ScatterInstances(SphereMesh, ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#FFFFFF")), 0.6f), 120, 700.f, 1480.f, FVector2D(0.07f, 0.11f), 4.f, Rng, true);
-	ScatterInstances(SphereMesh, ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#F472B6")), 0.6f, ZoogiUtil::Hex(TEXT("#F472B6")), 0.3f), 90, 700.f, 1480.f, FVector2D(0.08f, 0.12f), 4.f, Rng, true);
-
-	// Floating forest islets around the meadow.
-	UStaticMesh* Oak = ZoogiUtil::LoadMesh(TEXT("/Game/Env/OakTree/SM_OakTree.SM_OakTree"));
-	UStaticMesh* Pine = ZoogiUtil::LoadMesh(TEXT("/Game/Env/PineTree/SM_PineTree.SM_PineTree"));
-	const FLinearColor GA = ZoogiUtil::Hex(TEXT("#3F8A2C")), GB = ZoogiUtil::Hex(TEXT("#55A336")), RockC = ZoogiUtil::Hex(TEXT("#5E4C3D"));
-	for (int32 i = 0; i < 14; ++i)
-	{
-		const float A = i * (2.f * PI / 14.f) + Rng.FRandRange(-0.15f, 0.15f);
-		const float D = Rng.FRandRange(2600.f, 5200.f) + (i % 3) * 900.f;
-		const float Z = Rng.FRandRange(-900.f, 200.f);
-		const float Rad = Rng.FRandRange(320.f, 700.f);
-		BuildIslet(FVector(FMath::Cos(A) * D, FMath::Sin(A) * D, Z), Rad, GA, GB, RockC, (i % 2) ? Oak : Pine, FMath::RoundToInt(Rad / 160.f), Rng.FRandRange(500.f, 900.f), Rng);
-	}
-}
-
 void AZoogiArena::BuildVolcanic()
 {
 	BuildIsland(ZoogiUtil::Hex(TEXT("#3A2A26")), ZoogiUtil::Hex(TEXT("#5A3A2E")), ZoogiUtil::Hex(TEXT("#FF5722")),
