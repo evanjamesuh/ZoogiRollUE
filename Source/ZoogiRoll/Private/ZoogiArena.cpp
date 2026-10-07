@@ -455,10 +455,10 @@ void AZoogiArena::SetupSky(EZoogiArena InTheme)
 		Fog->SetFogInscatteringColor(FLinearColor(0.55f, 0.72f, 0.95f));
 		Clouds->SetVisibility(false);
 		SkyLight->SetIntensity(1.25f);
-		P.AutoExposureBias = -0.3f;
+		P.AutoExposureBias = -0.55f;
 		P.BloomIntensity = 1.0f;
-		P.ColorSaturation = FVector4(0.95f, 0.95f, 0.95f, 1.f); // r10: art palette is soft/muted
-		P.ColorContrast = FVector4(1.0f, 1.0f, 1.0f, 1.f);
+		P.ColorSaturation = FVector4(1.08f, 1.08f, 1.08f, 1.f); // r12: art is bright and saturated (r10 mute read washed)
+		P.ColorContrast = FVector4(1.06f, 1.06f, 1.06f, 1.f);
 		break;
 	default:
 		Sun->SetRelativeRotation(FRotator(-42.f, 35.f, 0.f));

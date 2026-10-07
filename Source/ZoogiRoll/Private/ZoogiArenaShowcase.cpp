@@ -56,8 +56,8 @@ void AZoogiArenaShowcase::MaybeStart(UWorld* World, const FString& ArenaSlug)
 		S->Poses.Insert(FPose{ TEXT("buzzy_spiral"), FVector(0, -60, 40),     270.f, 42.f, 1700.f, 70.f }, 0);
 		S->Poses.Insert(FPose{ TEXT("buzzy_lips"),   FVector(0, 1250, 40),     270.f, 30.f, 1900.f, 75.f }, 0);
 		S->Poses.Insert(FPose{ TEXT("buzzy_ramps"),  FVector(0, -1450, 120),   270.f, 20.f, 2300.f, 72.f }, 0);
-		S->Poses.Insert(FPose{ TEXT("buzzy_hero"),   FVector(0, -900, -300),   270.f, 20.f, 5600.f, 62.f }, 0);
-		S->Poses.Insert(FPose{ TEXT("buzzy_34"),     FVector(0, -700, -200),   270.f, 24.f, 5400.f, 62.f }, 0);
+		S->Poses.Insert(FPose{ TEXT("buzzy_hero"),   FVector(0, -1100, -200),  270.f, 15.f, 5800.f, 62.f }, 0);
+		S->Poses.Insert(FPose{ TEXT("buzzy_34"),     FVector(0, -1000, -150),  270.f, 17.f, 5600.f, 62.f }, 0);
 		S->Poses.Insert(FPose{ TEXT("buzzy_top"),    FVector(0, 0, 0),         270.f, 86.f, 5400.f, 62.f }, 0);
 	}
 	if (ArenaSlug.Contains(TEXT("ice")) || ArenaSlug.Contains(TEXT("frozen")))
