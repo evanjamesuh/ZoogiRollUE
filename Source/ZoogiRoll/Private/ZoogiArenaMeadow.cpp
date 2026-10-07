@@ -19,7 +19,7 @@
 void AZoogiArena::BuildMeadow()
 {
 	using namespace ZoogiMeadow; // function scope: unity builds also pull in ZoogiFrozen's WallR/GateYaw/...
-	using ZoogiMeadow::GateYaw; // unity builds: ZoogiArenaFrozen.cpp's file-scope 'using namespace ZoogiFrozen' makes GateYaw ambiguous otherwise
+	using ZoogiMeadow::GateYaw; using ZoogiMeadow::PillarH; // unity builds: ZoogiArenaFrozen.cpp's file-scope 'using namespace ZoogiFrozen' makes GateYaw ambiguous otherwise
 	const FLinearColor Green = ZoogiUtil::Hex(TEXT("#39E37A"));
 	// r19 (Evan 7:16): whole Meadow 1.3x larger (actor + every piece scale together), 6 orbs.
 	BuildScale = MeadowScale; SetActorScale3D(FVector(MeadowScale));
