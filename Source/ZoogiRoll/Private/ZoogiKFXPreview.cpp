@@ -47,6 +47,11 @@ void AZoogiKFXPreview::BeginPlay()
 	Capture->SetWorldLocationAndRotation(KFXBase + FVector(-720.f, -260.f, 380.f), (FVector(0.f, 0.f, 110.f) - FVector(-720.f, -260.f, 380.f)).Rotation());
 	Prefabs = { TEXT("Effect3"), TEXT("Effect4"), TEXT("Effect4_Hand"), TEXT("Effect5"), TEXT("Effect6"), TEXT("Effect6_Collision"), TEXT("Effect6_Hand"),
 		TEXT("Effect7"), TEXT("Effect7_Hand"), TEXT("Effect11"), TEXT("Effect17"), TEXT("Effect17_Collision"), TEXT("Effect19"), TEXT("Effect22") };
+	{
+		// two passes: the first warms up shaders compiled on demand (editor -game), the second pass's shots overwrite it
+		const TArray<FString> Once = Prefabs;
+		Prefabs.Append(Once);
+	}
 	UE_LOG(LogZoogi, Log, TEXT("KFX preview: %d systems -> %s"), Prefabs.Num(), *ShotDir);
 	T = -2.f; // let the world settle
 }

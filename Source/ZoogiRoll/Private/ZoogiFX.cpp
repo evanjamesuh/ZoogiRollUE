@@ -10,6 +10,7 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "TimerManager.h"
+#include "ZoogiKFXExtras.h"
 
 void AZoogiFX::Niagara(UWorld* World, const TCHAR* SystemName, const FVector& Location, const FRotator& Rotation, float Scale)
 {
@@ -61,6 +62,11 @@ UNiagaraComponent* AZoogiFX::KFX(UWorld* World, const TCHAR* Prefab, const FVect
 	else
 	{
 		C = UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, Sys, Location, FRotator::ZeroRotator, FVector(Scale), true, true, ENCPoolMethod::None);
+	}
+	if (C)
+	{
+		// Decals / lights / placed meshes of the prefab (ground cracks, icicles, rock spikes, tornado, portal disc).
+		AZoogiKFXExtras::Spawn(World, FString(Prefab), Location, Scale, MaxLife, Attach);
 	}
 	if (C && MaxLife > 0.f)
 	{
