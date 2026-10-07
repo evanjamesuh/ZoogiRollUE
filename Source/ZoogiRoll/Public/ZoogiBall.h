@@ -83,6 +83,7 @@ public:
 	void SetPlanarVelocity(const FVector& V, float Up = 0.f);
 	float StatusTime = 0.f;
 	float LastImpactFx = -10.f;
+	float LastScarAt = -10.f;
 
 	virtual void Tick(float DeltaSeconds) override;
 

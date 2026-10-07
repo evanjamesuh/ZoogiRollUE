@@ -72,7 +72,8 @@ enum class EZoogiPhase : uint8
 	Aiming,
 	Rolling,
 	Resolving,
-	GameOver
+	GameOver,
+	Forming   // Frozen Ring (Oct 6): the stage assembles before the first turn (skippable)
 };
 
 /**
@@ -221,6 +222,25 @@ public:
 	int32 MenuRevision = 0;
 	void MenuAction(FName Action, int32 Index);
 	void StartMatch();
+	/** Plays the arena's stage-forming intro (if it has one) before the first turn. Returns false when there is none. */
+	bool BeginStageForming(bool bCombo);
+	void SkipStageForming();
+	bool bFormingCombo = false;
+	float FormTimeScale = 1.f;      // -ZoogiFormSlow=4 (forming shots)
+	bool bNoForming = false;        // -ZoogiNoForm
+	bool bFormShots = false;        // -ZoogiFormShots: frames of the forming intro + pillar rise close-ups
+	bool bDamageShots = false;      // -ZoogiDamageShots: every piece type through its damage states
+	int32 FormShotIdx = 0;
+	float DamageShotClock = -1.f;
+	int32 DamageShotStep = 0;
+	void TickFormShots();
+	void TickDamageShots(float Dt);
+	int32 FormPass = 0;             // forming shots: pass 0 = overview sweep, pass 1 = pillar close-up
+	int32 FormCamMode = 0;          // read by the controller: 0 sweep, 1 pillar close-up
+	UPROPERTY() TObjectPtr<class ACameraActor> ShotCam;
+	double DamageShotReal = 0.0;
+	/** Combo arena for a menu pick: Frozen keeps Frozen, everything else plays on the Meadow prototype layout. */
+	static EZoogiArena ComboArenaFor(EZoogiArena Pick, int32 Demo) { return (Pick == EZoogiArena::Frozen && Demo <= 0) ? EZoogiArena::Frozen : EZoogiArena::Meadow; }
 	void ReturnToMenu();
 
 	// ---- match state

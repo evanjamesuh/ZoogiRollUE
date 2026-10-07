@@ -1,4 +1,6 @@
 #include "ZoogiHUD.h"
+#include "ZoogiStageForming.h"
+#include "ZoogiArena.h"
 #include "ZoogiCombo.h"
 #include "ZoogiRoll.h"
 #include "ZoogiGameMode.h"
@@ -139,7 +141,7 @@ void AZoogiHUD::DrawHUD()
 	if (bNoHUD && G->Phase != EZoogiPhase::Menu) { UpdateAwakenWidget(G, true); return; }
 
 	if (CanvasMenuMode < 0) CanvasMenuMode = FParse::Param(FCommandLine::Get(), TEXT("ZoogiCanvasMenu")) ? 1 : 0;
-	UpdateAwakenWidget(G, G->Phase == EZoogiPhase::Menu);
+	UpdateAwakenWidget(G, G->Phase == EZoogiPhase::Menu || G->Phase == EZoogiPhase::Forming);
 	if (G->Phase == EZoogiPhase::Menu)
 	{
 		if (CanvasMenuMode == 0 && PlayerOwner)
@@ -165,8 +167,28 @@ void AZoogiHUD::DrawHUD()
 		return;
 	}
 	if (MenuWidget && MenuWidget->GetVisibility() != ESlateVisibility::Collapsed) { MenuWidget->SetVisibility(ESlateVisibility::Collapsed); MenuWidget->SetBackdropPlaying(false); }
+	if (G->Phase == EZoogiPhase::Forming) { DrawForming(G); return; }
 	DrawMatch(G);
 	if (G->Phase == EZoogiPhase::GameOver) DrawResults(G);
+}
+
+void AZoogiHUD::DrawForming(AZoogiGameMode* G)
+{
+	// Stage forming intro (Frozen Ring, Oct 6): title, progress, SKIP.
+	const float W = Canvas->ClipX, H = Canvas->ClipY;
+	const float Prog = (G->Arena && G->Arena->Forming) ? G->Arena->Forming->GetProgress() : 1.f;
+	const float A = FMath::Clamp(G->PhaseTime * 3.f, 0.f, 1.f);
+	const FLinearColor Cy(0.55f, 0.95f, 1.f, A);
+	const bool bFrozen = G->Arena && G->Arena->GetTheme() == EZoogiArena::Frozen;
+	Text(bFrozen ? TEXT("THE FROZEN RING AWAKENS") : TEXT("THE ARENA FORMS"), W * 0.5f, H * 0.12f, Cy, 1.1f, true);
+	const float BW = 360.f * U;
+	Panel((W - BW) * 0.5f, H * 0.9f, BW, 6.f * U, FLinearColor(0.05f, 0.1f, 0.18f, 0.8f * A));
+	Panel((W - BW) * 0.5f, H * 0.9f, BW * FMath::Clamp(Prog, 0.f, 1.f), 6.f * U, Cy);
+	if (G->PhaseTime > 0.25f)
+	{
+		Button(TEXT("SKIP"), W - 190.f * U, H * 0.9f - 10.f * U, 150.f * U, 52.f * U, "FormSkip", 0, FLinearColor(0.8f, 0.9f, 1.f));
+		Text(TEXT("click / SPACE to skip"), W * 0.5f, H * 0.9f + 14.f * U, FLinearColor(0.8f, 0.9f, 1.f, 0.7f * A), 0.32f, true, false);
+	}
 }
 
 void AZoogiHUD::DrawMenu(AZoogiGameMode* G)

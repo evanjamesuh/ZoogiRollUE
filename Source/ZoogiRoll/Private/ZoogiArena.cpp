@@ -3,6 +3,10 @@
 #include "ZoogiTopping.h"
 #include "ZoogiRoll.h"
 #include "ZoogiPhysics.h"
+#include "ZoogiArenaShowcase.h"
+#include "ZoogiArenaPiece.h"
+#include "ZoogiStageForming.h"
+#include "ZoogiFloorScars.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/DirectionalLightComponent.h"
@@ -50,6 +54,8 @@ AZoogiArena::AZoogiArena()
 
 	Post = CreateDefaultSubobject<UPostProcessComponent>(TEXT("Post"));
 	Post->SetupAttachment(Root);
+
+	Forming = CreateDefaultSubobject<UZoogiStageForming>(TEXT("Forming"));
 	Post->bUnbound = true;
 
 	SkySphere = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("SkySphere"));
@@ -112,6 +118,14 @@ bool AZoogiArena::IsPathBlocked(const FVector2D& From, const FVector2D& To, floa
 	const FVector2D D = To - From;
 	const float Len = D.Size();
 	if (Len < 1.f) return false;
+	// Frozen Ring stage pieces with a live collider (pillars, obelisks, walls, bumpers ...).
+	for (const AZoogiArenaPiece* Pc : Pieces)
+	{
+		FVector2D Q; float PR = 0.f;
+		if (!Pc || !Pc->GetPathBlock(Q, PR)) continue;
+		const float T = FMath::Clamp(FVector2D::DotProduct(Q - From, D) / (Len * Len), 0.f, 1.f);
+		if (FVector2D::Distance(From + D * T, Q) < Radius + PR) return true;
+	}
 	for (const FVector2D& Q : SolidPosts)
 	{
 		const float T = FMath::Clamp(FVector2D::DotProduct(Q - From, D) / (Len * Len), 0.f, 1.f);
@@ -145,7 +159,8 @@ FVector AZoogiArena::GetSpawnPoint(int32 PlayerIndex) const
 		return FVector(S.X, S.Y, ZoogiConst::ZoogiRadius + 2.f);
 	}
 	const float A = FMath::DegreesToRadians(GSpawnAngles[PlayerIndex % 4]);
-	return FVector(FMath::Cos(A) * ZoogiConst::SpawnRadius, FMath::Sin(A) * ZoogiConst::SpawnRadius, ZoogiConst::ZoogiRadius + 2.f);
+	const float SR = SpawnRadiusOverride > 0.f ? SpawnRadiusOverride : ZoogiConst::SpawnRadius;
+	return FVector(FMath::Cos(A) * SR, FMath::Sin(A) * SR, ZoogiConst::ZoogiRadius + 2.f);
 }
 
 float AZoogiArena::GetSpawnYaw(int32 PlayerIndex) const
@@ -169,6 +184,14 @@ void AZoogiArena::Clear()
 	Rocks.Reset();
 	for (AZoogiTopping* T : Toppings) if (IsValid(T)) T->Destroy();
 	Toppings.Reset();
+	if (Forming) Forming->Clear();
+	for (AZoogiArenaPiece* P : Pieces) if (IsValid(P)) P->Destroy();
+	Pieces.Reset();
+	if (IsValid(Scars)) Scars->Destroy();
+	Scars = nullptr;
+	FloorMID = nullptr;
+	FrozenMats.Reset();
+	SpawnRadiusOverride = 0.f;
 	SolidBoxes.Reset();
 	SolidPosts.Reset();
 }
@@ -284,6 +307,7 @@ void AZoogiArena::Build(EZoogiArena InTheme)
 	{
 		UStaticMeshComponent* M = Cast<UStaticMeshComponent>(C);
 		if (!M || Cast<UInstancedStaticMeshComponent>(M) || M->GetCollisionEnabled() != ECollisionEnabled::NoCollision) continue;
+		if (M->ComponentHasTag(TEXT("NoCamBlock"))) continue; // hub core / flush kit pieces (Buzzy kit K3)
 		const FBoxSphereBounds Bd = M->Bounds;
 		const FVector O = Bd.Origin;
 		if (Bd.SphereRadius > 900.f || Bd.SphereRadius < 25.f || FVector2D(O.X, O.Y).Size() > 4000.f || O.Z > 2000.f || O.Z < -1500.f) continue;
@@ -294,6 +318,10 @@ void AZoogiArena::Build(EZoogiArena InTheme)
 		++CamBlockers;
 	}
 	UE_LOG(LogZoogi, Log, TEXT("Built arena %s with %d components (%d camera blockers)"), *ZoogiUtil::ArenaName(InTheme), Built.Num(), CamBlockers);
+	// -ZoogiArenaShots: fixed-camera A/B views of the arena (test tooling, see ZoogiArenaShowcase.h).
+	static const TCHAR* Slugs[] = { TEXT("meadow"), TEXT("frozen"), TEXT("volcanic"), TEXT("cosmic"), TEXT("arabian"), TEXT("tomb"), TEXT("neon") };
+	const int32 SlugIdx = (int32)InTheme;
+	AZoogiArenaShowcase::MaybeStart(GetWorld(), SlugIdx >= 0 && SlugIdx < UE_ARRAY_COUNT(Slugs) ? FString(Slugs[SlugIdx]) : FString::FromInt(SlugIdx));
 }
 
 void AZoogiArena::SetupSky(EZoogiArena InTheme)
@@ -326,8 +354,10 @@ void AZoogiArena::SetupSky(EZoogiArena InTheme)
 	P.ColorContrast = FVector4(1.05f, 1.05f, 1.05f, 1.f);
 	P.bOverride_SceneFringeIntensity = true;
 	P.SceneFringeIntensity = 0.f;
+	SkyLight->SetIntensity(1.f); // per-theme overrides below (Frozen)
 
 	Fog->SetVolumetricFog(false);
+	Fog->SetFogCutoffDistance(0.f); // AddPanoramaSky raises it so the painted sky sphere is not fogged
 	Clouds->SetVisibility(true);
 	Atmosphere->SetVisibility(true);
 	SkyLight->SetIntensity(1.f);
@@ -337,13 +367,17 @@ void AZoogiArena::SetupSky(EZoogiArena InTheme)
 	switch (InTheme)
 	{
 	case EZoogiArena::Frozen:
-		Sun->SetRelativeRotation(FRotator(-28.f, 60.f, 0.f));
-		Sun->SetIntensity(7.f);
-		Sun->SetLightColor(FLinearColor(0.85f, 0.92f, 1.f));
-		Fog->SetFogDensity(0.012f);
-		Fog->SetFogInscatteringColor(FLinearColor(0.35f, 0.5f, 0.75f));
-		P.AutoExposureBias = -0.6f;
-		P.ColorSaturation = FVector4(0.95f, 1.f, 1.08f, 1.f);
+		// Buzzy Frozen Ring (Oct 6): bright crisp anime daylight, cool key from high up, pale blue haze, aurora sky panorama.
+		Sun->SetRelativeRotation(FRotator(-38.f, 125.f, 0.f));
+		Sun->SetIntensity(8.f);
+		Sun->SetLightColor(FLinearColor(0.9f, 0.95f, 1.f));
+		Fog->SetFogDensity(0.005f);
+		Fog->SetFogInscatteringColor(FLinearColor(0.6f, 0.75f, 0.95f));
+		Clouds->SetVisibility(false);
+		SkyLight->SetIntensity(1.35f);
+		P.AutoExposureBias = -0.8f;
+		P.BloomIntensity = 1.1f;
+		P.ColorSaturation = FVector4(0.95f, 1.f, 1.1f, 1.f);
 		break;
 	case EZoogiArena::Volcanic:
 		Sun->SetRelativeRotation(FRotator(-12.f, 20.f, 0.f));
@@ -413,11 +447,11 @@ void AZoogiArena::SetupSky(EZoogiArena InTheme)
 	SkyLight->RecaptureSky();
 }
 
-void AZoogiArena::BuildIsland(const FLinearColor& TopA, const FLinearColor& TopB, const FLinearColor& Band, const FLinearColor& RockA, const FLinearColor& RockB, float FloorFriction)
+void AZoogiArena::BuildIsland(const FLinearColor& TopA, const FLinearColor& TopB, const FLinearColor& Band, const FLinearColor& RockA, const FLinearColor& RockB, float FloorFriction, UMaterialInterface* TopOverride)
 {
 	FloorPM = ZoogiPhysics::MakeMaterial(this, FloorFriction, 0.1f, true);
 	const float R = ZoogiConst::KnockoffRadius;
-	UMaterialInterface* Top = ZoogiUtil::GroundMID(this, TopA, TopB, 0.0025f, 0.92f);
+	UMaterialInterface* Top = TopOverride ? TopOverride : ZoogiUtil::GroundMID(this, TopA, TopB, 0.0025f, 0.92f);
 	UMaterialInterface* BandMat = ZoogiUtil::GroundMID(this, Band, Band * 0.75f, 0.01f, 0.95f);
 	UMaterialInterface* Rock = ZoogiUtil::GroundMID(this, RockA, RockB, 0.004f, 0.95f);
 
@@ -455,7 +489,8 @@ AZoogiRock* AZoogiArena::NearestStandingRock(const FVector2D& From) const
 	return Best;
 }
 
-void AZoogiArena::BuildRim(const TArray<FVector4>& Marks, const FLinearColor& A, const FLinearColor& B, float Restitution, bool bDestructible)
+void AZoogiArena::BuildRim(const TArray<FVector4>& Marks, const FLinearColor& A, const FLinearColor& B, float Restitution, bool bDestructible,
+	float CarvedLump, const FLinearColor& RuneColor, float RuneStrength)
 {
 	RockPM = ZoogiPhysics::MakeMaterial(this, 0.3f, Restitution, false);
 	if (bDestructible)
@@ -470,6 +505,7 @@ void AZoogiArena::BuildRim(const TArray<FVector4>& Marks, const FLinearColor& A,
 			SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 			AZoogiRock* R = GetWorld()->SpawnActor<AZoogiRock>(AZoogiRock::StaticClass(), FTransform(P), SP);
 			if (!R) continue;
+			if (CarvedLump > 0.f) R->SetCarvedStyle(CarvedLump, RuneColor, RuneStrength); // Buzzy rune-stone look (visual only)
 			R->InitRock(M.Z * 100.f, M.W * 100.f, M.X, A, B, RockPM, Seed++);
 			Rocks.Add(R);
 		}
@@ -557,25 +593,6 @@ void AZoogiArena::BuildMeadow()
 		const float Z = Rng.FRandRange(-900.f, 200.f);
 		const float Rad = Rng.FRandRange(320.f, 700.f);
 		BuildIslet(FVector(FMath::Cos(A) * D, FMath::Sin(A) * D, Z), Rad, GA, GB, RockC, (i % 2) ? Oak : Pine, FMath::RoundToInt(Rad / 160.f), Rng.FRandRange(500.f, 900.f), Rng);
-	}
-}
-
-void AZoogiArena::BuildFrozen()
-{
-	BuildIsland(ZoogiUtil::Hex(TEXT("#CFEFFF")), ZoogiUtil::Hex(TEXT("#9ED8F5")), ZoogiUtil::Hex(TEXT("#F4FBFF")),
-		ZoogiUtil::Hex(TEXT("#16324A")), ZoogiUtil::Hex(TEXT("#2D5675")), 0.03f);
-	TArray<FVector4> Rim;
-	const float Angles[] = { 32, 70, 152, 196, 250, 332 };
-	for (float A : Angles) Rim.Add(FVector4(A, 14.15, 0.55, 1.7));
-	BuildRim(Rim, ZoogiUtil::Hex(TEXT("#FFFFFF")), ZoogiUtil::Hex(TEXT("#DDEEFF")), 0.55f);
-	FRandomStream Rng(88);
-	UStaticMesh* SnowPine = ZoogiUtil::LoadMesh(TEXT("/Game/Env/SnowPine/SM_SnowPine.SM_SnowPine"));
-	for (int32 i = 0; i < 12; ++i)
-	{
-		const float A = i * (2.f * PI / 12.f) + Rng.FRandRange(-0.15f, 0.15f);
-		const float D = Rng.FRandRange(2600.f, 5600.f);
-		BuildIslet(FVector(FMath::Cos(A) * D, FMath::Sin(A) * D, Rng.FRandRange(-900.f, 200.f)), Rng.FRandRange(320.f, 650.f),
-			ZoogiUtil::Hex(TEXT("#FFFFFF")), ZoogiUtil::Hex(TEXT("#E3F2FD")), ZoogiUtil::Hex(TEXT("#2D5675")), SnowPine, 3, 700.f, Rng);
 	}
 }
 
@@ -970,8 +987,8 @@ void AZoogiArena::BuildArabian()
 		}
 		FRandomStream TopRng(4242);
 		TArray<FVector> Placed; // x, y, radius
-		const int32 Pieces = 21; // even = pepperoni (11), odd = cheese (10)
-		for (int32 i = 0; i < Pieces; ++i)
+		const int32 NumSlices = 21; // even = pepperoni (11), odd = cheese (10)
+		for (int32 i = 0; i < NumSlices; ++i)
 		{
 			const EZoogiToppingKind Kind = (i % 2 == 0) ? EZoogiToppingKind::Pepperoni : EZoogiToppingKind::Cheese;
 			const float TR = Kind == EZoogiToppingKind::Pepperoni ? TopRng.FRandRange(35.f, 45.f) : TopRng.FRandRange(20.f, 30.f);

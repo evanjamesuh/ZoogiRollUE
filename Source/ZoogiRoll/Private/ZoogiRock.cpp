@@ -395,6 +395,71 @@ UProceduralMeshComponent* AZoogiRock::MakeProc(bool bShadow)
 	return C;
 }
 
+void AZoogiRock::SetCarvedStyle(float InLump, const FLinearColor& InRuneColor, float InRuneStrength)
+{
+	bCarved = true;
+	StyleLump = InLump;
+	RuneColor = InRuneColor;
+	RuneStrength = InRuneStrength;
+}
+
+void AZoogiRock::BuildRunes()
+{
+	// A band of simple carved glyphs (bars, chevrons, ticks) around the stone at ~45% height, laid on the intact surface
+	// 0.7 cm out. Rock space (the component carries the yaw like CrackMesh).
+	if (!RuneMesh) return;
+	FMeshBuf B;
+	FRandomStream R(Seed * 31 + 5);
+	const int32 Glyphs = FMath::Clamp(FMath::RoundToInt(2.f * PI * Radius / 55.f), 5, 12);
+	const float El0 = FMath::Asin(0.42f);
+	auto At = [&](float Az, float El, FVector& OutN) { const FVector U = DirAE(Az, El); OutN = Shape.Normal(U); return Shape.Point(U) + OutN * 0.7f; };
+	auto Stroke = [&](float Az, float El, float DAz0, float DEl0, float DAz1, float DEl1)
+	{
+		const int32 Seg = 4;
+		const float W = FMath::Clamp(Radius * 0.022f, 1.6f, 2.6f);
+		TArray<FVector> L, Rr; TArray<FVector> Ns;
+		for (int32 i = 0; i <= Seg; ++i)
+		{
+			const float T = (float)i / Seg;
+			FVector N;
+			const FVector P = At(Az + FMath::Lerp(DAz0, DAz1, T), El + FMath::Lerp(DEl0, DEl1, T), N);
+			Ns.Add(N); L.Add(P);
+		}
+		for (int32 i = 0; i <= Seg; ++i)
+		{
+			const FVector D = (L[FMath::Min(i + 1, Seg)] - L[FMath::Max(i - 1, 0)]).GetSafeNormal();
+			const FVector Side = FVector::CrossProduct(Ns[i], D).GetSafeNormal() * W * 0.5f;
+			Rr.Add(L[i] - Side); L[i] += Side;
+		}
+		for (int32 i = 0; i < Seg; ++i)
+		{
+			const int32 A = B.Add(L[i], Ns[i]), Bb = B.Add(Rr[i], Ns[i]), C = B.Add(L[i + 1], Ns[i + 1]), D = B.Add(Rr[i + 1], Ns[i + 1]);
+			B.Tri(A, Bb, D, Ns[i]); B.Tri(A, D, C, Ns[i]);
+		}
+	};
+	const float GH = 0.16f; // glyph half height in elevation (rad)
+	for (int32 g = 0; g < Glyphs; ++g)
+	{
+		const float Az = (g + 0.5f) * 2.f * PI / Glyphs + R.FRandRange(-0.05f, 0.05f);
+		const float GW = 0.32f / Glyphs * 2.f * PI * 0.25f; // glyph half width in azimuth
+		Stroke(Az, El0, 0.f, -GH, 0.f, GH);
+		switch (R.RandRange(0, 3))
+		{
+		case 0: Stroke(Az, El0, -GW, GH, 0.f, 0.f); Stroke(Az, El0, GW, GH, 0.f, 0.f); break;
+		case 1: Stroke(Az, El0, -GW, -GH * 0.2f, GW, -GH * 0.2f); break;
+		case 2: Stroke(Az, El0, -GW, -GH, GW, GH); break;
+		default: Stroke(Az, El0, 0.f, GH, GW, GH * 0.3f); Stroke(Az, El0, 0.f, -GH * 0.3f, -GW, -GH); break;
+		}
+	}
+	// Two thin bands framing the glyphs.
+	for (int32 s = 0; s < 2; ++s)
+	{
+		const float El = El0 + (s ? GH * 1.45f : -GH * 1.45f);
+		for (int32 i = 0; i < 48; ++i) Stroke(i * 2.f * PI / 48.f, El, 0.f, 0.f, 2.f * PI / 48.f * 1.02f, 0.f);
+	}
+	Upload(RuneMesh, 0, B);
+}
+
 void AZoogiRock::InitRock(float InRadius, float InHeight, float InYaw, const FLinearColor& ColA, const FLinearColor& ColB, UPhysicalMaterial* PM, int32 InSeed)
 {
 	Radius = InRadius; Height = InHeight; Yaw = InYaw; Seed = InSeed;
@@ -443,7 +508,20 @@ void AZoogiRock::InitRock(float InRadius, float InHeight, float InYaw, const FLi
 	// Visual: a procedural boulder (same footprint as the old squashed sphere, semi-axes R, 0.9R, H) sunk into the turf,
 	// plus a smaller stone beside it. Seeded, so every rock keeps its look across matches.
 	FRandomStream Rng(Seed);
-	Shape.Init(FVector(Radius, Radius * 0.9f, Height), Rng, 1.f);
+	Shape.Init(FVector(Radius, Radius * 0.9f, Height), Rng, bCarved ? StyleLump : 1.f);
+	if (bCarved)
+	{
+		// Cut-stone block: a flat dressed top and four near-vertical cut faces (no extra Rng draws, so the chip/crack
+		// layout seeded above is unchanged). Faces stay inside the collider footprint (RadiusScale clamps 0.8..1.04).
+		const float Az0 = (Seed % 7) * 0.37f;
+		Shape.FacetN[0] = FVector(0.f, 0.f, 1.f); Shape.FacetH[0] = 0.86f;
+		for (int32 k = 1; k < 5; ++k)
+		{
+			const float Az = Az0 + (k - 1) * PI * 0.5f + ((Seed * (k + 3)) % 5 - 2) * 0.06f;
+			Shape.FacetN[k] = FVector(FMath::Cos(Az) * 0.985f, FMath::Sin(Az) * 0.985f, 0.17f).GetSafeNormal();
+			Shape.FacetH[k] = 0.88f + ((Seed + k) % 3) * 0.02f;
+		}
+	}
 	Body = MakeProc(true);
 	Body->SetRelativeRotation(FRotator(0.f, Yaw, 0.f));
 	Side = MakeProc(true);
@@ -459,6 +537,13 @@ void AZoogiRock::InitRock(float InRadius, float InHeight, float InYaw, const FLi
 	Rubble->SetRelativeRotation(FRotator(0.f, Yaw, 0.f));
 	BuildRubble(Rng);
 	BuildChunks(Rng);
+	if (bCarved && RuneStrength > 0.f)
+	{
+		RuneMesh = MakeProc(false);
+		RuneMesh->SetRelativeRotation(FRotator(0.f, Yaw, 0.f));
+		RuneMesh->SetMaterial(0, ZoogiUtil::SurfaceMID(this, RuneColor * 0.35f, 0.5f, RuneColor, RuneStrength));
+		BuildRunes();
+	}
 
 	// Grit: two instanced sets of small stone chips (dark weathered / light fresh), hidden until a hit.
 	UMaterialInterface* GritMats[2] = { ZoogiUtil::SurfaceMID(this, Stone * 0.75f, 0.95f), ZoogiUtil::SurfaceMID(this, Fresh * 0.9f, 0.9f) };
@@ -1219,6 +1304,8 @@ void AZoogiRock::HideAllDebris()
 void AZoogiRock::ResetRock()
 {
 	State = EZoogiRockState::Intact;
+	bDamagedStage = false;
+	if (Body && MatIntact) Body->SetMaterial(0, MatIntact);
 	LastHitTime = -10.f;
 	if (Collider) Collider->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
 	Shape.DentD = 0.f;
@@ -1230,6 +1317,7 @@ void AZoogiRock::ResetRock()
 		bBodyBuiltIntact = Body != nullptr;
 	}
 	if (Body) Body->SetVisibility(true);
+	if (RuneMesh) RuneMesh->SetVisibility(true);
 	if (Side) Side->SetVisibility(true);
 	if (CrackMesh) CrackMesh->SetVisibility(false);
 	if (Rubble) Rubble->SetVisibility(false);
@@ -1268,7 +1356,36 @@ void AZoogiRock::OnBallHit(AZoogiBall* Ball, const FVector& NormalImpulse, const
 	if (Dir.IsNearlyZero()) Dir = (GetActorLocation() - Ball->BallLocation()).GetSafeNormal2D();
 	UE_LOG(LogZoogi, Log, TEXT("Rock %s hit by P%d %s at %.0f cm/s normal (%.0f cm/s, cut %.0f deg)%s (state %d)"), *GetName(), Ball->PlayerIndex + 1, *Ball->Def.Name, Vn, V.Size2D(), CutDeg, bStrong ? TEXT(" STRONG") : TEXT(""), (int32)State);
 	if (bStrong || (State == EZoogiRockState::Cracked && Vn >= ShatterSpeed)) Shatter(ImpactPoint, Dir, Ball);
+	else if (State == EZoogiRockState::Intact && bFourStage && !bDamagedStage) MarkDamaged(ImpactPoint);
 	else if (State == EZoogiRockState::Intact) Crack(ImpactPoint, Dir, Ball);
+}
+
+void AZoogiRock::MarkDamaged(const FVector& P)
+{
+	bDamagedStage = true;
+	if (Body && MatCracked) Body->SetMaterial(0, MatCracked);
+	AZoogiFX::Spawn(GetWorld(), P, FLinearColor(0.75f, 0.92f, 1.f), FMath::Max(80.f, Radius * 0.9f), 0.35f, false, 4.f);
+	ZoogiUtil::PlaySfx(this, TEXT("Clack"), 0.6f, 1.4f);
+	UE_LOG(LogZoogi, Log, TEXT("Rock %s: INTACT -> DAMAGED (four-stage)"), *GetName());
+}
+
+void AZoogiRock::Escalate(const FVector& P, const FVector& Dir)
+{
+	const FVector D = Dir.IsNearlyZero() ? (GetActorLocation() - P).GetSafeNormal2D() : Dir;
+	if (State == EZoogiRockState::Shattered) return;
+	if (State == EZoogiRockState::Cracked) { Shatter(P, D, nullptr); return; }
+	if (bFourStage && !bDamagedStage) { MarkDamaged(P); return; }
+	Crack(P, D, nullptr);
+}
+
+void AZoogiRock::ForceStage(int32 Stage)
+{
+	ResetRock();
+	const FVector P = GetActorLocation() + FVector(-Radius, 0.f, Height * 0.5f);
+	const FVector D(1.f, 0.f, 0.f);
+	if (Stage >= 1 && bFourStage) MarkDamaged(P);
+	if (Stage >= 2) Crack(P, D, nullptr);
+	if (Stage >= 3) Shatter(P, D, nullptr);
 }
 
 void AZoogiRock::Crack(const FVector& P, const FVector& Dir, AZoogiBall* By)
@@ -1291,6 +1408,7 @@ void AZoogiRock::Crack(const FVector& P, const FVector& Dir, AZoogiBall* By)
 	bBodyBuiltIntact = false;
 	BuildCracks(U, Rng);
 	if (CrackMesh) CrackMesh->SetVisibility(true);
+	if (RuneMesh) RuneMesh->SetVisibility(false); // the runes go dark once the stone cracks (damage cue)
 
 	// Debris off the impact face (actor space): the flake, a few pebbles, stone grit and a grey-brown dust burst.
 	const FVector PA = RockToActor(P0), NA = RockToActor(N0);
@@ -1346,6 +1464,7 @@ void AZoogiRock::Shatter(const FVector& P, const FVector& Dir, AZoogiBall* By)
 	State = EZoogiRockState::Shattered;
 	Collider->SetCollisionEnabled(ECollisionEnabled::NoCollision); // the lane opens; nothing left to trap a Zoogi
 	if (Body) Body->SetVisibility(false);
+	if (RuneMesh) RuneMesh->SetVisibility(false);
 	if (Side) Side->SetVisibility(false);
 	if (CrackMesh) CrackMesh->SetVisibility(false);
 	if (Rubble) Rubble->SetVisibility(true);
