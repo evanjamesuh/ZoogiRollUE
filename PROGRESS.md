@@ -610,3 +610,16 @@ Awakened / crit-grade hit), and so are the collider, events, SFX, popup, feed li
   no missing-module prompt, no `Error:` lines, then closed cleanly (`LogExit: Exiting.`). The Aura plugin (1.1.0) loads.
   Its "project requires update (SupportedTargetPlatforms)" nag is silenced by adding `"SupportedTargetPlatforms": ["Win64","Mac"]`
   to the Aura entry in the .uproject. Note for Evan: `Docs/OPEN_IN_UNREAL.md`.
+
+* Meadow Arena package (Oct 7, 12:10 AM CT; combined main with ui-polish battle UI). Hand-built kit, no Aura.
+  Resonance pillars x4 (unbreakable, rise at match start), stadium-seat wall (48 breakable wood segments) with 4 orb-exit gaps
+  240 cm wide centred at 0/90/180/270 deg (half-gap 8.9 deg at r 1568; colliders open, no forming/debris/crater slabs in the gaps),
+  2 curved ricochet walls, launch ramp, raised platform, 8 breakable rim rocks, terrace, 6 stands (25/115/145/205/230/335),
+  Recovery Gate shrines, pagodas, waterfalls, 4 extra Arena Orb spots, floor scars + A&P CraterSlab kit (SM_MeadowCraterSlab_A-D,
+  Cracked/Shattered/Titan tiers, gap culling; FBX imported at 0.01 scale). 48 pieces / 48 forming entries.
+  -ZoogiArenaPlayTest (new generic harness, ZoogiArenaPlayTest.h): orb through each gap -> ORB OUT (4/4 PASS), seat-wall control
+  shot stays in (PASS), normal Zoogi shot cracks the seat wall (PASS) and a ricochet wall (PASS).
+  ui-polish merged clean (no conflicts); post-merge unity-build ambiguity (ZoogiMeadow vs ZoogiFrozen names) fixed by scoping
+  the using-namespace. Shots: box shots/arenas/meadow-buzzy/ (r2_sbs_*.jpg, r2_arena_meadow_*.jpg, r2_arenatest_*.jpg).
+  Still to do on Meadow: sky panorama not imported on main (T_MeadowSky), floor glow/carving weaker than Buzzy, pillars small, scars
+  still use the Frozen decal set.

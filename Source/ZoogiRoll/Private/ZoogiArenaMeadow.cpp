@@ -6,6 +6,7 @@
 #include "ZoogiRock.h"
 #include "ZoogiArenaPiece.h"
 #include "ZoogiFloorScars.h"
+#include "ZoogiArenaPlayTest.h"
 #include "ZoogiStageForming.h"
 #include "ZoogiMeshKit.h"
 #include "ZoogiPhysics.h"
@@ -253,7 +254,24 @@ void AZoogiArena::BuildMeadow()
 		}
 	}
 	if (Forming && FloorMID) Forming->AddParamRamp(FloorMID, TEXT("GlowStrength"), 0.f, 1.6f, 2.6f, 0.5f);
-	BuildPads();
+	// -ZoogiArenaPlayTest: orb out through each orb-exit gap (must count as ORB OUT), a control shot into the seat wall
+	// (must stay in), and normal Zoogi shots that must crack the seat wall and a ricochet wall.
+	if (AZoogiArenaPlayTest* PT = AZoogiArenaPlayTest::MaybeSpawn(this))
+	{
+		auto Pol = [](float R, float Deg) { const float A = FMath::DegreesToRadians(Deg); return FVector(FMath::Cos(A) * R, FMath::Sin(A) * R, 0.f); };
+		const float NormalShot = 0.55f * ZoogiConst::FullLaunchSpeed;
+		for (int32 g = 0; g < 4; ++g)
+		{
+			FZoogiArenaCheck C; C.Name = FString::Printf(TEXT("gap_%03.0f"), OrbExitGapYaw[g]); C.Kind = FZoogiArenaCheck::OrbOut;
+			C.From = Pol(1250.f, OrbExitGapYaw[g]); C.Vel = FVector2D(Pol(1500.f, OrbExitGapYaw[g])); C.Wait = 3.0f;
+			PT->Checks.Add(C);
+		}
+		{ FZoogiArenaCheck C; C.Name = TEXT("seatwall_control_120"); C.Kind = FZoogiArenaCheck::OrbStays; C.From = Pol(1250.f, 120.f); C.Vel = FVector2D(Pol(1500.f, 120.f)); C.Wait = 3.0f; PT->Checks.Add(C); }
+		{ FZoogiArenaCheck C; C.Name = TEXT("seatwall_crack_120"); C.Kind = FZoogiArenaCheck::ZoogiDamages; C.From = Pol(1050.f, 120.f); C.Vel = FVector2D(Pol(NormalShot, 120.f));
+		  C.PieceKind = TEXT("seatwall"); C.Near = Pol(FloorR + 18.f, 120.f); C.Radius = 350.f; C.Wait = 1.6f; PT->Checks.Add(C); }
+		{ FZoogiArenaCheck C; C.Name = TEXT("ricochet_crack_30"); C.Kind = FZoogiArenaCheck::ZoogiDamages; C.From = Pol(650.f, 30.f); C.Vel = FVector2D(Pol(NormalShot, 30.f));
+		  C.PieceKind = TEXT("stonewall"); C.Near = FVector::ZeroVector; C.Radius = 100.f; C.Wait = 1.6f; PT->Checks.Add(C); }
+	}
 	UE_LOG(LogZoogi, Log, TEXT("Meadow Arena built: %d pieces, %d forming, %d extra orbs, orb-exit gaps %.0f cm @ 0/90/180/270 (no Aura)"),
 		Pieces.Num(), Forming ? Forming->Num() : 0, ExtraOrbSpots.Num(), OrbExitGapWidthCm);
 }
