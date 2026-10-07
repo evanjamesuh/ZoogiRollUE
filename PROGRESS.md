@@ -636,3 +636,4 @@ Awakened / crit-grade hit), and so are the collider, events, SFX, popup, feed li
 - r6: taller spiral ring wall + west hub wall, wider pipes, valley floor, waterfall mesas, softer hills.
 - r7: floor seal redrawn to the art layout.
 - Tests 12/12 PASS (4 gaps ORB OUT, control, seat-wall + bench crack, 2 pipes, 2 lips, spiral). Packaged r5 4:13, r6 4:23, r7 4:31 AM CT; PACKAGE_EXIT=0, Desktop shortcut OK.
+- r8: seal glow deeper saturated green. Tests 12/12 PASS. Packaged 4:40 AM CT, PACKAGE_EXIT=0, Desktop shortcut OK.
