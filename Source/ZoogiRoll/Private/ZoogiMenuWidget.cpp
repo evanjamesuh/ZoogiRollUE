@@ -1,6 +1,7 @@
 #include "ZoogiMenuWidget.h"
 #include "ZoogiGameMode.h"
 #include "ZoogiTypes.h"
+#include "ZoogiAnimeSubsystem.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
@@ -58,6 +59,15 @@ void UZoogiMenuClick::Hover() {}
 
 void UZoogiMenuWidget::Fire(FName Action, int32 Index)
 {
+	if (Action == "Anime") // Oct 7 (Evan): WATCH ANIME plays the Movies.csv cut-ins / episodes via ZoogiAnimeSubsystem (1 next, -1 prev, 0 back)
+	{
+		UZoogiAnimeSubsystem* A = GetWorld() ? GetWorld()->GetSubsystem<UZoogiAnimeSubsystem>() : nullptr;
+		if (Index == 0 || !A) { if (A) A->StopMenuMovie(); bAnimeView = false; }
+		else { AnimeClip = A->PlayMenuMovie(Index > 0 ? 1 : -1); bAnimeView = !AnimeClip.IsEmpty(); }
+		SetBackdropPlaying(!bAnimeView);
+		MarkDirty();
+		return;
+	}
 	if (AZoogiGameMode* G = GetWorld() ? GetWorld()->GetAuthGameMode<AZoogiGameMode>() : nullptr) G->MenuAction(Action, Index);
 }
 
@@ -257,6 +267,35 @@ void UZoogiMenuWidget::BuildContents()
 	if (!G || !Root) return;
 	BuiltRevision = G->MenuRevision;
 
+	if (bAnimeView) // WATCH ANIME player: the clip full screen (fit), PREV / NEXT / BACK underneath
+	{
+		UBorder* Black = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+		Black->SetBrushColor(FLinearColor::Black);
+		if (UOverlaySlot* OS = Root->AddChildToOverlay(Black)) { OS->SetHorizontalAlignment(HAlign_Fill); OS->SetVerticalAlignment(VAlign_Fill); }
+		UZoogiAnimeSubsystem* A = GetWorld()->GetSubsystem<UZoogiAnimeSubsystem>();
+		if (A && A->MovieTexture)
+		{
+			UScaleBox* Fit = WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass());
+			Fit->SetStretch(EStretch::ScaleToFit);
+			Fit->SetVisibility(ESlateVisibility::HitTestInvisible);
+			UImage* Img = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
+			FSlateBrush B;
+			B.SetResourceObject(A->MovieTexture);
+			B.ImageSize = FVector2D(1280.f, 720.f);
+			Img->SetBrush(B);
+			Fit->AddChild(Img);
+			if (UOverlaySlot* OS = Root->AddChildToOverlay(Fit)) { OS->SetHorizontalAlignment(HAlign_Fill); OS->SetVerticalAlignment(VAlign_Fill); }
+		}
+		UHorizontalBox* Bar = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+		MakeButton(Bar, TEXT("< PREV"), "Anime", -1, GMenuOrbBlue, false, 150.f, 50.f, 20);
+		MakeText(Bar, FString::Printf(TEXT("   %s   "), *AnimeClip), 16, FLinearColor::White, false);
+		MakeButton(Bar, TEXT("NEXT >"), "Anime", 1, GMenuOrbBlue, false, 150.f, 50.f, 20);
+		MakeText(Bar, TEXT("     "), 16, FLinearColor::White, false);
+		MakeButton(Bar, TEXT("BACK TO MENU"), "Anime", 0, GGold, true, 220.f, 50.f, 20);
+		if (UOverlaySlot* OS = Root->AddChildToOverlay(Bar)) { OS->SetHorizontalAlignment(HAlign_Center); OS->SetVerticalAlignment(VAlign_Bottom); OS->SetPadding(FMargin(0.f, 0.f, 0.f, 30.f)); }
+		return;
+	}
+
 	// Backdrop: Evan's anime title video, cover-cropped to the window (the centre band: sunset + Zoogi streaks, the
 	// title art at the top of the vertical clip is cropped away so it doesn't fight the menu title).
 	// -ZoogiMenuArena keeps the old look (live arena behind the menu).
@@ -362,6 +401,8 @@ void UZoogiMenuWidget::BuildContents()
 	// Start.
 	UButton* Start = MakeButton(nullptr, TEXT("START MATCH"), "Start", 0, GGold, true, 420.f, 78.f, 34);
 	if (UVerticalBoxSlot* VS = Main->AddChildToVerticalBox(Start->GetParent())) { VS->SetHorizontalAlignment(HAlign_Center); VS->SetPadding(FMargin(0.f, 0.f, 0.f, 12.f)); }
+	UButton* AnimeBtn = MakeButton(nullptr, TEXT("WATCH ANIME"), "Anime", 1, FLinearColor(1.f, 0.45f, 0.75f), false, 260.f, 52.f, 22); // Oct 7 (Evan)
+	if (UVerticalBoxSlot* VS = Main->AddChildToVerticalBox(AnimeBtn->GetParent())) { VS->SetHorizontalAlignment(HAlign_Center); VS->SetPadding(FMargin(0.f, 0.f, 0.f, 12.f)); }
 	UTextBlock* Hint = MakeText(nullptr, TEXT("Click an enemy or orb to lock on  -  Tab: cycle targets  -  SPACE: fire  -  E / Q: Zoogi power  -  RMB / Esc: clear lock"), 16, GInk, false);
 	if (UVerticalBoxSlot* VS = Main->AddChildToVerticalBox(Hint)) VS->SetHorizontalAlignment(HAlign_Center);
 

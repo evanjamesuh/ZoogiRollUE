@@ -94,6 +94,10 @@ public:
 	FZoogiCombatEvent Current;
 	UPROPERTY() TObjectPtr<UMediaTexture> MovieTexture;
 	bool HasMovie() const { return bMovie; }
+	/** Main menu WATCH ANIME (Oct 7, Evan): play the next / previous Movies.csv clip (cut-ins and episodes, not the menu
+	 *  backdrop) into MovieTexture. Menu only: no freeze, no gameplay sequence. Returns the clip id, empty when none plays. */
+	FString PlayMenuMovie(int32 Step = 1);
+	void StopMenuMovie();
 
 	/** Resolve the sequence id for an event (fallback chain), for tests and the HUD. */
 	FString ResolveId(const FZoogiCombatEvent& E, const FZoogiAnimeRow** OutRow) const;

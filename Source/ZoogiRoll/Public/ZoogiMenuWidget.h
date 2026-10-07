@@ -74,4 +74,6 @@ protected:
 	UPROPERTY() TObjectPtr<UFileMediaSource> BackdropSource;
 	int32 BackdropState = 0; // 0 untried, 1 ok, -1 unavailable
 	float Time = 0.f;
+	bool bAnimeView = false; // WATCH ANIME player (Oct 7)
+	FString AnimeClip;
 };

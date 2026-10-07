@@ -17,6 +17,7 @@ enum class EZoogiArena : uint8
 	Arabian,
 	Tomb,
 	Neon,
+	Training, // Oct 7: Training Arena (Meadow r22 layout at A 1.3 + builder pack)
 	MAX UMETA(Hidden)
 };
 

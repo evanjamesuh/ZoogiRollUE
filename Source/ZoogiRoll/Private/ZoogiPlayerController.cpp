@@ -1000,7 +1000,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		{
 			WantPivot = C0;
 			DistMul = TacResolveDist * Scale;
-			if (G->Arena && G->Arena->IsNeon()) WantYaw = TacYaw = (FMath::Abs(FRotator::NormalizeAxis(Yaw - 90.f)) <= 90.f ? 90.f : -90.f);
+			if (G->Arena && G->Arena->IsNeonRect()) WantYaw = TacYaw = (FMath::Abs(FRotator::NormalizeAxis(Yaw - 90.f)) <= 90.f ? 90.f : -90.f);
 		}
 		WantLook = WantPivot;
 		ProbeFrom = WantPivot + FVector(0, 0, 150.f);
@@ -1130,7 +1130,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 			WantPivot = FVector(0, 0, 0);
 			WantLook = FVector(0, 0, 0);
 			DistMul = Scale;
-			if (G->Arena && G->Arena->IsNeon())
+			if (G->Arena && G->Arena->IsNeonRect())
 			{
 				// Rectangular court: square up so the long side runs across the screen, and come in closer to fill it.
 				WantYaw = FMath::Abs(FRotator::NormalizeAxis(Yaw - 90.f)) <= 90.f ? 90.f : -90.f;

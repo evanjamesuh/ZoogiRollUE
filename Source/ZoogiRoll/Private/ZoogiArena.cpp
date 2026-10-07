@@ -7,6 +7,7 @@
 #include "ZoogiArenaPiece.h"
 #include "ZoogiStageForming.h"
 #include "ZoogiFloorScars.h"
+#include "Misc/CommandLine.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/DirectionalLightComponent.h"
@@ -75,16 +76,17 @@ static const float GSpawnAngles[4] = { 180.f, 0.f, 90.f, 270.f };
 // Night Circuit spawn pads (NEON_SPAWN_UNITS), web (x, z) -> UE (x, y).
 static const FVector2D GNeonSpawns[4] = { FVector2D(-640.f, -110.f), FVector2D(660.f, 105.f), FVector2D(-115.f, 415.f), FVector2D(120.f, -405.f) };
 static constexpr float GNeonHalfX = 1200.f, GNeonHalfY = 800.f;
+static constexpr bool GNeonRect = false; // Oct 7: Night Circuit is a round disc (old rectangular court kept for reference)
 
 bool AZoogiArena::IsOffCourt(const FVector2D& P) const
 {
-	if (Theme == EZoogiArena::Neon) return FMath::Abs(P.X) > GNeonHalfX || FMath::Abs(P.Y) > GNeonHalfY;
+	if (GNeonRect && Theme == EZoogiArena::Neon) return FMath::Abs(P.X) > GNeonHalfX || FMath::Abs(P.Y) > GNeonHalfY;
 	return P.Size() > GetKnockoffRadius();
 }
 
 float AZoogiArena::DistanceToEdge(const FVector2D& P, const FVector2D& Dir) const
 {
-	if (Theme == EZoogiArena::Neon)
+	if (GNeonRect && Theme == EZoogiArena::Neon)
 	{
 		const float TX = Dir.X > 0.f ? (GNeonHalfX - P.X) / Dir.X : (Dir.X < 0.f ? (-GNeonHalfX - P.X) / Dir.X : 1e6f);
 		const float TY = Dir.Y > 0.f ? (GNeonHalfY - P.Y) / Dir.Y : (Dir.Y < 0.f ? (-GNeonHalfY - P.Y) / Dir.Y : 1e6f);
@@ -159,7 +161,7 @@ bool AZoogiArena::IsPathBlocked(const FVector2D& From, const FVector2D& To, floa
 
 FVector AZoogiArena::GetSpawnPoint(int32 PlayerIndex) const
 {
-	if (Theme == EZoogiArena::Neon)
+	if (GNeonRect && Theme == EZoogiArena::Neon)
 	{
 		const FVector2D S = GNeonSpawns[PlayerIndex % 4];
 		return FVector(S.X, S.Y, ZoogiConst::ZoogiRadius + 2.f);
@@ -171,7 +173,7 @@ FVector AZoogiArena::GetSpawnPoint(int32 PlayerIndex) const
 
 float AZoogiArena::GetSpawnYaw(int32 PlayerIndex) const
 {
-	if (Theme == EZoogiArena::Neon)
+	if (GNeonRect && Theme == EZoogiArena::Neon)
 	{
 		const FVector2D S = GNeonSpawns[PlayerIndex % 4];
 		return FMath::RadiansToDegrees(FMath::Atan2(-S.Y, -S.X));
@@ -311,6 +313,7 @@ void AZoogiArena::Build(EZoogiArena InTheme)
 	case EZoogiArena::Arabian: BuildArabian(); break;
 	case EZoogiArena::Tomb: BuildTomb(); break;
 	case EZoogiArena::Neon: BuildNeon(); break;
+	case EZoogiArena::Training: BuildTraining(); break;
 	default: BuildMeadow(); break;
 	}
 	BuildPads();
@@ -331,10 +334,10 @@ void AZoogiArena::Build(EZoogiArena InTheme)
 		M->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 		++CamBlockers;
 	}
-	if (InTheme != EZoogiArena::Meadow && InTheme != EZoogiArena::Frozen) PlaceIncoming(); // after cam-blocker pass: imported dressing stays camera-transparent
+	if (InTheme != EZoogiArena::Meadow) PlaceIncoming(); // Frozen: no pack items, arena tests only // after cam-blocker pass: imported dressing stays camera-transparent
 	UE_LOG(LogZoogi, Log, TEXT("Built arena %s with %d components (%d camera blockers)"), *ZoogiUtil::ArenaName(InTheme), Built.Num(), CamBlockers);
 	// -ZoogiArenaShots: fixed-camera A/B views of the arena (test tooling, see ZoogiArenaShowcase.h).
-	static const TCHAR* Slugs[] = { TEXT("meadow"), TEXT("frozen"), TEXT("volcanic"), TEXT("cosmic"), TEXT("arabian"), TEXT("tomb"), TEXT("neon") };
+	static const TCHAR* Slugs[] = { TEXT("meadow"), TEXT("frozen"), TEXT("volcanic"), TEXT("cosmic"), TEXT("arabian"), TEXT("tomb"), TEXT("neon"), TEXT("training") };
 	const int32 SlugIdx = (int32)InTheme;
 	AZoogiArenaShowcase::MaybeStart(GetWorld(), SlugIdx >= 0 && SlugIdx < UE_ARRAY_COUNT(Slugs) ? FString(Slugs[SlugIdx]) : FString::FromInt(SlugIdx));
 }
@@ -431,7 +434,7 @@ void AZoogiArena::SetupSky(EZoogiArena InTheme)
 		// Comic night: moonlight key, purple horizon haze, black starry sky (Lights.tsx saturn / tomb).
 		const bool bTomb = InTheme == EZoogiArena::Tomb;
 		Sun->SetRelativeRotation(bTomb ? FRotator(-40.f, 35.f, 0.f) : FRotator(-62.f, 150.f, 0.f));
-		Sun->SetIntensity(bTomb ? 4.5f : 3.f);
+		Sun->SetIntensity(bTomb ? 3.2f : 3.f); // Oct 7: Tomb sun 3.2 lux (_skies-lighting/06-pharaohs-tomb)
 		Sun->SetLightColor(bTomb ? ZoogiUtil::Hex(TEXT("#FFD2A8")) : ZoogiUtil::Hex(TEXT("#D4D0FF")));
 		Fog->SetFogDensity(0.008f);
 		Fog->SetFogInscatteringColor(bTomb ? FLinearColor(0.07f, 0.03f, 0.11f) : FLinearColor(0.06f, 0.025f, 0.13f));
@@ -440,6 +443,7 @@ void AZoogiArena::SetupSky(EZoogiArena InTheme)
 		Atmosphere->SetMieScatteringScale(0.f);
 		SkyLight->SetIntensity(bTomb ? 1.6f : 1.8f);
 		P.AutoExposureBias = bTomb ? 0.2f : 0.35f;
+		if (bTomb) { P.bOverride_BloomIntensity = true; P.BloomIntensity = 0.65f; P.bOverride_BloomThreshold = true; P.BloomThreshold = 0.9f; } // _skies-lighting/06-pharaohs-tomb
 		P.ColorSaturation = FVector4(1.05f, 1.f, 1.08f, 1.f);
 		break;
 	}
@@ -1083,11 +1087,16 @@ void AZoogiArena::BuildArabian()
 void AZoogiArena::BuildTomb()
 {
 	// Sandstone disc (TOMB_STAGE r 15.5) with a darker lip ring.
+	// Oct 7: with the Pharaoh's Tomb pack (06) the floor is the K1 kit floor (T_TombFloor / T_TombGlow, cyan lines #7FF3FF x1.2: 06 LIGHTING.md caps every emissive at 1.2),
+	// non-destructible with cosmetic damage only (FloorMID), under a day sky (PlaceIncoming sets the 06 lighting).
+	const bool bTombPack = !FParse::Param(FCommandLine::Get(), TEXT("ZoogiNoIncoming"));
+	UMaterialInterface* TombFloor = bTombPack ? KitFloorMaterial(TEXT("Tomb"), ZoogiUtil::Hex(TEXT("#7FF3FF")), 1.2f, 1.0f) : nullptr;
+	if (TombFloor) FloorMID = Cast<UMaterialInstanceDynamic>(TombFloor);
 	BuildIsland(ZoogiUtil::Hex(TEXT("#E0B88A")), ZoogiUtil::Hex(TEXT("#D2A776")), ZoogiUtil::Hex(TEXT("#A87848")),
-		ZoogiUtil::Hex(TEXT("#5A4232")), ZoogiUtil::Hex(TEXT("#3B2A20")), 0.3f);
+		ZoogiUtil::Hex(TEXT("#5A4232")), ZoogiUtil::Hex(TEXT("#3B2A20")), 0.3f, TombFloor);
 	const float R = ZoogiConst::KnockoffRadius;
-	AddCylinder(FVector2D::ZeroVector, R - 8.f, 2.f, 0.8f, ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#A87848")), 0.9f), false)->SetCastShadow(false);
-	AddCylinder(FVector2D::ZeroVector, R - 70.f, 2.f, 1.4f, ZoogiUtil::GroundMID(this, ZoogiUtil::Hex(TEXT("#E0B88A")), ZoogiUtil::Hex(TEXT("#D2A776")), 0.0025f, 0.88f), false)->SetCastShadow(false);
+	if (!TombFloor) AddCylinder(FVector2D::ZeroVector, R - 8.f, 2.f, 0.8f, ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#A87848")), 0.9f), false)->SetCastShadow(false);
+	if (!TombFloor) AddCylinder(FVector2D::ZeroVector, R - 70.f, 2.f, 1.4f, ZoogiUtil::GroundMID(this, ZoogiUtil::Hex(TEXT("#E0B88A")), ZoogiUtil::Hex(TEXT("#D2A776")), 0.0025f, 0.88f), false)->SetCastShadow(false);
 	RockPM = ZoogiPhysics::MakeMaterial(this, 0.3f, 0.55f, false);
 
 	UStaticMesh* Sph = ZoogiUtil::BasicShape(TEXT("Sphere"));
@@ -1193,6 +1202,7 @@ void AZoogiArena::BuildTomb()
 	UStaticMesh* Cone = ZoogiUtil::BasicShape(TEXT("Cone"));
 	UMaterialInterface* PyrMat = ZoogiUtil::GroundMID(this, ZoogiUtil::Hex(TEXT("#C99A66")), ZoogiUtil::Hex(TEXT("#A87A4E")), 0.0008f, 0.95f);
 	const FVector Pyr[] = { FVector(-9000, 6000, 3200), FVector(-11000, 1500, 2400), FVector(-7600, 9500, 1800) };
+	if (bTombPack) return; // the pack brings SM_Pyramid, the day sky (T_TombSky) and the sun orb: no code pyramids, moon or stars
 	for (const FVector& Pp : Pyr)
 	{
 		UStaticMeshComponent* Py = AddMesh(Cone, PyrMat, false, false);
@@ -1219,72 +1229,51 @@ UStaticMeshComponent* AZoogiArena::AddBox(const FVector2D& Min, const FVector2D&
 
 void AZoogiArena::BuildNeon()
 {
-	// 24 x 16 unit court, rails 0.7 deep that stop 3.15 short of each corner (open knockout mouths).
-	const float HX = GNeonHalfX, HY = GNeonHalfY, Depth = 70.f, Mouth = 315.f;
+	// Oct 7 (Evan 11:24): Night Circuit is a round disc now (r 1550 x map scale 1.3, like Meadow), no rails, pads or
+	// corner mouths. 4 unbreakable pillars at r 800 rise at match start (StageForming keeps them non-colliding until risen).
+	constexpr float NeonA = 1.3f;
+	BuildScale = NeonA; SetActorScale3D(FVector(NeonA));
+	KnockoffRadiusOverride = ZoogiConst::KnockoffRadius * NeonA; ActiveKnockoffR = KnockoffRadiusOverride;
+	SpawnRadiusOverride = ZoogiConst::SpawnRadius * NeonA;
+	OrbRingRadiusOverride = ZoogiConst::OrbRingRadius * NeonA;
 	FloorPM = ZoogiPhysics::MakeMaterial(this, 0.3f, 0.1f, true);
-	RockPM = ZoogiPhysics::MakeMaterial(this, 0.2f, 0.8f, false); // rails/posts: lively bounce
-
+	RockPM = ZoogiPhysics::MakeMaterial(this, 0.2f, 0.8f, false);
 	UMaterialInterface* FloorMat = ZoogiUtil::GroundMID(this, ZoogiUtil::Hex(TEXT("#14161F")), ZoogiUtil::Hex(TEXT("#1B1E2B")), 0.004f, 0.35f);
-	AddBox(FVector2D(-HX, -HY), FVector2D(HX, HY), -60.f, 0.f, FloorMat, true)->SetPhysMaterialOverride(FloorPM);
-	// Underside slab + glow lip (the knockout line).
-	AddBox(FVector2D(-HX + 20.f, -HY + 20.f), FVector2D(HX - 20.f, HY - 20.f), -400.f, -60.f, ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#0B0C14")), 0.6f), false);
-	UMaterialInterface* LipPink = ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#FF3EC8")), 6.f);
-	UMaterialInterface* LipCyan = ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#22E7FF")), 6.f);
-	AddBox(FVector2D(-HX - 8.f, HY), FVector2D(HX + 8.f, HY + 8.f), -20.f, 0.f, LipPink, false);
-	AddBox(FVector2D(-HX - 8.f, -HY - 8.f), FVector2D(HX + 8.f, -HY), -20.f, 0.f, LipPink, false);
-	AddBox(FVector2D(HX, -HY), FVector2D(HX + 8.f, HY), -20.f, 0.f, LipCyan, false);
-	AddBox(FVector2D(-HX - 8.f, -HY), FVector2D(-HX, HY), -20.f, 0.f, LipCyan, false);
-
-	// Floor grid lines (visual).
-	UMaterialInterface* Grid = ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#3B2D8F")), 1.2f);
-	for (float X = -HX + 200.f; X < HX; X += 200.f) AddBox(FVector2D(X - 1.5f, -HY), FVector2D(X + 1.5f, HY), 0.f, 0.6f, Grid, false)->SetCastShadow(false);
-	for (float Y = -HY + 200.f; Y < HY; Y += 200.f) AddBox(FVector2D(-HX, Y - 1.5f), FVector2D(HX, Y + 1.5f), 0.f, 0.6f, Grid, false)->SetCastShadow(false);
-	// Centre circle.
-	AddCylinder(FVector2D::ZeroVector, 260.f, 0.8f, 0.8f, ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#22E7FF")), 2.f), false)->SetCastShadow(false);
-	AddCylinder(FVector2D::ZeroVector, 250.f, 1.0f, 1.0f, FloorMat, false)->SetCastShadow(false);
-
-	// Rails: dark body with a bright neon top strip.
-	struct FRail { FVector2D Min, Max; const TCHAR* Color; };
-	const float GX = HX - Mouth, GY = HY - Mouth;
-	const FRail Rails[] = {
-		{ FVector2D(-GX, HY - Depth), FVector2D(GX, HY), TEXT("#B026FF") },
-		{ FVector2D(-GX, -HY), FVector2D(GX, -HY + Depth), TEXT("#B026FF") },
-		{ FVector2D(HX - Depth, -GY), FVector2D(HX, GY), TEXT("#FF2BD6") },
-		{ FVector2D(-HX, -GY), FVector2D(-HX + Depth, GY), TEXT("#22E7FF") } };
-	UMaterialInterface* RailBody = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#1A1C2A")), 0.3f, FLinearColor::Black, 0.f, 0.6f);
-	for (const FRail& R : Rails)
+	const bool bNeonCodePillars = FParse::Param(FCommandLine::Get(), TEXT("ZoogiNoIncoming"));
+	// Oct 7 (NC rev 9): K1 kit floor T_NeonFloor / T_NeonGlow (R = cyan circuit #2FD8FF x0.7), non-destructible, cosmetic damage only.
+	UMaterialInterface* NeonKit = bNeonCodePillars ? nullptr : KitFloorMaterial(TEXT("Neon"), ZoogiUtil::Hex(TEXT("#2FD8FF")), 0.7f, 1.0f);
+	if (NeonKit) { FloorMat = NeonKit; FloorMID = Cast<UMaterialInstanceDynamic>(NeonKit); }
+	BuildIsland(ZoogiUtil::Hex(TEXT("#14161F")), ZoogiUtil::Hex(TEXT("#1B1E2B")), ZoogiUtil::Hex(TEXT("#B026FF")),
+		ZoogiUtil::Hex(TEXT("#0B0C14")), ZoogiUtil::Hex(TEXT("#151726")), 0.3f, FloorMat);
+	// Knockout lip: glow ring just under the floor edge, centre circle.
+	AddCylinder(FVector2D::ZeroVector, ZoogiConst::KnockoffRadius + 10.f, 22.f, -1.f, ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#FF3EC8")), 6.f), false)->SetCastShadow(false);
+	if (!NeonKit)
 	{
-		UStaticMeshComponent* Col = AddBox(R.Min, R.Max, 0.f, 70.f, RailBody, true);
-		Col->SetPhysMaterialOverride(RockPM);
-		AddBox(R.Min + FVector2D(8.f, 8.f), R.Max - FVector2D(8.f, 8.f), 70.f, 78.f, ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(R.Color), 9.f), false)->SetCastShadow(false);
-		const FVector C((R.Min.X + R.Max.X) * 0.5f, (R.Min.Y + R.Max.Y) * 0.5f, 120.f);
-		AddPointLight(C, ZoogiUtil::Hex(R.Color), 60.f, 900.f);
+		AddCylinder(FVector2D::ZeroVector, 260.f, 0.8f, 0.8f, ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#22E7FF")), 2.f), false)->SetCastShadow(false);
+		AddCylinder(FVector2D::ZeroVector, 250.f, 1.0f, 1.0f, FloorMat, false)->SetCastShadow(false);
 	}
-	// Pads and the broken centre channel (axis-aligned solids).
-	struct FPad { float MinX, MaxX, MinZ, MaxZ; float H; };
-	const FPad Pads[] = {
-		{ -11.f, -9.3f, -1.55f, 1.55f, 45.f }, { 7.7f, 9.2f, -1.55f, 1.55f, 45.f }, { -2.4f, 0.4f, 5.55f, 6.7f, 45.f },
-		{ 1.6f, 3.8f, -6.7f, -5.55f, 45.f }, { -2.35f, 2.35f, 0.72f, 1.08f, 35.f }, { -2.35f, 2.35f, -1.08f, -0.72f, 35.f } };
-	UMaterialInterface* PadMat = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#222540")), 0.4f, ZoogiUtil::Hex(TEXT("#5B3BFF")), 0.15f, 0.4f);
-	UMaterialInterface* PadEdge = ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#22E7FF")), 4.f);
-	for (const FPad& Pd : Pads)
-	{
-		const FVector2D Mn(Pd.MinX * 100.f, Pd.MinZ * 100.f), Mx(Pd.MaxX * 100.f, Pd.MaxZ * 100.f);
-		AddBox(Mn, Mx, 0.f, Pd.H, PadMat, true)->SetPhysMaterialOverride(RockPM);
-		AddBox(Mn + FVector2D(5.f, 5.f), Mx - FVector2D(5.f, 5.f), Pd.H, Pd.H + 3.f, PadEdge, false)->SetCastShadow(false);
-		SolidBoxes.Add(FBox2D(Mn, Mx));
-	}
-	// Posts and pylons (BUMPER_RADIUS 0.955).
-	const FVector2D Posts[] = { {-510.f, 270.f}, {420.f, 340.f}, {-340.f, -460.f}, {-660.f, 560.f}, {580.f, -260.f} };
+
 	UMaterialInterface* PostMat = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#1C1F33")), 0.25f, FLinearColor::Black, 0.f, 0.8f);
-	for (int32 i = 0; i < 5; ++i)
+	UPhysicalMaterial* PillarPM = ZoogiPhysics::MakeMaterial(this, 0.25f, 0.6f, false);
+	const TCHAR* PilCols[4] = { TEXT("#22E7FF"), TEXT("#FF3EC8"), TEXT("#B026FF"), TEXT("#FF2BD6") };
+	constexpr float PillarR = 800.f, PillarH = 260.f, PillarRad = 70.f;
+	if (bNeonCodePillars) // Oct 7: the Night Circuit pack's SM_NC_ResonancePillar replaces these (PlaceIncoming kind 2)
+	for (int32 k = 0; k < 4; ++k)
 	{
-		const bool bPylon = i >= 3;
-		const float H = bPylon ? 220.f : 110.f;
-		AddCylinder(Posts[i], 95.5f, H, H, PostMat, true)->SetPhysMaterialOverride(RockPM);
-		AddCylinder(Posts[i], 98.f, 10.f, H * 0.5f + 5.f, ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(i % 2 ? TEXT("#FF3EC8") : TEXT("#22E7FF")), 7.f), false)->SetCastShadow(false);
-		AddCylinder(Posts[i], 60.f, 6.f, H + 6.f, ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#FFFFFF")), 4.f), false)->SetCastShadow(false);
-		SolidPosts.Add(Posts[i]);
+		const float Yaw = 45.f + 90.f * k, Rad = FMath::DegreesToRadians(Yaw);
+		const FVector Loc(FMath::Cos(Rad) * PillarR, FMath::Sin(Rad) * PillarR, 0.f);
+		AZoogiArenaPiece* P = SpawnPiece(Loc, Yaw, *FString::Printf(TEXT("pillar_%d"), k), TEXT("Stone"), 1000.f, true);
+		if (!P) continue;
+		P->AddShape(TEXT("Cylinder"), FTransform(FRotator::ZeroRotator, FVector(0, 0, PillarH * 0.5f), FVector(PillarRad / 50.f, PillarRad / 50.f, PillarH / 100.f)), PostMat);
+		UMaterialInterface* Glow = ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(PilCols[k]), 7.f);
+		for (int32 b = 0; b < 3; ++b)
+			P->AddShape(TEXT("Cylinder"), FTransform(FRotator::ZeroRotator, FVector(0, 0, 50.f + b * 80.f), FVector((PillarRad + 3.f) / 50.f, (PillarRad + 3.f) / 50.f, 0.08f)), Glow, false);
+		P->AddShape(TEXT("Cylinder"), FTransform(FRotator::ZeroRotator, FVector(0, 0, PillarH + 4.f), FVector(0.9f, 0.9f, 0.08f)), ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#FFFFFF")), 4.f), false);
+		P->AddColliderCyl(FVector2D::ZeroVector, PillarRad, 0.f, PillarH, TEXT("ZPillar"), PillarPM);
+		P->SetPathBlock(FVector2D(P->GetActorLocation()), PillarRad * NeonA);
+		P->FinishBuild();
+		if (Forming) Forming->AddActor(P, EZoogiFormStyle::Rise, FVector(0, 0, -(PillarH + 120.f)), 1.30f + 0.10f * k, 1.0f, 14.f);
+		AddPointLight(FVector(Loc.X, Loc.Y, 160.f), ZoogiUtil::Hex(PilCols[k]), 60.f, 900.f);
 	}
 
 	// City skyline: dark towers with glowing window bands, far below and around the court.
@@ -1306,5 +1295,5 @@ void AZoogiArena::BuildNeon()
 			AddBox(C - FVector2D(W, W) * 0.5f - FVector2D(4.f, 4.f), C + FVector2D(W, W) * 0.5f + FVector2D(4.f, 4.f), Z, Z + Rng.FRandRange(15.f, 50.f), Win, false)->SetCastShadow(false);
 		}
 	}
-	AddStars(900, 2.f, 5.f, FLinearColor(0.85f, 0.9f, 1.f), 21);
+	AddStars(bNeonCodePillars ? 900 : 300, 2.f, 5.f, FLinearColor(0.85f, 0.9f, 1.f), 21); // 07 LIGHTING.md: 300 stars over the T_NightCircuitSky panorama
 }

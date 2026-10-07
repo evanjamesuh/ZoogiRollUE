@@ -244,7 +244,7 @@ void AZoogiGameMode::SpawnOrbs()
 	{
 		const float A = i * 2.f * PI / 3.f + PI / 6.f;
 		FVector L(FMath::Cos(A) * 90.f, FMath::Sin(A) * 90.f, ZoogiConst::OrbRadius + 1.f);
-		if (Arena && Arena->IsNeon()) L = FVector(-200.f + i * 200.f, 0.f, L.Z); // between the centre channels
+		if (Arena && Arena->IsNeonRect()) L = FVector(-200.f + i * 200.f, 0.f, L.Z); // between the centre channels
 		if (!OrbSpot(L)) continue;
 		AZoogiOrb* O = GetWorld()->SpawnActor<AZoogiOrb>(AZoogiOrb::StaticClass(), FTransform(L));
 		if (O)
@@ -609,7 +609,7 @@ bool AZoogiGameMode::AllAtRest() const
 static FVector EdgePoint(const FVector& L, const AZoogiArena* Arena)
 {
 	FVector2D P(L.X, L.Y);
-	if (Arena && Arena->IsNeon())
+	if (Arena && Arena->IsNeonRect())
 	{
 		// Rectangular court: clamp onto the rails' inner box.
 		return FVector(FMath::Clamp(P.X, -1140.f, 1140.f), FMath::Clamp(P.Y, -740.f, 740.f), 120.f);

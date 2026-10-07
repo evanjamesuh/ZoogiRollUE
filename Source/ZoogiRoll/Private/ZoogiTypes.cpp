@@ -111,6 +111,7 @@ FString ZoogiUtil::ArenaName(EZoogiArena Arena)
 	case EZoogiArena::Arabian: return TEXT("Arabian Nights");
 	case EZoogiArena::Tomb: return TEXT("Pharaoh's Tomb");
 	case EZoogiArena::Neon: return TEXT("Night Circuit");
+	case EZoogiArena::Training: return TEXT("Training Arena");
 	default: return TEXT("Arena");
 	}
 }

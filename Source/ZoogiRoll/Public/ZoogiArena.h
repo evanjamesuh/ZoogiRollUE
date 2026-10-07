@@ -58,6 +58,7 @@ public:
 	/** True if a ball of the given radius rolling straight From -> To would hit a solid pad or post (Night Circuit). */
 	bool IsPathBlocked(const FVector2D& From, const FVector2D& To, float Radius) const;
 	bool IsNeon() const { return Theme == EZoogiArena::Neon; }
+	bool IsNeonRect() const { return false; } // Oct 7: Night Circuit is round now; the old rectangular-court special cases key off this
 	/** Destructible rocks placed by this arena (Meadow rim). Restored at match start. */
 	void ResetRocks();
 	const TArray<TObjectPtr<class AZoogiRock>>& GetRocks() const { return Rocks; }
@@ -108,6 +109,7 @@ protected:
 	void BuildArabian();
 	void BuildTomb();
 	void BuildNeon();
+	void BuildTraining();
 	void PlaceIncoming(); // Oct 7: reskin-incoming builder packs on the non-Meadow maps
 	/** Axis-aligned box (min/max XY in cm, height) with optional collision. */
 	UStaticMeshComponent* AddBox(const FVector2D& Min, const FVector2D& Max, float Bottom, float Top, UMaterialInterface* Mat, bool bCollide);

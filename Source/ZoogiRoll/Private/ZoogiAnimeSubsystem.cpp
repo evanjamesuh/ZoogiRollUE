@@ -498,3 +498,29 @@ void UZoogiAnimeSubsystem::ResetMatch()
 	Queue.Reset();
 	FullPlays.Reset();
 }
+
+FString UZoogiAnimeSubsystem::PlayMenuMovie(int32 Step)
+{
+	if (MovieSeconds.Num() == 0) LoadMovieTable();
+	TArray<FString> Ids;
+	for (const TPair<FString, float>& P : MovieSeconds) if (!P.Key.StartsWith(TEXT("Menu_"))) Ids.Add(P.Key);
+	Ids.Sort();
+	static int32 Cursor = -1;
+	for (int32 Tries = 0; Tries < Ids.Num(); ++Tries)
+	{
+		Cursor = ((Cursor + Step) % Ids.Num() + Ids.Num()) % Ids.Num();
+		if (TryStartMovie(Ids[Cursor]))
+		{
+			CurrentMovie = Ids[Cursor];
+			UE_LOG(LogZoogi, Log, TEXT("Menu anime: playing %s (%d/%d)"), *CurrentMovie, Cursor + 1, Ids.Num());
+			return CurrentMovie;
+		}
+	}
+	UE_LOG(LogZoogi, Warning, TEXT("Menu anime: no playable clip (%d listed in Movies.csv)"), Ids.Num());
+	return FString();
+}
+
+void UZoogiAnimeSubsystem::StopMenuMovie()
+{
+	if (MoviePlayer && !bPlaying) MoviePlayer->Close();
+}
