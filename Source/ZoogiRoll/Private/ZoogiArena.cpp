@@ -448,8 +448,8 @@ void AZoogiArena::SetupSky(EZoogiArena InTheme)
 		Sun->SetRelativeRotation(FRotator(-48.f, 215.f, 0.f));
 		Sun->SetIntensity(9.5f);
 		Sun->SetLightColor(FLinearColor(1.f, 0.94f, 0.82f));
-		Fog->SetFogDensity(0.004f);
-		Fog->SetStartDistance(6000.f);
+		Fog->SetFogDensity(0.0012f);
+		Fog->SetStartDistance(16000.f);
 		Fog->SetFogInscatteringColor(FLinearColor(0.55f, 0.72f, 0.95f));
 		Clouds->SetVisibility(false);
 		SkyLight->SetIntensity(1.25f);
