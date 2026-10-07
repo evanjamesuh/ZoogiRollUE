@@ -9,7 +9,7 @@ namespace ZoogiMeadow
 
 	// Resonance pillars (unbreakable): r 800 at diagonals
 	inline constexpr float PillarR = 800.f;
-	inline constexpr float PillarYaw[4] = { 45.f, 135.f, 225.f, 315.f };
+	inline constexpr float PillarYaw[4] = { 40.f, 187.f, 310.f, 355.f }; // r5: measured off the Buzzy top-down
 	inline constexpr float PillarH = 340.f;   // r3: Buzzy proportions (~3.4 Zoogi diameters)
 	inline constexpr float PillarS = 1.3f;     // r3: cross-section scale vs r2
 
@@ -21,31 +21,33 @@ namespace ZoogiMeadow
 	inline constexpr float OrbExitGapHalfDeg = 8.9f;
 	inline constexpr float OrbExitGapYaw[4] = { 0.f, 90.f, 180.f, 270.f };
 
-	// Curved ricochet wall arcs (inside disc) — stay clear of orb-exit gaps and spawn lanes.
-	inline constexpr float WallR = 1150.f;
-	inline constexpr float WallH = 85.f;
-	inline constexpr float WallA0[2] = { 200.f, 20.f };   // two arcs
-	inline constexpr float WallA1[2] = { 250.f, 70.f };
+	// r5 ramps, measured off the Buzzy top-down (screen up = -Y = yaw 270, screen right = +X = yaw 0; 1 art px ~ 4.37 cm).
+	// Central spiral ramp: floor-level foot at yaw 125, climbs counter-clockwise (125 -> 0 -> -90) to the raised disc at yaw 270.
+	inline constexpr float SpiralRIn = 210.f, SpiralROut = 410.f;   // band kept inside the r 500 orb ring
+	inline constexpr float SpiralA0 = 125.f, SpiralA1 = -90.f;       // foot -> top
+	inline constexpr float SpiralH = 110.f;
+	inline constexpr float DiscYaw = 270.f, DiscR = 310.f, DiscRad = 120.f;
+	// Two tall wooden quarter-pipes flanking the north (270) gap, radial, rising outward.
+	inline constexpr float PipeYaw[2] = { 250.f, 290.f };
+	inline constexpr float PipeR0 = 1300.f, PipeRq = 520.f, PipeEndDeg = 70.f, PipeWid = 200.f;
+	// Two low curved lips at the front stand ends (SW/SE), rising toward the stand end and curling inward.
+	inline constexpr float LipYawLow[2] = { 115.f, 65.f }, LipYawHigh[2] = { 142.f, 38.f };
+	inline constexpr float LipRLow = 1470.f, LipRHigh = 1290.f, LipWid = 170.f, LipH = 100.f;
+	// Wooden bench blocks (breakable) in the mid ring.
+	inline constexpr int32 NumBenches = 7;
+	inline constexpr float BenchYaw[NumBenches] = { 240.f, 209.f, 337.f, 167.f, 117.f, 65.f, 20.f };
+	inline constexpr float BenchR = 700.f;
 
-	// Launch ramp (+X) and raised platform
-	inline constexpr float RampYaw = 0.f;
-	inline constexpr float RampLen = 520.f;
-	inline constexpr float RampWid = 280.f;
-	inline constexpr float RampH = 95.f;
-	inline constexpr float RampCX = 650.f;
-	inline constexpr float PlatX = -720.f, PlatY = 420.f, PlatR = 160.f, PlatH = 110.f;
-
-	// Outer wooden stand arcs
-	inline constexpr float StandRIn = 1950.f;   // r3: closer, taller bleachers like the art
-	// A&P stand copies with the proposed gap moves (355 -> 335, 175 -> 235; 235 nudged to 230 to clear the 250 gate shrine).
-	inline constexpr int32 NumStands = 6;
-	inline constexpr float StandCenters[NumStands] = { 25.f, 115.f, 145.f, 205.f, 230.f, 335.f };
-	inline constexpr float StandArcDeg = 28.f;
-	inline constexpr int32 StandTiers = 6;
+	// Outer wooden stands: 4 arcs hugging the floor edge (art), gaps at 0/90/180/270 between them.
+	inline constexpr float StandRIn = 1640.f;
+	inline constexpr int32 NumStands = 4;
+	inline constexpr float StandCenters[NumStands] = { 25.f, 155.f, 218.f, 322.f };
+	inline constexpr float StandArcs[NumStands] = { 30.f, 30.f, 52.f, 52.f };
+	inline constexpr int32 StandTiers = 5;
 
 	// Recovery gate shrines
-	inline constexpr float GateR = 2150.f;
-	inline constexpr float GateYaw[2] = { 250.f, 290.f };
+	inline constexpr float GateR = 1720.f;
+	inline constexpr float GateYaw[2] = { 123.f, 56.f }; // r5: the two red shrine gates either side of the south (90) gap
 
 	inline bool NearOrbExitGap(float A, float Tol = 0.f)
 	{

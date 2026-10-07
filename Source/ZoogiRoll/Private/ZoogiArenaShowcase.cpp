@@ -50,6 +50,16 @@ void AZoogiArenaShowcase::MaybeStart(UWorld* World, const FString& ArenaSlug)
 		{ TEXT("rim"),       FVector(1130, 700, 40), 32.f, 30.f, 900.f, 70.f }, // rim rock at 32 deg + edge
 		{ TEXT("hub"),       FVector(0, 0, 120), 250.f, 24.f, 1500.f, 70.f },  // hub + pillars / centre orbs
 	};
+	if (ArenaSlug.Contains(TEXT("meadow")))
+	{
+		// r5: Buzzy Meadow compositions in the art orientation (screen up = -Y): top-down, 3/4, hero, ramp close-ups.
+		S->Poses.Insert(FPose{ TEXT("buzzy_spiral"), FVector(0, -60, 40),     270.f, 42.f, 1700.f, 70.f }, 0);
+		S->Poses.Insert(FPose{ TEXT("buzzy_lips"),   FVector(0, 1250, 40),     270.f, 30.f, 1900.f, 75.f }, 0);
+		S->Poses.Insert(FPose{ TEXT("buzzy_ramps"),  FVector(0, -1450, 120),   270.f, 20.f, 2300.f, 72.f }, 0);
+		S->Poses.Insert(FPose{ TEXT("buzzy_hero"),   FVector(0, -350, -150),   270.f, 24.f, 5200.f, 68.f }, 0);
+		S->Poses.Insert(FPose{ TEXT("buzzy_34"),     FVector(0, -150, 0),      270.f, 36.f, 5000.f, 66.f }, 0);
+		S->Poses.Insert(FPose{ TEXT("buzzy_top"),    FVector(0, 0, 0),         270.f, 86.f, 5400.f, 62.f }, 0);
+	}
 	if (ArenaSlug.Contains(TEXT("ice")) || ArenaSlug.Contains(TEXT("frozen")))
 	{
 		// Buzzy Frozen Ring compositions (screen up = -Y, the art orientation): top-down, 3/4, hero, hub, plus a damaged top.
