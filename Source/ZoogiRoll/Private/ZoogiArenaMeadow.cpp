@@ -19,7 +19,7 @@ void AZoogiArena::BuildMeadow()
 {
 	using namespace ZoogiMeadow; // function scope: unity builds also pull in ZoogiFrozen's WallR/GateYaw/...
 	const FLinearColor Green = ZoogiUtil::Hex(TEXT("#39E37A"));
-	constexpr float SealGlow = 9.0f; // r4: bold seal (T_MeadowGlow rebaked: thick core + soft halo)
+	constexpr float SealGlow = 4.5f; // r8: lower strength + deeper green so the tonemapper keeps it saturated // r4: bold seal (T_MeadowGlow rebaked: thick core + soft halo)
 	const FLinearColor Soil = ZoogiUtil::Hex(TEXT("#9C8B73"));
 	const FLinearColor Wood = ZoogiUtil::Hex(TEXT("#8B5A2B"));
 	const FLinearColor WoodAlt = ZoogiUtil::Hex(TEXT("#A06A38"));
@@ -28,7 +28,7 @@ void AZoogiArena::BuildMeadow()
 	const FLinearColor RockA = ZoogiUtil::Hex(TEXT("#B9A889"));
 	const FLinearColor RockB = ZoogiUtil::Hex(TEXT("#8E8063"));
 
-	UMaterialInterface* FloorMat = KitFloorMaterial(TEXT("Meadow"), ZoogiUtil::Hex(TEXT("#12E04A")), SealGlow, 0.98f);
+	UMaterialInterface* FloorMat = KitFloorMaterial(TEXT("Meadow"), ZoogiUtil::Hex(TEXT("#00B83A")), SealGlow, 0.98f);
 	BuildIsland(ZoogiUtil::Hex(TEXT("#3F8A2C")), ZoogiUtil::Hex(TEXT("#55A336")), Soil,
 		ZoogiUtil::Hex(TEXT("#6E5B4A")), ZoogiUtil::Hex(TEXT("#4A3B30")), 0.3f, FloorMat);
 	FloorMID = Cast<UMaterialInstanceDynamic>(FloorMat);
