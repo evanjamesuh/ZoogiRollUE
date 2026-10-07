@@ -626,3 +626,7 @@ Awakened / crit-grade hit), and so are the collider, events, SFX, popup, feed li
 ## Meadow r3 (Oct 7, 12:34 AM CT)
 - Buzzy Meadow sky (T_MeadowSky), floor glow 2.6, pillars H340 x1.3 (unbreakable, rise at start), Meadow brown/green scar set + dark crater (no cyan), terrace cut with drop channels at 0/90/180/270 (240 cm), 6-tier stands r1950, Meadow lighting/saturation.
 - Gap test 7/7 PASS. Packaged 12:34 AM CT, PACKAGE_EXIT=0, Desktop shortcut OK.
+
+## Meadow r4 (Oct 7, 1:02 AM CT)
+- Bold green floor seal (rebaked T_MeadowGlow: thick core + halo; GlowTint 1, glow 9, saturated green), layered mountain ridges (green/teal/blue, snow caps) with ridge waterfalls, fog cut back, hand-built pagoda tower + gatehouse hall on far hills (out of reach, solid scenery).
+- Gap test 7/7 PASS. Packaged 1:02 AM CT, PACKAGE_EXIT=0, Desktop shortcut OK.
