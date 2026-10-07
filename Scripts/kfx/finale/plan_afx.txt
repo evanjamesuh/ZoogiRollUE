@@ -1,0 +1,27 @@
+# Awaken FX comparison plan (Scripts/kfx/finale), cameras matched to Evan's picked demo frames (fx-finale/evan_picks).
+# Scale 1 = KriptoFX demo size (1 Unity m = 100 cm). Unity demo vertical FOV 60 -> horizontal ~91 at 16:9. prop = 180 cm stand-in.
+# ev AFX_<kind> <time> <ground> <scale> <param>: Ring param = power from,to,seconds; Shock param.x = collide time (0 = never);
+# Void param = rock target offset from the ground point. Times are seconds after the shot start.
+shot fire_ring
+# fire_ring_Effect4.png: camera ~22 deg above, ring ~6.5 m across at full launch power
+cam -770,0,340 0,0,55 91
+prop 0,0,0 180
+ev AFX_Ring 0 0,0,0 1 1,1,0.1
+times 0.15,0.3,0.5,1.0,2.0,3.0
+shot ring_power
+# launch-force binding: power 0 -> 1 over 2 s (size + intensity scale)
+cam -770,0,340 0,0,55 91
+prop 0,0,0 180
+ev AFX_Ring 0 0,0,0 1 0,1,2
+times 0.6,1.2,1.8,2.6
+shot shock_chain
+# shock_chain.png: high camera ~40 deg down, bolts from above the head to 3-4 ground points with dark splats
+cam -560,-120,480 0,0,60 91
+prop 0,0,0 180
+ev AFX_Shock 0 0,0,0 1 2.6,0,0
+times 0.3,0.7,1.2,1.8,2.4,2.7,3.0
+shot void_portal
+# void_portal.png: low camera, portal up-left ~3 m high, rock emerging, violet spill on the ground
+cam -500,0,170 100,130,165 91
+ev AFX_Void 0 0,0,0 1 -300,200,0
+times 0.3,0.5,0.7,0.9,1.3,1.8,2.4,3.0
