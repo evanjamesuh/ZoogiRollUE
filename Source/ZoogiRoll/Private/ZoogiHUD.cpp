@@ -1014,18 +1014,21 @@ void AZoogiHUD::DrawPreview(AZoogiGameMode* G)
 	const EZoogiArtifact Inf = B->Artifact ? B->Artifact->Infused : EZoogiArtifact::None;
 	FLinearColor ShotFill, ShotGlow;
 	AwakenLineColors(Inf, ShotFill, ShotGlow);
-	// Full predicted shot path (bank included) as a solid line in the Awaken colour, from the Zoogi to contact / stop.
+	// Predicted shot path (bank included) as the original dotted squares (Evan Oct 7: "what we initially had"), same
+	// size / spacing / fade as before the UI work, tinted in the Awaken colour (gold when none). Static; off court red.
+	// A slightly larger faint dark square under each dot keeps them readable on snow.
+	for (int32 i = 0; i < P.Path.Num(); ++i)
 	{
-		TArray<FVector> Pts;
-		TArray<bool> Off;
-		Pts.Add(B->BallLocation() + Ground + FVector(0, 0, 3.f));
-		for (int32 i = 0; i < P.Path.Num(); ++i)
-		{
-			Pts.Add(P.Path[i] + FVector(0, 0, 3.f));
-			Off.Add(P.PathOff.IsValidIndex(i) && P.PathOff[i]);
-		}
-		if (P.bContact) { Pts.Add(P.Ghost + Ground + FVector(0, 0, 3.f)); Off.Add(false); }
-		TrajectoryLine(Pts.GetData(), Pts.Num(), ShotFill, ShotGlow, bPower ? 1.12f : 1.f, 1.f, !P.bContact, &Off);
+		const FVector S = Project(P.Path[i], true);
+		if (S.Z <= 0.f) continue;
+		const float T = (float)(i + 1) / P.Path.Num();
+		const float Size = FMath::Lerp(12.f, 6.f, T) * U * (bPower ? 1.2f : 1.f);
+		const bool bOffDot = P.PathOff.IsValidIndex(i) && P.PathOff[i];
+		FLinearColor C = bOffDot ? FLinearColor(1.f, 0.25f, 0.2f, 0.9f) : FMath::Lerp(ShotFill, FLinearColor::White, T * 0.25f);
+		C.A = FMath::Lerp(0.95f, 0.45f, T);
+		const float E = 1.5f * U;
+		DrawRect(FLinearColor(0.02f, 0.03f, 0.06f, C.A * 0.55f), S.X - Size * 0.5f - E, S.Y - Size * 0.5f - E, Size + 2.f * E, Size + 2.f * E);
+		DrawRect(C, S.X - Size * 0.5f, S.Y - Size * 0.5f, Size, Size);
 	}
 	if (P.bBank)
 	{
