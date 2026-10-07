@@ -546,8 +546,8 @@ void AZoogiArena::BuildMeadow()
 		struct FRidge { float R; float HMin, HMax; FLinearColor A, B; int32 N; };
 		const FRidge Ridges[3] = {
 			{ 17000.f, 700.f, 1300.f, ZoogiUtil::Hex(TEXT("#98AE52")), ZoogiUtil::Hex(TEXT("#A8BA62")), 44 },   // r18: low near downs (horizon open)
-			{ 28000.f, 3000.f, 5500.f, ZoogiUtil::Hex(TEXT("#968A78")), ZoogiUtil::Hex(TEXT("#AA9E8A")), 40 },  // r18: rocky mountains
-			{ 46000.f, 5000.f, 8200.f, ZoogiUtil::Hex(TEXT("#A9C0D6")), ZoogiUtil::Hex(TEXT("#BDD0E2")), 48 } }; // far blue peaks
+			{ 30000.f, 1600.f, 3000.f, ZoogiUtil::Hex(TEXT("#968A78")), ZoogiUtil::Hex(TEXT("#AA9E8A")), 40 },  // r18: rocky mountains
+			{ 50000.f, 2600.f, 4600.f, /* r23: lower so v4 sky shows */ ZoogiUtil::Hex(TEXT("#A9C0D6")), ZoogiUtil::Hex(TEXT("#BDD0E2")), 48 } }; // far blue peaks
 		UMaterialInterface* Snow = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#EEF4F8")), 0.8f);
 		for (int32 r = 0; r < 3; ++r)
 		{

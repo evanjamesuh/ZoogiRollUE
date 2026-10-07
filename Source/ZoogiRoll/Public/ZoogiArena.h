@@ -36,7 +36,14 @@ public:
 	float GetRollingDecel() const;
 	FVector GetSpawnPoint(int32 PlayerIndex) const;
 	float GetSpawnYaw(int32 PlayerIndex) const;
-	float GetKnockoffRadius() const { return ZoogiConst::KnockoffRadius; }
+	float GetKnockoffRadius() const { return KnockoffRadiusOverride > 0.f ? KnockoffRadiusOverride : ZoogiConst::KnockoffRadius; }
+	/** r19 per-map scale (Meadow 1.3): the arena actor and every piece are scaled; world radii below follow it. */
+	float BuildScale = 1.f;
+	float KnockoffRadiusOverride = 0.f;
+	/** Per-map starting orb count on the ring (0 = ZoogiConst::OrbCount + centre triangle + extra spots). */
+	int32 OrbCountOverride = 0;
+	/** Knockoff radius of the arena built last (world cm), for code without an arena pointer (pieces, combo). */
+	static inline float ActiveKnockoffR = ZoogiConst::KnockoffRadius;
 	/** Extra orb spots off the main disc (Frozen bleacher islets, round 3c); world positions, Z = orb centre. Rebuilt per arena. */
 	TArray<FVector> ExtraOrbSpots;
 	/** Per-map starting orb ring (0 = ZoogiConst::OrbRingRadius) and its yaw offset in degrees; reset on every build. */
@@ -101,6 +108,7 @@ protected:
 	void BuildArabian();
 	void BuildTomb();
 	void BuildNeon();
+	void PlaceIncoming(); // Oct 7: reskin-incoming builder packs on the non-Meadow maps
 	/** Axis-aligned box (min/max XY in cm, height) with optional collision. */
 	UStaticMeshComponent* AddBox(const FVector2D& Min, const FVector2D& Max, float Bottom, float Top, UMaterialInterface* Mat, bool bCollide);
 	TArray<FBox2D> SolidBoxes;
