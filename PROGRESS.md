@@ -637,3 +637,12 @@ Awakened / crit-grade hit), and so are the collider, events, SFX, popup, feed li
 - r7: floor seal redrawn to the art layout.
 - Tests 12/12 PASS (4 gaps ORB OUT, control, seat-wall + bench crack, 2 pipes, 2 lips, spiral). Packaged r5 4:13, r6 4:23, r7 4:31 AM CT; PACKAGE_EXIT=0, Desktop shortcut OK.
 - r8: seal glow deeper saturated green. Tests 12/12 PASS. Packaged 4:40 AM CT, PACKAGE_EXIT=0, Desktop shortcut OK.
+
+## Meadow r9-r17 (Grok Bot, 2026-10-07)
+- r9/r10: full-size spiral (r300-600), per-map orb ring (OrbRingRadiusOverride 690 cm, +7 deg; Meadow only), benches snapped, warm tan floor, saturation 1.08.
+- r11-r13: sandstone cliffs/seats, pale distant ridges, terrace-level plain to r14000 with ravines at the 4 gaps, rounder golem.
+- r14: plain raised to stand level (no moat/underside), shrines and golem re-seated at -40, seal glow 7.0.
+- r15-r17: warm olive grass (#93A644/#A6B656), grassy gap banks, dense flowers and field rocks to r4200, pinkish stand wood (#CDA28B/#D9B29A/#A0705A), red gatehouse roof, art-matched hero/3-4 cameras.
+- Comparison shots: add -ZoogiNoHUD with -ZoogiArenaShots for viewport-only captures (no UI source changes).
+- Tests: 12/12 ARENATEST pass every round. Packaged r14 (06:42) and r17 (07:02).
+- Open: toon/outline post-process, layered valleys + rocky mountains + more waterfalls, bigger pagoda/golem detail.
