@@ -25,11 +25,13 @@ namespace ZoogiMeadow
 	// Central spiral ramp: floor-level foot at yaw 125, climbs counter-clockwise (125 -> 0 -> -90) to the raised disc at yaw 270.
 	inline constexpr float SpiralRIn = 210.f, SpiralROut = 410.f;   // band kept inside the r 500 orb ring
 	inline constexpr float SpiralA0 = 125.f, SpiralA1 = -90.f;       // foot -> top
-	inline constexpr float SpiralH = 110.f;
+	inline constexpr float SpiralH = 140.f;
+	inline constexpr float SpiralRailH = 55.f; // r6: the art's tall outer ring wall
+	inline constexpr float HubWallA0 = 140.f, HubWallA1 = 255.f; // r6: west half of the yin-yang ring wall
 	inline constexpr float DiscYaw = 270.f, DiscR = 310.f, DiscRad = 120.f;
 	// Two tall wooden quarter-pipes flanking the north (270) gap, radial, rising outward.
 	inline constexpr float PipeYaw[2] = { 250.f, 290.f };
-	inline constexpr float PipeR0 = 1300.f, PipeRq = 520.f, PipeEndDeg = 70.f, PipeWid = 200.f;
+	inline constexpr float PipeR0 = 1300.f, PipeRq = 520.f, PipeEndDeg = 70.f, PipeWid = 280.f;
 	// Two low curved lips at the front stand ends (SW/SE), rising toward the stand end and curling inward.
 	inline constexpr float LipYawLow[2] = { 115.f, 65.f }, LipYawHigh[2] = { 142.f, 38.f };
 	inline constexpr float LipRLow = 1470.f, LipRHigh = 1290.f, LipWid = 170.f, LipH = 100.f;
