@@ -209,6 +209,13 @@ void AZoogiHUD::TickUIPolish(AZoogiGameMode* G)
 		if (PolishStep == 1 && PolishAwakenT > 5.5f)
 		{
 			G->MenuAction(TEXT("Infuse"), 0); // direct (QueueControlClick only ticks under -ZoogiUiTest)
+			// -ZoogiPolishArt=Ember|Storm|Frost|Titan|Void: force the infused artifact so each Awaken colour can be captured.
+			FString ArtKey;
+			if (FParse::Value(FCommandLine::Get(), TEXT("ZoogiPolishArt="), ArtKey))
+				if (AZoogiBall* PB = G->GetActiveBall())
+					if (PB->Artifact)
+						for (EZoogiArtifact A : { EZoogiArtifact::Ember, EZoogiArtifact::Storm, EZoogiArtifact::Frost, EZoogiArtifact::Titan, EZoogiArtifact::Void })
+							if (ZoogiArtifacts::Key(A) == ArtKey) PB->Artifact->SetInfused(A);
 			PolishStep = 2;
 			UE_LOG(LogZoogi, Log, TEXT("UIPolish: Infuse after stone spin hold"));
 		}
@@ -221,17 +228,19 @@ void AZoogiHUD::TickUIPolish(AZoogiGameMode* G)
 		if (AimHold > 0.35f && !G->HasAim())
 		{
 			const TArray<AActor*> Cands = G->TargetCandidates();
-			if (Cands.Num() > 0) G->LockOn(Cands[0], false);
+			int32 CandIdx = 0; // -ZoogiPolishCand=N: lock a different target (e.g. for a bank shot)
+			FParse::Value(FCommandLine::Get(), TEXT("ZoogiPolishCand="), CandIdx);
+			if (Cands.Num() > 0) G->LockOn(Cands[FMath::Clamp(CandIdx, 0, Cands.Num() - 1)], false);
 		}
 		if (AimHold > 1.4f && G->Preview.bValid && G->bAimActive)
 		{
-			G->TakeShot(TEXT("beam_aim"));
+			G->TakeShot(TEXT("traj_aim"));
 			PolishStep = 3;
 			PolishBeamT = 0.f;
-			UE_LOG(LogZoogi, Log, TEXT("UIPolish: beam aim shot (contact=%d)"), G->Preview.bContact ? 1 : 0);
+			UE_LOG(LogZoogi, Log, TEXT("UIPolish: trajectory aim shot (contact=%d)"), G->Preview.bContact ? 1 : 0);
 		}
 	}
-	// -ZoogiClipFrames: ~5 s of the Resonance beam flowing (clip_beam_####.png at 20 fps), aim held.
+	// -ZoogiClipFrames: ~5 s of the aim trajectory lines (clip_beam_####.png at 20 fps), aim held.
 	static const bool bBeamClip = FParse::Param(FCommandLine::Get(), TEXT("ZoogiClipFrames"));
 	if (PolishStep == 3 && bBeamClip && !G->ShotDir.IsEmpty() && ClipBeamFrames < 100 && G->Preview.bValid && G->bAimActive)
 	{
@@ -512,9 +521,9 @@ void AZoogiHUD::DrawAim(AZoogiGameMode* G)
 	{
 		const FVector TP = Cast<AZoogiOrb>(TL) ? Cast<AZoogiOrb>(TL)->OrbLocation() : (Cast<AZoogiBall>(TL) ? Cast<AZoogiBall>(TL)->BallLocation() : TL->GetActorLocation());
 		const FVector S0 = Project(B->BallLocation(), true), S1 = Project(TP, true);
-		// Battle straight shot: the Resonance beam (DrawPreview) is the aim line, so skip the plain line under it.
-		const bool bBeamShown = G->Stage == EZoogiStage::Battle && G->bAimActive && G->Preview.bValid && G->Preview.bContact && !G->Preview.bBank;
-		if (S0.Z > 0.f && S1.Z > 0.f && !bBeamShown)
+		// Battle aim: the trajectory line (DrawPreview) already shows the shot, so skip the plain lock line under it.
+		const bool bTrajShown = G->Stage == EZoogiStage::Battle && G->bAimActive && G->Preview.bValid;
+		if (S0.Z > 0.f && S1.Z > 0.f && !bTrajShown)
 		{
 			const bool bBattle = G->Stage == EZoogiStage::Battle;
 			const float Pulse = 0.65f + 0.35f * FMath::Sin(Time * (bBattle ? 18.f : 8.f));
@@ -868,48 +877,60 @@ void AZoogiHUD::WorldCircle(const FVector& C, float Radius, const FLinearColor& 
 	}
 }
 
-// Resonance cyan-teal; an infused artifact pulls the beam toward its own colour.
-static FLinearColor ResonanceTint(EZoogiArtifact Inf)
+// Trajectory palette (Evan Oct 7): the shot / target line glows in the current Awaken colour, warm gold when none.
+// Fill is the solid line colour, Glow the soft halo around it.
+static void AwakenLineColors(EZoogiArtifact Inf, FLinearColor& Fill, FLinearColor& Glow)
 {
-	const FLinearColor Res(0.3f, 0.95f, 0.92f, 1.f);
-	if (Inf == EZoogiArtifact::None) return Res;
-	FLinearColor C = FMath::Lerp(Res, ZoogiArtifacts::Color(Inf), 0.85f);
-	C.A = 1.f;
-	return C;
+	switch (Inf)
+	{
+	case EZoogiArtifact::Ember: Fill = FLinearColor(1.f, 0.42f, 0.12f); Glow = FLinearColor(1.f, 0.18f, 0.04f); break;
+	case EZoogiArtifact::Storm: Fill = FLinearColor(1.f, 0.98f, 0.35f); Glow = FLinearColor(0.15f, 0.45f, 1.f); break; // lemon core, electric-blue rim
+	case EZoogiArtifact::Frost: Fill = FLinearColor(0.88f, 1.f, 1.f); Glow = FLinearColor(0.4f, 0.95f, 1.f); break;
+	case EZoogiArtifact::Titan: Fill = FLinearColor(1.f, 0.6f, 0.06f); Glow = FLinearColor(0.85f, 0.38f, 0.0f); break; // amber
+	case EZoogiArtifact::Void: Fill = FLinearColor(0.78f, 0.4f, 1.f); Glow = FLinearColor(0.55f, 0.12f, 1.f); break;
+	default: Fill = FLinearColor(1.f, 0.9f, 0.62f); Glow = FLinearColor(1.f, 0.72f, 0.25f); break;
+	}
 }
+// The player's own Zoogi after launch / contact: always blue.
+static const FLinearColor ZoogiBlueFill(0.25f, 0.6f, 1.f), ZoogiBlueGlow(0.08f, 0.3f, 1.f);
 
 void AZoogiHUD::WorldArrow(const FVector& From, const FVector& To, const FLinearColor& Col, float Thick)
 {
-	// Every aim / direction arrow is a Resonance beam now (ui-polish); thickness maps to beam size.
-	ResonanceBeam(From, To, FMath::Clamp(Thick / (4.f * U), 0.6f, 1.4f), Col.A, 0.f, ResonanceTint(EZoogiArtifact::None));
+	// Every aim / direction arrow is a glowing trajectory line with a static head (ui-polish).
+	FLinearColor Fill, Glow;
+	AwakenLineColors(EZoogiArtifact::None, Fill, Glow);
+	const FVector Pts[2] = { From, To };
+	TrajectoryLine(Pts, 2, Fill, Glow, FMath::Clamp(Thick / (4.f * U), 0.6f, 1.4f), Col.A, true);
 }
 
-void AZoogiHUD::ResonanceBeam(const FVector& From, const FVector& To, float Scale, float Alpha, float Seed, const FLinearColor& Tint)
+void AZoogiHUD::TrajectoryLine(const FVector* Pts, int32 Num, const FLinearColor& Fill, const FLinearColor& Glow, float Scale, float Alpha, bool bHead, const TArray<bool>* Off)
 {
-	// Resonance beam (ui-polish, Evan Oct 7): a stream of energy chevrons flowing toward the target over a soft glowing
-	// core, breathing with the Resonance Hub pillars (~1.2 s), tapered/faded at the Zoogi end, ripple ring at the target.
-	const FVector S0 = Project(From, true), S1 = Project(To, true);
-	if (S0.Z <= 0.f || S1.Z <= 0.f || !Canvas) return;
-	const FVector2D A(S0.X, S0.Y), B(S1.X, S1.Y);
-	const float L = FVector2D::Distance(A, B);
-	const float K = U * Scale;
-	if (L < 24.f * K) return;
-	const FVector2D D = (B - A) / L, N(-D.Y, D.X);
-	const float Pulse = 0.5f + 0.5f * FMath::Sin(Time * (UE_TWO_PI / 1.2f) + Seed * 2.f);
-	auto P = [&](float Along, float Across) { return A + D * Along + N * Across; };
-	// Canvas additive ignores alpha, so additive passes premultiply (bAdd) to keep the hue instead of blowing out to white.
-	bool bAdd = false;
-	auto C = [Alpha, &bAdd](const FLinearColor& Base, float Al)
+	// Solid glowing trajectory line (ui-polish, Evan Oct 7): dark outline, soft static halo, solid fill, bright core,
+	// optional static arrowhead at the end. Nothing moves along it; only a very gentle in-place brightness breath.
+	if (!Canvas || Num < 2) return;
+	TArray<FVector2D> S;
+	TArray<bool> SOff;
+	for (int32 i = 0; i < Num; ++i)
 	{
-		const float A2 = FMath::Clamp(Al, 0.f, 1.f) * Alpha;
-		return bAdd ? FLinearColor(Base.R * A2, Base.G * A2, Base.B * A2, A2) : FLinearColor(Base.R, Base.G, Base.B, A2);
-	};
-	const FLinearColor Hue = Tint, Hot = FMath::Lerp(Tint, FLinearColor::White, 0.65f), Dark(0.01f, 0.04f, 0.07f, 1.f);
-	// Taper: thin + faint near the Zoogi, full by ~22% of the way, slight thinning into the ring.
-	auto Taper = [&](float a) { const float t = a / L; return FMath::Clamp(FMath::SmoothStep(0.f, 0.22f, t), 0.15f, 1.f) * (1.f - 0.25f * FMath::SmoothStep(0.85f, 1.f, t)); };
+		const FVector V = Project(Pts[i], true);
+		if (V.Z <= 0.f) continue;
+		const FVector2D Q(V.X, V.Y);
+		if (S.Num() && FVector2D::Distance(S.Last(), Q) < 1.5f) continue;
+		S.Add(Q);
+		SOff.Add(Off && Off->IsValidIndex(i - 1) && (*Off)[i - 1]);
+	}
+	if (S.Num() < 2) return;
+	const float K = U * Scale;
+	const float Breath = 0.9f + 0.1f * FMath::Sin(Time * (UE_TWO_PI / 1.6f));
+	const FLinearColor Dark = FMath::Lerp(FLinearColor(0.02f, 0.03f, 0.06f, 1.f), Glow, Glow.B > Fill.B + 0.4f ? 0.55f : 0.2f), OffC(1.f, 0.22f, 0.18f, 1.f);
+	FVector2D HeadDir = (S.Last() - S[S.Num() - 2]).GetSafeNormal();
+	const float HeadL = 16.f * K, HeadW = 9.f * K;
+	FVector2D LineEnd = S.Last();
+	if (bHead && FVector2D::Distance(S.Last(), S[S.Num() - 2]) > HeadL * 1.2f) S.Last() = LineEnd - HeadDir * HeadL * 0.7f;
+	else if (bHead) bHead = false;
 
 	TArray<FCanvasUVTri> Tris;
-	Tris.Reserve(256);
+	Tris.Reserve(512);
 	auto Tri = [&Tris](const FVector2D& P0, const FVector2D& P1, const FVector2D& P2, const FLinearColor& C0, const FLinearColor& C1, const FLinearColor& C2)
 	{
 		FCanvasUVTri T;
@@ -917,11 +938,6 @@ void AZoogiHUD::ResonanceBeam(const FVector& From, const FVector& To, float Scal
 		T.V0_UV = T.V1_UV = T.V2_UV = FVector2D(0.5f, 0.5f);
 		T.V0_Color = C0; T.V1_Color = C1; T.V2_Color = C2;
 		Tris.Add(T);
-	};
-	auto Quad = [&Tri](const FVector2D& P0, const FVector2D& P1, const FVector2D& P2, const FVector2D& P3, const FLinearColor& C0, const FLinearColor& C1, const FLinearColor& C2, const FLinearColor& C3)
-	{
-		Tri(P0, P1, P2, C0, C1, C2);
-		Tri(P0, P2, P3, C0, C2, C3);
 	};
 	auto Flush = [this, &Tris](ESimpleElementBlendMode Mode)
 	{
@@ -931,83 +947,51 @@ void AZoogiHUD::ResonanceBeam(const FVector& From, const FVector& To, float Scal
 		Canvas->DrawItem(Item);
 		Tris.Reset();
 	};
-	// Tapered strip along the beam; soft edges (centre colour Cc, edge colour Ce).
-	const float End = L - 6.f * K;
-	auto Strip = [&](float HalfW, const FLinearColor& Cc, const FLinearColor& Ce)
+	// Canvas additive ignores alpha: premultiply for the additive halo.
+	auto Col = [Alpha](const FLinearColor& B, float Al, bool bAdd)
 	{
-		const int32 Seg = 18;
-		for (int32 s = 0; s < Seg; ++s)
+		const float A2 = FMath::Clamp(Al, 0.f, 1.f) * Alpha;
+		return bAdd ? FLinearColor(B.R * A2, B.G * A2, B.B * A2, A2) : FLinearColor(B.R, B.G, B.B, A2);
+	};
+	// One pass: every segment as a quad with soft (Ce) or hard edges, round joints so corners / banks stay solid.
+	auto Pass = [&](float HalfW, const FLinearColor& Cc, const FLinearColor& Ce, bool bOffAware)
+	{
+		for (int32 i = 0; i + 1 < S.Num(); ++i)
 		{
-			const float a0 = End * s / Seg, a1 = End * (s + 1) / Seg;
-			const float t0 = Taper(a0), t1 = Taper(a1);
-			const FLinearColor c0 = C(Cc, Cc.A * t0), c1 = C(Cc, Cc.A * t1), e0 = C(Ce, Ce.A * t0), e1 = C(Ce, Ce.A * t1);
-			Quad(P(a0, 0.f), P(a0, HalfW * t0), P(a1, HalfW * t1), P(a1, 0.f), c0, e0, e1, c1);
-			Quad(P(a0, -HalfW * t0), P(a0, 0.f), P(a1, 0.f), P(a1, -HalfW * t1), e0, c0, c1, e1);
+			const FVector2D A = S[i], Bp = S[i + 1];
+			const FVector2D D = (Bp - A).GetSafeNormal(), N(-D.Y, D.X);
+			FLinearColor c = Cc, e = Ce;
+			if (bOffAware && SOff[i + 1]) { c = FLinearColor(OffC.R, OffC.G, OffC.B, Cc.A); e = FLinearColor(OffC.R, OffC.G, OffC.B, Ce.A); }
+			Tri(A, A + N * HalfW, Bp + N * HalfW, c, e, e); Tri(A, Bp + N * HalfW, Bp, c, e, c);
+			Tri(A, Bp, Bp - N * HalfW, c, c, e); Tri(A, Bp - N * HalfW, A - N * HalfW, c, e, e);
+		}
+		for (int32 i = 0; i < S.Num(); ++i)
+		{
+			const int32 Seg = 14;
+			for (int32 k = 0; k < Seg; ++k)
+			{
+				const float a0 = k * UE_TWO_PI / Seg, a1 = (k + 1) * UE_TWO_PI / Seg;
+				Tri(S[i], S[i] + FVector2D(FMath::Cos(a0), FMath::Sin(a0)) * HalfW, S[i] + FVector2D(FMath::Cos(a1), FMath::Sin(a1)) * HalfW, Cc, Ce, Ce);
+			}
 		}
 	};
-	auto Ring = [&](const FVector2D& Ctr, float R, float Wd, const FLinearColor& Cl)
+	auto Head = [&](float Grow, const FLinearColor& C)
 	{
-		const int32 Seg = 28;
-		for (int32 k = 0; k < Seg; ++k)
-		{
-			const float a0 = k * UE_TWO_PI / Seg, a1 = (k + 1) * UE_TWO_PI / Seg;
-			const FVector2D u0(FMath::Cos(a0), FMath::Sin(a0)), u1(FMath::Cos(a1), FMath::Sin(a1));
-			Quad(Ctr + u0 * (R - Wd), Ctr + u0 * (R + Wd), Ctr + u1 * (R + Wd), Ctr + u1 * (R - Wd), Cl, Cl, Cl, Cl);
-		}
+		if (!bHead) return;
+		const FVector2D N(-HeadDir.Y, HeadDir.X), Base = LineEnd - HeadDir * HeadL;
+		Tri(LineEnd + HeadDir * Grow * 1.6f, Base + N * (HeadW + Grow) - HeadDir * Grow, Base - N * (HeadW + Grow) - HeadDir * Grow, C, C, C);
 	};
-	auto Disc = [&](const FVector2D& Ctr, float R, const FLinearColor& Cc, const FLinearColor& Ce)
-	{
-		const int32 Seg = 20;
-		for (int32 k = 0; k < Seg; ++k)
-		{
-			const float a0 = k * UE_TWO_PI / Seg, a1 = (k + 1) * UE_TWO_PI / Seg;
-			Tri(Ctr, Ctr + FVector2D(FMath::Cos(a0), FMath::Sin(a0)) * R, Ctr + FVector2D(FMath::Cos(a1), FMath::Sin(a1)) * R, Cc, Ce, Ce);
-		}
-	};
-	// Chevron ">" pointing along D at 'a': two slanted bars meeting at the tip.
-	const float ChH = 11.f * K, ChBack = 9.f * K, ChT = 3.8f * K;
-	auto Chevron = [&](float a, float Grow, float Sz, const FLinearColor& Cl)
-	{
-		const float h = ChH * Sz + Grow, bk = ChBack * Sz, t = ChT * Sz + Grow;
-		const FVector2D Tip = P(a + Grow, 0.f);
-		for (int32 sd = -1; sd <= 1; sd += 2)
-		{
-			const FVector2D Back = P(a - bk, sd * h);
-			Quad(Back, Back - D * t * 1.4f, Tip - D * t * 1.4f, Tip, Cl, Cl, Cl, Cl);
-		}
-	};
-	const float Sp = 30.f * K, Scroll = FMath::Fmod(Time * 70.f * K + Seed * Sp, Sp);
-	TArray<float> ChA;
-	for (float a = Scroll + 10.f * K; a < End - 6.f * K; a += Sp) ChA.Add(a);
-
-	// 1) Dark under-glow: readable on snow / bright sand.
-	Strip(12.f * K, C(Dark, 0.6f), C(Dark, 0.f));
-	for (float a : ChA) Chevron(a, 2.8f * K, Taper(a), C(Dark, 0.92f * Taper(a)));
-	const bool bNode = Scale >= 0.9f; // ripple node only on the main Zoogi -> target beam (less clutter)
-	if (bNode) Disc(B, 22.f * K, C(Dark, 0.45f), C(Dark, 0.f));
-	Flush(SE_BLEND_Translucent);
-	// 2) Soft halo (additive, breathing).
-	bAdd = true;
-	Strip((13.f + 5.f * Pulse) * K, C(Hue, 0.30f + 0.20f * Pulse), C(Hue, 0.f));
-	for (float a : ChA) Chevron(a, 2.6f * K, Taper(a), C(Hue, (0.25f + 0.2f * Pulse) * Taper(a)));
-	for (int32 r = 0; r < 2 && bNode; ++r)
-	{
-		const float Ph = FMath::Frac(Time / 1.2f + r * 0.5f + Seed);
-		Ring(B, (8.f + 22.f * Ph) * K, (2.6f - 1.f * Ph) * K, C(Hue, 0.8f * (1.f - Ph)));
-	}
+	// 1) Soft halo (additive).
+	Pass((7.f + 1.f * Breath) * K, Col(Glow, 0.5f * Breath, true), Col(Glow, 0.f, true), false);
+	Head(3.5f * K, Col(Glow, 0.35f * Breath, true));
 	Flush(SE_BLEND_Additive);
-	// 3) Solid passes (translucent) so the hue reads on snow: thin core line, chevrons brightening toward the target.
-	bAdd = false;
-	Strip(1.8f * K, C(Hot, 0.85f), C(Hue, 0.55f));
-	for (float a : ChA)
-	{
-		const float tw = Taper(a), t = a / L;
-		Chevron(a, 0.f, tw, C(FMath::Lerp(Hue, FLinearColor::White, 0.05f + 0.5f * t * Pulse), (0.8f + 0.2f * t) * tw));
-	}
-	// 4) Target node: dark-rimmed resonance ring + bright centre.
-	if (bNode) Ring(B, 10.f * K, 2.6f * K, C(Dark, 0.7f));
-	if (bNode) Ring(B, 10.f * K, 1.5f * K, C(Hue, 0.95f));
-	if (bNode) Disc(B, (4.5f + 1.5f * Pulse) * K, C(Hot, 1.f), C(Hue, 0.6f));
+	// 2) Dark outline, so the line reads on snow and sand.
+	Pass(3.6f * K, Col(Dark, 0.9f, false), Col(Dark, 0.8f, false), false);
+	Head(1.6f * K, Col(Dark, 0.9f, false));
+	// 3) Solid fill + bright core.
+	Pass(2.3f * K, Col(Fill, 1.f, false), Col(FMath::Lerp(Fill, Glow, 0.45f), 1.f, false), true);
+	Head(0.f, Col(Fill, 1.f, false));
+	Pass(0.8f * K, Col(FMath::Lerp(Fill, FLinearColor::White, 0.6f), 0.95f * Breath, false), Col(Fill, 0.9f, false), true);
 	Flush(SE_BLEND_Translucent);
 }
 
@@ -1028,20 +1012,20 @@ void AZoogiHUD::DrawPreview(AZoogiGameMode* G)
 	if (!P.bValid || !G->bAimActive) return;
 	const bool bPower = G->IsPowerUpStep();
 	const EZoogiArtifact Inf = B->Artifact ? B->Artifact->Infused : EZoogiArtifact::None;
-	const FLinearColor PathC = Inf != EZoogiArtifact::None ? ZoogiArtifacts::Color(Inf) : PC;
-	const FLinearColor BeamC = ResonanceTint(Inf);
-	// Straight shot onto a locked target: the Resonance beam (Zoogi -> contact) replaces the dotted path.
-	const bool bBeamPath = P.bContact && !P.bBank;
-	if (bBeamPath) ResonanceBeam(B->BallLocation() + Ground + FVector(0, 0, 3.f), P.Ghost + Ground + FVector(0, 0, 3.f), bPower ? 1.15f : 1.f, 1.f, 0.f, BeamC);
-	for (int32 i = 0; i < P.Path.Num() && !bBeamPath; ++i)
+	FLinearColor ShotFill, ShotGlow;
+	AwakenLineColors(Inf, ShotFill, ShotGlow);
+	// Full predicted shot path (bank included) as a solid line in the Awaken colour, from the Zoogi to contact / stop.
 	{
-		const FVector S = Project(P.Path[i], true);
-		if (S.Z <= 0.f) continue;
-		const float T = (float)(i + 1) / P.Path.Num();
-		const float Size = FMath::Lerp(12.f, 6.f, T) * U * (bPower ? 1.2f : 1.f);
-		FLinearColor C = P.PathOff.IsValidIndex(i) && P.PathOff[i] ? FLinearColor(1.f, 0.25f, 0.2f, 0.9f) : FMath::Lerp(PathC, FLinearColor::White, T * 0.5f);
-		C.A = FMath::Lerp(0.95f, 0.45f, T);
-		DrawRect(C, S.X - Size * 0.5f, S.Y - Size * 0.5f, Size, Size);
+		TArray<FVector> Pts;
+		TArray<bool> Off;
+		Pts.Add(B->BallLocation() + Ground + FVector(0, 0, 3.f));
+		for (int32 i = 0; i < P.Path.Num(); ++i)
+		{
+			Pts.Add(P.Path[i] + FVector(0, 0, 3.f));
+			Off.Add(P.PathOff.IsValidIndex(i) && P.PathOff[i]);
+		}
+		if (P.bContact) { Pts.Add(P.Ghost + Ground + FVector(0, 0, 3.f)); Off.Add(false); }
+		TrajectoryLine(Pts.GetData(), Pts.Num(), ShotFill, ShotGlow, bPower ? 1.12f : 1.f, 1.f, !P.bContact, &Off);
 	}
 	if (P.bBank)
 	{
@@ -1058,19 +1042,23 @@ void AZoogiHUD::DrawPreview(AZoogiGameMode* G)
 	{
 		// Ghost ball at the contact point, target departure (contact normal), shooter deflection.
 		const FVector GC = P.Ghost + Ground + FVector(0, 0, 3.f);
-		WorldCircle(GC, ZoogiConst::ZoogiRadius, FLinearColor(1.f, 1.f, 1.f, 0.85f), 2.5f * U);
+		// Static contact ghost: dark rim + Awaken-coloured ring.
+		WorldCircle(GC, ZoogiConst::ZoogiRadius, FLinearColor(0.02f, 0.03f, 0.06f, 0.8f), 4.f * U);
+		WorldCircle(GC, ZoogiConst::ZoogiRadius, FLinearColor(ShotFill.R, ShotFill.G, ShotFill.B, 0.95f), 2.f * U);
 		if (AActor* T = P.ContactActor.Get())
 		{
 			FVector TP = Cast<AZoogiOrb>(T) ? Cast<AZoogiOrb>(T)->OrbLocation() : (Cast<AZoogiBall>(T) ? Cast<AZoogiBall>(T)->BallLocation() : T->GetActorLocation());
 			TP.Z = GC.Z;
 			const float Len = FMath::Lerp(180.f, 520.f, FMath::Clamp(P.Fraction, 0.f, 1.f)) * FMath::Max(0.2f, FMath::Cos(FMath::DegreesToRadians(P.CutDeg)));
-			// Smaller, fainter beam from the target's rim along its departure line.
-			ResonanceBeam(TP + P.TargetDir * (ZoogiConst::ZoogiRadius * 0.7f), TP + P.TargetDir * (Len + ZoogiConst::ZoogiRadius * 0.7f), 0.7f, 0.7f, 0.3f, BeamC);
+			// Target's after-contact direction: Awaken colour, slightly thinner / dimmer, static head.
+			const FVector TPts[2] = { TP + P.TargetDir * (ZoogiConst::ZoogiRadius * 0.7f), TP + P.TargetDir * (Len + ZoogiConst::ZoogiRadius * 0.7f) };
+			TrajectoryLine(TPts, 2, ShotFill, ShotGlow, 0.85f, 0.85f, true);
 		}
 		if (!P.ShooterDir.IsNearlyZero())
 		{
-			// Shooter's deflection: a thin, dim beam (same hue, so both read as "where things go").
-			ResonanceBeam(GC + P.ShooterDir * (ZoogiConst::ZoogiRadius * 0.7f), GC + P.ShooterDir * 320.f, 0.55f, 0.5f, 0.6f, BeamC);
+			// The player's own Zoogi after contact: always a blue line.
+			const FVector SPts[2] = { GC + P.ShooterDir * (ZoogiConst::ZoogiRadius * 0.7f), GC + P.ShooterDir * 320.f };
+			TrajectoryLine(SPts, 2, ZoogiBlueFill, ZoogiBlueGlow, 0.9f, 1.f, true);
 		}
 		const FVector S = Project(GC, true);
 		if (S.Z > 0.f) Text(FString::Printf(TEXT("cut %.0f deg"), P.CutDeg), S.X, S.Y + 26.f * U, FLinearColor(0.9f, 0.95f, 1.f), 0.38f, true, false);
