@@ -225,9 +225,21 @@ void AZoogiHUD::TickUIPolish(AZoogiGameMode* G)
 		}
 		if (AimHold > 1.4f && G->Preview.bValid && G->bAimActive)
 		{
-			G->TakeShot(TEXT("sword_aim"));
+			G->TakeShot(TEXT("beam_aim"));
 			PolishStep = 3;
-			UE_LOG(LogZoogi, Log, TEXT("UIPolish: sword aim shot (contact=%d)"), G->Preview.bContact ? 1 : 0);
+			PolishBeamT = 0.f;
+			UE_LOG(LogZoogi, Log, TEXT("UIPolish: beam aim shot (contact=%d)"), G->Preview.bContact ? 1 : 0);
+		}
+	}
+	// -ZoogiClipFrames: ~5 s of the Resonance beam flowing (clip_beam_####.png at 20 fps), aim held.
+	static const bool bBeamClip = FParse::Param(FCommandLine::Get(), TEXT("ZoogiClipFrames"));
+	if (PolishStep == 3 && bBeamClip && !G->ShotDir.IsEmpty() && ClipBeamFrames < 100 && G->Preview.bValid && G->bAimActive)
+	{
+		PolishBeamT += FApp::GetDeltaTime();
+		if (PolishBeamT > 0.04f)
+		{
+			PolishBeamT = 0.f;
+			FScreenshotRequest::RequestScreenshot(FPaths::Combine(G->ShotDir, FString::Printf(TEXT("clip_beam_%04d.png"), ClipBeamFrames++)), true, false);
 		}
 	}
 }
@@ -500,7 +512,9 @@ void AZoogiHUD::DrawAim(AZoogiGameMode* G)
 	{
 		const FVector TP = Cast<AZoogiOrb>(TL) ? Cast<AZoogiOrb>(TL)->OrbLocation() : (Cast<AZoogiBall>(TL) ? Cast<AZoogiBall>(TL)->BallLocation() : TL->GetActorLocation());
 		const FVector S0 = Project(B->BallLocation(), true), S1 = Project(TP, true);
-		if (S0.Z > 0.f && S1.Z > 0.f)
+		// Battle straight shot: the Resonance beam (DrawPreview) is the aim line, so skip the plain line under it.
+		const bool bBeamShown = G->Stage == EZoogiStage::Battle && G->bAimActive && G->Preview.bValid && G->Preview.bContact && !G->Preview.bBank;
+		if (S0.Z > 0.f && S1.Z > 0.f && !bBeamShown)
 		{
 			const bool bBattle = G->Stage == EZoogiStage::Battle;
 			const float Pulse = 0.65f + 0.35f * FMath::Sin(Time * (bBattle ? 18.f : 8.f));
@@ -854,37 +868,48 @@ void AZoogiHUD::WorldCircle(const FVector& C, float Radius, const FLinearColor& 
 	}
 }
 
-void AZoogiHUD::WorldArrow(const FVector& From, const FVector& To, const FLinearColor& Col, float Thick)
+// Resonance cyan-teal; an infused artifact pulls the beam toward its own colour.
+static FLinearColor ResonanceTint(EZoogiArtifact Inf)
 {
-	// Every aim / direction arrow is a golden sword now (ui-polish); thickness maps to sword size.
-	SwordArrow(From, To, FMath::Clamp(Thick / (4.f * U), 0.6f, 1.4f), Col.A, 0.f);
+	const FLinearColor Res(0.3f, 0.95f, 0.92f, 1.f);
+	if (Inf == EZoogiArtifact::None) return Res;
+	FLinearColor C = FMath::Lerp(Res, ZoogiArtifacts::Color(Inf), 0.85f);
+	C.A = 1.f;
+	return C;
 }
 
-void AZoogiHUD::SwordArrow(const FVector& From, const FVector& To, float Scale, float Alpha, float Seed)
+void AZoogiHUD::WorldArrow(const FVector& From, const FVector& To, const FLinearColor& Col, float Thick)
 {
+	// Every aim / direction arrow is a Resonance beam now (ui-polish); thickness maps to beam size.
+	ResonanceBeam(From, To, FMath::Clamp(Thick / (4.f * U), 0.6f, 1.4f), Col.A, 0.f, ResonanceTint(EZoogiArtifact::None));
+}
+
+void AZoogiHUD::ResonanceBeam(const FVector& From, const FVector& To, float Scale, float Alpha, float Seed, const FLinearColor& Tint)
+{
+	// Resonance beam (ui-polish, Evan Oct 7): a stream of energy chevrons flowing toward the target over a soft glowing
+	// core, breathing with the Resonance Hub pillars (~1.2 s), tapered/faded at the Zoogi end, ripple ring at the target.
 	const FVector S0 = Project(From, true), S1 = Project(To, true);
 	if (S0.Z <= 0.f || S1.Z <= 0.f || !Canvas) return;
 	const FVector2D A(S0.X, S0.Y), B(S1.X, S1.Y);
 	const float L = FVector2D::Distance(A, B);
-	if (L < 20.f * U) return;
-	const FVector2D D = (B - A) / L, N(-D.Y, D.X);
-	const float Pulse = 0.5f + 0.5f * FMath::Sin(Time * 3.4f + Seed * 5.f);
 	const float K = U * Scale;
-
-	// Proportions: hilt (pommel + grip + guard) is a fixed size, clamped down on short swords; blade takes the rest.
-	float PomR = 6.5f * K, GripL = 26.f * K, GripW = 4.2f * K, GuardT = 7.f * K, GuardS = 24.f * K, BladeW = 8.5f * K;
-	const float Need = PomR * 1.6f + GripL + GuardT + BladeW * 2.6f + 30.f * K;
-	if (Need > L)
-	{
-		const float F = FMath::Max(0.35f, L / Need);
-		PomR *= F; GripL *= F; GripW *= F; GuardT *= F; GuardS *= F; BladeW *= F;
-	}
-	const float TipL = BladeW * 2.6f;
-	const float aPom = PomR, aGrip0 = PomR * 1.5f, aGuard = aGrip0 + GripL, aBlade0 = aGuard + GuardT, aTip0 = FMath::Max(aBlade0 + 4.f * K, L - TipL);
+	if (L < 24.f * K) return;
+	const FVector2D D = (B - A) / L, N(-D.Y, D.X);
+	const float Pulse = 0.5f + 0.5f * FMath::Sin(Time * (UE_TWO_PI / 1.2f) + Seed * 2.f);
 	auto P = [&](float Along, float Across) { return A + D * Along + N * Across; };
+	// Canvas additive ignores alpha, so additive passes premultiply (bAdd) to keep the hue instead of blowing out to white.
+	bool bAdd = false;
+	auto C = [Alpha, &bAdd](const FLinearColor& Base, float Al)
+	{
+		const float A2 = FMath::Clamp(Al, 0.f, 1.f) * Alpha;
+		return bAdd ? FLinearColor(Base.R * A2, Base.G * A2, Base.B * A2, A2) : FLinearColor(Base.R, Base.G, Base.B, A2);
+	};
+	const FLinearColor Hue = Tint, Hot = FMath::Lerp(Tint, FLinearColor::White, 0.65f), Dark(0.01f, 0.04f, 0.07f, 1.f);
+	// Taper: thin + faint near the Zoogi, full by ~22% of the way, slight thinning into the ring.
+	auto Taper = [&](float a) { const float t = a / L; return FMath::Clamp(FMath::SmoothStep(0.f, 0.22f, t), 0.15f, 1.f) * (1.f - 0.25f * FMath::SmoothStep(0.85f, 1.f, t)); };
 
 	TArray<FCanvasUVTri> Tris;
-	Tris.Reserve(96);
+	Tris.Reserve(256);
 	auto Tri = [&Tris](const FVector2D& P0, const FVector2D& P1, const FVector2D& P2, const FLinearColor& C0, const FLinearColor& C1, const FLinearColor& C2)
 	{
 		FCanvasUVTri T;
@@ -906,84 +931,84 @@ void AZoogiHUD::SwordArrow(const FVector& From, const FVector& To, float Scale, 
 		Canvas->DrawItem(Item);
 		Tris.Reset();
 	};
-	// Whole silhouette grown by I (glow / outline passes), one colour.
-	auto Silhouette = [&](float I, const FLinearColor& C)
+	// Tapered strip along the beam; soft edges (centre colour Cc, edge colour Ce).
+	const float End = L - 6.f * K;
+	auto Strip = [&](float HalfW, const FLinearColor& Cc, const FLinearColor& Ce)
 	{
-		Quad(P(aPom - PomR - I, 0.f), P(aPom, PomR + I), P(aPom + PomR + I, 0.f), P(aPom, -PomR - I), C, C, C, C);
-		Quad(P(aGrip0 - I, -GripW - I), P(aGrip0 - I, GripW + I), P(aGuard, GripW + I), P(aGuard, -GripW - I), C, C, C, C);
-		const FVector2D GC = P(aGuard + GuardT * 0.5f, 0.f);
-		const FVector2D G[6] = { P(aGuard - I, -GuardS * 0.82f), P(aGuard + GuardT * 1.3f + I, -GuardS - I), P(aGuard + GuardT + I, -GuardS * 0.82f),
-			P(aGuard + GuardT + I, GuardS * 0.82f), P(aGuard + GuardT * 1.3f + I, GuardS + I), P(aGuard - I, GuardS * 0.82f) };
-		for (int32 k = 0; k < 6; ++k) Tri(GC, G[k], G[(k + 1) % 6], C, C, C);
-		Quad(P(aBlade0 - 1.f, -BladeW - I), P(aBlade0 - 1.f, BladeW + I), P(aTip0, BladeW * 0.86f + I), P(aTip0, -BladeW * 0.86f - I), C, C, C, C);
-		Tri(P(aTip0, BladeW * 0.86f + I), P(L + I * 1.8f, 0.f), P(aTip0, -BladeW * 0.86f - I), C, C, C);
-	};
-	auto Col = [Alpha](float R, float G, float Bv, float Al) { return FLinearColor(R, G, Bv, Al * Alpha); };
-
-	// 1) Glow (additive, breathing).
-	Silhouette((7.f + 5.f * Pulse) * K, Col(1.f, 0.62f, 0.05f, 0.10f + 0.07f * Pulse));
-	Silhouette(3.2f * K, Col(1.f, 0.78f, 0.15f, 0.20f + 0.08f * Pulse));
-	Flush(SE_BLEND_Additive);
-	// 2) Dark outline: keeps the sword readable on snow / bright floors.
-	Silhouette(2.2f * K, Col(0.16f, 0.07f, 0.0f, 0.88f));
-	// 3) Fill.
-	const FLinearColor Gold = Col(1.f, 0.76f, 0.16f, 1.f), GoldHi = Col(1.f, 0.93f, 0.5f, 1.f), GoldLo = Col(0.86f, 0.5f, 0.04f, 1.f);
-	Quad(P(aPom - PomR, 0.f), P(aPom, PomR), P(aPom + PomR, 0.f), P(aPom, -PomR), GoldLo, GoldHi, Gold, GoldLo);
-	const FLinearColor Grip = Col(0.42f, 0.2f, 0.06f, 1.f), GripHi = Col(0.66f, 0.36f, 0.1f, 1.f);
-	Quad(P(aGrip0, -GripW), P(aGrip0, GripW), P(aGuard, GripW), P(aGuard, -GripW), Grip, GripHi, GripHi, Grip);
-	for (int32 w = 0; w < 4; ++w) // leather wraps
-	{
-		const float a0 = aGrip0 + GripL * (0.12f + 0.22f * w), a1 = a0 + GripL * 0.09f;
-		Quad(P(a0, -GripW), P(a0 + GripL * 0.05f, GripW), P(a1 + GripL * 0.05f, GripW), P(a1, -GripW), Col(1.f, 0.82f, 0.3f, 0.75f), Col(1.f, 0.82f, 0.3f, 0.75f), Col(1.f, 0.82f, 0.3f, 0.75f), Col(1.f, 0.82f, 0.3f, 0.75f));
-	}
-	{
-		const FVector2D GC = P(aGuard + GuardT * 0.5f, 0.f);
-		const FVector2D G[6] = { P(aGuard, -GuardS * 0.82f), P(aGuard + GuardT * 1.3f, -GuardS), P(aGuard + GuardT, -GuardS * 0.82f),
-			P(aGuard + GuardT, GuardS * 0.82f), P(aGuard + GuardT * 1.3f, GuardS), P(aGuard, GuardS * 0.82f) };
-		const FLinearColor GCs[6] = { GoldLo, GoldHi, Gold, Gold, GoldHi, GoldLo };
-		for (int32 k = 0; k < 6; ++k) Tri(GC, G[k], G[(k + 1) % 6], GoldHi, GCs[k], GCs[(k + 1) % 6]);
-		// jewel in the guard
-		const float JR = GuardT * 0.42f;
-		Quad(P(aGuard + GuardT * 0.5f - JR, 0.f), P(aGuard + GuardT * 0.5f, JR), P(aGuard + GuardT * 0.5f + JR, 0.f), P(aGuard + GuardT * 0.5f, -JR),
-			Col(1.f, 0.35f, 0.25f, 1.f), Col(1.f, 0.7f, 0.6f, 1.f), Col(0.8f, 0.15f, 0.1f, 1.f), Col(0.8f, 0.15f, 0.1f, 1.f));
-	}
-	// Blade: two bevels (lit + shaded side), brighter towards the point.
-	const FLinearColor LitBase = Col(1.f, 0.8f, 0.2f, 1.f), LitTip = Col(1.f, 0.97f, 0.62f, 1.f);
-	const FLinearColor ShBase = Col(0.92f, 0.56f, 0.06f, 1.f), ShTip = Col(1.f, 0.82f, 0.3f, 1.f);
-	Quad(P(aBlade0, 0.f), P(aBlade0, BladeW), P(aTip0, BladeW * 0.86f), P(aTip0, 0.f), LitBase, LitBase, LitTip, LitTip);
-	Quad(P(aBlade0, -BladeW), P(aBlade0, 0.f), P(aTip0, 0.f), P(aTip0, -BladeW * 0.86f), ShBase, ShBase, ShTip, ShTip);
-	Tri(P(aTip0, 0.f), P(aTip0, BladeW * 0.86f), P(L, 0.f), LitTip, LitTip, Col(1.f, 1.f, 0.85f, 1.f));
-	Tri(P(aTip0, -BladeW * 0.86f), P(aTip0, 0.f), P(L, 0.f), ShTip, ShTip, Col(1.f, 0.95f, 0.7f, 1.f));
-	// Fuller (the groove down the middle of the blade).
-	const float FW = BladeW * 0.17f;
-	Quad(P(aBlade0 + 3.f * K, -FW), P(aBlade0 + 3.f * K, FW), P(aTip0 - 2.f * K, FW * 0.6f), P(aTip0 - 2.f * K, -FW * 0.6f),
-		Col(0.75f, 0.4f, 0.02f, 0.9f), Col(1.f, 1.f, 0.85f, 0.9f), Col(1.f, 1.f, 0.85f, 0.6f), Col(0.75f, 0.4f, 0.02f, 0.6f));
-	Flush(SE_BLEND_Translucent);
-	// 4) Shimmer running hilt -> point, and a twinkle at the point (additive).
-	const float Ph = ZoogiUIFx::SweepPhase(Time, 1.9f, Seed, 0.55f);
-	if (Ph >= 0.f)
-	{
-		const float BL = (L - aBlade0) * 0.22f;
-		const float C = FMath::Lerp(aBlade0 - BL, L + BL * 0.3f, Ph);
-		auto W = [&](float a) { return a >= aTip0 ? BladeW * 0.86f * FMath::Clamp((L - a) / TipL, 0.f, 1.f) : FMath::Lerp(BladeW, BladeW * 0.86f, (a - aBlade0) / FMath::Max(1.f, aTip0 - aBlade0)); };
-		const float a0 = FMath::Clamp(C - BL, aBlade0, L), a1 = FMath::Clamp(C, aBlade0, L), a2 = FMath::Clamp(C + BL * 0.5f, aBlade0, L);
-		const FLinearColor Z = Col(1.f, 1.f, 0.8f, 0.f), H = Col(1.f, 1.f, 0.85f, 0.75f);
-		if (a1 > a0) Quad(P(a0, -W(a0)), P(a0, W(a0)), P(a1, W(a1)), P(a1, -W(a1)), Z, Z, H, H);
-		if (a2 > a1) Quad(P(a1, -W(a1)), P(a1, W(a1)), P(a2, W(a2)), P(a2, -W(a2)), H, H, Z, Z);
-	}
-	{
-		const float SR = (9.f + 7.f * Pulse) * K, SW = 1.6f * K;
-		const FVector2D T = P(L, 0.f);
-		const FLinearColor Cc = Col(1.f, 1.f, 0.9f, 0.85f), Ce = Col(1.f, 0.9f, 0.5f, 0.f);
-		const float Spin = Time * 1.3f + Seed;
-		for (int32 r = 0; r < 2; ++r)
+		const int32 Seg = 18;
+		for (int32 s = 0; s < Seg; ++s)
 		{
-			const float An = Spin + r * UE_HALF_PI;
-			const FVector2D X(FMath::Cos(An), FMath::Sin(An)), Y(-X.Y, X.X);
-			Quad(T - X * SR, T + Y * SW, T + X * SR, T - Y * SW, Ce, Cc, Ce, Cc);
+			const float a0 = End * s / Seg, a1 = End * (s + 1) / Seg;
+			const float t0 = Taper(a0), t1 = Taper(a1);
+			const FLinearColor c0 = C(Cc, Cc.A * t0), c1 = C(Cc, Cc.A * t1), e0 = C(Ce, Ce.A * t0), e1 = C(Ce, Ce.A * t1);
+			Quad(P(a0, 0.f), P(a0, HalfW * t0), P(a1, HalfW * t1), P(a1, 0.f), c0, e0, e1, c1);
+			Quad(P(a0, -HalfW * t0), P(a0, 0.f), P(a1, 0.f), P(a1, -HalfW * t1), e0, c0, c1, e1);
 		}
+	};
+	auto Ring = [&](const FVector2D& Ctr, float R, float Wd, const FLinearColor& Cl)
+	{
+		const int32 Seg = 28;
+		for (int32 k = 0; k < Seg; ++k)
+		{
+			const float a0 = k * UE_TWO_PI / Seg, a1 = (k + 1) * UE_TWO_PI / Seg;
+			const FVector2D u0(FMath::Cos(a0), FMath::Sin(a0)), u1(FMath::Cos(a1), FMath::Sin(a1));
+			Quad(Ctr + u0 * (R - Wd), Ctr + u0 * (R + Wd), Ctr + u1 * (R + Wd), Ctr + u1 * (R - Wd), Cl, Cl, Cl, Cl);
+		}
+	};
+	auto Disc = [&](const FVector2D& Ctr, float R, const FLinearColor& Cc, const FLinearColor& Ce)
+	{
+		const int32 Seg = 20;
+		for (int32 k = 0; k < Seg; ++k)
+		{
+			const float a0 = k * UE_TWO_PI / Seg, a1 = (k + 1) * UE_TWO_PI / Seg;
+			Tri(Ctr, Ctr + FVector2D(FMath::Cos(a0), FMath::Sin(a0)) * R, Ctr + FVector2D(FMath::Cos(a1), FMath::Sin(a1)) * R, Cc, Ce, Ce);
+		}
+	};
+	// Chevron ">" pointing along D at 'a': two slanted bars meeting at the tip.
+	const float ChH = 11.f * K, ChBack = 9.f * K, ChT = 3.8f * K;
+	auto Chevron = [&](float a, float Grow, float Sz, const FLinearColor& Cl)
+	{
+		const float h = ChH * Sz + Grow, bk = ChBack * Sz, t = ChT * Sz + Grow;
+		const FVector2D Tip = P(a + Grow, 0.f);
+		for (int32 sd = -1; sd <= 1; sd += 2)
+		{
+			const FVector2D Back = P(a - bk, sd * h);
+			Quad(Back, Back - D * t * 1.4f, Tip - D * t * 1.4f, Tip, Cl, Cl, Cl, Cl);
+		}
+	};
+	const float Sp = 30.f * K, Scroll = FMath::Fmod(Time * 70.f * K + Seed * Sp, Sp);
+	TArray<float> ChA;
+	for (float a = Scroll + 10.f * K; a < End - 6.f * K; a += Sp) ChA.Add(a);
+
+	// 1) Dark under-glow: readable on snow / bright sand.
+	Strip(12.f * K, C(Dark, 0.6f), C(Dark, 0.f));
+	for (float a : ChA) Chevron(a, 2.8f * K, Taper(a), C(Dark, 0.92f * Taper(a)));
+	const bool bNode = Scale >= 0.9f; // ripple node only on the main Zoogi -> target beam (less clutter)
+	if (bNode) Disc(B, 22.f * K, C(Dark, 0.45f), C(Dark, 0.f));
+	Flush(SE_BLEND_Translucent);
+	// 2) Soft halo (additive, breathing).
+	bAdd = true;
+	Strip((13.f + 5.f * Pulse) * K, C(Hue, 0.30f + 0.20f * Pulse), C(Hue, 0.f));
+	for (float a : ChA) Chevron(a, 2.6f * K, Taper(a), C(Hue, (0.25f + 0.2f * Pulse) * Taper(a)));
+	for (int32 r = 0; r < 2 && bNode; ++r)
+	{
+		const float Ph = FMath::Frac(Time / 1.2f + r * 0.5f + Seed);
+		Ring(B, (8.f + 22.f * Ph) * K, (2.6f - 1.f * Ph) * K, C(Hue, 0.8f * (1.f - Ph)));
 	}
 	Flush(SE_BLEND_Additive);
+	// 3) Solid passes (translucent) so the hue reads on snow: thin core line, chevrons brightening toward the target.
+	bAdd = false;
+	Strip(1.8f * K, C(Hot, 0.85f), C(Hue, 0.55f));
+	for (float a : ChA)
+	{
+		const float tw = Taper(a), t = a / L;
+		Chevron(a, 0.f, tw, C(FMath::Lerp(Hue, FLinearColor::White, 0.05f + 0.5f * t * Pulse), (0.8f + 0.2f * t) * tw));
+	}
+	// 4) Target node: dark-rimmed resonance ring + bright centre.
+	if (bNode) Ring(B, 10.f * K, 2.6f * K, C(Dark, 0.7f));
+	if (bNode) Ring(B, 10.f * K, 1.5f * K, C(Hue, 0.95f));
+	if (bNode) Disc(B, (4.5f + 1.5f * Pulse) * K, C(Hot, 1.f), C(Hue, 0.6f));
+	Flush(SE_BLEND_Translucent);
 }
 
 void AZoogiHUD::DrawPreview(AZoogiGameMode* G)
@@ -1004,7 +1029,11 @@ void AZoogiHUD::DrawPreview(AZoogiGameMode* G)
 	const bool bPower = G->IsPowerUpStep();
 	const EZoogiArtifact Inf = B->Artifact ? B->Artifact->Infused : EZoogiArtifact::None;
 	const FLinearColor PathC = Inf != EZoogiArtifact::None ? ZoogiArtifacts::Color(Inf) : PC;
-	for (int32 i = 0; i < P.Path.Num(); ++i)
+	const FLinearColor BeamC = ResonanceTint(Inf);
+	// Straight shot onto a locked target: the Resonance beam (Zoogi -> contact) replaces the dotted path.
+	const bool bBeamPath = P.bContact && !P.bBank;
+	if (bBeamPath) ResonanceBeam(B->BallLocation() + Ground + FVector(0, 0, 3.f), P.Ghost + Ground + FVector(0, 0, 3.f), bPower ? 1.15f : 1.f, 1.f, 0.f, BeamC);
+	for (int32 i = 0; i < P.Path.Num() && !bBeamPath; ++i)
 	{
 		const FVector S = Project(P.Path[i], true);
 		if (S.Z <= 0.f) continue;
@@ -1035,13 +1064,13 @@ void AZoogiHUD::DrawPreview(AZoogiGameMode* G)
 			FVector TP = Cast<AZoogiOrb>(T) ? Cast<AZoogiOrb>(T)->OrbLocation() : (Cast<AZoogiBall>(T) ? Cast<AZoogiBall>(T)->BallLocation() : T->GetActorLocation());
 			TP.Z = GC.Z;
 			const float Len = FMath::Lerp(180.f, 520.f, FMath::Clamp(P.Fraction, 0.f, 1.f)) * FMath::Max(0.2f, FMath::Cos(FMath::DegreesToRadians(P.CutDeg)));
-			// Golden sword from the target's rim along its departure line.
-			SwordArrow(TP + P.TargetDir * (ZoogiConst::ZoogiRadius * 0.7f), TP + P.TargetDir * (Len + ZoogiConst::ZoogiRadius * 0.7f), 1.f, 1.f, 0.f);
+			// Smaller, fainter beam from the target's rim along its departure line.
+			ResonanceBeam(TP + P.TargetDir * (ZoogiConst::ZoogiRadius * 0.7f), TP + P.TargetDir * (Len + ZoogiConst::ZoogiRadius * 0.7f), 0.7f, 0.7f, 0.3f, BeamC);
 		}
 		if (!P.ShooterDir.IsNearlyZero())
 		{
-			// Shooter's deflection: a smaller, slightly dimmer sword (same gold, so both read as "where things go").
-			SwordArrow(GC + P.ShooterDir * (ZoogiConst::ZoogiRadius * 0.7f), GC + P.ShooterDir * 320.f, 0.78f, 0.85f, 0.5f);
+			// Shooter's deflection: a thin, dim beam (same hue, so both read as "where things go").
+			ResonanceBeam(GC + P.ShooterDir * (ZoogiConst::ZoogiRadius * 0.7f), GC + P.ShooterDir * 320.f, 0.55f, 0.5f, 0.6f, BeamC);
 		}
 		const FVector S = Project(GC, true);
 		if (S.Z > 0.f) Text(FString::Printf(TEXT("cut %.0f deg"), P.CutDeg), S.X, S.Y + 26.f * U, FLinearColor(0.9f, 0.95f, 1.f), 0.38f, true, false);

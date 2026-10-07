@@ -57,9 +57,9 @@ protected:
 	void Gem(uint8 Artifact, float CX, float CY, float R, float Alpha = 1.f);
 	void WorldCircle(const FVector& C, float Radius, const FLinearColor& Col, float Thick);
 	void WorldArrow(const FVector& From, const FVector& To, const FLinearColor& Col, float Thick);
-	/** Aim arrows drawn as glowing golden swords (pommel, wrapped grip, swept crossguard, bevelled blade with a fuller,
-	 *  travelling shimmer, sparkle at the point). Scale ~1 for the main arrow; Seed de-syncs the shimmer. */
-	void SwordArrow(const FVector& From, const FVector& To, float Scale, float Alpha, float Seed);
+	/** Resonance beam aim indicator: energy chevrons scrolling From -> To over a soft glowing core, ~1.2 s brightness
+	 *  pulse, taper/fade at the Zoogi end, ripple ring at the target. Scale ~1 for the main beam; Seed de-syncs. */
+	void ResonanceBeam(const FVector& From, const FVector& To, float Scale, float Alpha, float Seed, const FLinearColor& Tint);
 	/** -ZoogiClipFrames -ZoogiShots=<dir>: dump Awaken panel frames for a short review clip. */
 	void TickClipFrames(AZoogiGameMode* G);
 	/** -ZoogiUIPolish: hold human Awaken for stone spin shot/clip, Infuse, then sword-aim shot. */
@@ -68,6 +68,8 @@ protected:
 	float ClipAwakenT = -1.f;
 	float PolishAwakenT = 0.f;
 	int32 PolishStep = 0;
+	float PolishBeamT = 0.f;
+	int32 ClipBeamFrames = 0;
 
 	void Panel(float X, float Y, float W, float H, const FLinearColor& C);
 	void Text(const FString& S, float X, float Y, const FLinearColor& C, float Scale, bool bCenter = false, bool bBig = true);
