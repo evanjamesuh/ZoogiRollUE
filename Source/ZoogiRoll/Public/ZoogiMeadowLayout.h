@@ -10,7 +10,8 @@ namespace ZoogiMeadow
 	// Resonance pillars (unbreakable): r 800 at diagonals
 	inline constexpr float PillarR = 800.f;
 	inline constexpr float PillarYaw[4] = { 45.f, 135.f, 225.f, 315.f };
-	inline constexpr float PillarH = 230.f;
+	inline constexpr float PillarH = 340.f;   // r3: Buzzy proportions (~3.4 Zoogi diameters)
+	inline constexpr float PillarS = 1.3f;     // r3: cross-section scale vs r2
 
 	// Stadium-seat wall (MEADOW ONLY) with 4 orb-exit gaps — keep clear of VFX/debris.
 	// Gap width: OrbRadius 40 + ZoogiRadius 50 + margin 70 = 240 cm (~8.9 deg half at r 1550).
@@ -35,12 +36,12 @@ namespace ZoogiMeadow
 	inline constexpr float PlatX = -720.f, PlatY = 420.f, PlatR = 160.f, PlatH = 110.f;
 
 	// Outer wooden stand arcs
-	inline constexpr float StandRIn = 2100.f;
+	inline constexpr float StandRIn = 1950.f;   // r3: closer, taller bleachers like the art
 	// A&P stand copies with the proposed gap moves (355 -> 335, 175 -> 235; 235 nudged to 230 to clear the 250 gate shrine).
 	inline constexpr int32 NumStands = 6;
 	inline constexpr float StandCenters[NumStands] = { 25.f, 115.f, 145.f, 205.f, 230.f, 335.f };
-	inline constexpr float StandArcDeg = 30.f;
-	inline constexpr int32 StandTiers = 3;
+	inline constexpr float StandArcDeg = 28.f;
+	inline constexpr int32 StandTiers = 6;
 
 	// Recovery gate shrines
 	inline constexpr float GateR = 2150.f;

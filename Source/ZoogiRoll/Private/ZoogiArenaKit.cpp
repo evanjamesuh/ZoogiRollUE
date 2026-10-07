@@ -184,6 +184,13 @@ float AZoogiArena::TerraceHeight(float R, float AngleRad) const
 	return TerraceZ + Nz * 5.f + (TerraceRimZ - TerraceZ) * T + Nz * 35.f * T;
 }
 
+bool AZoogiArena::InTerraceGap(float AngleRad) const
+{
+	const float D = FMath::RadiansToDegrees(AngleRad);
+	for (float G : TerraceGapYaw) if (FMath::Abs(FMath::FindDeltaAngleDegrees(D, G)) < TerraceGapHalfDeg) return true;
+	return false;
+}
+
 void AZoogiArena::AddTerrace(float RIn, float ROut, float Z, float FlatTo, float RimZ, UMaterialInterface* Top, UMaterialInterface* Wall, UMaterialInterface* Under)
 {
 	TerraceRIn = RIn; TerraceROut = ROut; TerraceZ = Z; TerraceFlatTo = FlatTo; TerraceRimZ = RimZ;
@@ -212,6 +219,7 @@ void AZoogiArena::AddTerrace(float RIn, float ROut, float Z, float FlatTo, float
 	for (int32 j = 0; j < Rs.Num() - 1; ++j)
 		for (int32 i = 0; i < Segs; ++i)
 		{
+			if (InTerraceGap(2.f * PI * (i + 0.5f) / Segs)) continue; // drop channel
 			const int32 A = j * Cols + i, B = A + 1, Cc = A + Cols, D = Cc + 1;
 			TopM.Tri(A, B, D, FVector::UpVector);
 			TopM.Tri(A, D, Cc, FVector::UpVector);
@@ -220,6 +228,22 @@ void AZoogiArena::AddTerrace(float RIn, float ROut, float Z, float FlatTo, float
 	for (int32 i = 0; i < Segs; ++i)
 	{
 		const float A0 = 2.f * PI * i / Segs, A1 = 2.f * PI * (i + 1) / Segs, Am = (A0 + A1) * 0.5f;
+		const bool bGap = InTerraceGap(Am);
+		if (bGap)
+		{
+			// Channel cheeks: a cliff face on each side of the cut, facing into the channel.
+			for (int32 e = 0; e < 2; ++e)
+			{
+				const float Ae = e ? A1 : A0;
+				const bool bEdge = e ? !InTerraceGap(Am + 2.f * PI / Segs) : !InTerraceGap(Am - 2.f * PI / Segs);
+				if (!bEdge) continue;
+				const FVector Out = FVector::CrossProduct(FVector::UpVector, Polar(1.f, Ae, 0.f)) * (e ? -1.f : 1.f);
+				for (int32 j = 0; j + 1 < Rs.Num(); ++j)
+					WallM.Quad(Polar(Rs[j], Ae, TerraceHeight(Rs[j], Ae)), Polar(Rs[j + 1], Ae, TerraceHeight(Rs[j + 1], Ae)),
+						Polar(Rs[j + 1], Ae, Z - 420.f), Polar(Rs[j], Ae, Z - 420.f), Out);
+			}
+			continue;
+		}
 		WallM.Quad(Polar(RIn, A0, TerraceHeight(RIn, A0)), Polar(RIn, A1, TerraceHeight(RIn, A1)), Polar(RIn - 20.f, A1, Z - 380.f), Polar(RIn - 20.f, A0, Z - 380.f), -Polar(1.f, Am, 0.f));
 		WallM.Quad(Polar(ROut, A0, TerraceHeight(ROut, A0)), Polar(ROut, A1, TerraceHeight(ROut, A1)), Polar(ROut - 60.f, A1, RimZ - 520.f), Polar(ROut - 60.f, A0, RimZ - 520.f), Polar(1.f, Am, 0.f));
 	}
@@ -252,6 +276,7 @@ void AZoogiArena::ScatterTerrace(UStaticMesh* Mesh, UMaterialInterface* Mat, int
 	for (int32 i = 0; i < Count; ++i)
 	{
 		const float A = Rng.FRandRange(0.f, 2.f * PI);
+		if (InTerraceGap(A)) continue;
 		const float R = FMath::Sqrt(Rng.FRandRange(RMin * RMin, RMax * RMax));
 		const float Sc = Rng.FRandRange(ScaleRange.X, ScaleRange.Y);
 		FTransform T;
