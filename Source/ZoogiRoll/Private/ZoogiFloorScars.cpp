@@ -102,6 +102,66 @@ void AZoogiFloorScars::SpawnCraterSlabs(const FVector& Loc, const FVector& Norma
 {
 	constexpr int32 MaxSlabs = 60;
 	UMaterialInterface* M = Mat ? Mat : SlabMat.Get();
+	auto Claim = [&]() -> int32
+	{
+		if (SlabPool.Num() < MaxSlabs)
+		{
+			UStaticMeshComponent* NewC = NewObject<UStaticMeshComponent>(this);
+			NewC->SetMobility(EComponentMobility::Movable);
+			NewC->SetupAttachment(Root);
+			NewC->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			NewC->SetCastShadow(true);
+			NewC->RegisterComponent();
+			SlabPool.Add(NewC);
+			Slabs.AddDefaulted();
+		}
+		const int32 I = NextSlab % SlabPool.Num();
+		NextSlab = (NextSlab + 1) % MaxSlabs;
+		return I;
+	};
+	if (SlabMeshes.Num() > 0)
+	{
+		// A&P CraterSlab tiers (destruction_states.json craterSlab.tiers): Cracked / Shattered / Titan.
+		int32 Cnt; float T0, T1, Rad, Sc, PopS;
+		if (Power < 1.6f) { Cnt = 6; T0 = 18.f; T1 = 28.f; Rad = 70.f; Sc = 0.55f; PopS = 0.12f; }
+		else if (Power < 2.6f) { Cnt = 9; T0 = 26.f; T1 = 45.f; Rad = 120.f; Sc = 1.f; PopS = 0.10f; }
+		else { Cnt = 12; T0 = 30.f; T1 = 60.f; Rad = 170.f; Sc = 1.6f; PopS = 0.08f; }
+		const float Base0 = FMath::FRandRange(0.f, 360.f);
+		int32 Made = 0, Culled = 0;
+		for (int32 i = 0; i < Cnt; ++i)
+		{
+			const float Yd = Base0 + i * 360.f / Cnt + FMath::FRandRange(-8.f, 8.f);
+			const FVector Out(FMath::Cos(FMath::DegreesToRadians(Yd)), FMath::Sin(FMath::DegreesToRadians(Yd)), 0.f);
+			const FVector Hinge = Loc + Out * Rad * FMath::FRandRange(0.9f, 1.1f);
+			// Orb-exit gap rule: no slab whose hinge falls inside a gap volume.
+			bool bCull = false;
+			if (NoSlabHalfDeg > 0.f && FVector2D(Hinge).Size() > NoSlabMinR)
+			{
+				const float HY = FMath::RadiansToDegrees(FMath::Atan2(Hinge.Y, Hinge.X));
+				for (float G : NoSlabYaw) if (FMath::Abs(FMath::FindDeltaAngleDegrees(HY, G)) < NoSlabHalfDeg) bCull = true;
+			}
+			if (bCull) { ++Culled; continue; }
+			const int32 Idx = Claim();
+			UStaticMeshComponent* C = SlabPool[Idx];
+			if (!C) continue;
+			C->SetStaticMesh(SlabMeshes[i % SlabMeshes.Num()]);
+			if (M) C->SetMaterial(0, M);
+			if (SlabSideMat) C->SetMaterial(1, SlabSideMat);
+			// Pivot = outer top edge, local +X to the crater centre, tilt about local Y (inner edge rises).
+			C->SetWorldRotation(FRotator(FMath::FRandRange(T0, T1), Yd + 180.f, FMath::FRandRange(-4.f, 4.f)));
+			FSlab& Sl = Slabs[Idx];
+			Sl.Scale = FVector(Sc * FMath::FRandRange(0.85f, 1.15f));
+			Sl.Base = Hinge;
+			Sl.Lift = FVector(0, 0, 18.f * Sc);
+			Sl.Born = Clock + FMath::FRandRange(0.f, 0.03f) - (0.12f - PopS);
+			C->SetWorldLocation(Sl.Base - Sl.Lift);
+			C->SetWorldScale3D(Sl.Scale * 0.05f);
+			C->SetVisibility(true);
+			++Made;
+		}
+		UE_LOG(LogZoogi, Log, TEXT("Crater slabs (kit): %d at (%.0f, %.0f) power %.1f, %d culled in orb-exit gaps"), Made, Loc.X, Loc.Y, Power, Culled);
+		return;
+	}
 	const float Pw = FMath::Clamp((Power - 1.f) / 2.f, 0.f, 1.f);
 	const int32 N = FMath::Clamp(FMath::RoundToInt(6.f + 6.f * Pw), 6, 12);
 	const float Tilt = FMath::Lerp(20.f, 55.f, Pw);
@@ -128,6 +188,7 @@ void AZoogiFloorScars::SpawnCraterSlabs(const FVector& Loc, const FVector& Norma
 		NextSlab = (NextSlab + 1) % MaxSlabs;
 		UStaticMeshComponent* C = SlabPool[Idx];
 		if (!C) continue;
+		C->SetStaticMesh(ZoogiUtil::BasicShape(TEXT("Cube")));
 		const float A = FMath::DegreesToRadians(A0 + i * 360.f / N + FMath::FRandRange(-9.f, 9.f));
 		const FVector Out = Ax * FMath::Cos(A) + Ay * FMath::Sin(A);
 		const float Rr = Ring * FMath::FRandRange(0.88f, 1.12f);

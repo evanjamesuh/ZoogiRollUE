@@ -9,6 +9,7 @@ class UStaticMeshComponent;
 class UMaterialInstanceDynamic;
 class UTexture;
 class UMaterialInterface;
+class UStaticMesh;
 
 /**
  * Reactive court floor (Frozen Ring, Oct 6): impacts leave scars that escalate DAMAGED (hairline cracks + frost) ->
@@ -42,6 +43,14 @@ public:
 	void ClearCraterSlabs();
 	/** Default slab material for this map (Frozen sets its ice). */
 	UPROPERTY() TObjectPtr<UMaterialInterface> SlabMat;
+	/** Data-driven slab set (A&P CraterSlab kit, e.g. SM_MeadowCraterSlab_A..D). Empty = placeholder cube ring (Frozen). */
+	UPROPERTY() TArray<TObjectPtr<UStaticMesh>> SlabMeshes;
+	/** Fracture-side material (mesh slot 1) for the data-driven slabs. */
+	UPROPERTY() TObjectPtr<UMaterialInterface> SlabSideMat;
+	/** No slab whose hinge is within NoSlabHalfDeg of any of these yaws and beyond NoSlabMinR (Meadow orb-exit gaps). */
+	TArray<float> NoSlabYaw;
+	float NoSlabHalfDeg = 0.f;
+	float NoSlabMinR = 1450.f;
 	virtual void Tick(float DeltaSeconds) override;
 
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> Root;
