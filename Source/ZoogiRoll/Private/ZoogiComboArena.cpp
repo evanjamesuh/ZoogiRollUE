@@ -325,14 +325,17 @@ void AZoogiComboArena::BuildFrozen()
 	{
 		auto DamageMID = [this](UMaterialInterface* Src, float Dmg) -> UMaterialInterface*
 		{
-			UMaterialInstanceDynamic* M = UMaterialInstanceDynamic::Create(Src, this);
+			// Src is itself a MID (arena FrozenMat): a MID parented to a MID renders black, so re-parent to its base material.
+			UMaterialInstanceDynamic* SrcMID = Cast<UMaterialInstanceDynamic>(Src);
+			UMaterialInstanceDynamic* M = UMaterialInstanceDynamic::Create(SrcMID ? SrcMID->Parent.Get() : Src, this);
+			if (SrcMID) M->CopyParameterOverrides(SrcMID);
 			M->SetScalarParameterValue(TEXT("Damage"), Dmg);
 			M->SetVectorParameterValue(TEXT("CrackColor"), ZoogiUtil::Hex(TEXT("#19C3E6")));
 			return M;
 		};
 		SlabMat = Ice;
-		SlabDamagedMat = DamageMID(Ice, 0.3f);
-		SlabCrackedMat = DamageMID(Ice, 0.6f);
+		SlabDamagedMat = DamageMID(Ice, 0.42f);
+		SlabCrackedMat = DamageMID(Ice, 0.8f);
 		SlabA = AddPiece(TEXT("Cube"), SlabMat, true, TEXT("ZFloor"), StonePM);
 		SlabB = AddPiece(TEXT("Cube"), SlabMat, true, TEXT("ZFloor"), StonePM);
 		for (int32 i = 0; i < 6; ++i) Cracks.Add(AddPiece(TEXT("Cube"), Rune, false, NAME_None, nullptr));

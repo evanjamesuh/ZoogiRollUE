@@ -54,7 +54,7 @@ void AZoogiArenaShowcase::MaybeStart(UWorld* World, const FString& ArenaSlug)
 	{
 		// Buzzy Frozen Ring compositions (screen up = -Y, the art orientation): top-down, 3/4, hero, hub, plus a damaged top.
 		S->Poses.Insert(FPose{ TEXT("buzzy_hub"),   FVector(0, -40, 110),   270.f, 22.f, 1900.f, 75.f }, 0);
-		S->Poses.Insert(FPose{ TEXT("buzzy_hero"),  FVector(0, -300, 0),    270.f, 21.f, 6400.f, 70.f }, 0);
+		S->Poses.Insert(FPose{ TEXT("buzzy_hero"),  FVector(0, -250, -250), 270.f, 16.f, 6000.f, 70.f }, 0);
 		S->Poses.Insert(FPose{ TEXT("buzzy_34"),    FVector(0, 0, 0),       270.f, 50.f, 6600.f, 62.f }, 0);
 		S->Poses.Insert(FPose{ TEXT("buzzy_top"),   FVector(0, 0, 0),       270.f, 64.f, 6300.f, 62.f }, 0);
 	}

@@ -128,7 +128,7 @@ void AZoogiArena::BuildFrozen()
 	// ---- materials (Buzzy palette: ice #7FC4EA / #BFE6F7, snow #F4FBFF, stone #CACFDC, glow #19C3E6) ----
 	const FLinearColor Cyan = ZoogiUtil::Hex(TEXT("#19C3E6"));
 	UMaterialInterface* Ice = MakeFrozenMat(TEXT("Ice"), ZoogiUtil::Hex(TEXT("#8FD3F4")), TEXT("T_FrozenIceTile"), 180.f, 0.5f, 0.18f, 0.75f, ZoogiUtil::Hex(TEXT("#4FC9F0")), 0.12f);
-	UMaterialInterface* IceDeep = MakeFrozenMat(TEXT("IceDeep"), ZoogiUtil::Hex(TEXT("#4F9BD8")), TEXT("T_FrozenIceTile"), 260.f, 0.5f, 0.25f, 0.7f, ZoogiUtil::Hex(TEXT("#2A7FC0")), 0.08f);
+	UMaterialInterface* IceDeep = MakeFrozenMat(TEXT("IceDeep"), ZoogiUtil::Hex(TEXT("#74B4E4")), TEXT("T_FrozenIceTile"), 260.f, 0.5f, 0.25f, 0.7f, ZoogiUtil::Hex(TEXT("#2A7FC0")), 0.08f);
 	UMaterialInterface* IcePane = MakeFrozenMat(TEXT("IcePane"), ZoogiUtil::Hex(TEXT("#A9E2FA")), TEXT("T_FrozenIceTile"), 140.f, 0.35f, 0.08f, 0.9f, ZoogiUtil::Hex(TEXT("#6FDcff")), 0.3f);
 	UMaterialInterface* Snow = MakeFrozenMat(TEXT("Snow"), ZoogiUtil::Hex(TEXT("#F2F8FF")), TEXT("T_FrozenSnowTile"), 240.f, 0.35f, 0.8f, 0.35f, FLinearColor(0.85f, 0.93f, 1.f), 0.04f);
 	UMaterialInterface* SnowShade = MakeFrozenMat(TEXT("SnowShade"), ZoogiUtil::Hex(TEXT("#C9DDEE")), TEXT("T_FrozenSnowTile"), 240.f, 0.35f, 0.85f, 0.3f, FLinearColor::Black, 0.f);
@@ -136,7 +136,7 @@ void AZoogiArena::BuildFrozen()
 	UMaterialInterface* StoneDark = MakeFrozenMat(TEXT("StoneDark"), ZoogiUtil::Hex(TEXT("#8E9DB4")), TEXT("T_FrozenStoneTile"), 120.f, 0.55f, 0.7f, 0.4f, FLinearColor::Black, 0.f);
 	UMaterialInterface* Wood = MakeFrozenMat(TEXT("Wood"), ZoogiUtil::Hex(TEXT("#CACFDC")), TEXT("T_FrozenStoneTile"), 60.f, 0.6f, 0.75f, 0.3f, FLinearColor::Black, 0.f);
 	UMaterialInterface* WoodDark = MakeFrozenMat(TEXT("WoodDark"), ZoogiUtil::Hex(TEXT("#8E95A8")), TEXT("T_FrozenStoneTile"), 60.f, 0.6f, 0.8f, 0.3f, FLinearColor::Black, 0.f);
-	UMaterialInterface* Cliff = MakeFrozenMat(TEXT("Cliff"), ZoogiUtil::Hex(TEXT("#8FBDE2")), TEXT("T_FrozenIceTile"), 420.f, 0.6f, 0.4f, 0.5f, ZoogiUtil::Hex(TEXT("#2F6EA8")), 0.05f);
+	UMaterialInterface* Cliff = MakeFrozenMat(TEXT("Cliff"), ZoogiUtil::Hex(TEXT("#B7DCF4")), TEXT("T_FrozenIceTile"), 420.f, 0.6f, 0.4f, 0.5f, ZoogiUtil::Hex(TEXT("#5FA8DA")), 0.06f);
 	UMaterialInterface* Peak = MakeFrozenMat(TEXT("Peak"), ZoogiUtil::Hex(TEXT("#A7C3E2")), TEXT("T_FrozenSnowTile"), 2400.f, 0.5f, 0.8f, 0.3f, FLinearColor(0.5f, 0.65f, 0.85f), 0.08f);
 	UMaterialInterface* Rune = ZoogiUtil::GlowMID(this, Cyan, 3.f);
 	UMaterialInterface* RuneSoft = ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#69E1F9")), 1.6f);
@@ -160,7 +160,7 @@ void AZoogiArena::BuildFrozen()
 		FloorMID->SetScalarParameterValue(TEXT("Pulse"), 0.12f);
 	}
 	BuildIsland(ZoogiUtil::Hex(TEXT("#CFEFFF")), ZoogiUtil::Hex(TEXT("#9ED8F5")), ZoogiUtil::Hex(TEXT("#F4FBFF")),
-		ZoogiUtil::Hex(TEXT("#3E6E9C")), ZoogiUtil::Hex(TEXT("#6A9CC8")), 0.03f, FloorMat);
+		ZoogiUtil::Hex(TEXT("#7FB3DE")), ZoogiUtil::Hex(TEXT("#A9D4F0")), 0.03f, FloorMat);
 	AddPanoramaSky(TEXT("Frozen"), 1.0f, 0.f, FLinearColor::White);
 
 	// Snow lip (outside the knockout line, top below the court at the line so balls roll off as before) + ice cliff face.
@@ -171,8 +171,8 @@ void AZoogiArena::BuildFrozen()
 		{
 			const float N = FMath::PerlinNoise2D(FVector2D(FMath::Cos(A) * 3.1f, FMath::Sin(A) * 3.1f)) * 0.5f + 0.5f;
 			if (R < 1560.f) return -4.f;
-			if (R < 1650.f) return FMath::Lerp(-4.f, 14.f + 16.f * N, (R - 1560.f) / 90.f);
-			return FMath::Lerp(14.f + 16.f * N, -18.f, (R - 1650.f) / 130.f);
+			if (R < 1650.f) return FMath::Lerp(-4.f, 34.f + 26.f * N, FMath::SmoothStep(0.f, 1.f, (R - 1560.f) / 90.f));
+			return FMath::Lerp(34.f + 26.f * N, -18.f, FMath::SmoothStep(0.f, 1.f, (R - 1650.f) / 130.f));
 		};
 		const float Rs[5] = { 1553.f, 1600.f, 1650.f, 1720.f, 1780.f };
 		for (int32 s = 0; s < Seg; ++s)
@@ -214,6 +214,47 @@ void AZoogiArena::BuildFrozen()
 		}
 		AddFrozenProc(Under, IceDeep, nullptr, true);
 		AddFrozenProc(Icicles, Ice, nullptr, false);
+		// Round 2: lumpy snow mounds along the lip (the art's thick snow rim), no collision.
+		FZoogiMeshBuilder Mounds;
+		for (int32 i = 0; i < 64; ++i)
+		{
+			const float A = i * 360.f / 64 + Rng.FRandRange(-2.5f, 2.5f);
+			const float R = Rng.FRandRange(1645.f, 1715.f);
+			Mounds.Chunk(Pol(R, A, Rng.FRandRange(18.f, 30.f)), FVector(Rng.FRandRange(55.f, 85.f), Rng.FRandRange(80.f, 130.f), Rng.FRandRange(22.f, 40.f)), Rng, 0.18f, A);
+		}
+		AddFrozenProc(Mounds, Snow, nullptr, true);
+	}
+
+	// ---- Round 2: glowing boundary ring + hub rune circles (flat emissive strips just above the floor, no collision) ----
+	{
+		auto Ring = [](FZoogiMeshBuilder& M, float R0, float R1, float Z, int32 Seg)
+		{
+			for (int32 s = 0; s < Seg; ++s)
+			{
+				const float A0 = 2.f * PI * s / Seg, A1 = 2.f * PI * (s + 1) / Seg;
+				const FVector P00(FMath::Cos(A0) * R0, FMath::Sin(A0) * R0, Z), P01(FMath::Cos(A1) * R0, FMath::Sin(A1) * R0, Z);
+				const FVector P10(FMath::Cos(A0) * R1, FMath::Sin(A0) * R1, Z), P11(FMath::Cos(A1) * R1, FMath::Sin(A1) * R1, Z);
+				M.Quad(P00, P01, P11, P10, FVector::UpVector);
+			}
+		};
+		FZoogiMeshBuilder Bound, BoundSoft, HubRunes;
+		Ring(Bound, 1526.f, 1544.f, 0.9f, 192);
+		Ring(BoundSoft, 1490.f, 1497.f, 0.7f, 192);
+		Ring(HubRunes, 146.f, 154.f, 0.6f, 64);
+		Ring(HubRunes, 326.f, 336.f, 0.6f, 96);
+		Ring(HubRunes, 596.f, 604.f, 0.6f, 128);
+		for (int32 k = 0; k < 4; ++k)
+		{
+			// Four short spokes linking the rune circles (between the pillars and the obelisks).
+			const float A = FMath::DegreesToRadians(k * 90.f);
+			const FVector Dv(FMath::Cos(A), FMath::Sin(A), 0.f), Nv(-FMath::Sin(A), FMath::Cos(A), 0.f);
+			const FVector P0 = Dv * 336.f + FVector(0, 0, 0.6f), P1 = Dv * 596.f + FVector(0, 0, 0.6f);
+			HubRunes.Quad(P0 - Nv * 4.f, P1 - Nv * 4.f, P1 + Nv * 4.f, P0 + Nv * 4.f, FVector::UpVector);
+		}
+		UProceduralMeshComponent* B0 = AddFrozenProc(Bound, ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#7FEAFF")), 3.4f), nullptr, false);
+		UProceduralMeshComponent* B1 = AddFrozenProc(BoundSoft, RuneSoft, nullptr, false);
+		UProceduralMeshComponent* B2 = AddFrozenProc(HubRunes, ZoogiUtil::GlowMID(this, Cyan, 2.4f), nullptr, false);
+		for (UProceduralMeshComponent* C : { B0, B1, B2 }) if (C) C->ComponentTags.Add(TEXT("NoCamBlock"));
 	}
 
 	// ---- distant snow valley + mountain ranges (Buzzy: white peaks with blue shading, cloud sea under the island) ----
@@ -234,16 +275,16 @@ void AZoogiArena::BuildFrozen()
 		AddFrozenProc(Valley, SnowShade, nullptr, false);
 		// Mountains: each a cluster (main peak + two shoulders), mostly snow-covered, far enough to sit on the horizon.
 		FZoogiMeshBuilder Rock, Caps;
-		for (int32 i = 0; i < 30; ++i)
+		for (int32 i = 0; i < 40; ++i)
 		{
-			const float A = i * 360.f / 30 + Rng.FRandRange(-5.f, 5.f);
+			const float A = i * 360.f / 40 + Rng.FRandRange(-4.f, 4.f);
 			const bool bFront = FMath::Abs(FMath::FindDeltaAngleDegrees(A, 90.f)) < 50.f; // camera side (art bottom): lower
-			const float R = Rng.FRandRange(19000.f, 32000.f) * (bFront ? 1.2f : 1.f);
-			const float Hh = Rng.FRandRange(4200.f, 7800.f) * (bFront ? 0.55f : 1.f);
+			const float R = Rng.FRandRange(24000.f, 38000.f) * (bFront ? 1.15f : 1.f);
+			const float Hh = Rng.FRandRange(3200.f, 6200.f) * (bFront ? 0.5f : 1.f);
 			for (int32 c = 0; c < 3; ++c)
 			{
 				const float Hc = Hh * (c == 0 ? 1.f : Rng.FRandRange(0.5f, 0.75f));
-				const float Rb = Hc * Rng.FRandRange(0.6f, 0.8f);
+				const float Rb = Hc * Rng.FRandRange(0.45f, 0.62f);
 				const FVector2D XY = FVector2D(Pol(R, A)) + (c == 0 ? FVector2D::ZeroVector : FVector2D(Pol(Hh * Rng.FRandRange(0.35f, 0.6f), A + (c == 1 ? 90.f : -90.f) + Rng.FRandRange(-20.f, 20.f))));
 				const int32 Sides = Rng.RandRange(5, 8);
 				const float Yw = Rng.FRandRange(0.f, 360.f);
@@ -301,7 +342,9 @@ void AZoogiArena::BuildFrozen()
 			P->AddColliderBox(FVector(0, 0, PillarH * 0.5f), FVector(PillarHalf * 2.f, PillarHalf * 2.f, PillarH), FRotator::ZeroRotator, TEXT("ZPillar"), PillarPM);
 			P->SetPathBlock(FVector2D(P->GetActorLocation()), 60.f);
 			P->FinishBuild();
-			if (Forming) Forming->AddActor(P, EZoogiFormStyle::Rise, FVector(0, 0, -(PillarH + 120.f)), 0.25f + 0.18f * k, 1.35f, 10.f);
+			// Climax of the intro (animations pack forming_spec "Resonance pillars"): break-throughs staggered 0.1 s from 1.3 s,
+			// +14 cm overshoot, settled by ~2.6 s, just before the rune floor ignites.
+			if (Forming) Forming->AddActor(P, EZoogiFormStyle::Rise, FVector(0, 0, -(PillarH + 120.f)), 1.30f + 0.10f * k, 1.0f, 14.f);
 		}
 	}
 

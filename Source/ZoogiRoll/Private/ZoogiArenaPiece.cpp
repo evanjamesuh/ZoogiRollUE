@@ -520,8 +520,10 @@ int32 AZoogiArenaPiece::DamageArea(UWorld* World, const FVector& P, float Radius
 AZoogiArenaPiece* AZoogiArenaPiece::RingOutCrash(UWorld* World, const FVector& ExitPoint, const FVector& Dir, float Amount, AZoogiBall* By)
 {
 	if (!World) return nullptr;
-	const FVector2D D2 = FVector2D(Dir).GetSafeNormal();
-	const FVector2D E2(ExitPoint);
+	// Mostly vertical fall (the ball is already well below the rim when it is called out): use the radial direction.
+	const FVector2D Hz(Dir);
+	const FVector2D D2 = (Hz.Size() > 0.3f * Dir.Size() && Hz.Size() > 20.f) ? Hz.GetSafeNormal() : FVector2D(ExitPoint).GetSafeNormal();
+	const FVector2D E2 = FVector2D(ExitPoint).GetSafeNormal() * FMath::Min(FVector2D(ExitPoint).Size(), ZoogiConst::KnockoffRadius + 60.f);
 	AZoogiArenaPiece* Best = nullptr;
 	float BestScore = 1e9f;
 	for (TActorIterator<AZoogiArenaPiece> It(World); It; ++It)
@@ -537,6 +539,19 @@ AZoogiArenaPiece* AZoogiArenaPiece::RingOutCrash(UWorld* World, const FVector& E
 		if (Cos < 0.82f) continue; // ~35 degree cone
 		const float Score = Dist * (2.f - Cos);
 		if (Score < BestScore) { BestScore = Score; Best = A; }
+	}
+	if (!Best)
+	{
+		// Nothing in the flight cone: the nearest rim piece to the exit point takes it (within ~9 m).
+		for (TActorIterator<AZoogiArenaPiece> It(World); It; ++It)
+		{
+			AZoogiArenaPiece* A = *It;
+			if (A->bIndestructible || A->State == EZoogiPieceState::Broken) continue;
+			const FVector2D P(A->GetActorLocation());
+			if (P.Size() < ZoogiConst::KnockoffRadius - 20.f) continue;
+			const float Dist = FVector2D::Distance(P, E2);
+			if (Dist < 900.f && Dist < BestScore) { BestScore = Dist; Best = A; }
+		}
 	}
 	if (Best)
 	{
