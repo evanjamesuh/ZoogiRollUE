@@ -1,4 +1,5 @@
 #include "ZoogiGameMode.h"
+#include "ZoogiKFXPreview.h"
 #include "ZoogiRoll.h"
 #include "ZoogiBall.h"
 #include "ZoogiOrb.h"
@@ -70,6 +71,7 @@ void AZoogiGameMode::BeginPlay()
 		if (FParse::Value(Cmd, TEXT("ZoogiSfxVol="), Vol)) ZoogiUtil::SetSfxVolume(Vol / 100.f);
 	}
 	FParse::Value(Cmd, TEXT("ZoogiShots="), ShotDir);
+	if (FParse::Param(Cmd, TEXT("ZoogiKFXPreview"))) GetWorld()->SpawnActor<AZoogiKFXPreview>(); // review captures of the KriptoFX ports
 	FParse::Value(Cmd, TEXT("ZoogiQuit="), QuitAfter);
 	int32 NumPlayers = 0;
 	if (FParse::Value(Cmd, TEXT("ZoogiPlayers="), NumPlayers)) MenuNumPlayers = FMath::Clamp(NumPlayers, 2, 4);
@@ -573,6 +575,7 @@ void AZoogiGameMode::RespawnBall(AZoogiBall* Ball)
 {
 	const FVector P = FindFreeSpot(Ball->SpawnLocation);
 	Ball->PlaceAt(P, Ball->SpawnYaw);
+	AZoogiFX::KFX(GetWorld(), TEXT("Effect5"), P - FVector(0, 0, ZoogiConst::ZoogiRadius - 3.f), 0.45f, 2.5f); // KriptoFX portal on respawn
 	Ball->LastHitPlayer = -1;
 }
 
@@ -689,6 +692,7 @@ void AZoogiGameMode::CheckKnockoffs()
 				BigColor = ZoogiUtil::PlayerColor(A->PlayerIndex);
 				BigAge = 0.f;
 				AZoogiFX::Spawn(GetWorld(), EdgePoint(L, Arena) - FVector(0, 0, 20.f), BigColor, 420.f, 0.8f, true, 12.f);
+				AZoogiFX::KFX(GetWorld(), TEXT("Effect17_Collision"), EdgePoint(L, Arena), 0.7f, 2.5f); // KriptoFX red shatter on KNOCKOUT
 				if (AZoogiPlayerController* PCtl = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PCtl->OnImpact(1.f);
 				TakeShotDelayed(TEXT("knockout"), 0.25f);
 			}

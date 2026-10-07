@@ -8,6 +8,7 @@
 class UStaticMeshComponent;
 class UPointLightComponent;
 class UMaterialInstanceDynamic;
+class UNiagaraComponent;
 
 /** Short-lived additive glow: an expanding sphere or flat ring with a light flash (powers, impacts, knock-offs). */
 UCLASS()
@@ -27,6 +28,9 @@ public:
 	static void Niagara(UWorld* World, const TCHAR* SystemName, const FVector& Location, const FRotator& Rotation = FRotator::ZeroRotator, float Scale = 1.f);
 	/** The Niagara burst that matches a Zoogi power (NS_Explosion for Hotstreak, coloured bursts otherwise). */
 	static const TCHAR* PowerBurst(EZoogiPower Power);
+	/** Spawns a ported KriptoFX system /Game/VFX/KriptoFX/<EffectN>/NS_KFX_<Prefab> (e.g. "Effect6_Collision"). MaxLife > 0 deactivates it
+	 *  after that many seconds (some emitters loop). Attach = follow that actor (upright). No-op with -ZoogiNoNiagara / -ZoogiNoKFX. */
+	static UNiagaraComponent* KFX(UWorld* World, const TCHAR* Prefab, const FVector& Location, float Scale = 1.f, float MaxLife = 3.f, AActor* Attach = nullptr);
 
 	virtual void Tick(float DeltaSeconds) override;
 

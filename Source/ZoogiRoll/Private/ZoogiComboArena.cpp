@@ -463,6 +463,7 @@ void AZoogiComboArena::GateFlash()
 	GatePulse = 1.f;
 	AZoogiFX::Spawn(GetWorld(), GateReturn(), FLinearColor(0.3f, 1.f, 0.6f), 220.f, 0.7f, true, 10.f);
 	AZoogiFX::Niagara(GetWorld(), TEXT("NS_Burst_Green"), GateReturn());
+	AZoogiFX::KFX(GetWorld(), TEXT("Effect5"), GateReturn() - FVector(0, 0, 45.f), 0.45f, 2.5f); // KriptoFX portal at the Recovery Gate
 }
 
 void AZoogiComboArena::Tick(float DeltaSeconds)

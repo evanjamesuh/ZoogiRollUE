@@ -9,6 +9,7 @@
 #include "NiagaraComponent.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "TimerManager.h"
 
 void AZoogiFX::Niagara(UWorld* World, const TCHAR* SystemName, const FVector& Location, const FRotator& Rotation, float Scale)
 {
@@ -25,6 +26,51 @@ void AZoogiFX::Niagara(UWorld* World, const TCHAR* SystemName, const FVector& Lo
 		Cache.Add(Key, Sys);
 	}
 	UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, Sys, Location, Rotation, FVector(Scale), true, true, ENCPoolMethod::AutoRelease);
+}
+
+UNiagaraComponent* AZoogiFX::KFX(UWorld* World, const TCHAR* Prefab, const FVector& Location, float Scale, float MaxLife, AActor* Attach)
+{
+	static const bool bDisabled = FParse::Param(FCommandLine::Get(), TEXT("ZoogiNoNiagara")) || FParse::Param(FCommandLine::Get(), TEXT("ZoogiNoKFX"));
+	if (!World || bDisabled || World->GetNetMode() == NM_DedicatedServer) return nullptr;
+	static TMap<FName, TWeakObjectPtr<UNiagaraSystem>> Cache;
+	const FName Key(Prefab);
+	UNiagaraSystem* Sys = Cache.FindRef(Key).Get();
+	if (!Sys)
+	{
+		const FString P(Prefab);
+		int32 U = INDEX_NONE;
+		const FString Folder = P.FindChar(TEXT('_'), U) ? P.Left(U) : P;
+		const FString Path = FString::Printf(TEXT("/Game/VFX/KriptoFX/%s/NS_KFX_%s.NS_KFX_%s"), *Folder, *P, *P);
+		Sys = LoadObject<UNiagaraSystem>(nullptr, *Path, nullptr, LOAD_NoWarn);
+		if (!Sys) return nullptr;
+		Cache.Add(Key, Sys);
+	}
+	UNiagaraComponent* C = nullptr;
+	if (Attach && Attach->GetRootComponent())
+	{
+		C = UNiagaraFunctionLibrary::SpawnSystemAttached(Sys, Attach->GetRootComponent(), NAME_None, FVector::ZeroVector, FRotator::ZeroRotator, EAttachLocation::KeepRelativeOffset, true, true, ENCPoolMethod::None);
+		if (C)
+		{
+			// Marbles roll: keep the effect upright and at its own scale.
+			C->SetUsingAbsoluteRotation(true);
+			C->SetUsingAbsoluteScale(true);
+			C->SetWorldRotation(FRotator::ZeroRotator);
+			C->SetWorldScale3D(FVector(Scale));
+		}
+	}
+	else
+	{
+		C = UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, Sys, Location, FRotator::ZeroRotator, FVector(Scale), true, true, ENCPoolMethod::None);
+	}
+	if (C && MaxLife > 0.f)
+	{
+		// Some ported emitters loop (fire skins, fog): stop spawning after MaxLife, hard-remove a few seconds later.
+		TWeakObjectPtr<UNiagaraComponent> W(C);
+		FTimerHandle H1, H2;
+		World->GetTimerManager().SetTimer(H1, FTimerDelegate::CreateLambda([W]() { if (W.IsValid()) W->Deactivate(); }), MaxLife, false);
+		World->GetTimerManager().SetTimer(H2, FTimerDelegate::CreateLambda([W]() { if (W.IsValid()) W->DestroyComponent(); }), MaxLife + 4.f, false);
+	}
+	return C;
 }
 
 const TCHAR* AZoogiFX::PowerBurst(EZoogiPower Power)
