@@ -3,7 +3,7 @@ import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { useZoogiGame } from "@/lib/stores/useZoogiGame";
 import { visualPosition } from "@/lib/renderInterp";
-import { ORB_BODY_COLOR, ORB_DRAW_RADIUS, ORB_GLOW_COLOR, ORB_REST_Y } from "@/lib/restHeight";
+import { ORB_BODY_COLOR, ORB_DRAW_RADIUS, ORB_GLOW_COLOR } from "@/lib/restHeight";
 import { Glint } from "@/vfx/powerLooks";
 
 function getStarColor(starOrbType: "wolfgang" | "hotstreak" | "bolt" | null | undefined): string {
@@ -55,8 +55,7 @@ export function Orb({ orbId }: OrbProps) {
     }
     group.visible = true;
     const vis = visualPosition(orb.id, orb.position, visRef.current);
-    const falling = orb.isOutOfRing || orb.position[1] < ORB_REST_Y - 0.05;
-    group.position.set(vis[0], falling ? vis[1] : ORB_REST_Y, vis[2]);
+    group.position.set(vis[0], vis[1], vis[2]);
     if (bullseyeRef.current) {
       bullseyeRotationRef.current += delta * 1.5;
       bullseyeRef.current.rotation.z = bullseyeRotationRef.current;

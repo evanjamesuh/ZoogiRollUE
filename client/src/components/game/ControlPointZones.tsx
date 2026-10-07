@@ -154,7 +154,7 @@ export function ControlPointZones({
     });
   });
 
-  if (!enabled) return null;
+  if (!enabled || gameMode !== "map_editor") return null;
 
   const handleZoneClick = (zoneId: string) => {
     if (gameMode === "map_editor") {

@@ -47,7 +47,7 @@ test("orbs and zoogis rest on the floor", async () => {
   assert.ok(started.playerEntity);
   assert.ok(started.orbs.length > 0);
   assert.equal(started.playerEntity.position[1], ZOOGI_REST_Y);
-  assert.equal(started.orbs[0].position[1], ORB_REST_Y);
+  assert.ok(started.orbs[0].position[1] > ORB_REST_Y + 2, "orbs start above the floor");
 
   useZoogiGame.setState({
     phase: "playing",
@@ -59,7 +59,7 @@ test("orbs and zoogis rest on the floor", async () => {
       isStunned: false,
     },
     orbs: started.orbs.map((orb, index) => (
-      index === 0 ? { ...orb, position: [2, 0.5, 2] as [number, number, number], velocity: [0, 0, 0] as [number, number, number] } : orb
+      index === 0 ? { ...orb, position: [2, ORB_REST_Y, 2] as [number, number, number], velocity: [0, 0, 0] as [number, number, number] } : orb
     )),
   });
   useZoogiGame.getState().physicsTick(1 / 60);
