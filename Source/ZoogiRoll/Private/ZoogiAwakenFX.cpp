@@ -179,7 +179,7 @@ void AZoogiAwakenFX::Init()
 	case EZoogiAwakenFX::ShockChain:
 		Quads->SetMaterial(0, MID(TEXT("MI_ZAFX_Bolt")));
 		Quads->SetMaterial(1, MID(TEXT("MI_ZAFX_Orb")));
-		Light = MakeLight(ShockTint, 1000.f * S);
+		Light = MakeLight(ShockTint, 600.f * S);
 		Decal2 = MakeDecal(TEXT("MI_ZAFX_ShockGlow"), 560.f * S, 300.f * S); // bright violet light pool on the ground under the chain
 		for (int32 k = 0; k < 4; ++k) HitLights.Add(MakeLight(ShockTint, 480.f * S));
 		Bolts.SetNum(4);
@@ -205,7 +205,7 @@ void AZoogiAwakenFX::Init()
 		for (int32 k = 0; k < 9; ++k) Chunks.Add(MakeCard(TEXT("MI_ZAFX_Rock"), TEXT("/Game/VFX/KriptoFX/Effect5/Meshes/SM_Rock.SM_Rock")));
 		Decal2 = MakeDecal(TEXT("MI_ZAFX_Spill"), 330.f * S, 400.f * S);
 		Decal2->SetUsingAbsoluteLocation(true);
-		Light = MakeLight(VoidTint, 800.f * S);
+		Light = MakeLight(VoidTint, 520.f * S);
 		Light->SetUsingAbsoluteLocation(true);
 		Light2 = MakeLight(VoidTint, 600.f * S);
 		Light2->SetUsingAbsoluteLocation(true);
@@ -464,7 +464,7 @@ void AZoogiAwakenFX::TickShock(float Dt, float Fade)
 			Pts.Add(Src + D * T + FVector(0, 0, Arc * 4.f * T * (1.f - T)) + (Side * O1 + Up2 * O2) * 0.045f * Len * FMath::Max(Env, 0.15f) * (i == 0 || i == NP ? 0.f : 1.f));
 		}
 		const float Iv = Bo.Flick * Run;
-		Ribbon(Pts, 190.f * S, FLinearColor(0.3f * Iv, 0.3f * Iv, 0.3f * Iv, 1.f)); // soft glow sheath (the demo's bloom)
+		Ribbon(Pts, 140.f * S, FLinearColor(0.2f * Iv, 0.2f * Iv, 0.2f * Iv, 1.f)); // soft glow sheath (the demo's bloom)
 		Ribbon(Pts, 64.f * S, FLinearColor(Iv, Iv, Iv, 1.f));
 		for (int32 b = 0; b < 3; ++b)
 		{
@@ -560,7 +560,7 @@ void AZoogiAwakenFX::TickVoid(float Dt)
 	if (Card0) { Card0->SetVisibility(K > 0.01f); Card0->SetWorldLocationAndRotation(PortalC, Rot); Card0->SetWorldScale3D(FVector(D / 0.8f / 100.f * K)); }
 	if (Card1) { Card1->SetVisibility(K > 0.01f); Card1->SetWorldLocationAndRotation(PortalC + PortalN * 2.f, Rot); Card1->SetWorldScale3D(FVector(D / 0.8f / 100.f * K * Wob, D / 0.8f / 100.f * K, 1.f)); }
 	if (Card2) { Card2->SetVisibility(K > 0.01f); Card2->SetWorldLocationAndRotation(PortalC - PortalN * 2.f, Rot); Card2->SetWorldScale3D(FVector(D * 1.9f / 100.f * K)); }
-	if (Light) Light->SetIntensity(25.f * K);
+	if (Light) Light->SetIntensity(20.f * K);
 	if (Decal2) if (UMaterialInstanceDynamic* M = Cast<UMaterialInstanceDynamic>(Decal2->GetDecalMaterial())) M->SetScalarParameterValue(TEXT("Fade"), K);
 
 	// rock
@@ -579,12 +579,13 @@ void AZoogiAwakenFX::TickVoid(float Dt)
 		if (Age >= 0.35f && Age < 0.85f)
 		{
 			const float U = Ease((Age - 0.35f) / 0.5f);
-			RockP = FMath::Lerp(PortalC - PortalN * 30.f * S, Out, U); RockScale = Unit * FMath::Lerp(0.45f, 1.f, U);
+			// the boulder swells up inside the ring and only starts to push through (fills most of the portal, picked frame)
+			RockP = FMath::Lerp(PortalC - PortalN * 25.f * S, PortalC + PortalN * 30.f * S, U); RockScale = Unit * FMath::Lerp(0.55f, 1.f, U);
 		}
 		else if (Age >= 0.85f && HitAt < 0.f)
 		{
 			const float U = FMath::Clamp((Age - 0.85f) / FlyT, 0.f, 1.f);
-			RockP = FMath::Lerp(Out, To, U) + FVector(0, 0, 60.f * S * 4.f * U * (1.f - U)); RockScale = Unit;
+			RockP = FMath::Lerp(PortalC + PortalN * 30.f * S, To, U) + FVector(0, 0, 60.f * S * 4.f * U * (1.f - U)); RockScale = Unit;
 			RockR = FRotator(Age * 220.f, Age * 160.f, 0.f);
 			if (U >= 1.f)
 			{

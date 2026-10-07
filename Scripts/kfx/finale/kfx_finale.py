@@ -205,16 +205,16 @@ def build_mis():
     mi('MI_ZAFX_Flash', 'Add', {'Tex': T('T_ZAFX_Glow'), 'Chan': R1, 'Tint': LC(0.75, 0.62, 1.0, 1), 'Glow': 6.0})
     mi('MI_ZAFX_Splat', 'Decal', {'Tex': T('T_ZAFX_Splat'), 'Chan': R1, 'Tint': LC(0.6, 0.35, 1.0, 1), 'Glow': 1.6, 'Darken': 1.8, 'EmisOpac': 1.0,
                                    'BaseTint': LC(0.004, 0.003, 0.006, 1), 'UseReveal': 0.0})
-    mi('MI_ZAFX_ShockGlow', 'Decal', {'Tex': T('T_ZAFX_Glow'), 'Chan': R1, 'Tint': LC(0.62, 0.26, 1.0, 1), 'Glow': 1.1, 'Darken': 0.85, 'EmisOpac': 0.0,
-                                       'BaseTint': LC(0.16, 0.05, 0.36, 1), 'UseReveal': 0.0})
+    mi('MI_ZAFX_ShockGlow', 'Decal', {'Tex': T('T_ZAFX_Glow'), 'Chan': R1, 'Tint': LC(0.55, 0.18, 1.0, 1), 'Glow': 0.9, 'Darken': 1.0, 'EmisOpac': 0.0,
+                                       'BaseTint': LC(0.07, 0.02, 0.20, 1), 'UseReveal': 0.0})
     mi('MI_ZAFX_Spark', 'Add', {'Tex': T('T_ZAFX_Dot'), 'Chan': R1, 'Tint': LC(0.72, 0.52, 1.0, 1), 'Glow': 9.0})
     # --- void portal (Effect5 violet)
     mi('MI_ZAFX_PortalInner', 'Portal', {'RimTex': T('T_ZAFX_PortalRim'), 'StarTex': T('T_ZAFX_Stars'), 'NebTex': T('T_ZAFX_Stars')})
     mi('MI_ZAFX_PortalRim', 'Add', {'Tex': T('T_ZAFX_PortalRim'), 'Chan': R1, 'Spin': 0.35, 'Tint': LC(0.55, 0.18, 1.0, 1), 'Glow': 1.35, 'Contrast': 1.3})
     mi('MI_ZAFX_PortalGlow', 'Add', {'Tex': T('T_ZAFX_Glow'), 'Chan': R1, 'Tint': LC(0.50, 0.16, 1.0, 1), 'Glow': 0.07})
     mi('MI_ZAFX_Mote', 'Add', {'Tex': T('T_ZAFX_Dot'), 'Chan': R1, 'Tint': LC(0.8, 0.55, 1.0, 1), 'Glow': 5.0})
-    mi('MI_ZAFX_Spill', 'Decal', {'Tex': T('T_ZAFX_Glow'), 'Chan': R1, 'Tint': LC(0.70, 0.26, 1.0, 1), 'Glow': 1.0, 'Darken': 1.0, 'EmisOpac': 0.0,
-                                   'BaseTint': LC(0.18, 0.05, 0.40, 1), 'UseReveal': 0.0})
+    mi('MI_ZAFX_Spill', 'Decal', {'Tex': T('T_ZAFX_Glow'), 'Chan': R1, 'Tint': LC(0.60, 0.08, 1.0, 1), 'Glow': 2.0, 'Darken': 1.0, 'EmisOpac': 0.0,
+                                   'BaseTint': LC(0.07, 0.01, 0.22, 1), 'UseReveal': 0.0})
     mi('MI_ZAFX_Rock', 'Rock', {'Tex': T('T_ZAFX_Noise'), 'Tint': LC(0.10, 0.095, 0.11, 1), 'RimColor': LC(0.35, 0.12, 0.85, 1)})
 
 # ------------------------------------------------------------ Niagara
