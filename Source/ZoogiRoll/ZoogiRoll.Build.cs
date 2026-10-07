@@ -8,5 +8,6 @@ public class ZoogiRoll : ModuleRules
 		PublicDependencyModuleNames.AddRange(new string[] {
 			"Core", "CoreUObject", "Engine", "InputCore", "PhysicsCore", "Slate", "SlateCore", "UMG", "Niagara", "NiagaraCore", "MediaAssets", "ProceduralMeshComponent"
 		});
+		if (Target.bBuildEditor) PrivateDependencyModuleNames.AddRange(new string[] { "UnrealEd", "NiagaraEditor" });
 	}
 }

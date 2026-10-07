@@ -120,6 +120,7 @@ void AZoogiGameMode::FireInstantPower(AZoogiBall* Ball)
 	{
 		AZoogiFX::Spawn(GetWorld(), L, C, ExplosionRadius, 0.7f, false, 16.f);
 		AZoogiFX::Niagara(GetWorld(), TEXT("NS_Explosion"), L);
+		AZoogiFX::KFX(GetWorld(), TEXT("Effect19"), L - FVector(0, 0, ZoogiConst::ZoogiRadius - 3.f), FMath::Clamp(ExplosionRadius / 450.f, 0.6f, 1.2f), 2.5f); // KriptoFX lava eruption
 		AZoogiFX::Spawn(GetWorld(), L, FLinearColor(1.f, 0.85f, 0.3f), ExplosionRadius * 0.45f, 0.35f, false, 25.f);
 		AZoogiFX::Spawn(GetWorld(), L - FVector(0, 0, ZoogiConst::ZoogiRadius - 3.f), FLinearColor(1.f, 0.55f, 0.1f), ExplosionRadius * 1.15f, 0.8f, true, 10.f);
 		int32 N = 0;
@@ -140,6 +141,7 @@ void AZoogiGameMode::FireInstantPower(AZoogiBall* Ball)
 	{
 		AZoogiFX::Spawn(GetWorld(), L - FVector(0, 0, ZoogiConst::ZoogiRadius - 3.f), C, ShadowRadius, 1.0f, true, 14.f);
 		AZoogiFX::Niagara(GetWorld(), TEXT("NS_Burst_Purple"), L, FRotator::ZeroRotator, 1.6f);
+		AZoogiFX::KFX(GetWorld(), TEXT("Effect22"), L - FVector(0, 0, ZoogiConst::ZoogiRadius - 3.f), FMath::Clamp(ShadowRadius / 500.f, 0.5f, 1.2f), 2.5f); // KriptoFX ice spikes: rivals FROZEN
 		AZoogiFX::Spawn(GetWorld(), L, FLinearColor(0.35f, 0.08f, 0.9f), ShadowRadius * 0.8f, 0.9f, false, 12.f);
 		int32 N = 0;
 		for (AZoogiBall* B : Balls)
@@ -265,6 +267,7 @@ void AZoogiGameMode::OnArmedShot(AZoogiBall* Ball)
 	switch (P)
 	{
 	case EZoogiPower::StaticShock: Ball->SetPhasing(true); break;
+	case EZoogiPower::LockOn: AZoogiFX::KFX(GetWorld(), TEXT("Effect6"), Ball->BallLocation(), 0.8f, 2.f, Ball); break; // KriptoFX projectile orb rides the locked shot
 	case EZoogiPower::Ricochet: RicochetsLeft = 2; RicochetFrom = nullptr; RicochetTimer = -1.f; break;
 	default: break;
 	}
@@ -284,6 +287,7 @@ void AZoogiGameMode::OnShooterContact(AZoogiBall* Shooter, AActor* Other)
 		AZoogiFX::Spawn(GetWorld(), Mid, FLinearColor(1.f, 0.97f, 0.9f), 90.f + 90.f * S, 0.22f, false, 14.f);
 		AZoogiFX::Spawn(GetWorld(), Mid - FVector(0, 0, ZoogiConst::ZoogiRadius - 4.f), PC, 150.f + 150.f * S, 0.45f, true, 10.f);
 		if (S > 0.6f) AddPopup(TEXT("SMASH!"), Mid + FVector(0, 0, 150.f), PC);
+		if (bPowerUsed && Shooter->Def.PowerKind == EZoogiPower::LockOn) AZoogiFX::KFX(GetWorld(), TEXT("Effect6_Collision"), Mid, 0.6f, 1.5f); // projectile impact
 		if (AZoogiPlayerController* PCtl = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PCtl->OnImpact(S);
 	}
 	if (Phase == EZoogiPhase::Rolling && Shooter && Other) ApplyInfuseImpact(Shooter, Other);
@@ -383,6 +387,7 @@ void AZoogiGameMode::TickPowers(float Dt)
 				Ball->SetPlanarVelocity(Dir * Speed);
 				AZoogiFX::Spawn(GetWorld(), L, PowerColor(EZoogiPower::Ricochet), 120.f, 0.4f, false, 8.f);
 				AZoogiFX::Niagara(GetWorld(), TEXT("NS_Burst_Green"), L, FRotator::ZeroRotator, 0.8f);
+				AZoogiFX::KFX(GetWorld(), TEXT("Effect11"), L - FVector(0, 0, ZoogiConst::ZoogiRadius - 3.f), 0.45f, 1.2f); // KriptoFX tornado on each ricochet
 				AddPopup(TEXT("RICOCHET"), L + FVector(0, 0, 110.f), PowerColor(EZoogiPower::Ricochet));
 				ZoogiUtil::PlaySfx(this, TEXT("Zap"), 0.5f, 2.f);
 				RicochetsLeft--;

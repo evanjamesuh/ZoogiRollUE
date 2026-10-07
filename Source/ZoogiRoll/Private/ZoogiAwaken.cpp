@@ -162,6 +162,7 @@ bool AZoogiGameMode::AwakenInfuse(int32 Pick)
 	AZoogiFX::Spawn(GetWorld(), B->BallLocation(), C, 200.f, 0.6f, false, 10.f, B);
 	AZoogiFX::Spawn(GetWorld(), B->BallLocation() - FVector(0, 0, ZoogiConst::ZoogiRadius - 3.f), C, 260.f, 0.7f, true, 8.f);
 	AZoogiFX::Niagara(GetWorld(), *ZoogiArtifacts::Get(A).AuraNiagara.ToString(), B->BallLocation(), FRotator::ZeroRotator, 0.9f);
+	AZoogiFX::KFX(GetWorld(), TEXT("Effect4"), B->BallLocation() - FVector(0, 0, ZoogiConst::ZoogiRadius - 3.f), 0.45f, 3.f); // KriptoFX ring of fire: Awaken Infuse (super)
 	UE_LOG(LogZoogi, Log, TEXT("Awaken: P%d %s INFUSES %s%s"), B->PlayerIndex + 1, *B->Def.Name, *ZoogiArtifacts::Name(A), bAff ? TEXT(" (affinity)") : TEXT(""));
 	EmitAnime(TEXT("Infuse"), B, A, B, B->BallLocation(), 1.f, false);
 	return true;
