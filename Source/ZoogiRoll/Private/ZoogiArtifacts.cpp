@@ -23,35 +23,35 @@ namespace
 				TEXT("Flame burst on hit: pushes everything nearby, target Burned (-15% next shot)"),
 				TEXT("Flame ring: attacker bounces back, you take 40% less knockback"), TEXT("#FF5A1F"), TEXT("#FFC14D"));
 			A.ImpactRadius = 260.f; A.ImpactPush = 900.f; A.StatusTurns = 1; A.GuardAttackerMul = -0.35f;
-			A.ImpactNiagara = TEXT("NS_Explosion"); A.AuraNiagara = TEXT("NS_Burst_Red"); A.AnimeKey = TEXT("Ember"); A.AffinityZoogi = TEXT("hotstreak");
+			A.ImpactNiagara = TEXT("NS_Explosion"); A.AuraNiagara = TEXT("NS_Burst_Red"); A.AnimeKey = TEXT("Ember"); A.AffinityZoogi = TEXT("vex");
 		}
 		{
 			FZoogiArtifactRow& A = Make(EZoogiArtifact::Storm, EZoogiElement::Lightning, TEXT("Storm Eye"),
 				TEXT("Lightning chains to 2 more targets on hit, first target Shocked (next shot max 70%)"),
 				TEXT("Arc cage: attacker gets Shocked, you take 40% less knockback"), TEXT("#7FD8FF"), TEXT("#FFFFFF"));
 			A.ImpactRadius = 650.f; A.ImpactPush = 600.f; A.ChainCount = 2; A.StatusTurns = 1;
-			A.ImpactNiagara = TEXT("NS_Burst_White"); A.AuraNiagara = TEXT("NS_Burst_Blue"); A.AnimeKey = TEXT("Storm"); A.AffinityZoogi = TEXT("bolt");
+			A.ImpactNiagara = TEXT("NS_Burst_White"); A.AuraNiagara = TEXT("NS_Burst_Blue"); A.AnimeKey = TEXT("Storm"); A.AffinityZoogi = TEXT("luma");
 		}
 		{
 			FZoogiArtifactRow& A = Make(EZoogiArtifact::Frost, EZoogiElement::Ice, TEXT("Frost Crystal"),
 				TEXT("Target Frozen: slides on ice after the hit; ice shards push small things"),
 				TEXT("Ice shell: attacker slowed 40% on contact, you take 40% less knockback"), TEXT("#9EF0FF"), TEXT("#E8FBFF"));
 			A.ImpactRadius = 220.f; A.ImpactPush = 450.f; A.StatusTurns = 1; A.GuardAttackerMul = 0.6f;
-			A.ImpactNiagara = TEXT("NS_Burst_Blue"); A.AuraNiagara = TEXT("NS_Burst_White"); A.AnimeKey = TEXT("Frost"); A.AffinityZoogi = TEXT("pinpoint");
+			A.ImpactNiagara = TEXT("NS_Burst_Blue"); A.AuraNiagara = TEXT("NS_Burst_White"); A.AnimeKey = TEXT("Frost"); A.AffinityZoogi = TEXT("moss");
 		}
 		{
 			FZoogiArtifactRow& A = Make(EZoogiArtifact::Titan, EZoogiElement::Earth, TEXT("Titan Core"),
 				TEXT("1.7x mass, slightly slower roll; ground shockwave on hit"),
 				TEXT("Rock plating: 1.8x mass while guarded, 40% less knockback"), TEXT("#8C7A63"), TEXT("#FFB347"));
 			A.MassMul = 1.7f; A.LaunchSpeedMul = 0.9f; A.ImpactRadius = 320.f; A.ImpactPush = 700.f; A.GuardMassMul = 1.8f;
-			A.ImpactNiagara = TEXT("NS_Burst_Gold"); A.AuraNiagara = TEXT("NS_Burst_Gold"); A.AnimeKey = TEXT("Titan"); A.AffinityZoogi = TEXT("wraps");
+			A.ImpactNiagara = TEXT("NS_Burst_Gold"); A.AuraNiagara = TEXT("NS_Burst_Gold"); A.AnimeKey = TEXT("Titan"); A.AffinityZoogi = TEXT("orin");
 		}
 		{
 			FZoogiArtifactRow& A = Make(EZoogiArtifact::Void, EZoogiElement::Void, TEXT("Void Shard"),
 				TEXT("Gravity well at impact: pulls nearby orbs and rivals in for 0.6 s"),
 				TEXT("Ring-warp barrier: attacker deflected 25 deg, 40% less knockback"), TEXT("#2A0F4F"), TEXT("#B06CFF"));
 			A.ImpactRadius = 450.f; A.PullTime = 0.6f; A.PullAccel = 2500.f; A.GuardReflectDeg = 25.f;
-			A.ImpactNiagara = TEXT("NS_Burst_Purple"); A.AuraNiagara = TEXT("NS_Burst_Purple"); A.AnimeKey = TEXT("Void"); A.AffinityZoogi = TEXT("nightshade");
+			A.ImpactNiagara = TEXT("NS_Burst_Purple"); A.AuraNiagara = TEXT("NS_Burst_Purple"); A.AnimeKey = TEXT("Void"); A.AffinityZoogi = TEXT("darkzoogy");
 		}
 		return R;
 	}
@@ -167,7 +167,21 @@ FLinearColor ZoogiArtifacts::Color(EZoogiArtifact A)
 
 EZoogiArtifact ZoogiArtifacts::Affinity(FName Id)
 {
-	// FName compares case-insensitively.
+	// Oct 6 (bible roster): affinity follows the power each character inherited, so the balance tuned per power
+	// (Ember x0.3 burst, Storm stun-on-impact, Void stun without freeze, ...) carries over unchanged.
+	// Old ids are kept for anything still referring to them. FName compares case-insensitively.
+	if (const FZoogiDef* D = ZoogiUtil::FindZoogi(Id))
+	{
+		switch (D->PowerKind)
+		{
+		case EZoogiPower::Explosion: return EZoogiArtifact::Ember;                                  // Vex
+		case EZoogiPower::StaticShock: case EZoogiPower::Ricochet: return EZoogiArtifact::Storm;   // Luma, Blue
+		case EZoogiPower::LockOn: case EZoogiPower::WolfPack: return EZoogiArtifact::Frost;        // Moss, Tavi
+		case EZoogiPower::ShadowStun: case EZoogiPower::RuneSeal: return EZoogiArtifact::Void;     // Dark Zoogy, Sera
+		case EZoogiPower::BandageBind: return EZoogiArtifact::Titan;                               // Master Orin
+		default: break;
+		}
+	}
 	if (Id == FName(TEXT("hotstreak"))) return EZoogiArtifact::Ember;
 	if (Id == FName(TEXT("bolt")) || Id == FName(TEXT("lars"))) return EZoogiArtifact::Storm;
 	if (Id == FName(TEXT("pinpoint")) || Id == FName(TEXT("wolfgang"))) return EZoogiArtifact::Frost;

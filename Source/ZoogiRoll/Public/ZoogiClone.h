@@ -20,7 +20,7 @@ public:
 	UPROPERTY(VisibleAnywhere) TObjectPtr<USphereComponent> Sphere;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Visual;
 
-	void InitClone(UStaticMesh* WolfMesh, AActor* InTarget, int32 InOwnerPlayer, float InSpeed);
+	void InitClone(UStaticMesh* WolfMesh, AActor* InTarget, int32 InOwnerPlayer, float InSpeed, FLinearColor Tint = FLinearColor(0.3f, 0.55f, 1.f));
 	virtual void Tick(float DeltaSeconds) override;
 
 	int32 OwnerPlayer = -1;

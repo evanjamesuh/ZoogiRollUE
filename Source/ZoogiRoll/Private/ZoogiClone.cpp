@@ -35,7 +35,7 @@ void AZoogiClone::BeginPlay()
 	Sphere->OnComponentHit.AddDynamic(this, &AZoogiClone::OnSphereHit);
 }
 
-void AZoogiClone::InitClone(UStaticMesh* WolfMesh, AActor* InTarget, int32 InOwnerPlayer, float InSpeed)
+void AZoogiClone::InitClone(UStaticMesh* WolfMesh, AActor* InTarget, int32 InOwnerPlayer, float InSpeed, FLinearColor Tint)
 {
 	Target = InTarget;
 	OwnerPlayer = InOwnerPlayer;
@@ -47,7 +47,7 @@ void AZoogiClone::InitClone(UStaticMesh* WolfMesh, AActor* InTarget, int32 InOwn
 	const float S = (2.f * CloneRadius) / FMath::Max(2.f * B.BoxExtent.GetMax(), 1.f);
 	Visual->SetRelativeScale3D(FVector(S));
 	Visual->SetRelativeLocation(-B.Origin * S);
-	MID = ZoogiUtil::FxMID(this, FLinearColor(0.3f, 0.55f, 1.f), 9.f);
+	MID = ZoogiUtil::FxMID(this, Tint, 9.f);
 	for (int32 i = 0; i < Visual->GetNumMaterials(); ++i) Visual->SetMaterial(i, MID);
 }
 

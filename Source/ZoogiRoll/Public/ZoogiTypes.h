@@ -20,7 +20,7 @@ enum class EZoogiArena : uint8
 	MAX UMETA(Hidden)
 };
 
-/** Zoogi powers (ZOOGI_ROSTER abilities). */
+/** Zoogi powers (ZOOGI_ROSTER abilities; since Oct 6 carried by the 8 bible characters, see Docs/BIBLE_CHARACTERS.md). */
 UENUM(BlueprintType)
 enum class EZoogiPower : uint8
 {
@@ -30,7 +30,8 @@ enum class EZoogiPower : uint8
 	LockOn,       // Pinpoint: the shot snaps onto the target in the pull direction
 	StaticShock,  // Bolt: phase through rivals this shot and stun them
 	BandageBind,  // Wraps: rivals you touch are slowed and bound (weaker next shot)
-	ShadowStun    // Nightshade: shadow pulse freezes nearby rivals, they skip a turn
+	ShadowStun,   // Dark Zoogy (was Nightshade): shadow pulse freezes nearby rivals, they skip a turn
+	RuneSeal      // Sera: rune pulse (Shadow Stun's radius check, smaller) that puts the Bind curse on nearby rivals
 };
 
 /** One playable Zoogi. Stats and abilities are ported from ZOOGI_ROSTER in useZoogiGame.tsx. */
@@ -53,6 +54,9 @@ struct FZoogiDef
 	/** Nightshade: keep the file pivot (ball centre) instead of fitting the bounds (horns stick out). */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) bool bPivotFit = false;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) EZoogiPower PowerKind = EZoogiPower::Explosion;
+	/** Bible character asset name: loads /Game/Characters/Bible/<MeshAsset>/SM_<MeshAsset> (+ SM_<MeshAsset>_Nubs).
+	 *  Empty = the old /Game/Zoogis/<Id>/SM_<Id> path. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) FName MeshAsset;
 	/** Extra yaw (degrees) so the face looks along the aim. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) float ModelYaw = 0.f;
 
@@ -115,6 +119,9 @@ namespace ZoogiUtil
 	ZOOGIROLL_API UMaterialInstanceDynamic* FxMID(UObject* Outer, const FLinearColor& Color, float Strength);
 	/** True if the power is armed before/while shooting rather than fired instantly. */
 	ZOOGIROLL_API bool IsArmedPower(EZoogiPower Power);
+	/** Project toggle for the bible characters' visual-only flipper nubs: Config/DefaultGame.ini
+	 *  [ZoogiRoll.Characters] ShowFlipperNubs=True|False; -ZoogiNoNubs / -ZoogiNubs override it on the command line. */
+	ZOOGIROLL_API bool ShowFlipperNubs();
 
 	/** Plays /Game/Audio/S_<Name> as a 2D sound (no-op if missing or with -NoSound). */
 	/** 2D SFX from /Game/Audio/S_<Name>. StartTime skips into the sound (e.g. so a wind-up ends exactly on the launch).

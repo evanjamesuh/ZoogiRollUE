@@ -10,6 +10,7 @@ class UStaticMeshComponent;
 class UPointLightComponent;
 class UPhysicalMaterial;
 class UZoogiArtifactComponent;
+class UZoogiExpressionComponent;
 
 /** A Zoogi marble: a Chaos-simulated sphere with the character model riding inside it. */
 UCLASS()
@@ -22,11 +23,19 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<USphereComponent> Sphere;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<UStaticMeshComponent> Visual;
+	/** Bible characters: the two flipper nubs (SM_<Asset>_Nubs), a visual-only child of Visual (no collision).
+	 *  Hidden project-wide with [ZoogiRoll.Characters] ShowFlipperNubs=False in Config/DefaultGame.ini. */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<UStaticMeshComponent> Nubs;
 	/** Flat glowing ring under the marble in the player's colour (does not roll). */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<UStaticMeshComponent> Ring;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<UPointLightComponent> TurnLight;
 	/** Milestone "Awaken": artifact hand / infuse / guard / status and the transformation visuals. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<UZoogiArtifactComponent> Artifact;
+	/** Facial expressions + light character animation driven by the turn phases (ZoogiExpressionComponent.h). */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly) TObjectPtr<UZoogiExpressionComponent> Expression;
+	/** Expressions: while bActive, turns the model (face = local +X) toward WorldFace (slerp, Rate 1/s). Inactive keeps the
+	 *  current offset frozen in the sphere's frame, so the face simply rolls with the ball. Visual only. */
+	void SetFaceTarget(bool bActive, const FQuat& WorldFace, float Rate = 4.f);
 	/** Owner / team (one Zoogi per player for now; lets N Zoogis per player come later). */
 	UPROPERTY(BlueprintReadOnly) int32 TeamIndex = 0;
 	/** Mass with no artifact modifiers (Titan Core / guard scale this temporarily). */
@@ -122,6 +131,10 @@ protected:
 	float ExpandAge = 10.f, ExpandStrength = 0.f;
 	float LastSquashTime = -10.f;
 	float ModelScale = 1.f;
+	FQuat FaceAlign = FQuat::Identity;              // expression face turn, in the sphere's local frame
+	FQuat FaceTargetWorld = FQuat::Identity;
+	bool bFaceTarget = false;
+	float FaceRate = 4.f;
 	/** -ZoogiHookDemo (with -ZoogiShots): close-up test camera on P1 during its first turn, firing each hook once for review shots. */
 	void TickHookDemo(float Dt);
 	float HookDemoClock = -1.f;

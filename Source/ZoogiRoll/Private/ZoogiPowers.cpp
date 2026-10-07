@@ -10,11 +10,13 @@
 #include "Engine/World.h"
 #include "Engine/StaticMesh.h"
 #include "Components/SphereComponent.h"
+#include "Components/StaticMeshComponent.h"
 
 namespace
 {
 	constexpr float ExplosionRadius = 310.f;   // balance Oct 3: 450 -> 390 -> 360; Oct 4: 360 -> 310 (Hotstreak won 62% of the 3rd 20-match sample)
 	constexpr float ShadowRadius = 520.f;
+	constexpr float RuneSealRadius = 460.f;  // Sera (Oct 6): a smaller Shadow Stun pulse that binds instead of freezing
 	constexpr float LockOnCone = 35.f;
 	constexpr float LockOnRange = 2600.f;
 	constexpr float BindShotScale = 0.65f;
@@ -34,6 +36,7 @@ namespace
 		case EZoogiPower::StaticShock: return FLinearColor(1.f, 0.85f, 0.15f);
 		case EZoogiPower::BandageBind: return FLinearColor(0.9f, 0.78f, 0.55f);
 		case EZoogiPower::ShadowStun: return FLinearColor(0.45f, 0.15f, 0.95f);
+		case EZoogiPower::RuneSeal: return FLinearColor(0.62f, 0.8f, 1.f);
 		}
 		return FLinearColor::White;
 	}
@@ -108,7 +111,7 @@ void AZoogiGameMode::FireInstantPower(AZoogiBall* Ball)
 	Ball->Charges = FMath::Max(0, Ball->Charges - 1);
 	bPowerUsed = true;
 	AddPopup(Ball->Def.Ability.ToUpper() + TEXT("!"), L + FVector(0, 0, 140.f), C);
-	ZoogiUtil::PlaySfx(this, P == EZoogiPower::Explosion ? TEXT("Explosion") : TEXT("Zap"), 0.9f, P == EZoogiPower::ShadowStun ? 0.7f : 1.f);
+	ZoogiUtil::PlaySfx(this, P == EZoogiPower::Explosion ? TEXT("Explosion") : TEXT("Zap"), 0.9f, P == EZoogiPower::ShadowStun ? 0.7f : (P == EZoogiPower::RuneSeal ? 1.25f : 1.f));
 	TakeShotDelayed(FString::Printf(TEXT("power_%s"), *Ball->Def.Id.ToString()), P == EZoogiPower::WolfPack ? 0.6f : 0.15f);
 
 	switch (P)
@@ -130,7 +133,7 @@ void AZoogiGameMode::FireInstantPower(AZoogiBall* Ball)
 			PushActor(T, Dir * (470.f + 1100.f * K), 200.f + 180.f * K, Ball->PlayerIndex); // Oct 4: 550+1300k -> 470+1100k; // balance Oct 3 (20-match sample): 600+1400k -> 550+1300k, Hotstreak won 50%
 			++N;
 		}
-		UE_LOG(LogZoogi, Log, TEXT("P%d Hotstreak explosion pushed %d"), Ball->PlayerIndex + 1, N);
+		UE_LOG(LogZoogi, Log, TEXT("P%d %s explosion pushed %d"), Ball->PlayerIndex + 1, *Ball->Def.Name, N);
 		break;
 	}
 	case EZoogiPower::ShadowStun:
@@ -152,7 +155,29 @@ void AZoogiGameMode::FireInstantPower(AZoogiBall* Ball)
 			AddPopup(TEXT("FROZEN"), B->BallLocation() + FVector(0, 0, 110.f), C);
 			++N;
 		}
-		UE_LOG(LogZoogi, Log, TEXT("P%d Nightshade shadow stun froze %d"), Ball->PlayerIndex + 1, N);
+		UE_LOG(LogZoogi, Log, TEXT("P%d %s shadow stun froze %d"), Ball->PlayerIndex + 1, *Ball->Def.Name, N);
+		break;
+	}
+	case EZoogiPower::RuneSeal:
+	{
+		// Sera: Shadow Stun's pulse (smaller radius) carrying Bandage Bind's curse: nearby rivals' next 2 shots are weak
+		// (BoundShots, consumed in the shot code). No freeze and no skipped turn, so it is weaker than Shadow Stun.
+		AZoogiFX::Spawn(GetWorld(), L - FVector(0, 0, ZoogiConst::ZoogiRadius - 3.f), C, RuneSealRadius, 1.0f, true, 12.f);
+		AZoogiFX::Spawn(GetWorld(), L - FVector(0, 0, ZoogiConst::ZoogiRadius - 3.f), FLinearColor(0.95f, 0.8f, 0.45f), RuneSealRadius * 0.7f, 0.8f, true, 8.f);
+		AZoogiFX::Niagara(GetWorld(), TEXT("NS_Burst_Gold"), L, FRotator::ZeroRotator, 1.3f);
+		int32 N = 0;
+		for (AZoogiBall* B : Balls)
+		{
+			if (!B || B == Ball || B->bOut || IsAlly(Ball, B)) continue;
+			if (FVector::Dist2D(B->BallLocation(), L) > RuneSealRadius + ZoogiConst::ZoogiRadius) continue;
+			B->BoundShots = FMath::Max(B->BoundShots, 2);
+			B->LastHitPlayer = Ball->PlayerIndex;
+			AZoogiFX::Spawn(GetWorld(), B->BallLocation(), C, 110.f, 0.6f, true, 6.f, B);
+			AZoogiFX::Niagara(GetWorld(), TEXT("NS_Burst_Gold"), B->BallLocation(), FRotator::ZeroRotator, 0.7f);
+			AddPopup(TEXT("SEALED"), B->BallLocation() + FVector(0, 0, 110.f), C);
+			++N;
+		}
+		UE_LOG(LogZoogi, Log, TEXT("P%d %s rune seal bound %d"), Ball->PlayerIndex + 1, *Ball->Def.Name, N);
 		break;
 	}
 	case EZoogiPower::WolfPack:
@@ -164,7 +189,9 @@ void AZoogiGameMode::FireInstantPower(AZoogiBall* Ball)
 		if (Fwd.IsNearlyZero()) Fwd = FRotator(0.f, Ball->AimYaw, 0.f).Vector();
 		const FVector Right = FVector::CrossProduct(FVector::UpVector, Fwd);
 		const FVector Offsets[3] = { Right * 115.f, -Right * 115.f, -Fwd * 120.f };
-		UStaticMesh* Wolf = ZoogiUtil::LoadMesh(TEXT("/Game/Zoogis/wolfgang/SM_wolfgang.SM_wolfgang"));
+		// Echo clones of the caster's own model (was always Wolfgang's mesh), tinted in its colour.
+		UStaticMesh* Wolf = Ball->Visual ? Ball->Visual->GetStaticMesh() : nullptr;
+		if (!Wolf) Wolf = ZoogiUtil::LoadMesh(TEXT("/Game/Zoogis/wolfgang/SM_wolfgang.SM_wolfgang"));
 		for (int32 i = 0; i < 3; ++i)
 		{
 			const FVector SpawnL = L + Offsets[i] + FVector(0, 0, 8.f);
@@ -173,13 +200,13 @@ void AZoogiGameMode::FireInstantPower(AZoogiBall* Ball)
 			AZoogiClone* Cl = GetWorld()->SpawnActor<AZoogiClone>(AZoogiClone::StaticClass(), FTransform(Fwd.Rotation(), SpawnL), SP);
 			if (!Cl) continue;
 			AActor* T = Targets.IsValidIndex(i) ? Targets[i] : (Targets.Num() ? Targets[0] : nullptr);
-			Cl->InitClone(Wolf, T, Ball->PlayerIndex, 1750.f); // balance Oct 3: 1800 -> 1650 -> 1750 (52% win share in sample 1, 5% in sample 2)
+			Cl->InitClone(Wolf, T, Ball->PlayerIndex, 1750.f, Ball->Def.MeshAsset.IsNone() ? FLinearColor(0.3f, 0.55f, 1.f) : Ball->Def.Color); // balance Oct 3: 1800 -> 1650 -> 1750 (52% win share in sample 1, 5% in sample 2)
 			Cl->Sphere->SetPhysicsLinearVelocity(Fwd * 900.f + Offsets[i].GetSafeNormal() * 400.f);
 			Clones.Add(Cl);
 			AZoogiFX::Spawn(GetWorld(), SpawnL, C, 90.f, 0.4f, false, 6.f);
 			AZoogiFX::Niagara(GetWorld(), TEXT("NS_Burst_White"), SpawnL, FRotator::ZeroRotator, 0.6f);
 		}
-		UE_LOG(LogZoogi, Log, TEXT("P%d Wolfgang wolf pack: %d clones"), Ball->PlayerIndex + 1, Clones.Num());
+		UE_LOG(LogZoogi, Log, TEXT("P%d %s wolf pack: %d clones"), Ball->PlayerIndex + 1, *Ball->Def.Name, Clones.Num());
 		break;
 	}
 	default:
@@ -231,7 +258,7 @@ void AZoogiGameMode::OnArmedShot(AZoogiBall* Ball)
 	PowerTouched.Reset();
 	const FLinearColor C = PowerColor(P);
 	AZoogiFX::Spawn(GetWorld(), Ball->BallLocation(), C, 140.f, 0.6f, false, 7.f, Ball);
-	if (P != EZoogiPower::Explosion && P != EZoogiPower::ShadowStun) AZoogiFX::Niagara(GetWorld(), AZoogiFX::PowerBurst(P), Ball->BallLocation(), FRotator::ZeroRotator, 0.8f);
+	if (P != EZoogiPower::Explosion && P != EZoogiPower::ShadowStun && P != EZoogiPower::RuneSeal) AZoogiFX::Niagara(GetWorld(), AZoogiFX::PowerBurst(P), Ball->BallLocation(), FRotator::ZeroRotator, 0.8f);
 	AddPopup(Ball->Def.Ability.ToUpper() + TEXT("!"), Ball->BallLocation() + FVector(0, 0, 140.f), C);
 	TakeShotDelayed(FString::Printf(TEXT("power_%s"), *Ball->Def.Id.ToString()), 0.6f);
 	ZoogiUtil::PlaySfx(this, TEXT("Zap"), 0.6f, 1.3f);
@@ -287,7 +314,7 @@ void AZoogiGameMode::OnShooterContact(AZoogiBall* Shooter, AActor* Other)
 			AZoogiFX::Niagara(GetWorld(), TEXT("NS_Burst_Yellow"), OtherBall->BallLocation());
 			AddPopup(TEXT("STUNNED"), OtherBall->BallLocation() + FVector(0, 0, 110.f), PowerColor(P));
 			ZoogiUtil::PlaySfx(this, TEXT("Zap"), 0.8f, 1.6f);
-			UE_LOG(LogZoogi, Log, TEXT("Bolt phased through P%d and stunned it"), OtherBall->PlayerIndex + 1);
+			UE_LOG(LogZoogi, Log, TEXT("%s static shock: phased through P%d and stunned it"), *Shooter->Def.Name, OtherBall->PlayerIndex + 1);
 		}
 		break;
 	case EZoogiPower::BandageBind:
@@ -306,7 +333,7 @@ void AZoogiGameMode::OnShooterContact(AZoogiBall* Shooter, AActor* Other)
 			AZoogiFX::Niagara(GetWorld(), TEXT("NS_Burst_Gold"), OtherBall->BallLocation(), FRotator::ZeroRotator, 0.8f);
 			AddPopup(TEXT("BOUND"), OtherBall->BallLocation() + FVector(0, 0, 110.f), PowerColor(P));
 			ZoogiUtil::PlaySfx(this, TEXT("Arm"), 0.6f, 0.6f);
-			UE_LOG(LogZoogi, Log, TEXT("Wraps bound P%d"), OtherBall->PlayerIndex + 1);
+			UE_LOG(LogZoogi, Log, TEXT("%s bandage bind: bound P%d"), *Shooter->Def.Name, OtherBall->PlayerIndex + 1);
 		}
 		break;
 	default:
@@ -359,7 +386,7 @@ void AZoogiGameMode::TickPowers(float Dt)
 				AddPopup(TEXT("RICOCHET"), L + FVector(0, 0, 110.f), PowerColor(EZoogiPower::Ricochet));
 				ZoogiUtil::PlaySfx(this, TEXT("Zap"), 0.5f, 2.f);
 				RicochetsLeft--;
-				UE_LOG(LogZoogi, Log, TEXT("Lars ricochet toward %s (%.0f cm), %d left"), *Best->GetName(), BestD, RicochetsLeft);
+				UE_LOG(LogZoogi, Log, TEXT("%s ricochet toward %s (%.0f cm), %d left"), *Ball->Def.Name, *Best->GetName(), BestD, RicochetsLeft);
 			}
 			else
 			{
@@ -413,9 +440,10 @@ void AZoogiGameMode::CPUPowerTick()
 	{
 		CPUExplPrevN = 0;
 		// Shadow Stun before shooting if a rival is already close.
-		if (P == EZoogiPower::ShadowStun && bLockedMain && LockTime > 0.2f)
+		if ((P == EZoogiPower::ShadowStun || P == EZoogiPower::RuneSeal) && bLockedMain && LockTime > 0.2f)
 		{
-			for (AZoogiBall* O : Balls) if (O && O != B && !O->bOut && FVector::Dist2D(O->BallLocation(), L) < ShadowRadius) { TryPower(); break; }
+			const float Rad = P == EZoogiPower::RuneSeal ? RuneSealRadius : ShadowRadius;
+			for (AZoogiBall* O : Balls) if (O && O != B && !O->bOut && !IsAlly(B, O) && FVector::Dist2D(O->BallLocation(), L) < Rad) { TryPower(); break; }
 		}
 		return;
 	}
@@ -444,11 +472,12 @@ void AZoogiGameMode::CPUPowerTick()
 		if (N >= 3 || bPastPeak || bEdgeKill || (N >= 1 && bSlow)) TryPower();
 		CPUExplPrevN = FMath::Max(CPUExplPrevN, N);
 	}
-	else if (P == EZoogiPower::ShadowStun)
+	else if (P == EZoogiPower::ShadowStun || P == EZoogiPower::RuneSeal)
 	{
+		const float Rad = P == EZoogiPower::RuneSeal ? RuneSealRadius : ShadowRadius;
 		for (AZoogiBall* O : Balls)
 		{
-			if (O && O != B && !O->bOut && FVector::Dist2D(O->BallLocation(), L) < ShadowRadius + 40.f)
+			if (O && O != B && !O->bOut && !IsAlly(B, O) && FVector::Dist2D(O->BallLocation(), L) < Rad + 40.f)
 			{
 				TryPower();
 				break;

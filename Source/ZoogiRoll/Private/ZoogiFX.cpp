@@ -38,6 +38,7 @@ const TCHAR* AZoogiFX::PowerBurst(EZoogiPower Power)
 	case EZoogiPower::StaticShock: return TEXT("NS_Burst_Yellow");
 	case EZoogiPower::BandageBind: return TEXT("NS_Burst_Gold");
 	case EZoogiPower::ShadowStun: return TEXT("NS_Burst_Purple");
+	case EZoogiPower::RuneSeal: return TEXT("NS_Burst_Gold");
 	}
 	return TEXT("NS_Burst_White");
 }

@@ -9,6 +9,7 @@
 #include "ZoogiFloorScars.h"
 #include "ZoogiArena.h"
 #include "ZoogiArtifactComponent.h"
+#include "ZoogiExpressionComponent.h"
 #include "Engine/World.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -50,6 +51,12 @@ AZoogiBall::AZoogiBall()
 	Visual->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Visual->SetCastShadow(true);
 
+	Nubs = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Nubs"));
+	Nubs->SetupAttachment(Visual);
+	Nubs->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Nubs->SetCastShadow(true);
+	Nubs->SetVisibility(false);
+
 	Ring = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Ring"));
 	Ring->SetupAttachment(Sphere);
 	Ring->SetUsingAbsoluteRotation(true);
@@ -66,6 +73,7 @@ AZoogiBall::AZoogiBall()
 	TurnLight->SetCastShadows(false);
 
 	Artifact = CreateDefaultSubobject<UZoogiArtifactComponent>(TEXT("Artifact"));
+	Expression = CreateDefaultSubobject<UZoogiExpressionComponent>(TEXT("Expression"));
 }
 
 void AZoogiBall::SetMassScale(float Mul)
@@ -85,6 +93,7 @@ void AZoogiBall::SetPhasing(bool bOn)
 	bPhasing = bOn;
 	Sphere->SetCollisionResponseToChannel(ECC_Pawn, bOn ? ECR_Overlap : ECR_Block);
 	Visual->SetRenderCustomDepth(bOn);
+	if (Nubs) Nubs->SetRenderCustomDepth(bOn);
 }
 
 void AZoogiBall::SetPlanarVelocity(const FVector& V, float Up)
@@ -117,7 +126,20 @@ void AZoogiBall::InitZoogi(const FZoogiDef& InDef, int32 InPlayerIndex, bool bIn
 	Sphere->SetMassOverrideInKg(NAME_None, BaseMassKg, true);
 
 	const FString Id = Def.Id.ToString();
-	UStaticMesh* Mesh = ZoogiUtil::LoadMesh(FString::Printf(TEXT("/Game/Zoogis/%s/SM_%s.SM_%s"), *Id, *Id, *Id));
+	UStaticMesh* Mesh = nullptr;
+	UStaticMesh* NubMesh = nullptr;
+	if (!Def.MeshAsset.IsNone())
+	{
+		// Bible characters (Scripts/import_bible_characters.py): shell + eyes + trim + core in one mesh, nubs separate.
+		const FString A = Def.MeshAsset.ToString();
+		Mesh = ZoogiUtil::LoadMesh(FString::Printf(TEXT("/Game/Characters/Bible/%s/SM_%s.SM_%s"), *A, *A, *A));
+		NubMesh = ZoogiUtil::LoadMesh(FString::Printf(TEXT("/Game/Characters/Bible/%s/SM_%s_Nubs.SM_%s_Nubs"), *A, *A, *A));
+	}
+	if (!Mesh) Mesh = ZoogiUtil::LoadMesh(FString::Printf(TEXT("/Game/Zoogis/%s/SM_%s.SM_%s"), *Id, *Id, *Id));
+	// The nubs share Visual's transform (same pivot / scale), so they roll, squash and wobble with the shell.
+	Nubs->SetStaticMesh(NubMesh);
+	Nubs->SetRelativeTransform(FTransform::Identity);
+	Nubs->SetVisibility(NubMesh != nullptr && ZoogiUtil::ShowFlipperNubs());
 	if (Mesh)
 	{
 		Visual->SetStaticMesh(Mesh);
@@ -129,6 +151,7 @@ void AZoogiBall::InitZoogi(const FZoogiDef& InDef, int32 InPlayerIndex, bool bIn
 		Visual->SetMaterial(0, ZoogiUtil::SurfaceMID(this, Def.Color, 0.35f));
 	}
 	FitVisual();
+	if (Expression) Expression->Setup();
 
 	const FLinearColor PC = ZoogiUtil::PlayerColor(PlayerIndex);
 	Ring->SetStaticMesh(ZoogiUtil::BasicShape(TEXT("Cylinder")));
@@ -238,11 +261,20 @@ void AZoogiBall::SetModelScale(float Scale)
 	TickVisualHooks(0.f);
 }
 
+void AZoogiBall::SetFaceTarget(bool bActive, const FQuat& WorldFace, float Rate)
+{
+	bFaceTarget = bActive;
+	FaceTargetWorld = WorldFace;
+	FaceRate = FMath::Max(Rate, 0.1f);
+	if (bActive) bHooksDirty = true;
+}
+
 void AZoogiBall::ResetVisualHooks()
 {
 	SpinLocal = FQuat::Identity;
 	SpinRate = 0.f;
 	SquashAge = WobbleAge = ExpandAge = 10.f;
+	FaceAlign = FQuat::Identity;
 	bHooksDirty = true;
 	TickVisualHooks(0.f);
 }
@@ -274,7 +306,14 @@ void AZoogiBall::TickVisualHooks(float Dt)
 		WobbleLocal = FQuat(ToLocal.RotateVector(WobbleAxisWorld), FMath::DegreesToRadians(Ang));
 		bActive = true;
 	}
-	const FQuat Rel = WobbleLocal * SpinLocal * BaseVisualRot;
+	// Expression face turn: settle so that SphereQ * SpinLocal * FaceAlign * BaseVisualRot == FaceTargetWorld (wobble aside).
+	if (bFaceTarget)
+	{
+		const FQuat Want = (SpinLocal.Inverse() * ToLocal * FaceTargetWorld * BaseVisualRot.Inverse()).GetNormalized();
+		FaceAlign = FQuat::Slerp(FaceAlign, Want, 1.f - FMath::Exp(-Dt * FaceRate)).GetNormalized();
+		if (FaceAlign.AngularDistance(Want) > FMath::DegreesToRadians(0.5f)) bActive = true;
+	}
+	const FQuat Rel = WobbleLocal * SpinLocal * FaceAlign * BaseVisualRot;
 
 	// Squash: the diagonal of the squash matrix I + a (1.5 d d^T - 0.5 I) in the model's own axes (no shear on a rotated mesh).
 	FVector S = FVector::OneVector;
@@ -579,6 +618,7 @@ void AZoogiBall::OnSphereHit(UPrimitiveComponent* HitComp, AActor* OtherActor, U
 		const float K = FMath::Clamp((NormalImpulse.Size() - 3000.f) / 25000.f, 0.f, 1.f);
 		Squash(-(0.04f + 0.08f * K), Hit.ImpactNormal);
 		Wobble(1.5f + 3.f * K, Hit.ImpactNormal);
+		if (Expression) Expression->OnImpact(NormalImpulse.Size(), OtherActor);
 		if (HookGain() > 0.f && FParse::Param(FCommandLine::Get(), TEXT("ZoogiHookShots")))
 			UE_LOG(LogZoogi, Log, TEXT("Hook impact P%d squash %.3f (impulse %.0f, other %s)"), PlayerIndex + 1, SquashAmount, NormalImpulse.Size(), OtherActor ? *OtherActor->GetName() : TEXT("-"));
 	}

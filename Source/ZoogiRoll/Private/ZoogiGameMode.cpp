@@ -38,7 +38,7 @@ AZoogiGameMode::AZoogiGameMode()
 	MenuPlayers.SetNum(4);
 	for (int32 i = 0; i < 4; ++i)
 	{
-		MenuPlayers[i].ZoogiIndex = i % 7;
+		MenuPlayers[i].ZoogiIndex = i % FMath::Max(1, ZoogiUtil::Roster().Num());
 		MenuPlayers[i].bCPU = i > 0; // P1 human, others CPU by default
 	}
 	MenuPlayers[1].ZoogiIndex = 1;
@@ -793,7 +793,7 @@ void AZoogiGameMode::PlanCPUShot()
 	// More charges banked = more willing to spend one.
 	bCPUUsePower = !bArtifactMode && Me->Charges > 0 && (bPowerTest || FMath::FRand() < (Me->Charges >= 2 ? 0.8f : 0.5f));
 	const EZoogiPower MyPower = Me->Def.PowerKind;
-	const bool bHuntRivals = bCPUUsePower && (MyPower == EZoogiPower::ShadowStun || MyPower == EZoogiPower::StaticShock || MyPower == EZoogiPower::BandageBind);
+	const bool bHuntRivals = bCPUUsePower && (MyPower == EZoogiPower::ShadowStun || MyPower == EZoogiPower::StaticShock || MyPower == EZoogiPower::BandageBind || MyPower == EZoogiPower::RuneSeal);
 	for (AZoogiBall* Other : Balls) if (Other && Other != Me && !Other->bOut && !IsAlly(Me, Other)) Cands.Add({ FVector2D(Other->BallLocation()), bHuntRivals ? 100.f : 40.f, Other->Def.MassRatio(), ZoogiConst::ZoogiRadius, Other });
 
 	auto Blocked = [&](const FVector2D& From, const FVector2D& To, const FVector2D& Ignore)

@@ -1,4 +1,6 @@
 #include "ZoogiTypes.h"
+#include "Misc/ConfigCacheIni.h"
+#include "Misc/CommandLine.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
 #include "UObject/StrongObjectPtr.h"
@@ -40,25 +42,27 @@ static TArray<FZoogiDef> BuildRoster()
 		D.Speed = Spd; D.Power = Pow; D.Defense = Def; D.Control = Ctl;
 		return D;
 	};
+	// Oct 6: the 8 Buzzy bible characters (Zoogy Roll Master Asset Bible, section 1) replace the old 7. Each one inherits
+	// an existing power together with the stats (and so the mass) that power was balanced with; Sera's Rune Seal is a
+	// small variant (Shadow Stun's pulse applying Bandage Bind's curse). Table: Docs/BIBLE_CHARACTERS.md.
 	TArray<FZoogiDef> R;
-	auto P = [&R](EZoogiPower Pw) { R.Last().PowerKind = Pw; };
-	R.Add(Make("wolfgang", TEXT("Wolfgang"), TEXT("Wolf"), TEXT("#6B7280"), TEXT("#9CA3AF"), TEXT("Wolf Pack"),
-		TEXT("While moving, send three clones that chase the nearest orb or opponent"), 85, 60, 50, 75)); P(EZoogiPower::WolfPack);
-	R.Add(Make("hotstreak", TEXT("Hotstreak"), TEXT("Lava"), TEXT("#EF4444"), TEXT("#F97316"), TEXT("Instant Explosion"),
-		TEXT("Create a fiery explosion around you"), 55, 90, 62, 45)); P(EZoogiPower::Explosion); // balance Oct 4: Defense 70 -> 62 (mass 1.17 -> 1.03); bal4 Hotstreak won 46% mostly by rarely being knocked off
-	R.Add(Make("lars", TEXT("Lars"), TEXT("Bouncer"), TEXT("#3B82F6"), TEXT("#93C5FD"), TEXT("Ricochet"),
-		TEXT("Ricochets toward the nearest target after a hit"), 70, 75, 60, 80)); P(EZoogiPower::Ricochet);
-	R.Add(Make("pinpoint", TEXT("Pinpoint"), TEXT("Precision"), TEXT("#8B5CF6"), TEXT("#A78BFA"), TEXT("Laser Trajectory"),
-		TEXT("Laser-guided strike: the locked shot hits 30% harder"), 60, 65, 45, 95)); P(EZoogiPower::LockOn);
-	R.Add(Make("bolt", TEXT("Bolt"), TEXT("Electric"), TEXT("#FBBF24"), TEXT("#FDE047"), TEXT("Static Shock"),
-		TEXT("Phase through enemies and stun them"), 80, 55, 40, 70)); P(EZoogiPower::StaticShock);
-	R.Add(Make("wraps", TEXT("Wraps"), TEXT("Mummy"), TEXT("#8B7355"), TEXT("#D4C4B0"), TEXT("Bandage Bind"),
-		TEXT("Curse enemies on contact: they take the hit 25% harder and their next 2 shots are weak"), 50, 70, 85, 65)); P(EZoogiPower::BandageBind);
-	FZoogiDef N = Make("nightshade", TEXT("Nightshade"), TEXT("Shadow"), TEXT("#6B46C1"), TEXT("#9F7AEA"), TEXT("Shadow Stun"),
-		TEXT("A short shadow pulse that freezes nearby opponents and skips their next turn"), 62, 68, 64, 84);
-	N.bPivotFit = true;
-	N.PowerKind = EZoogiPower::ShadowStun;
-	R.Add(N);
+	auto P = [&R](EZoogiPower Pw, const TCHAR* Asset) { R.Last().PowerKind = Pw; R.Last().MeshAsset = Asset; R.Last().bPivotFit = true; };
+	R.Add(Make("blue", TEXT("Blue"), TEXT("Lead Zoogy"), TEXT("#22C3E6"), TEXT("#E2B866"), TEXT("Resonance Rebound"),
+		TEXT("Arm while aiming: after each of your next 2 hits you rebound toward the best target"), 70, 75, 60, 80)); P(EZoogiPower::Ricochet, TEXT("Blue")); // was Lars
+	R.Add(Make("tavi", TEXT("Tavi"), TEXT("Best Friend"), TEXT("#F08A1C"), TEXT("#F5C76B"), TEXT("Friend Squad"),
+		TEXT("While moving, send three amber echoes that chase the nearest orb or opponent"), 85, 60, 50, 75)); P(EZoogiPower::WolfPack, TEXT("Tavi")); // was Wolfgang
+	R.Add(Make("vex", TEXT("Vex"), TEXT("Rival"), TEXT("#D11A2A"), TEXT("#FF7A1A"), TEXT("Rival Blast"),
+		TEXT("Create a fiery explosion around you that blasts everything away"), 55, 90, 62, 45)); P(EZoogiPower::Explosion, TEXT("Vex")); // was Hotstreak (balance Oct 4: Defense 62)
+	R.Add(Make("moss", TEXT("Moss"), TEXT("Tactician"), TEXT("#2E6B45"), TEXT("#6CC69A"), TEXT("Tactical Lock"),
+		TEXT("Laser-guided strike: the shot snaps onto the target nearest your aim and hits 30% harder"), 60, 65, 45, 95)); P(EZoogiPower::LockOn, TEXT("Moss")); // was Pinpoint
+	R.Add(Make("orin", TEXT("Master Orin"), TEXT("Arena Keeper"), TEXT("#8E8E8E"), TEXT("#D9A441"), TEXT("Granite Bind"),
+		TEXT("Curse enemies on contact: they take the hit 25% harder and their next 2 shots are weak"), 50, 70, 85, 65)); P(EZoogiPower::BandageBind, TEXT("MasterOrin")); // was Wraps
+	R.Add(Make("sera", TEXT("Sera"), TEXT("Archivist"), TEXT("#C7B6F2"), TEXT("#D8B26A"), TEXT("Rune Seal"),
+		TEXT("A rune ring seals nearby opponents: their next 2 shots are weak"), 58, 62, 66, 84)); P(EZoogiPower::RuneSeal, TEXT("Sera")); // new variant
+	R.Add(Make("luma", TEXT("Luma"), TEXT("Announcer"), TEXT("#E81CC8"), TEXT("#F2E23A"), TEXT("Hype Shock"),
+		TEXT("Phase through enemies and stun them"), 80, 55, 40, 70)); P(EZoogiPower::StaticShock, TEXT("Luma")); // was Bolt
+	R.Add(Make("darkzoogy", TEXT("Dark Zoogy"), TEXT("Ancient Mystery"), TEXT("#7A0E26"), TEXT("#FF3048"), TEXT("Shadow Stun"),
+		TEXT("A short shadow pulse that freezes nearby opponents and skips their next turn"), 62, 68, 64, 84)); P(EZoogiPower::ShadowStun, TEXT("DarkZoogy")); // was Nightshade
 	return R;
 }
 
@@ -166,6 +170,20 @@ UMaterialInstanceDynamic* ZoogiUtil::FxMID(UObject* Outer, const FLinearColor& C
 	MID->SetVectorParameterValue(TEXT("Color"), Color);
 	MID->SetScalarParameterValue(TEXT("Strength"), Strength);
 	return MID;
+}
+
+bool ZoogiUtil::ShowFlipperNubs()
+{
+	static int32 Cached = -1;
+	if (Cached < 0)
+	{
+		bool bShow = true;
+		if (GConfig) GConfig->GetBool(TEXT("ZoogiRoll.Characters"), TEXT("ShowFlipperNubs"), bShow, GGameIni);
+		if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiNoNubs"))) bShow = false;
+		if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiNubs"))) bShow = true;
+		Cached = bShow ? 1 : 0;
+	}
+	return Cached == 1;
 }
 
 bool ZoogiUtil::IsArmedPower(EZoogiPower Power)
