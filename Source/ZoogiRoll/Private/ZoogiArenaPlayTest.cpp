@@ -92,6 +92,28 @@ void AZoogiArenaPlayTest::Tick(float DeltaSeconds)
 			if (APlayerController* PC = W->GetFirstPlayerController()) if (APawn* Pw = PC->GetPawn()) PC->SetViewTarget(Pw);
 		}
 	};
+	if (C.Kind == FZoogiArenaCheck::ZoogiLaunch)
+	{
+		AZoogiBall* B = TestBall.Get();
+		if (!B) { Next(C.Name + TEXT(": no Zoogi FAIL")); return; }
+		if (Before < 0)
+		{
+			Before = CountDamaged(C.PieceKind, C.Near, 400.f);
+			B->PlaceAt(C.From + FVector(0, 0, ZoogiConst::ZoogiRadius + 1.f), Yaw);
+			B->Launch(C.Vel);
+			StartZ = MaxZ = B->GetActorLocation().Z;
+			View(C.Near + FVector(0, 0, 60.f), Yaw + 90.f, 18.f, 1500.f);
+		}
+		MaxZ = FMath::Max(MaxZ, (float)B->GetActorLocation().Z);
+		if (T > 0.8 && !bShot && !ShotDir.IsEmpty()) { bShot = true; FScreenshotRequest::RequestScreenshot(FPaths::Combine(ShotDir, FString::Printf(TEXT("arenatest_%d_%s.png"), Step, *C.Name)), false, false); }
+		if (T > C.Wait)
+		{
+			const float Rise = MaxZ - StartZ;
+			const int32 N = CountDamaged(C.PieceKind, C.Near, 400.f);
+			Next(FString::Printf(TEXT("%s: %.0f cm/s Zoogi roll -> peak rise %.0f cm (need %.0f), %s pieces damaged %d->%d %s"), *C.Name, C.Vel.Size(), Rise, C.Radius, *C.PieceKind.ToString(), Before, N, Rise >= C.Radius ? TEXT("PASS") : TEXT("FAIL")));
+		}
+		return;
+	}
 	if (C.Kind == FZoogiArenaCheck::ZoogiDamages)
 	{
 		AZoogiBall* B = TestBall.Get();

@@ -12,7 +12,7 @@ class ACameraActor;
 /** One scripted check for -ZoogiArenaPlayTest. */
 struct FZoogiArenaCheck
 {
-	enum EKind : uint8 { OrbOut, OrbStays, ZoogiDamages };
+	enum EKind : uint8 { OrbOut, OrbStays, ZoogiDamages, ZoogiLaunch }; // ZoogiLaunch: Radius = min rise (cm)
 	FString Name;
 	EKind Kind = OrbOut;
 	FVector From = FVector::ZeroVector;   // start (Z = ground; radius is added)
@@ -49,6 +49,7 @@ private:
 	double StepStart = 0.0;
 	bool bStarted = false, bShot = false;
 	int32 Before = 0;
+	float StartZ = 0.f, MaxZ = 0.f;
 	TWeakObjectPtr<AZoogiBall> TestBall;
 	TWeakObjectPtr<AZoogiOrb> TestOrb;
 	UPROPERTY() TObjectPtr<ACameraActor> Cam;
