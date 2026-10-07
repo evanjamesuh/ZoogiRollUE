@@ -209,6 +209,13 @@ void AZoogiHUD::TickUIPolish(AZoogiGameMode* G)
 		if (PolishStep == 1 && PolishAwakenT > 5.5f)
 		{
 			G->MenuAction(TEXT("Infuse"), 0); // direct (QueueControlClick only ticks under -ZoogiUiTest)
+			// -ZoogiPolishArt=Ember|Storm|Frost|Titan|Void: force the infused artifact so each Awaken colour can be captured.
+			FString ArtKey;
+			if (FParse::Value(FCommandLine::Get(), TEXT("ZoogiPolishArt="), ArtKey))
+				if (AZoogiBall* PB = G->GetActiveBall())
+					if (PB->Artifact)
+						for (EZoogiArtifact A : { EZoogiArtifact::Ember, EZoogiArtifact::Storm, EZoogiArtifact::Frost, EZoogiArtifact::Titan, EZoogiArtifact::Void })
+							if (ZoogiArtifacts::Key(A) == ArtKey) PB->Artifact->SetInfused(A);
 			PolishStep = 2;
 			UE_LOG(LogZoogi, Log, TEXT("UIPolish: Infuse after stone spin hold"));
 		}
@@ -221,13 +228,27 @@ void AZoogiHUD::TickUIPolish(AZoogiGameMode* G)
 		if (AimHold > 0.35f && !G->HasAim())
 		{
 			const TArray<AActor*> Cands = G->TargetCandidates();
-			if (Cands.Num() > 0) G->LockOn(Cands[0], false);
+			int32 CandIdx = 0; // -ZoogiPolishCand=N: lock a different target (e.g. for a bank shot)
+			FParse::Value(FCommandLine::Get(), TEXT("ZoogiPolishCand="), CandIdx);
+			if (Cands.Num() > 0) G->LockOn(Cands[FMath::Clamp(CandIdx, 0, Cands.Num() - 1)], false);
 		}
 		if (AimHold > 1.4f && G->Preview.bValid && G->bAimActive)
 		{
-			G->TakeShot(TEXT("sword_aim"));
+			G->TakeShot(TEXT("traj_aim"));
 			PolishStep = 3;
-			UE_LOG(LogZoogi, Log, TEXT("UIPolish: sword aim shot (contact=%d)"), G->Preview.bContact ? 1 : 0);
+			PolishBeamT = 0.f;
+			UE_LOG(LogZoogi, Log, TEXT("UIPolish: trajectory aim shot (contact=%d)"), G->Preview.bContact ? 1 : 0);
+		}
+	}
+	// -ZoogiClipFrames: ~5 s of the aim trajectory lines (clip_beam_####.png at 20 fps), aim held.
+	static const bool bBeamClip = FParse::Param(FCommandLine::Get(), TEXT("ZoogiClipFrames"));
+	if (PolishStep == 3 && bBeamClip && !G->ShotDir.IsEmpty() && ClipBeamFrames < 100 && G->Preview.bValid && G->bAimActive)
+	{
+		PolishBeamT += FApp::GetDeltaTime();
+		if (PolishBeamT > 0.04f)
+		{
+			PolishBeamT = 0.f;
+			FScreenshotRequest::RequestScreenshot(FPaths::Combine(G->ShotDir, FString::Printf(TEXT("clip_beam_%04d.png"), ClipBeamFrames++)), true, false);
 		}
 	}
 }
@@ -500,7 +521,9 @@ void AZoogiHUD::DrawAim(AZoogiGameMode* G)
 	{
 		const FVector TP = Cast<AZoogiOrb>(TL) ? Cast<AZoogiOrb>(TL)->OrbLocation() : (Cast<AZoogiBall>(TL) ? Cast<AZoogiBall>(TL)->BallLocation() : TL->GetActorLocation());
 		const FVector S0 = Project(B->BallLocation(), true), S1 = Project(TP, true);
-		if (S0.Z > 0.f && S1.Z > 0.f)
+		// Battle aim: the trajectory line (DrawPreview) already shows the shot, so skip the plain lock line under it.
+		const bool bTrajShown = G->Stage == EZoogiStage::Battle && G->bAimActive && G->Preview.bValid;
+		if (S0.Z > 0.f && S1.Z > 0.f && !bTrajShown)
 		{
 			const bool bBattle = G->Stage == EZoogiStage::Battle;
 			const float Pulse = 0.65f + 0.35f * FMath::Sin(Time * (bBattle ? 18.f : 8.f));
@@ -854,37 +877,60 @@ void AZoogiHUD::WorldCircle(const FVector& C, float Radius, const FLinearColor& 
 	}
 }
 
+// Trajectory palette (Evan Oct 7): the shot / target line glows in the current Awaken colour, warm gold when none.
+// Fill is the solid line colour, Glow the soft halo around it.
+static void AwakenLineColors(EZoogiArtifact Inf, FLinearColor& Fill, FLinearColor& Glow)
+{
+	switch (Inf)
+	{
+	case EZoogiArtifact::Ember: Fill = FLinearColor(1.f, 0.42f, 0.12f); Glow = FLinearColor(1.f, 0.18f, 0.04f); break;
+	case EZoogiArtifact::Storm: Fill = FLinearColor(1.f, 0.98f, 0.35f); Glow = FLinearColor(0.15f, 0.45f, 1.f); break; // lemon core, electric-blue rim
+	case EZoogiArtifact::Frost: Fill = FLinearColor(0.88f, 1.f, 1.f); Glow = FLinearColor(0.4f, 0.95f, 1.f); break;
+	case EZoogiArtifact::Titan: Fill = FLinearColor(1.f, 0.6f, 0.06f); Glow = FLinearColor(0.85f, 0.38f, 0.0f); break; // amber
+	case EZoogiArtifact::Void: Fill = FLinearColor(0.78f, 0.4f, 1.f); Glow = FLinearColor(0.55f, 0.12f, 1.f); break;
+	default: Fill = FLinearColor(1.f, 0.9f, 0.62f); Glow = FLinearColor(1.f, 0.72f, 0.25f); break;
+	}
+}
+// The player's own Zoogi after launch / contact: always blue.
+static const FLinearColor ZoogiBlueFill(0.25f, 0.6f, 1.f), ZoogiBlueGlow(0.08f, 0.3f, 1.f);
+
 void AZoogiHUD::WorldArrow(const FVector& From, const FVector& To, const FLinearColor& Col, float Thick)
 {
-	// Every aim / direction arrow is a golden sword now (ui-polish); thickness maps to sword size.
-	SwordArrow(From, To, FMath::Clamp(Thick / (4.f * U), 0.6f, 1.4f), Col.A, 0.f);
+	// Every aim / direction arrow is a glowing trajectory line with a static head (ui-polish).
+	FLinearColor Fill, Glow;
+	AwakenLineColors(EZoogiArtifact::None, Fill, Glow);
+	const FVector Pts[2] = { From, To };
+	TrajectoryLine(Pts, 2, Fill, Glow, FMath::Clamp(Thick / (4.f * U), 0.6f, 1.4f), Col.A, true);
 }
 
-void AZoogiHUD::SwordArrow(const FVector& From, const FVector& To, float Scale, float Alpha, float Seed)
+void AZoogiHUD::TrajectoryLine(const FVector* Pts, int32 Num, const FLinearColor& Fill, const FLinearColor& Glow, float Scale, float Alpha, bool bHead, const TArray<bool>* Off)
 {
-	const FVector S0 = Project(From, true), S1 = Project(To, true);
-	if (S0.Z <= 0.f || S1.Z <= 0.f || !Canvas) return;
-	const FVector2D A(S0.X, S0.Y), B(S1.X, S1.Y);
-	const float L = FVector2D::Distance(A, B);
-	if (L < 20.f * U) return;
-	const FVector2D D = (B - A) / L, N(-D.Y, D.X);
-	const float Pulse = 0.5f + 0.5f * FMath::Sin(Time * 3.4f + Seed * 5.f);
-	const float K = U * Scale;
-
-	// Proportions: hilt (pommel + grip + guard) is a fixed size, clamped down on short swords; blade takes the rest.
-	float PomR = 6.5f * K, GripL = 26.f * K, GripW = 4.2f * K, GuardT = 7.f * K, GuardS = 24.f * K, BladeW = 8.5f * K;
-	const float Need = PomR * 1.6f + GripL + GuardT + BladeW * 2.6f + 30.f * K;
-	if (Need > L)
+	// Solid glowing trajectory line (ui-polish, Evan Oct 7): dark outline, soft static halo, solid fill, bright core,
+	// optional static arrowhead at the end. Nothing moves along it; only a very gentle in-place brightness breath.
+	if (!Canvas || Num < 2) return;
+	TArray<FVector2D> S;
+	TArray<bool> SOff;
+	for (int32 i = 0; i < Num; ++i)
 	{
-		const float F = FMath::Max(0.35f, L / Need);
-		PomR *= F; GripL *= F; GripW *= F; GuardT *= F; GuardS *= F; BladeW *= F;
+		const FVector V = Project(Pts[i], true);
+		if (V.Z <= 0.f) continue;
+		const FVector2D Q(V.X, V.Y);
+		if (S.Num() && FVector2D::Distance(S.Last(), Q) < 1.5f) continue;
+		S.Add(Q);
+		SOff.Add(Off && Off->IsValidIndex(i - 1) && (*Off)[i - 1]);
 	}
-	const float TipL = BladeW * 2.6f;
-	const float aPom = PomR, aGrip0 = PomR * 1.5f, aGuard = aGrip0 + GripL, aBlade0 = aGuard + GuardT, aTip0 = FMath::Max(aBlade0 + 4.f * K, L - TipL);
-	auto P = [&](float Along, float Across) { return A + D * Along + N * Across; };
+	if (S.Num() < 2) return;
+	const float K = U * Scale;
+	const float Breath = 0.9f + 0.1f * FMath::Sin(Time * (UE_TWO_PI / 1.6f));
+	const FLinearColor Dark = FMath::Lerp(FLinearColor(0.02f, 0.03f, 0.06f, 1.f), Glow, Glow.B > Fill.B + 0.4f ? 0.55f : 0.2f), OffC(1.f, 0.22f, 0.18f, 1.f);
+	FVector2D HeadDir = (S.Last() - S[S.Num() - 2]).GetSafeNormal();
+	const float HeadL = 16.f * K, HeadW = 9.f * K;
+	FVector2D LineEnd = S.Last();
+	if (bHead && FVector2D::Distance(S.Last(), S[S.Num() - 2]) > HeadL * 1.2f) S.Last() = LineEnd - HeadDir * HeadL * 0.7f;
+	else if (bHead) bHead = false;
 
 	TArray<FCanvasUVTri> Tris;
-	Tris.Reserve(96);
+	Tris.Reserve(512);
 	auto Tri = [&Tris](const FVector2D& P0, const FVector2D& P1, const FVector2D& P2, const FLinearColor& C0, const FLinearColor& C1, const FLinearColor& C2)
 	{
 		FCanvasUVTri T;
@@ -892,11 +938,6 @@ void AZoogiHUD::SwordArrow(const FVector& From, const FVector& To, float Scale, 
 		T.V0_UV = T.V1_UV = T.V2_UV = FVector2D(0.5f, 0.5f);
 		T.V0_Color = C0; T.V1_Color = C1; T.V2_Color = C2;
 		Tris.Add(T);
-	};
-	auto Quad = [&Tri](const FVector2D& P0, const FVector2D& P1, const FVector2D& P2, const FVector2D& P3, const FLinearColor& C0, const FLinearColor& C1, const FLinearColor& C2, const FLinearColor& C3)
-	{
-		Tri(P0, P1, P2, C0, C1, C2);
-		Tri(P0, P2, P3, C0, C2, C3);
 	};
 	auto Flush = [this, &Tris](ESimpleElementBlendMode Mode)
 	{
@@ -906,84 +947,52 @@ void AZoogiHUD::SwordArrow(const FVector& From, const FVector& To, float Scale, 
 		Canvas->DrawItem(Item);
 		Tris.Reset();
 	};
-	// Whole silhouette grown by I (glow / outline passes), one colour.
-	auto Silhouette = [&](float I, const FLinearColor& C)
+	// Canvas additive ignores alpha: premultiply for the additive halo.
+	auto Col = [Alpha](const FLinearColor& B, float Al, bool bAdd)
 	{
-		Quad(P(aPom - PomR - I, 0.f), P(aPom, PomR + I), P(aPom + PomR + I, 0.f), P(aPom, -PomR - I), C, C, C, C);
-		Quad(P(aGrip0 - I, -GripW - I), P(aGrip0 - I, GripW + I), P(aGuard, GripW + I), P(aGuard, -GripW - I), C, C, C, C);
-		const FVector2D GC = P(aGuard + GuardT * 0.5f, 0.f);
-		const FVector2D G[6] = { P(aGuard - I, -GuardS * 0.82f), P(aGuard + GuardT * 1.3f + I, -GuardS - I), P(aGuard + GuardT + I, -GuardS * 0.82f),
-			P(aGuard + GuardT + I, GuardS * 0.82f), P(aGuard + GuardT * 1.3f + I, GuardS + I), P(aGuard - I, GuardS * 0.82f) };
-		for (int32 k = 0; k < 6; ++k) Tri(GC, G[k], G[(k + 1) % 6], C, C, C);
-		Quad(P(aBlade0 - 1.f, -BladeW - I), P(aBlade0 - 1.f, BladeW + I), P(aTip0, BladeW * 0.86f + I), P(aTip0, -BladeW * 0.86f - I), C, C, C, C);
-		Tri(P(aTip0, BladeW * 0.86f + I), P(L + I * 1.8f, 0.f), P(aTip0, -BladeW * 0.86f - I), C, C, C);
+		const float A2 = FMath::Clamp(Al, 0.f, 1.f) * Alpha;
+		return bAdd ? FLinearColor(B.R * A2, B.G * A2, B.B * A2, A2) : FLinearColor(B.R, B.G, B.B, A2);
 	};
-	auto Col = [Alpha](float R, float G, float Bv, float Al) { return FLinearColor(R, G, Bv, Al * Alpha); };
-
-	// 1) Glow (additive, breathing).
-	Silhouette((7.f + 5.f * Pulse) * K, Col(1.f, 0.62f, 0.05f, 0.10f + 0.07f * Pulse));
-	Silhouette(3.2f * K, Col(1.f, 0.78f, 0.15f, 0.20f + 0.08f * Pulse));
-	Flush(SE_BLEND_Additive);
-	// 2) Dark outline: keeps the sword readable on snow / bright floors.
-	Silhouette(2.2f * K, Col(0.16f, 0.07f, 0.0f, 0.88f));
-	// 3) Fill.
-	const FLinearColor Gold = Col(1.f, 0.76f, 0.16f, 1.f), GoldHi = Col(1.f, 0.93f, 0.5f, 1.f), GoldLo = Col(0.86f, 0.5f, 0.04f, 1.f);
-	Quad(P(aPom - PomR, 0.f), P(aPom, PomR), P(aPom + PomR, 0.f), P(aPom, -PomR), GoldLo, GoldHi, Gold, GoldLo);
-	const FLinearColor Grip = Col(0.42f, 0.2f, 0.06f, 1.f), GripHi = Col(0.66f, 0.36f, 0.1f, 1.f);
-	Quad(P(aGrip0, -GripW), P(aGrip0, GripW), P(aGuard, GripW), P(aGuard, -GripW), Grip, GripHi, GripHi, Grip);
-	for (int32 w = 0; w < 4; ++w) // leather wraps
+	// One pass: every segment as a quad with soft (Ce) or hard edges, round joints so corners / banks stay solid.
+	auto Pass = [&](float HalfW, const FLinearColor& Cc, const FLinearColor& Ce, bool bOffAware)
 	{
-		const float a0 = aGrip0 + GripL * (0.12f + 0.22f * w), a1 = a0 + GripL * 0.09f;
-		Quad(P(a0, -GripW), P(a0 + GripL * 0.05f, GripW), P(a1 + GripL * 0.05f, GripW), P(a1, -GripW), Col(1.f, 0.82f, 0.3f, 0.75f), Col(1.f, 0.82f, 0.3f, 0.75f), Col(1.f, 0.82f, 0.3f, 0.75f), Col(1.f, 0.82f, 0.3f, 0.75f));
-	}
-	{
-		const FVector2D GC = P(aGuard + GuardT * 0.5f, 0.f);
-		const FVector2D G[6] = { P(aGuard, -GuardS * 0.82f), P(aGuard + GuardT * 1.3f, -GuardS), P(aGuard + GuardT, -GuardS * 0.82f),
-			P(aGuard + GuardT, GuardS * 0.82f), P(aGuard + GuardT * 1.3f, GuardS), P(aGuard, GuardS * 0.82f) };
-		const FLinearColor GCs[6] = { GoldLo, GoldHi, Gold, Gold, GoldHi, GoldLo };
-		for (int32 k = 0; k < 6; ++k) Tri(GC, G[k], G[(k + 1) % 6], GoldHi, GCs[k], GCs[(k + 1) % 6]);
-		// jewel in the guard
-		const float JR = GuardT * 0.42f;
-		Quad(P(aGuard + GuardT * 0.5f - JR, 0.f), P(aGuard + GuardT * 0.5f, JR), P(aGuard + GuardT * 0.5f + JR, 0.f), P(aGuard + GuardT * 0.5f, -JR),
-			Col(1.f, 0.35f, 0.25f, 1.f), Col(1.f, 0.7f, 0.6f, 1.f), Col(0.8f, 0.15f, 0.1f, 1.f), Col(0.8f, 0.15f, 0.1f, 1.f));
-	}
-	// Blade: two bevels (lit + shaded side), brighter towards the point.
-	const FLinearColor LitBase = Col(1.f, 0.8f, 0.2f, 1.f), LitTip = Col(1.f, 0.97f, 0.62f, 1.f);
-	const FLinearColor ShBase = Col(0.92f, 0.56f, 0.06f, 1.f), ShTip = Col(1.f, 0.82f, 0.3f, 1.f);
-	Quad(P(aBlade0, 0.f), P(aBlade0, BladeW), P(aTip0, BladeW * 0.86f), P(aTip0, 0.f), LitBase, LitBase, LitTip, LitTip);
-	Quad(P(aBlade0, -BladeW), P(aBlade0, 0.f), P(aTip0, 0.f), P(aTip0, -BladeW * 0.86f), ShBase, ShBase, ShTip, ShTip);
-	Tri(P(aTip0, 0.f), P(aTip0, BladeW * 0.86f), P(L, 0.f), LitTip, LitTip, Col(1.f, 1.f, 0.85f, 1.f));
-	Tri(P(aTip0, -BladeW * 0.86f), P(aTip0, 0.f), P(L, 0.f), ShTip, ShTip, Col(1.f, 0.95f, 0.7f, 1.f));
-	// Fuller (the groove down the middle of the blade).
-	const float FW = BladeW * 0.17f;
-	Quad(P(aBlade0 + 3.f * K, -FW), P(aBlade0 + 3.f * K, FW), P(aTip0 - 2.f * K, FW * 0.6f), P(aTip0 - 2.f * K, -FW * 0.6f),
-		Col(0.75f, 0.4f, 0.02f, 0.9f), Col(1.f, 1.f, 0.85f, 0.9f), Col(1.f, 1.f, 0.85f, 0.6f), Col(0.75f, 0.4f, 0.02f, 0.6f));
-	Flush(SE_BLEND_Translucent);
-	// 4) Shimmer running hilt -> point, and a twinkle at the point (additive).
-	const float Ph = ZoogiUIFx::SweepPhase(Time, 1.9f, Seed, 0.55f);
-	if (Ph >= 0.f)
-	{
-		const float BL = (L - aBlade0) * 0.22f;
-		const float C = FMath::Lerp(aBlade0 - BL, L + BL * 0.3f, Ph);
-		auto W = [&](float a) { return a >= aTip0 ? BladeW * 0.86f * FMath::Clamp((L - a) / TipL, 0.f, 1.f) : FMath::Lerp(BladeW, BladeW * 0.86f, (a - aBlade0) / FMath::Max(1.f, aTip0 - aBlade0)); };
-		const float a0 = FMath::Clamp(C - BL, aBlade0, L), a1 = FMath::Clamp(C, aBlade0, L), a2 = FMath::Clamp(C + BL * 0.5f, aBlade0, L);
-		const FLinearColor Z = Col(1.f, 1.f, 0.8f, 0.f), H = Col(1.f, 1.f, 0.85f, 0.75f);
-		if (a1 > a0) Quad(P(a0, -W(a0)), P(a0, W(a0)), P(a1, W(a1)), P(a1, -W(a1)), Z, Z, H, H);
-		if (a2 > a1) Quad(P(a1, -W(a1)), P(a1, W(a1)), P(a2, W(a2)), P(a2, -W(a2)), H, H, Z, Z);
-	}
-	{
-		const float SR = (9.f + 7.f * Pulse) * K, SW = 1.6f * K;
-		const FVector2D T = P(L, 0.f);
-		const FLinearColor Cc = Col(1.f, 1.f, 0.9f, 0.85f), Ce = Col(1.f, 0.9f, 0.5f, 0.f);
-		const float Spin = Time * 1.3f + Seed;
-		for (int32 r = 0; r < 2; ++r)
+		for (int32 i = 0; i + 1 < S.Num(); ++i)
 		{
-			const float An = Spin + r * UE_HALF_PI;
-			const FVector2D X(FMath::Cos(An), FMath::Sin(An)), Y(-X.Y, X.X);
-			Quad(T - X * SR, T + Y * SW, T + X * SR, T - Y * SW, Ce, Cc, Ce, Cc);
+			const FVector2D A = S[i], Bp = S[i + 1];
+			const FVector2D D = (Bp - A).GetSafeNormal(), N(-D.Y, D.X);
+			FLinearColor c = Cc, e = Ce;
+			if (bOffAware && SOff[i + 1]) { c = FLinearColor(OffC.R, OffC.G, OffC.B, Cc.A); e = FLinearColor(OffC.R, OffC.G, OffC.B, Ce.A); }
+			Tri(A, A + N * HalfW, Bp + N * HalfW, c, e, e); Tri(A, Bp + N * HalfW, Bp, c, e, c);
+			Tri(A, Bp, Bp - N * HalfW, c, c, e); Tri(A, Bp - N * HalfW, A - N * HalfW, c, e, e);
 		}
-	}
+		for (int32 i = 0; i < S.Num(); ++i)
+		{
+			const int32 Seg = 14;
+			for (int32 k = 0; k < Seg; ++k)
+			{
+				const float a0 = k * UE_TWO_PI / Seg, a1 = (k + 1) * UE_TWO_PI / Seg;
+				Tri(S[i], S[i] + FVector2D(FMath::Cos(a0), FMath::Sin(a0)) * HalfW, S[i] + FVector2D(FMath::Cos(a1), FMath::Sin(a1)) * HalfW, Cc, Ce, Ce);
+			}
+		}
+	};
+	auto Head = [&](float Grow, const FLinearColor& C)
+	{
+		if (!bHead) return;
+		const FVector2D N(-HeadDir.Y, HeadDir.X), Base = LineEnd - HeadDir * HeadL;
+		Tri(LineEnd + HeadDir * Grow * 1.6f, Base + N * (HeadW + Grow) - HeadDir * Grow, Base - N * (HeadW + Grow) - HeadDir * Grow, C, C, C);
+	};
+	// 1) Soft halo (additive).
+	Pass((7.f + 1.f * Breath) * K, Col(Glow, 0.5f * Breath, true), Col(Glow, 0.f, true), false);
+	Head(3.5f * K, Col(Glow, 0.35f * Breath, true));
 	Flush(SE_BLEND_Additive);
+	// 2) Dark outline, so the line reads on snow and sand.
+	Pass(3.6f * K, Col(Dark, 0.9f, false), Col(Dark, 0.8f, false), false);
+	Head(1.6f * K, Col(Dark, 0.9f, false));
+	// 3) Solid fill + bright core.
+	Pass(2.3f * K, Col(Fill, 1.f, false), Col(FMath::Lerp(Fill, Glow, 0.45f), 1.f, false), true);
+	Head(0.f, Col(Fill, 1.f, false));
+	Pass(0.8f * K, Col(FMath::Lerp(Fill, FLinearColor::White, 0.6f), 0.95f * Breath, false), Col(Fill, 0.9f, false), true);
+	Flush(SE_BLEND_Translucent);
 }
 
 void AZoogiHUD::DrawPreview(AZoogiGameMode* G)
@@ -1003,15 +1012,22 @@ void AZoogiHUD::DrawPreview(AZoogiGameMode* G)
 	if (!P.bValid || !G->bAimActive) return;
 	const bool bPower = G->IsPowerUpStep();
 	const EZoogiArtifact Inf = B->Artifact ? B->Artifact->Infused : EZoogiArtifact::None;
-	const FLinearColor PathC = Inf != EZoogiArtifact::None ? ZoogiArtifacts::Color(Inf) : PC;
+	FLinearColor ShotFill, ShotGlow;
+	AwakenLineColors(Inf, ShotFill, ShotGlow);
+	// Predicted shot path (bank included) as the original dotted squares (Evan Oct 7: "what we initially had"), same
+	// size / spacing / fade as before the UI work, tinted in the Awaken colour (gold when none). Static; off court red.
+	// A slightly larger faint dark square under each dot keeps them readable on snow.
 	for (int32 i = 0; i < P.Path.Num(); ++i)
 	{
 		const FVector S = Project(P.Path[i], true);
 		if (S.Z <= 0.f) continue;
 		const float T = (float)(i + 1) / P.Path.Num();
 		const float Size = FMath::Lerp(12.f, 6.f, T) * U * (bPower ? 1.2f : 1.f);
-		FLinearColor C = P.PathOff.IsValidIndex(i) && P.PathOff[i] ? FLinearColor(1.f, 0.25f, 0.2f, 0.9f) : FMath::Lerp(PathC, FLinearColor::White, T * 0.5f);
+		const bool bOffDot = P.PathOff.IsValidIndex(i) && P.PathOff[i];
+		FLinearColor C = bOffDot ? FLinearColor(1.f, 0.25f, 0.2f, 0.9f) : FMath::Lerp(ShotFill, FLinearColor::White, T * 0.25f);
 		C.A = FMath::Lerp(0.95f, 0.45f, T);
+		const float E = 1.5f * U;
+		DrawRect(FLinearColor(0.02f, 0.03f, 0.06f, C.A * 0.55f), S.X - Size * 0.5f - E, S.Y - Size * 0.5f - E, Size + 2.f * E, Size + 2.f * E);
 		DrawRect(C, S.X - Size * 0.5f, S.Y - Size * 0.5f, Size, Size);
 	}
 	if (P.bBank)
@@ -1029,19 +1045,23 @@ void AZoogiHUD::DrawPreview(AZoogiGameMode* G)
 	{
 		// Ghost ball at the contact point, target departure (contact normal), shooter deflection.
 		const FVector GC = P.Ghost + Ground + FVector(0, 0, 3.f);
-		WorldCircle(GC, ZoogiConst::ZoogiRadius, FLinearColor(1.f, 1.f, 1.f, 0.85f), 2.5f * U);
+		// Static contact ghost: dark rim + Awaken-coloured ring.
+		WorldCircle(GC, ZoogiConst::ZoogiRadius, FLinearColor(0.02f, 0.03f, 0.06f, 0.8f), 4.f * U);
+		WorldCircle(GC, ZoogiConst::ZoogiRadius, FLinearColor(ShotFill.R, ShotFill.G, ShotFill.B, 0.95f), 2.f * U);
 		if (AActor* T = P.ContactActor.Get())
 		{
 			FVector TP = Cast<AZoogiOrb>(T) ? Cast<AZoogiOrb>(T)->OrbLocation() : (Cast<AZoogiBall>(T) ? Cast<AZoogiBall>(T)->BallLocation() : T->GetActorLocation());
 			TP.Z = GC.Z;
 			const float Len = FMath::Lerp(180.f, 520.f, FMath::Clamp(P.Fraction, 0.f, 1.f)) * FMath::Max(0.2f, FMath::Cos(FMath::DegreesToRadians(P.CutDeg)));
-			// Golden sword from the target's rim along its departure line.
-			SwordArrow(TP + P.TargetDir * (ZoogiConst::ZoogiRadius * 0.7f), TP + P.TargetDir * (Len + ZoogiConst::ZoogiRadius * 0.7f), 1.f, 1.f, 0.f);
+			// Target's after-contact direction: Awaken colour, slightly thinner / dimmer, static head.
+			const FVector TPts[2] = { TP + P.TargetDir * (ZoogiConst::ZoogiRadius * 0.7f), TP + P.TargetDir * (Len + ZoogiConst::ZoogiRadius * 0.7f) };
+			TrajectoryLine(TPts, 2, ShotFill, ShotGlow, 0.85f, 0.85f, true);
 		}
 		if (!P.ShooterDir.IsNearlyZero())
 		{
-			// Shooter's deflection: a smaller, slightly dimmer sword (same gold, so both read as "where things go").
-			SwordArrow(GC + P.ShooterDir * (ZoogiConst::ZoogiRadius * 0.7f), GC + P.ShooterDir * 320.f, 0.78f, 0.85f, 0.5f);
+			// The player's own Zoogi after contact: always a blue line.
+			const FVector SPts[2] = { GC + P.ShooterDir * (ZoogiConst::ZoogiRadius * 0.7f), GC + P.ShooterDir * 320.f };
+			TrajectoryLine(SPts, 2, ZoogiBlueFill, ZoogiBlueGlow, 0.9f, 1.f, true);
 		}
 		const FVector S = Project(GC, true);
 		if (S.Z > 0.f) Text(FString::Printf(TEXT("cut %.0f deg"), P.CutDeg), S.X, S.Y + 26.f * U, FLinearColor(0.9f, 0.95f, 1.f), 0.38f, true, false);
