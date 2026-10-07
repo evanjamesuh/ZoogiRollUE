@@ -10,6 +10,12 @@
 #include "Engine/World.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "ZoogiArena.h"
+#include "ZoogiArenaPiece.h"
+#include "ZoogiStageForming.h"
+#include "ZoogiFloorScars.h"
+#include "ZoogiFrozenLayout.h"
+#include "ZoogiMeshKit.h"
 
 AZoogiComboArena::AZoogiComboArena()
 {
@@ -18,10 +24,74 @@ AZoogiComboArena::AZoogiComboArena()
 	RootComponent = Root;
 }
 
+// Layout statics (Meadow prototype defaults; SetLayout switches them per theme).
+float AZoogiComboArena::WallR = 1150.f;
+float AZoogiComboArena::WallA0 = 195.f;
+float AZoogiComboArena::WallA1 = 245.f;
+float AZoogiComboArena::WallH = 85.f;
+float AZoogiComboArena::RampH = 45.f;
+float AZoogiComboArena::PlatformR = 200.f;
+float AZoogiComboArena::PlatformH = 55.f;
+FVector2D AZoogiComboArena::LRampMin(-760.f, 290.f);
+FVector2D AZoogiComboArena::LRampMax(-540.f, 510.f);
+FVector2D AZoogiComboArena::LSecMin(-150.f, 200.f);
+FVector2D AZoogiComboArena::LSecMax(250.f, 600.f);
+FVector2D AZoogiComboArena::LPlat(750.f, 900.f);
+FVector2D AZoogiComboArena::LGate(0.f, -1450.f);
+FVector AZoogiComboArena::LGateReturn(0.f, -1180.f, 52.f);
+bool AZoogiComboArena::bFrozenLayout = false;
+
+namespace
+{
+	TArray<FVector2D>& MutableBumpers()
+	{
+		static TArray<FVector2D> B = { FVector2D(420.f, -420.f), FVector2D(-500.f, 950.f), FVector2D(850.f, -850.f) };
+		return B;
+	}
+	FVector FPol(float R, float YawDeg, float Z = 0.f)
+	{
+		const float A = FMath::DegreesToRadians(YawDeg);
+		return FVector(FMath::Cos(A) * R, FMath::Sin(A) * R, Z);
+	}
+}
+
 const TArray<FVector2D>& AZoogiComboArena::BumperXY()
 {
-	static const TArray<FVector2D> B = { FVector2D(420.f, -420.f), FVector2D(-500.f, 950.f), FVector2D(850.f, -850.f) };
-	return B;
+	return MutableBumpers();
+}
+
+void AZoogiComboArena::SetLayout(EZoogiArena Theme)
+{
+	using namespace ZoogiFrozen;
+	bFrozenLayout = Theme == EZoogiArena::Frozen;
+	TArray<FVector2D>& B = MutableBumpers();
+	if (bFrozenLayout)
+	{
+		WallR = ZoogiFrozen::WallR; WallA0 = WallNA0; WallA1 = WallNA1; WallH = ZoogiFrozen::WallH;
+		RampH = ZoogiFrozen::RampH;
+		LRampMin = FVector2D(RampCX - 110.f, RampCY - 110.f); LRampMax = FVector2D(RampCX + 110.f, RampCY + 110.f);
+		LSecMin = FVector2D(SecX0, SecY0); LSecMax = FVector2D(SecX1, SecY1);
+		LPlat = FVector2D(PlatX, PlatY); PlatformR = PlatR; PlatformH = PlatH;
+		LGate = FVector2D(FPol(ArchR, GateYaw));
+		LGateReturn = FPol(GateReturnR, GateYaw, 52.f);
+		B = { FVector2D(BumpX[0], BumpY[0]), FVector2D(BumpX[1], BumpY[1]), FVector2D(BumpX[2], BumpY[2]) };
+	}
+	else
+	{
+		WallR = 1150.f; WallA0 = 195.f; WallA1 = 245.f; WallH = 85.f; RampH = 45.f;
+		LRampMin = FVector2D(-760.f, 290.f); LRampMax = FVector2D(-540.f, 510.f);
+		LSecMin = FVector2D(-150.f, 200.f); LSecMax = FVector2D(250.f, 600.f);
+		LPlat = FVector2D(750.f, 900.f); PlatformR = 200.f; PlatformH = 55.f;
+		LGate = FVector2D(0.f, -1450.f); LGateReturn = FVector(0.f, -1180.f, 52.f);
+		B = { FVector2D(420.f, -420.f), FVector2D(-500.f, 950.f), FVector2D(850.f, -850.f) };
+	}
+}
+
+void AZoogiComboArena::Destroyed()
+{
+	for (AZoogiArenaPiece* P : IceBumpers) if (IsValid(P)) P->Destroy();
+	IceBumpers.Reset();
+	Super::Destroyed();
 }
 
 FString AZoogiComboArena::FloorStateName(EZoogiFloorState S)
@@ -91,6 +161,7 @@ void AZoogiComboArena::Build()
 	WallPM = ZoogiPhysics::MakeMaterial(this, 0.2f, 0.9f, false);
 	BumperPM = ZoogiPhysics::MakeMaterial(this, 0.2f, 0.95f, false);
 	StonePM = ZoogiPhysics::MakeMaterial(this, 0.3f, 0.1f, true);
+	if (bFrozenLayout && Arena && Arena->GetTheme() == EZoogiArena::Frozen) { BuildFrozen(); return; }
 	const FLinearColor Teal = ZoogiUtil::Hex(TEXT("#2DD4BF"));
 	UMaterialInterface* Stone = ZoogiUtil::GroundMID(this, ZoogiUtil::Hex(TEXT("#8C8577")), ZoogiUtil::Hex(TEXT("#6E685C")), 0.01f, 0.85f);
 	UMaterialInterface* Glow = ZoogiUtil::GlowMID(this, Teal, 4.f);
@@ -177,6 +248,122 @@ void AZoogiComboArena::Build()
 	UE_LOG(LogZoogi, Log, TEXT("Combo arena props built: curved wall %.0f-%.0f deg, ramp, platform, %d bumpers, Recovery Gate, floor section %s"), WallA0, WallA1, Bumpers.Num(), *FloorStateName(FloorState));
 }
 
+
+// Frozen Ring combo props (Oct 6). The curved bank wall (N arc), the snow-chute ramp, the hex-ice platform and the
+// Recovery Gate arch are arena stage pieces (ZoogiArenaFrozen.cpp, tagged ZWall / ZRamp / ZPlatform). Here: the three
+// ice-crystal bumpers (destructible pieces, ZBumper), the gate return pad, the SW hex-ice reactive section and the
+// rune sockets of the Arena Orb homes. Everything joins the arena's stage-forming intro.
+void AZoogiComboArena::BuildFrozen()
+{
+	UZoogiStageForming* Form = Arena->Forming;
+	UMaterialInterface* Ice = Arena->FrozenMat(TEXT("Ice"));
+	UMaterialInterface* IceDeep = Arena->FrozenMat(TEXT("IceDeep"));
+	UMaterialInterface* IcePane = Arena->FrozenMat(TEXT("IcePane"));
+	UMaterialInterface* StoneDark = Arena->FrozenMat(TEXT("StoneDark"));
+	UMaterialInterface* Snow = Arena->FrozenMat(TEXT("Snow"));
+	UMaterialInterface* Rune = Arena->FrozenMat(TEXT("Rune"));
+	const FLinearColor Cyan = ZoogiUtil::Hex(TEXT("#19C3E6"));
+	if (!Rune) Rune = ZoogiUtil::GlowMID(this, Cyan, 5.f);
+	if (!Ice) Ice = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#8FD3F4")), 0.2f);
+	if (!IceDeep) IceDeep = Ice;
+	if (!IcePane) IcePane = Ice;
+	if (!StoneDark) StoneDark = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#8E9DB4")), 0.7f);
+	if (!Snow) Snow = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#F2F8FF")), 0.8f);
+
+	// 1) Ice-crystal bumpers: a stone socket ring with a cluster of glowing crystals (collider: the r70 kick post).
+	int32 Bi = 0;
+	for (const FVector2D& XY : BumperXY())
+	{
+		FActorSpawnParameters SP;
+		SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		AZoogiArenaPiece* P = GetWorld()->SpawnActor<AZoogiArenaPiece>(AZoogiArenaPiece::StaticClass(), FTransform(FRotator(0.f, 30.f * Bi, 0.f), FVector(XY.X, XY.Y, 0.f)), SP);
+		if (!P) continue;
+		P->Setup(TEXT("crystal_bumper"), TEXT("Crystal"), 140.f);
+		FRandomStream R(300 + Bi);
+		FZoogiMeshBuilder Socket, Main, Small;
+		Socket.Prism(FVector2D::ZeroVector, 8, 86.f, 78.f, -4.f, 14.f, 22.5f, 0.f, false);
+		Main.Prism(FVector2D::ZeroVector, 6, 46.f, 34.f, 10.f, 92.f, 0.f, 40.f, false);
+		for (int32 c = 0; c < 4; ++c)
+		{
+			const float A = 45.f + 90.f * c + R.FRandRange(-15.f, 15.f);
+			const FVector2D O(FPol(R.FRandRange(42.f, 52.f), A));
+			Small.Prism(O, 5, R.FRandRange(14.f, 20.f), R.FRandRange(8.f, 11.f), 8.f, R.FRandRange(40.f, 62.f), A, R.FRandRange(10.f, 18.f), false);
+		}
+		P->AddProc(Socket, StoneDark);
+		P->AddProc(Main, IcePane);
+		P->AddProc(Small, Ice);
+		UStaticMeshComponent* Ring = P->AddShape(TEXT("Cylinder"), FTransform(FRotator::ZeroRotator, FVector(0, 0, 14.5f), FVector(1.74f, 1.74f, 0.012f)), Rune, false);
+		P->MarkGlow(Ring);
+		UStaticMeshComponent* Core = P->AddShape(TEXT("Sphere"), FTransform(FRotator::ZeroRotator, FVector(0, 0, 70.f), FVector(0.42f, 0.42f, 0.7f)), Rune, false);
+		P->MarkGlow(Core);
+		P->AddColliderCyl(FVector2D::ZeroVector, 70.f, -10.f, 90.f, TEXT("ZBumper"), BumperPM);
+		P->SetPathBlock(XY, 75.f);
+		P->RubbleKeepZ = 16.f;
+		P->FinishBuild();
+		IceBumpers.Add(P);
+		if (Form) Form->AddActor(P, EZoogiFormStyle::Grow, FVector::ZeroVector, 1.55f + 0.15f * Bi, 0.75f, 0.f);
+		++Bi;
+	}
+
+	// 2) Recovery Gate return pad (the gate itself is the SE rune arch, an arena piece).
+	{
+		GatePad = AddCyl(FVector2D(GateReturn().X, GateReturn().Y), 85.f, 0.f, 1.2f, ZoogiUtil::GlowMID(this, FLinearColor(0.3f, 1.f, 0.85f), 1.5f), false, NAME_None, nullptr);
+		UStaticMeshComponent* Ring = AddCyl(FVector2D(GateReturn().X, GateReturn().Y), 100.f, 0.f, 0.8f, Rune, false, NAME_None, nullptr);
+		GateLight = NewObject<UPointLightComponent>(this);
+		GateLight->SetupAttachment(Root);
+		GateLight->RegisterComponent();
+		GateLight->SetWorldLocation(FVector(GateXY().X, GateXY().Y, 0.f) * 0.92f + FVector(0, 0, 180.f));
+		GateLight->SetIntensityUnits(ELightUnits::Candelas);
+		GateLight->SetIntensity(40.f);
+		GateLight->SetLightColor(FLinearColor(0.3f, 1.f, 0.85f));
+		GateLight->SetAttenuationRadius(600.f);
+		GateLight->SetCastShadows(false);
+		if (Form) { Form->AddComponent(GatePad, EZoogiFormStyle::Grow, FVector::ZeroVector, 2.0f, 0.4f); Form->AddComponent(Ring, EZoogiFormStyle::Grow, FVector::ZeroVector, 2.0f, 0.4f); }
+	}
+
+	// 3) Reactive hex-ice section (NORMAL -> DAMAGED -> CRACKED): ice slab, deep ice once damaged, dark cracked crater ice.
+	{
+		auto DamageMID = [this](UMaterialInterface* Src, float Dmg) -> UMaterialInterface*
+		{
+			UMaterialInstanceDynamic* M = UMaterialInstanceDynamic::Create(Src, this);
+			M->SetScalarParameterValue(TEXT("Damage"), Dmg);
+			M->SetVectorParameterValue(TEXT("CrackColor"), ZoogiUtil::Hex(TEXT("#19C3E6")));
+			return M;
+		};
+		SlabMat = Ice;
+		SlabDamagedMat = DamageMID(Ice, 0.3f);
+		SlabCrackedMat = DamageMID(Ice, 0.6f);
+		SlabA = AddPiece(TEXT("Cube"), SlabMat, true, TEXT("ZFloor"), StonePM);
+		SlabB = AddPiece(TEXT("Cube"), SlabMat, true, TEXT("ZFloor"), StonePM);
+		for (int32 i = 0; i < 6; ++i) Cracks.Add(AddPiece(TEXT("Cube"), Rune, false, NAME_None, nullptr));
+		const FVector2D A = SectionMin(), B = SectionMax();
+		TArray<UStaticMeshComponent*> Edge;
+		Edge.Add(AddBoxAt(FVector((A.X + B.X) * 0.5f, A.Y - 5.f, 0.4f), FVector(B.X - A.X + 20.f, 10.f, 1.2f), FRotator::ZeroRotator, Rune, false, NAME_None, nullptr));
+		Edge.Add(AddBoxAt(FVector((A.X + B.X) * 0.5f, B.Y + 5.f, 0.4f), FVector(B.X - A.X + 20.f, 10.f, 1.2f), FRotator::ZeroRotator, Rune, false, NAME_None, nullptr));
+		Edge.Add(AddBoxAt(FVector(A.X - 5.f, (A.Y + B.Y) * 0.5f, 0.4f), FVector(10.f, B.Y - A.Y, 1.2f), FRotator::ZeroRotator, Rune, false, NAME_None, nullptr));
+		Edge.Add(AddBoxAt(FVector(B.X + 5.f, (A.Y + B.Y) * 0.5f, 0.4f), FVector(10.f, B.Y - A.Y, 1.2f), FRotator::ZeroRotator, Rune, false, NAME_None, nullptr));
+		FloorState = EZoogiFloorState::Normal;
+		ApplyFloorState();
+		if (Form)
+		{
+			Form->AddComponent(SlabA, EZoogiFormStyle::Rise, FVector(0, 0, -45.f), 1.3f, 0.6f);
+			for (UStaticMeshComponent* E : Edge) Form->AddComponent(E, EZoogiFormStyle::Grow, FVector::ZeroVector, 1.7f, 0.4f);
+		}
+	}
+
+	// 4) Arena Orb homes: small rune sockets in the ice (where the six orbs spawn and are re-seeded).
+	for (int32 i = 0; i < OrbHomes.Num(); ++i)
+	{
+		const FVector2D H = OrbHomes[i];
+		UStaticMeshComponent* Disc = AddCyl(H, 62.f, 0.f, 0.7f, IceDeep, false, NAME_None, nullptr);
+		UStaticMeshComponent* Ring = AddCyl(H, 70.f, 0.f, 0.5f, Rune, false, NAME_None, nullptr);
+		Disc->SetCastShadow(false); Ring->SetCastShadow(false);
+		if (Form) { Form->AddComponent(Disc, EZoogiFormStyle::Grow, FVector::ZeroVector, 1.9f + 0.05f * i, 0.35f); Form->AddComponent(Ring, EZoogiFormStyle::Grow, FVector::ZeroVector, 1.9f + 0.05f * i, 0.35f); }
+	}
+	UE_LOG(LogZoogi, Log, TEXT("Combo arena props built (FROZEN RING): bank wall %.0f-%.0f deg r%.0f (stage pieces), ramp, hex platform, %d ice-crystal bumpers, Recovery Gate (SE arch) pad at (%.0f, %.0f), hex-ice section, %d orb sockets"),
+		WallA0, WallA1, WallR, IceBumpers.Num(), GateReturn().X, GateReturn().Y, OrbHomes.Num());
+}
+
 bool AZoogiComboArena::IsInSection(const FVector2D& P, float Pad) const
 {
 	return P.X >= SectionMin().X - Pad && P.X <= SectionMax().X + Pad && P.Y >= SectionMin().Y - Pad && P.Y <= SectionMax().Y + Pad;
@@ -243,8 +430,16 @@ bool AZoogiComboArena::FloorImpact(const FVector& Where, const FVector& TravelDi
 	FloorState = FloorState == EZoogiFloorState::Normal ? EZoogiFloorState::Damaged : EZoogiFloorState::Cracked;
 	ApplyFloorState();
 	const FVector C((SectionMin().X + SectionMax().X) * 0.5f, (SectionMin().Y + SectionMax().Y) * 0.5f, 10.f);
-	AZoogiFX::Spawn(GetWorld(), C, FLinearColor(1.f, 0.55f, 0.2f), 320.f, 0.7f, true, 9.f);
-	AZoogiFX::Niagara(GetWorld(), TEXT("NS_Burst_Red"), Where, FRotator::ZeroRotator, 1.2f);
+	if (bFrozenLayout)
+	{
+		AZoogiFX::Spawn(GetWorld(), C, ZoogiUtil::Hex(TEXT("#19C3E6")), 320.f, 0.7f, true, 9.f);
+		AZoogiFX::Niagara(GetWorld(), TEXT("NS_Burst_Blue"), Where, FRotator::ZeroRotator, 1.2f);
+	}
+	else
+	{
+		AZoogiFX::Spawn(GetWorld(), C, FLinearColor(1.f, 0.55f, 0.2f), 320.f, 0.7f, true, 9.f);
+		AZoogiFX::Niagara(GetWorld(), TEXT("NS_Burst_Red"), Where, FRotator::ZeroRotator, 1.2f);
+	}
 	ZoogiUtil::PlaySfx(this, TEXT("HitCrack"), 1.f, 0.6f);
 	UE_LOG(LogZoogi, Log, TEXT("Floor section impact (strength %.0f) -> %s (raised edge on the %s side)"), Strength, *FloorStateName(FloorState), LipDir > 0.f ? TEXT("+X") : TEXT("-X"));
 	return true;
@@ -285,6 +480,8 @@ void AZoogiComboArena::Tick(float DeltaSeconds)
 			B->SetWorldLocation(FVector(XY.X, XY.Y, Top - (Bo.Origin.Z + Bo.BoxExtent.Z) * S.Z));
 			if (BumperCaps.IsValidIndex(i)) BumperCaps[i]->SetWorldTransform(FTransform(FRotator::ZeroRotator, FVector(XY.X, XY.Y, Top), FVector(R / 58.f, R / 58.f, 0.35f)));
 		}
+		// Frozen: the crystal bumpers swell (actor scale: the r70 kick post becomes r105, 90 -> 120 cm tall).
+		for (AZoogiArenaPiece* P : IceBumpers) if (IsValid(P)) P->SetActorScale3D(FVector(R / 70.f, R / 70.f, Top / 90.f));
 	}
 	GatePulse = FMath::Max(0.f, GatePulse - DeltaSeconds * 0.8f);
 	if (GateLight) GateLight->SetIntensity(40.f + 400.f * GatePulse + 10.f * FMath::Sin(Clock * 3.f));

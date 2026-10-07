@@ -5,6 +5,9 @@
 #include "ZoogiGameMode.h"
 #include "ZoogiFX.h"
 #include "ZoogiRock.h"
+#include "ZoogiArenaPiece.h"
+#include "ZoogiFloorScars.h"
+#include "ZoogiArena.h"
 #include "ZoogiArtifactComponent.h"
 #include "Engine/World.h"
 #include "Components/SphereComponent.h"
@@ -391,6 +394,12 @@ void AZoogiBall::PlaceAt(const FVector& Location, float FacingYaw)
 
 void AZoogiBall::SetOut()
 {
+	// Ring-out: whatever stands where the Zoogi flew out (rim ice, wall, arch, stands) takes the crash.
+	if (!bOut && GetWorld())
+	{
+		const FVector V = PrevVelocity.SizeSquared() > 1.f ? PrevVelocity : GetBallVelocity();
+		AZoogiArenaPiece::RingOutCrash(GetWorld(), BallLocation(), V, 50.f, this);
+	}
 	bOut = true;
 	Sphere->SetSimulatePhysics(false);
 	Sphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -524,6 +533,23 @@ void AZoogiBall::OnSphereHit(UPrimitiveComponent* HitComp, AActor* OtherActor, U
 	}
 	// Destructible rocks take the hit (crack / shatter thresholds live in AZoogiRock).
 	if (AZoogiRock* Rock = Cast<AZoogiRock>(OtherActor)) Rock->OnBallHit(this, NormalImpulse, Hit.ImpactPoint);
+	// Frozen Ring stage pieces (walls, arches, stands, ramp, platform, obelisks, crystal bumpers ...) take the hit too.
+	if (AZoogiArenaPiece* Piece = Cast<AZoogiArenaPiece>(OtherActor)) Piece->OnBallHit(this, NormalImpulse, Hit.ImpactPoint);
+	// Reactive floor: hard Zoogi-vs-Zoogi impacts scar the ice (visual only: cracks -> glowing cracks -> cyan crater),
+	// an Ember / Titan infused clash also hits the stage pieces around it (power-reactive hook).
+	if (AZoogiBall* OB = Cast<AZoogiBall>(OtherActor))
+	{
+		const float Imp = NormalImpulse.Size();
+		const float NowS = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+		if (G && G->Arena && Imp > 12000.f && PlayerIndex < OB->PlayerIndex && NowS - LastScarAt > 0.3f)
+		{
+			LastScarAt = NowS;
+			const EZoogiArtifact E = (Artifact && Artifact->Infused != EZoogiArtifact::None) ? Artifact->Infused : ((OB->Artifact && OB->Artifact->Infused != EZoogiArtifact::None) ? OB->Artifact->Infused : EZoogiArtifact::None);
+			const FVector P(Hit.ImpactPoint.X, Hit.ImpactPoint.Y, 0.f);
+			if (AZoogiFloorScars* Sc = G->Arena->GetScars()) Sc->Impact(P, Imp / 12000.f, E);
+			if (E != EZoogiArtifact::None) AZoogiArenaPiece::DamageArea(GetWorld(), P, 260.f, 22.f, E, this); // Ember melts, Frost refreezes, Storm shocks, Titan crushes
+		}
+	}
 	// Impact spark on hard hits between marbles/orbs.
 	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
 	if ((Cast<AZoogiBall>(OtherActor) || Cast<AZoogiOrb>(OtherActor)) && NormalImpulse.Size() > 3500.f && Now - LastImpactFx > 0.15f)

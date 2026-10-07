@@ -33,6 +33,7 @@ public:
 	bool IsOverUI(const FVector2D& ViewportPos) const;
 
 protected:
+	void DrawForming(class AZoogiGameMode* G);
 	void DrawMenu(AZoogiGameMode* G);
 	void DrawMatch(AZoogiGameMode* G);
 	void DrawScoreboard(AZoogiGameMode* G);

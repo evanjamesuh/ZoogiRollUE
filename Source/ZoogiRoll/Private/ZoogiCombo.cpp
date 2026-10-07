@@ -3,6 +3,10 @@
 // per-team Combo Gauge, one Partner Follow-Up per team turn, Guard Reaction / Guard Break, Ring Marks with the
 // Recovery Gate, neutral Arena Orbs (ORB OUT = score + Resonance + Arena Control, then respawn), reactive terrain.
 #include "ZoogiCombo.h"
+#include "ZoogiArenaPiece.h"
+#include "ZoogiFloorScars.h"
+#include "ZoogiArena.h"
+#include "ZoogiArtifactComponent.h"
 #include "ZoogiGameMode.h"
 #include "ZoogiRoll.h"
 #include "ZoogiBall.h"
@@ -28,6 +32,8 @@ namespace
 		return A ? A->GetActorLocation() : FVector::ZeroVector;
 	}
 	const FVector2D GComboSpawns[4] = { FVector2D(-1000.f, 50.f), FVector2D(-700.f, -400.f), FVector2D(1000.f, -50.f), FVector2D(700.f, 400.f) };
+	// Frozen Ring (Oct 6): the starts sit in the clear lanes between the hub pillars / obelisks (45 / 180 / 225 / 0 deg).
+	const FVector2D GComboSpawnsFrozen[4] = { FVector2D(-1000.f, 0.f), FVector2D(-640.f, -640.f), FVector2D(1000.f, 0.f), FVector2D(640.f, 640.f) };
 	const FVector2D GComboOrbHomes[6] = { FVector2D(-350.f, -150.f), FVector2D(300.f, 150.f), FVector2D(0.f, 0.f), FVector2D(-450.f, -750.f), FVector2D(-200.f, 1050.f), FVector2D(500.f, -1050.f) };
 }
 
@@ -134,9 +140,10 @@ void AZoogiGameMode::ComboSetMode(bool bOn)
 	if (bOn)
 	{
 		MenuNumPlayers = 4;
-		if (MenuArena != EZoogiArena::Meadow)
+		const EZoogiArena Want = ComboArenaFor(MenuArena, ComboDemo);
+		if (MenuArena != Want)
 		{
-			MenuArena = EZoogiArena::Meadow;
+			MenuArena = Want;
 			if (Arena)
 			{
 				ClearMatch();
@@ -145,7 +152,7 @@ void AZoogiGameMode::ComboSetMode(bool bOn)
 			}
 		}
 	}
-	UE_LOG(LogZoogi, Log, TEXT("Mode: %s"), bOn ? TEXT("2v2 COMBO (Meadow prototype arena)") : TEXT("CLASSIC"));
+	UE_LOG(LogZoogi, Log, TEXT("Mode: %s"), bOn ? (MenuArena == EZoogiArena::Frozen ? TEXT("2v2 COMBO (Frozen Ring)") : TEXT("2v2 COMBO (Meadow prototype arena)")) : TEXT("CLASSIC"));
 }
 
 void AZoogiGameMode::ComboSpawnOrbs()
@@ -169,17 +176,27 @@ void AZoogiGameMode::ComboStartMatch()
 	ClearMatch();
 	ZoogiUtil::SetComboColors(true);
 	MenuNumPlayers = 4;
-	MenuArena = EZoogiArena::Meadow;
+	MenuArena = ComboArenaFor(MenuArena, ComboDemo);
 	if (Arena->GetTheme() != MenuArena) Arena->Build(MenuArena);
 	Arena->ResetRocks();
+	AZoogiComboArena::SetLayout(MenuArena);
+	const bool bFrozen = MenuArena == EZoogiArena::Frozen;
 	ComboArena = GetWorld()->SpawnActor<AZoogiComboArena>(AZoogiComboArena::StaticClass(), FTransform::Identity);
-	if (ComboArena) ComboArena->Build();
+	if (ComboArena)
+	{
+		ComboArena->SetArena(Arena);
+		TArray<FVector2D> Homes;
+		for (const FVector2D& H : GComboOrbHomes) Homes.Add(H);
+		ComboArena->SetOrbHomes(Homes);
+		ComboArena->Build();
+	}
 	ComboSpawnOrbs();
 	const TArray<FZoogiDef>& Roster = ZoogiUtil::Roster();
 	for (int32 i = 0; i < 4; ++i)
 	{
 		const FZoogiPlayerSetup& S = MenuPlayers[i];
-		const FVector L(GComboSpawns[i].X, GComboSpawns[i].Y, ZoogiConst::ZoogiRadius + 2.f);
+		const FVector2D Sp = bFrozen ? GComboSpawnsFrozen[i] : GComboSpawns[i];
+		const FVector L(Sp.X, Sp.Y, ZoogiConst::ZoogiRadius + 2.f);
 		const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(-L.Y, -L.X));
 		AZoogiBall* B = GetWorld()->SpawnActor<AZoogiBall>(AZoogiBall::StaticClass(), FTransform(FRotator(0, Yaw, 0), L));
 		if (!B) continue;
@@ -212,7 +229,7 @@ void AZoogiGameMode::ComboStartMatch()
 		Balls.IsValidIndex(2) ? *Balls[2]->Def.Name : TEXT("?"), Balls.IsValidIndex(3) ? *Balls[3]->Def.Name : TEXT("?"));
 	PlayMusic(TEXT("MatchMusic"));
 	if (ComboDemo > 0) DemoStage();
-	ComboBeginTeamTurn(0);
+	if (!BeginStageForming(true)) ComboBeginTeamTurn(0);
 }
 
 void AZoogiGameMode::ComboBeginTeamTurn(int32 Team)
@@ -661,6 +678,14 @@ void AZoogiGameMode::ComboTick(float Dt)
 			{
 				if (ComboArena->FloorImpact(L, V.GetSafeNormal2D(), -S.PrevVz)) ComboOnFloorChanged(B);
 			}
+			// Frozen Ring reactive floor: a hard landing scars the ice where it lands (visual only), and the heavy landing
+			// shakes the stage pieces next to it (power-reactive: Ember / Titan landings hit them harder).
+			else if (S.PrevVz < -250.f && Arena && Arena->GetScars() && FVector2D(L).Size() < ZoogiConst::KnockoffRadius - 60.f)
+			{
+				const EZoogiArtifact E = (B->Artifact && B->Artifact->Infused != EZoogiArtifact::None) ? B->Artifact->Infused : EZoogiArtifact::None;
+				Arena->GetScars()->Impact(FVector(L.X, L.Y, 0.f), -S.PrevVz / 350.f, E);
+				AZoogiArenaPiece::DamageArea(GetWorld(), FVector(L.X, L.Y, 0.f), 180.f, FMath::Clamp((-S.PrevVz - 250.f) / 25.f, 4.f, 30.f), E, B);
+			}
 		}
 		if (bAirNow) S.AirTime += Dt;
 		S.bAir = bAirNow;
@@ -1025,6 +1050,12 @@ namespace
 		if (G->Arena)
 			for (const AZoogiRock* Rk : G->Arena->GetRocks())
 				if (Rk && Rk->IsStanding() && SegBlock(P, Exit, FVector2D(Rk->GetActorLocation()), Rk->GetRadius() + TR + 15.f)) Score += 5000.f;
+		if (G->Arena)
+			for (const AZoogiArenaPiece* Pc : G->Arena->GetPieces())
+			{
+				FVector2D PXY; float PR = 0.f;
+				if (Pc && Pc->GetPathBlock(PXY, PR) && (SegBlock(S, Ghost, PXY, PR + ZoogiConst::ZoogiRadius + 5.f) || SegBlock(P, Exit, PXY, PR + TR + 10.f))) Score += 5000.f;
+			}
 		if (G->ComboArena)
 		{
 			for (const FVector2D& Bp : AZoogiComboArena::BumperXY())

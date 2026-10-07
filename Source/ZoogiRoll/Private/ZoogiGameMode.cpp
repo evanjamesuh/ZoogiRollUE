@@ -12,6 +12,8 @@
 #include "ZoogiArtifactComponent.h"
 #include "ZoogiAnimeSubsystem.h"
 #include "ZoogiCombo.h"
+#include "ZoogiStageForming.h"
+#include "ZoogiArenaPiece.h"
 #include "Engine/World.h"
 #include "Components/SphereComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -58,6 +60,11 @@ void AZoogiGameMode::BeginPlay()
 	bCinematicCam = FParse::Param(Cmd, TEXT("ZoogiCinematic"));
 	bRockTest = FParse::Param(Cmd, TEXT("ZoogiRockTest"));
 	bClimaxTest = FParse::Param(Cmd, TEXT("ZoogiClimaxTest"));
+	bNoForming = FParse::Param(Cmd, TEXT("ZoogiNoForm"));
+	bFormShots = FParse::Param(Cmd, TEXT("ZoogiFormShots"));
+	bDamageShots = FParse::Param(Cmd, TEXT("ZoogiDamageShots"));
+	FParse::Value(Cmd, TEXT("ZoogiFormSlow="), FormTimeScale);
+	if (bFormShots && FormTimeScale <= 1.f) FormTimeScale = 4.f;
 	{
 		int32 Vol = 100;
 		if (FParse::Value(Cmd, TEXT("ZoogiSfxVol="), Vol)) ZoogiUtil::SetSfxVolume(Vol / 100.f);
@@ -155,6 +162,7 @@ void AZoogiGameMode::MenuAction(FName Action, int32 Index)
 	else if (Action == "AimCancel") ClearLock();
 	else if (Action == "AimNext") CycleLock(false);
 	else if (Action == "AnimeSkip") { if (UZoogiAnimeSubsystem* Anime = GetWorld()->GetSubsystem<UZoogiAnimeSubsystem>()) Anime->Skip(); }
+	else if (Action == "FormSkip") SkipStageForming();
 	else if (Action == "CamStyle") bCinematicCam = !bCinematicCam;
 	else if (Action == "Menu") ReturnToMenu();
 	else if (Action == "Rematch") StartMatch();
@@ -164,7 +172,7 @@ void AZoogiGameMode::MenuAction(FName Action, int32 Index)
 		ZoogiUtil::PlaySfx(this, TEXT("UiConfirm"), 0.4f);
 	else if (Action == "AimCancel" || Action == "Menu" || Action == "Quit")
 		ZoogiUtil::PlaySfx(this, TEXT("UiCancel"), 0.4f);
-	else if (Action != "Power" && Action != "AimNudge" && Action != "AnimeSkip")
+	else if (Action != "Power" && Action != "AimNudge" && Action != "AnimeSkip" && Action != "FormSkip")
 		ZoogiUtil::PlaySfx(this, TEXT("UiClick"), 0.55f);
 	MenuRevision++;
 }
@@ -274,7 +282,35 @@ void AZoogiGameMode::StartMatch()
 	TurnCounter = 0;
 	UE_LOG(LogZoogi, Log, TEXT("Match started: %d players on %s"), Balls.Num(), *ZoogiUtil::ArenaName(MenuArena));
 	PlayMusic(TEXT("MatchMusic"));
-	BeginTurn(0);
+	if (!BeginStageForming(false)) BeginTurn(0);
+}
+
+bool AZoogiGameMode::BeginStageForming(bool bCombo)
+{
+	if (!Arena || !Arena->Forming || bNoForming)
+	{
+		if (Arena) Arena->ResetPieces();
+		return false;
+	}
+	if (Arena->Forming->Num() == 0) { Arena->ResetPieces(); return false; }
+	bFormingCombo = bCombo;
+	FormPass = 0;
+	FormCamMode = 0;
+	Arena->BeginForming(FormTimeScale);
+	Phase = EZoogiPhase::Forming;
+	PhaseTime = 0.f;
+	FormShotIdx = 0;
+	ZoogiUtil::PlaySfx(this, TEXT("RockCrack"), 0.5f, 0.6f);
+	UE_LOG(LogZoogi, Log, TEXT("STAGE FORMING: %d pieces, %.1f s (x%.1f slow)%s"), Arena->Forming->Num(), Arena->Forming->GetLength() * FormTimeScale, FormTimeScale, bCombo ? TEXT(" [2v2 COMBO]") : TEXT(""));
+	return true;
+}
+
+void AZoogiGameMode::SkipStageForming()
+{
+	if (Phase != EZoogiPhase::Forming || !Arena || !Arena->Forming) return;
+	if (PhaseTime < 0.25f) return;
+	Arena->Forming->Skip();
+	UE_LOG(LogZoogi, Log, TEXT("STAGE FORMING skipped at %.2f s"), PhaseTime);
 }
 
 void AZoogiGameMode::ReturnToMenu()
@@ -990,8 +1026,29 @@ void AZoogiGameMode::Tick(float DeltaSeconds)
 	}
 
 	if (bComboMode && (Phase == EZoogiPhase::Aiming || Phase == EZoogiPhase::Rolling || Phase == EZoogiPhase::Resolving)) ComboTick(Dt);
+	if (bDamageShots) TickDamageShots(Dt);
 	switch (Phase)
 	{
+	case EZoogiPhase::Forming:
+		if (bFormShots) TickFormShots();
+		if (!Arena || !Arena->IsForming())
+		{
+			UE_LOG(LogZoogi, Log, TEXT("STAGE FORMED after %.2f s: colliders live, first turn"), PhaseTime);
+			if (bFormShots && FormPass == 0)
+			{
+				TakeShot(TEXT("form_99_settled"));
+				// Second pass: replay the forming with the camera on the hub pillars rising through the floor.
+				FormPass = 1;
+				FormCamMode = 1;
+				FormShotIdx = 0;
+				Arena->BeginForming(FormTimeScale);
+				break;
+			}
+			if (bFormShots) TakeShot(TEXT("pillar_99_settled"));
+			FormCamMode = 0;
+			if (bFormingCombo) ComboBeginTeamTurn(0); else BeginTurn(0);
+		}
+		break;
 	case EZoogiPhase::Aiming:
 	{
 		AZoogiBall* Ball = GetActiveBall();

@@ -45,9 +45,19 @@ public:
 	/** Radius / height of the footprint in cm, visual yaw, two rock colours, physics material, seed for the chip layout. */
 	void InitRock(float InRadius, float InHeight, float InYaw, const FLinearColor& ColA, const FLinearColor& ColB, UPhysicalMaterial* PM, int32 InSeed);
 	void ResetRock();
+	/** Optional look (call before InitRock): Buzzy "carved rune-stone" block with flatter cut faces and faint rune
+	 *  carvings that glow (RuneStrength > 0) while the rock is intact and go dark once it cracks. Visual only. */
+	void SetCarvedStyle(float InLump, const FLinearColor& InRuneColor, float InRuneStrength);
 	/** Called from the ball's hit event. NormalImpulse in kg cm/s. */
 	void OnBallHit(AZoogiBall* Ball, const FVector& NormalImpulse, const FVector& ImpactPoint);
 	bool IsStanding() const { return State != EZoogiRockState::Shattered; }
+	/** Frozen Ring (Oct 6): INTACT -> DAMAGED (frosted, darker) -> CRACKED -> SHATTERED instead of three stages. */
+	bool bFourStage = false;
+	bool IsDamagedStage() const { return bDamagedStage; }
+	/** One stage further (powers, tests): intact -> damaged (four-stage) -> cracked -> shattered. */
+	void Escalate(const FVector& P, const FVector& Dir);
+	/** Tests / shots: 0 intact, 1 damaged, 2 cracked, 3 shattered (from a fresh rock). */
+	void ForceStage(int32 Stage);
 	EZoogiRockState GetState() const { return State; }
 	float GetRadius() const { return Radius; }
 
@@ -90,6 +100,7 @@ protected:
 	void BuildSide(FRandomStream& Rng);
 	void BuildRubble(FRandomStream& Rng);
 	void BuildChunks(FRandomStream& Rng);
+	void BuildRunes();
 	int32 SideOf(const FVector& U) const;
 	FVector SplitPos(const FVector& P, int32 InSide) const;
 	FVector SplitNrm(const FVector& N, int32 InSide) const;
@@ -121,6 +132,8 @@ protected:
 	UPROPERTY() TObjectPtr<UProceduralMeshComponent> CrackMesh;
 	/** Broken stump + loose stones + stone powder (sections 0 outer, 1 fresh faces, 2 powder). No collision. */
 	UPROPERTY() TObjectPtr<UProceduralMeshComponent> Rubble;
+	/** Carved-style rune strokes on the intact surface (glow while intact). */
+	UPROPERTY() TObjectPtr<UProceduralMeshComponent> RuneMesh;
 	UPROPERTY() TArray<TObjectPtr<UProceduralMeshComponent>> ChunkPool;
 	UPROPERTY() TArray<TObjectPtr<UInstancedStaticMeshComponent>> GritISM;
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Puffs;
@@ -163,6 +176,9 @@ protected:
 	int32 NextPuff = 0;
 
 	FShape Shape;
+	bool bCarved = false;
+	float StyleLump = 1.f, RuneStrength = 0.f;
+	FLinearColor RuneColor = FLinearColor::Green;
 	// Fracture (crack stage): boundary meridians at SplitAz + Jag (half A) and SplitAz + PI + Jag (half B).
 	TArray<float> JagA, JagB;
 	float SplitAz = 0.f, SplitSep = 0.f;
@@ -176,6 +192,8 @@ protected:
 	FLinearColor DustCol = FLinearColor(0.3f, 0.28f, 0.24f);
 
 	EZoogiRockState State = EZoogiRockState::Intact;
+	bool bDamagedStage = false;
+	void MarkDamaged(const FVector& P);
 	float Radius = 100.f, Height = 80.f, Yaw = 0.f;
 	float LastHitTime = -10.f;
 	int32 Seed = 0;

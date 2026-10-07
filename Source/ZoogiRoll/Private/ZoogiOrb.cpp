@@ -1,4 +1,5 @@
 #include "ZoogiOrb.h"
+#include "ZoogiArenaPiece.h"
 #include "ZoogiTypes.h"
 #include "ZoogiPhysics.h"
 #include "Components/SphereComponent.h"
@@ -95,6 +96,7 @@ void AZoogiOrb::MakeStar()
 
 void AZoogiOrb::SetOut()
 {
+	if (!bOut && GetWorld() && Sphere) AZoogiArenaPiece::RingOutCrash(GetWorld(), OrbLocation(), Sphere->GetPhysicsLinearVelocity(), 25.f, nullptr);
 	bOut = true;
 	Sphere->SetSimulatePhysics(false);
 	Sphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);

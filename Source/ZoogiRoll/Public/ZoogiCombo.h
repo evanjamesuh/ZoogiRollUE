@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "ZoogiTypes.h"
 #include "ZoogiCombo.generated.h"
 
 class UStaticMeshComponent;
@@ -34,22 +35,34 @@ public:
 	AZoogiComboArena();
 	void Build();
 
-	// Layout (cm, floor top at Z = 0).
-	static constexpr float WallR = 1150.f;
-	static constexpr float WallA0 = 195.f;
-	static constexpr float WallA1 = 245.f;
-	static constexpr float WallH = 85.f;
-	static FVector2D RampMin() { return FVector2D(-760.f, 290.f); }
-	static FVector2D RampMax() { return FVector2D(-540.f, 510.f); }
-	static constexpr float RampH = 45.f;
-	static FVector2D SectionMin() { return FVector2D(-150.f, 200.f); }
-	static FVector2D SectionMax() { return FVector2D(250.f, 600.f); }
-	static FVector2D PlatformXY() { return FVector2D(750.f, 900.f); }
-	static constexpr float PlatformR = 200.f;
-	static constexpr float PlatformH = 55.f;
-	static FVector2D GateXY() { return FVector2D(0.f, -1450.f); }
-	static FVector GateReturn() { return FVector(0.f, -1180.f, 52.f); }
+	// Layout (cm, floor top at Z = 0). Per theme (SetLayout): Meadow prototype layout or the Frozen Ring layout
+	// (ZoogiFrozenLayout.h, Oct 6) where the wall / ramp / platform / gate arch are arena stage pieces.
+	static float WallR;
+	static float WallA0;
+	static float WallA1;
+	static float WallH;
+	static FVector2D RampMin() { return LRampMin; }
+	static FVector2D RampMax() { return LRampMax; }
+	static float RampH;
+	static FVector2D SectionMin() { return LSecMin; }
+	static FVector2D SectionMax() { return LSecMax; }
+	static FVector2D PlatformXY() { return LPlat; }
+	static float PlatformR;
+	static float PlatformH;
+	static FVector2D GateXY() { return LGate; }
+	static FVector GateReturn() { return LGateReturn; }
 	static const TArray<FVector2D>& BumperXY();
+	/** Selects the layout for a theme (Frozen -> Frozen Ring layout, anything else -> Meadow prototype layout). */
+	static void SetLayout(EZoogiArena Theme);
+	static bool IsFrozenLayout() { return bFrozenLayout; }
+	/** Arena the props sit on (Frozen: stage-forming registration, scars, materials). Call before Build(). */
+	void SetArena(class AZoogiArena* InArena) { Arena = InArena; }
+	/** Orb home markers (Frozen: rune sockets where the Arena Orbs spawn / return). */
+	void SetOrbHomes(const TArray<FVector2D>& Homes) { OrbHomes = Homes; }
+	virtual void Destroyed() override;
+	/** Tests / shots: forces the reactive section state. */
+	void ForceFloorState(EZoogiFloorState S) { FloorState = S; ApplyFloorState(); }
+	const TArray<TObjectPtr<class AZoogiArenaPiece>>& GetIceBumpers() const { return IceBumpers; }
 
 	bool IsInSection(const FVector2D& P, float Pad = 0.f) const;
 	/** Heavy impact on the damageable section: NORMAL -> DAMAGED -> CRACKED (rate limited). Returns true if the state changed. */
@@ -73,6 +86,18 @@ protected:
 	/** Places a slab whose top face runs from (X0, Z0) to (X1, Z1) along +X (Y span Y0..Y1), Thickness below the top face. */
 	void PlaceSlab(UStaticMeshComponent* C, float X0, float Z0, float X1, float Z1, float Y0, float Y1, float Thickness);
 	void ApplyFloorState();
+	void BuildFrozen();
+	static FVector2D LRampMin;
+	static FVector2D LRampMax;
+	static FVector2D LSecMin;
+	static FVector2D LSecMax;
+	static FVector2D LPlat;
+	static FVector2D LGate;
+	static FVector LGateReturn;
+	static bool bFrozenLayout;
+	UPROPERTY() TObjectPtr<class AZoogiArena> Arena;
+	UPROPERTY() TArray<TObjectPtr<class AZoogiArenaPiece>> IceBumpers;
+	TArray<FVector2D> OrbHomes;
 
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Bumpers;
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> BumperCaps;

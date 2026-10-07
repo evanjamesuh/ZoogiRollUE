@@ -1,4 +1,6 @@
 #include "ZoogiPlayerController.h"
+#include "ZoogiStageForming.h"
+#include "ZoogiArena.h"
 #include "ZoogiRoll.h"
 #include "ZoogiGameMode.h"
 #include "ZoogiBall.h"
@@ -659,6 +661,12 @@ void AZoogiPlayerController::HandleInput(float Dt)
 		}
 	}
 
+	if (G->Phase == EZoogiPhase::Forming)
+	{
+		HoverTarget.Reset();
+		if (bLMB || WasInputKeyJustPressed(EKeys::SpaceBar) || WasInputKeyJustPressed(EKeys::Enter) || WasInputKeyJustPressed(EKeys::Escape)) G->SkipStageForming();
+		return;
+	}
 	if (G->Phase == EZoogiPhase::Menu || G->Phase == EZoogiPhase::GameOver)
 	{
 		HoverTarget.Reset();
@@ -842,6 +850,34 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	if (!Cam || !G) return;
 	const float Scale = (G->Arena && G->Arena->IsNeon()) ? NeonScale : 1.f;
 
+	if (G->Phase == EZoogiPhase::Forming)
+	{
+		// Stage forming: a slow sweep in to the art orientation (screen up = -Y) while the stage assembles.
+		const float Pg = (G->Arena && G->Arena->Forming) ? G->Arena->Forming->GetProgress() : 1.f;
+		const float E = Pg * Pg * (3.f - 2.f * Pg);
+		Yaw = FMath::Lerp(215.f, 270.f, E);
+		Pitch = FMath::Lerp(30.f, 52.f, E);
+		Dist = FMath::Lerp(4300.f, 3300.f, E) * Scale;
+		Fov = 70.f;
+		Dutch = 0.f;
+		Pivot = FVector(0.f, 0.f, -60.f);
+		if (G->FormCamMode == 1)
+		{
+			// Pillar close-up (forming shots): low view across the floor at the 22.5 deg Resonance pillar and its neighbour.
+			Yaw = 22.5f + 25.f; Pitch = 10.f; Dist = 1250.f; Fov = 60.f;
+			Pivot = FVector(560.f, 360.f, 120.f);
+		}
+		Look = Pivot;
+		const FRotator Heading(0.f, Yaw, 0.f);
+		const float Pr = FMath::DegreesToRadians(Pitch);
+		const FVector Loc = Pivot - Heading.Vector() * Dist * FMath::Cos(Pr) + FVector(0, 0, Dist * FMath::Sin(Pr));
+		Cam->SetActorLocation(Loc);
+		Cam->SetActorRotation((Look - Loc).Rotation());
+		Cam->GetCameraComponent()->SetFieldOfView(Fov);
+		ApplyPostProcess(Dt, PMenu, FVector::Dist(Loc, Look));
+		CurProfile = PMenu;
+		return;
+	}
 	if (bMenuCam || G->Phase == EZoogiPhase::Menu || G->Phase == EZoogiPhase::GameOver)
 	{
 		AZoogiBall* W = CamTarget.Get();
