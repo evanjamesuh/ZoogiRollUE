@@ -1,0 +1,178 @@
+// -ZoogiEpisodeTest=A|B|E|F: Titan Meteor test director (classic mode, P1's first turn). It only sets up the start
+// state and gives P1's inputs through the same calls the HUD uses (placement, Awaken Infuse Titan, lock / free aim,
+// confirm); everything after the launch is real physics. Then it logs one TITAN_TEST line comparing what the
+// presentation depicted with what the simulation produced.
+//   A: Titan heavy hit that pushes the target inward (expected: no ring-out)  -> meteor, "STILL STANDING"
+//   B: full-power Titan hit toward the edge (expected: ring-out)              -> meteor, "RING OUT"
+//   E: Titan shot that misses everything                                     -> no meteor, lower tier
+//   F: B in Competitive mode                                                 -> short meteor, same result as B
+#include "ZoogiEpisodeSubsystem.h"
+#include "ZoogiGameMode.h"
+#include "ZoogiBall.h"
+#include "ZoogiOrb.h"
+#include "ZoogiArena.h"
+#include "ZoogiRock.h"
+#include "ZoogiArtifactComponent.h"
+#include "ZoogiTypes.h"
+#include "ZoogiRoll.h"
+#include "Components/SphereComponent.h"
+#include "Engine/World.h"
+#include "Kismet/KismetSystemLibrary.h"
+#include "Misc/App.h"
+
+namespace
+{
+	float SegDist2D(const FVector2D& P, const FVector2D& A, const FVector2D& B)
+	{
+		const FVector2D AB = B - A;
+		const float L2 = AB.SizeSquared();
+		const float T = L2 > 1.f ? FMath::Clamp(FVector2D::DotProduct(P - A, AB) / L2, 0.f, 1.f) : 0.f;
+		return FVector2D::Distance(P, A + AB * T);
+	}
+}
+
+void UZoogiEpisodeSubsystem::TickTest()
+{
+	AZoogiGameMode* G = GM();
+	UWorld* W = GetWorld();
+	if (!G || !W || G->bComboMode) return;
+	if (TestQuitAt > 0.0 && RealClock > TestQuitAt)
+	{
+		TestQuitAt = 0.0;
+		UE_LOG(LogZoogi, Log, TEXT("TITAN_TEST done, quitting"));
+		UKismetSystemLibrary::QuitGame(W, W->GetFirstPlayerController(), EQuitPreference::Quit, false);
+		return;
+	}
+	if (W->IsPaused()) return;
+	const bool bMiss = TestVariant == TEXT("E");
+	const bool bInward = TestVariant == TEXT("A") || bMiss;
+	switch (TestStep)
+	{
+	case 0:
+	{
+		if (G->Phase != EZoogiPhase::Aiming || G->Stage != EZoogiStage::Draw || G->ActivePlayer != 0 || G->Balls.Num() < 2 || !G->Arena) return;
+		AZoogiBall* S = G->Balls[0];
+		AZoogiBall* T = G->Balls[TestTarget];
+		if (!S || !T || !S->Artifact) return;
+		const float R = AZoogiArena::ActiveKnockoffR;
+		const float Z0 = S->BallLocation().Z, Z1 = T->BallLocation().Z;
+		// scan layout orientations until the lane and every spot are clear of orbs and rocks
+		float BestTheta = 0.f;
+		bool bFound = false;
+		FVector2D SP(0.f, 0.f), TP(0.f, 0.f), AimEnd(0.f, 0.f);
+		TArray<FVector2D> OthersP;
+		for (int32 k = 0; k < 24 && !bFound; ++k)
+		{
+			const float Th = FMath::DegreesToRadians(15.f * k);
+			const FVector2D U(FMath::Cos(Th), FMath::Sin(Th)), V(-U.Y, U.X);
+			if (bInward) { TP = U * (0.50f * R); SP = U * (0.80f * R); AimEnd = TP - U * 0.15f * R; }
+			else { TP = V * (0.58f * R) + U * (0.30f * R); SP = TP - U * 650.f; AimEnd = TP + U * 0.4f * R; }
+			if (bMiss) AimEnd = SP + (TP - SP).GetSafeNormal().GetRotated(35.f) * 520.f;
+			OthersP.Reset();
+			for (int32 i = 1; i < G->Balls.Num(); ++i) if (i != TestTarget) OthersP.Add(-V * (0.55f * R) + U * (OthersP.Num() == 0 ? 420.f : -420.f));
+			bool bOk = true;
+			TArray<FVector2D> Spots = { SP, TP };
+			Spots.Append(OthersP);
+			for (const FVector2D& P : Spots) if (G->Arena->IsOffCourt(P) || !G->Arena->IsSpotClear(P, 60.f)) bOk = false;
+			for (AZoogiOrb* O : G->Orbs)
+			{
+				if (!O || O->bOut || !bOk) continue;
+				const FVector2D OP(O->OrbLocation());
+				if (SegDist2D(OP, SP, bMiss ? AimEnd : TP) < 160.f || (!bInward && SegDist2D(OP, TP, AimEnd) < 160.f)) bOk = false;
+				for (const FVector2D& P : Spots) if (FVector2D::Distance(OP, P) < 150.f) bOk = false;
+			}
+			for (const AZoogiRock* Rk : G->Arena->GetRocks())
+			{
+				if (!Rk || Rk->GetState() == EZoogiRockState::Shattered || !bOk) continue;
+				const FVector2D RP(Rk->GetActorLocation());
+				if (SegDist2D(RP, SP, AimEnd) < Rk->GetRadius() + 80.f) bOk = false;
+				for (const FVector2D& P : Spots) if (FVector2D::Distance(RP, P) < Rk->GetRadius() + 90.f) bOk = false;
+			}
+			if (bOk) { bFound = true; BestTheta = 15.f * k; }
+		}
+		if (!bFound) UE_LOG(LogZoogi, Warning, TEXT("TITAN_TEST no fully clear lane found, using the last layout"));
+		const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(TP.Y - SP.Y, TP.X - SP.X));
+		S->PlaceAt(FVector(SP, Z0), Yaw);
+		T->PlaceAt(FVector(TP, Z1), Yaw + 180.f);
+		int32 Oi = 0;
+		for (int32 i = 1; i < G->Balls.Num(); ++i)
+			if (i != TestTarget && G->Balls[i] && OthersP.IsValidIndex(Oi)) { G->Balls[i]->PlaceAt(FVector(OthersP[Oi++], G->Balls[i]->BallLocation().Z), 0.f); }
+		S->bCPU = false;                              // P1's inputs come from this director this turn
+		S->Artifact->Drawn = EZoogiArtifact::Titan;   // the drawn artifact this turn
+		TestAimPoint = FVector(AimEnd, Z0);
+		TestStep = 1;
+		UE_LOG(LogZoogi, Log, TEXT("TITAN_TEST setup variant=%s mode=%s lane_theta=%.0f clear=%d shooter=P1 (%.0f,%.0f) target=P%d (%.0f,%.0f) knockoffR=%.0f decel=%.0f"),
+			*TestVariant, ZoogiEpisode::ModeName(Mode), BestTheta, bFound ? 1 : 0, SP.X, SP.Y, TestTarget + 1, TP.X, TP.Y, R, G->Arena->GetRollingDecel());
+		break;
+	}
+	case 1:
+		if (G->Stage == EZoogiStage::Awaken && G->StageTime > 0.25f)
+		{
+			const bool bOk = G->AwakenInfuse(0);
+			UE_LOG(LogZoogi, Log, TEXT("TITAN_TEST awaken infuse titan=%d"), bOk ? 1 : 0);
+			TestStep = 2;
+		}
+		break;
+	case 2:
+		if (G->IsAimStep() && G->StepTime > 0.3f)
+		{
+			AZoogiBall* S = G->Balls[0];
+			AZoogiBall* T = G->Balls[TestTarget];
+			if (TestVariant == TEXT("A"))
+			{
+				// free aim past the target: the shot reaches it at a moderate speed (v^2 = 2 a (D - gap))
+				const float Decel = G->Arena->GetRollingDecel();
+				const FVector2D D = FVector2D(T->BallLocation() - S->BallLocation());
+				const float Gap = D.Size() - 2.f * ZoogiConst::ZoogiRadius;
+				const float VImp = 520.f;
+				const FVector2D P = FVector2D(S->BallLocation()) + D.GetSafeNormal() * (Gap + VImp * VImp / (2.f * Decel));
+				G->SetFreeAim(FVector(P, S->BallLocation().Z));
+			}
+			else if (bMiss) G->SetFreeAim(TestAimPoint);
+			else { G->LockOn(T, false); G->AimPowerStep = 3; }
+			const bool bOk = G->CommitLock();
+			UE_LOG(LogZoogi, Log, TEXT("TITAN_TEST aim variant=%s committed=%d"), *TestVariant, bOk ? 1 : 0);
+			TestStep = 3;
+		}
+		break;
+	case 3:
+		if (G->Phase == EZoogiPhase::Rolling)
+		{
+			G->Balls[0]->bCPU = true; // back to the CPU for the rest of the match
+			G->AimPowerStep = 0;
+			TestActionId = Truth.ActionId;
+			TestStep = 4;
+		}
+		break;
+	default:
+		break;
+	}
+}
+
+void UZoogiEpisodeSubsystem::TestFinalize()
+{
+	AZoogiGameMode* G = GM();
+	if (!G) return;
+	const FZoogiEpisodeRecognitionRecord& R = LiveRec;
+	const bool bTargetOut = Truth.RingOuts.Contains(TestTarget);
+	const bool bGameOut = G->Balls.IsValidIndex(TestTarget) && G->Balls[TestTarget] && G->Balls[TestTarget]->bOut;
+	const bool bDepictOut = Plan.Epilogue == TEXT("RING OUT");
+	const bool bDepictMatch = Mode == EZoogiEpisodeMode::Off ? true : (Plan.Epilogue.IsEmpty() ? !Plan.bMeteor : (bDepictOut == bTargetOut));
+	bool bExpect = true;
+	FString Expect;
+	if (TestVariant == TEXT("A")) { Expect = TEXT("meteor=1 ringout=0"); bExpect = (Mode == EZoogiEpisodeMode::Off || Plan.bMeteor) && !bTargetOut; }
+	else if (TestVariant == TEXT("B") || TestVariant == TEXT("F")) { Expect = TEXT("meteor=1 ringout=1"); bExpect = (Mode == EZoogiEpisodeMode::Off || Plan.bMeteor) && bTargetOut; }
+	else if (TestVariant == TEXT("E")) { Expect = TEXT("meteor=0 power_hit=0 tier<4"); bExpect = !Plan.bMeteor && !Truth.bPowerHit && R.Tier < 4; }
+	FString Final, Deltas;
+	for (int32 i = 0; i < Truth.FinalBallPos.Num(); ++i)
+	{
+		Final += FString::Printf(TEXT("%sP%d(%.1f,%.1f%s)"), Final.IsEmpty() ? TEXT("") : TEXT(" "), i + 1, Truth.FinalBallPos[i].X, Truth.FinalBallPos[i].Y, Truth.FinalBallOut[i] ? TEXT(",out") : TEXT(""));
+		Deltas += FString::Printf(TEXT("%sP%d:%+d/%+d"), Deltas.IsEmpty() ? TEXT("") : TEXT(","), i + 1, Truth.ScoreDelta.IsValidIndex(i) ? Truth.ScoreDelta[i] : 0, Truth.RingMarkDelta.IsValidIndex(i) ? Truth.RingMarkDelta[i] : 0);
+	}
+	UE_LOG(LogZoogi, Log, TEXT("TITAN_TEST variant=%s mode=%s action=%d power_hit=%d crit=%d archetype=%s tier=%d score=%.0f meteor=%d meteor_s=%.2f target=P%d target_ringout=%d game_bOut=%d score/ringmark=%s depicted=\"%s\" depicted_matches_physics=%d result_unchanged=%d drift_cm=%.4f dilation_restored=%d expect=[%s] %s final=%s"),
+		*TestVariant, ZoogiEpisode::ModeName(Mode), Truth.ActionId, Truth.bPowerHit ? 1 : 0, Truth.bCrit ? 1 : 0, ZoogiEpisode::ArchetypeName(R.Archetype), R.Tier, R.Score,
+		Plan.bMeteor ? 1 : 0, Plan.MeteorSeconds, TestTarget + 1, bTargetOut ? 1 : 0, bGameOut ? 1 : 0, *Deltas, *Plan.Epilogue, bDepictMatch ? 1 : 0, Plan.ResultUnchanged() ? 1 : 0,
+		Plan.FreezeDriftCm, Plan.bDilationRestored ? 1 : 0, *Expect, (bExpect && bDepictMatch && Plan.ResultUnchanged()) ? TEXT("PASS") : TEXT("FAIL"), *Final);
+	TestQuitAt = RealClock + 2.0;
+	TestStep = 5;
+}

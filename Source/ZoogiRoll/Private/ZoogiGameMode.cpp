@@ -1,4 +1,5 @@
 #include "ZoogiGameMode.h"
+#include "ZoogiEpisodeSubsystem.h"
 #include "ZoogiKFXPreview.h"
 #include "ZoogiRoll.h"
 #include "ZoogiBall.h"
@@ -780,6 +781,7 @@ void AZoogiGameMode::FireShot(const FVector2D& Velocity)
 	UE_LOG(LogZoogi, Log, TEXT("P%d %s shot at %.0f cm/s from (%.0f, %.0f) dir %.0f deg, expected roll %.0f cm"), ActivePlayer + 1, *Ball->Def.Name, Velocity.Size(),
 		ShotStart.X, ShotStart.Y, FMath::RadiansToDegrees(FMath::Atan2(Velocity.Y, Velocity.X)), Velocity.SizeSquared() / (2.f * Arena->GetRollingDecel()));
 	if (AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PC->OnShotFired(Ball);
+	if (UZoogiEpisodeSubsystem* Ep = GetWorld()->GetSubsystem<UZoogiEpisodeSubsystem>()) Ep->OnShotFired(Ball); // Episode Engine: truth capture (read-only)
 }
 
 static float InvertLaunch(float Speed)
