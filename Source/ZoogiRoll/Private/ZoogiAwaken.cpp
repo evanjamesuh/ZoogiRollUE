@@ -264,7 +264,7 @@ void AZoogiGameMode::ApplyStatusOnShot(AZoogiBall* Ball, FVector2D& V)
 		V *= R.LaunchSpeedMul;
 		RefreshArtifactMass(Ball, true);
 		// Affinity: the Zoogi's signature power rides along. Armed powers fire with this shot (OnArmedShot), instant ones on impact.
-		// (Bolt's Static Shock is the exception: phasing through would skip the powered contact, so it stuns on impact instead.)
+		// (Static Shock, now Luma's Hype Shock, is the exception: phasing through would skip the powered contact, so it stuns on impact instead.)
 		if (ZoogiArtifacts::Affinity(Ball->Def.Id) == AC->Infused && ZoogiUtil::IsArmedPower(Ball->Def.PowerKind) && Ball->Def.PowerKind != EZoogiPower::StaticShock)
 		{
 			bPowerArmed = true;
@@ -427,9 +427,9 @@ void AZoogiGameMode::ApplyInfuseImpact(AZoogiBall* Shooter, AActor* Other)
 		OB->StunTurns = FMath::Max(OB->StunTurns, 1);
 		OB->LastHitPlayer = Shooter->PlayerIndex;
 		AZoogiFX::Niagara(GetWorld(), TEXT("NS_Burst_Yellow"), OB->BallLocation());
-		AddPopup(TEXT("STATIC SHOCK!  STUNNED"), OB->BallLocation() + FVector(0, 0, 110.f), FLinearColor(1.f, 0.85f, 0.15f));
+		AddPopup(FString::Printf(TEXT("%s!  STUNNED"), *Shooter->Def.Ability.ToUpper()), OB->BallLocation() + FVector(0, 0, 110.f), FLinearColor(1.f, 0.85f, 0.15f));
 		ZoogiUtil::PlaySfx(this, TEXT("Zap"), 0.8f, 1.6f);
-		UE_LOG(LogZoogi, Log, TEXT("Affinity: Bolt's Static Shock stunned P%d on impact"), OB->PlayerIndex + 1);
+		UE_LOG(LogZoogi, Log, TEXT("Affinity: %s's %s stunned P%d on impact"), *Shooter->Def.Name, *Shooter->Def.Ability, OB->PlayerIndex + 1);
 	}
 
 	UE_LOG(LogZoogi, Log, TEXT("Powered hit: P%d %s %s -> %s (contact %.0f / launch %.0f cm/s = %.0f%%, cut %.1f deg)%s, affected %d"),

@@ -287,6 +287,7 @@ void AZoogiArena::ScatterInstances(UStaticMesh* Mesh, UMaterialInterface* Mat, i
 void AZoogiArena::Build(EZoogiArena InTheme)
 {
 	Clear();
+	ExtraOrbSpots.Reset();
 	Theme = InTheme;
 	SetupSky(InTheme);
 	switch (InTheme)
@@ -365,10 +366,16 @@ void AZoogiArena::SetupSky(EZoogiArena InTheme)
 	Atmosphere->SetRayleighScatteringScale(0.0331f);
 	Atmosphere->SetMieScatteringScale(0.003996f);
 
+	Sun->SetEnableLightShaftBloom(false);
 	switch (InTheme)
 	{
 	case EZoogiArena::Frozen:
 		// Buzzy Frozen Ring (Oct 6): bright crisp anime daylight, cool key from high up, pale blue haze, aurora sky panorama.
+		// Round 3c: sun rays (light-shaft bloom from the key light when the sun side is in frame).
+		Sun->SetEnableLightShaftBloom(true);
+		Sun->SetBloomScale(0.35f);
+		Sun->SetBloomThreshold(0.55f);
+		Sun->SetBloomTint(FColor(235, 245, 255));
 		Sun->SetRelativeRotation(FRotator(-38.f, 125.f, 0.f));
 		Sun->SetIntensity(8.f);
 		Sun->SetLightColor(FLinearColor(0.9f, 0.95f, 1.f));

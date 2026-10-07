@@ -46,6 +46,15 @@ def import_tex(path):
         t.set_editor_property("compression_settings", TCS.TC_BC7); t.set_editor_property("srgb", True)
         t.set_editor_property("mip_gen_settings", unreal.TextureMipGenSettings.TMGS_NO_MIPMAPS)
         t.set_editor_property("address_x", TA.TA_WRAP); t.set_editor_property("address_y", TA.TA_CLAMP)
+    elif name.startswith("T_FrozenDisp") or name == "T_FrozenCloud":
+        # round 3: colour-baked display decals (pack-derived) and the cloud-sea puff
+        t.set_editor_property("compression_settings", TCS.TC_DEFAULT); t.set_editor_property("srgb", True)
+        t.set_editor_property("address_x", TA.TA_CLAMP); t.set_editor_property("address_y", TA.TA_CLAMP)
+    elif any(name.startswith(p) for p in ("T_FrozenCrack_", "T_FrozenGlowCrack_", "T_FrozenCrater_", "T_FrozenFX_", "T_FrozenPow_", "T_FrozenForm_")):
+        # round 3: raw Animations & Powers pack masks / flipbooks (linear data, kept for MF_FrozenDamage / Niagara work)
+        t.set_editor_property("compression_settings", TCS.TC_DEFAULT); t.set_editor_property("srgb", "BaseColor" in name or "_FX_" in name)
+        tile = "_Tile_" in name
+        t.set_editor_property("address_x", TA.TA_WRAP if tile else TA.TA_CLAMP); t.set_editor_property("address_y", TA.TA_WRAP if tile else TA.TA_CLAMP)
     elif name.startswith("T_FrozenDmg") or name.startswith("T_FrozenScar"):
         t.set_editor_property("compression_settings", TCS.TC_DEFAULT); t.set_editor_property("srgb", True)
         t.set_editor_property("address_x", TA.TA_CLAMP); t.set_editor_property("address_y", TA.TA_CLAMP)

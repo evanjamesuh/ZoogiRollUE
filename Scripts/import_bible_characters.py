@@ -351,6 +351,31 @@ def no_nanite(mesh):
     log("nanite off: " + mesh.get_name())
 
 
+def drop_glb_leftovers(name):
+    """Interchange also creates the GLB's own materials / textures under <Name>/<Name>_UE/. Once the meshes carry our
+    instances nothing references them: delete them so they don't get cooked (only that folder, only unreferenced)."""
+    d = "%s/%s/%s_UE" % (ROOT, name, name)
+    if not EAL.does_directory_exist(d):
+        return
+    ar = unreal.AssetRegistryHelpers.get_asset_registry()
+    opts = unreal.AssetRegistryDependencyOptions(include_soft_package_references=True, include_hard_package_references=True,
+                                                include_searchable_names=False, include_soft_management_references=True,
+                                                include_hard_management_references=True)
+    pkgs = [p.split(".")[0] for p in EAL.list_assets(d, recursive=True, include_folder=False)]
+    n = kept = 0
+    for p in pkgs:
+        ext = [str(r) for r in (ar.get_referencers(p, opts) or []) if not str(r).startswith(d + "/")]
+        if ext:
+            kept += 1
+            log("kept %s (referenced by %s)" % (p, ext))
+            continue
+        if EAL.delete_asset(p):
+            n += 1
+    if not kept:
+        EAL.delete_directory(d)
+    log("dropped %d GLB leftovers in %s (%d kept)" % (n, d, kept))
+
+
 def make_mi(name, slot, spec, tex):
     folder = "%s/%s/Materials" % (ROOT, name)
     mi_name = "MI_%s_%s" % (name, slot)
@@ -424,6 +449,10 @@ def main():
                 "bounds_extent": [b.box_extent.x, b.box_extent.y, b.box_extent.z] if b else None,
                 "nanite": bool(body.get_editor_property("nanite_settings").get_editor_property("enabled")) if body else None,
                 "textures": sorted(tex.keys())}
+            try:
+                drop_glb_leftovers(name)
+            except Exception as ex:
+                log("leftover cleanup %s: %s" % (name, ex))
             log("%s done" % name)
         except Exception as ex:
             report["errors"].append("%s: %s" % (name, ex))
