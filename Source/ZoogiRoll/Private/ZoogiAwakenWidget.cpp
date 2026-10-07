@@ -25,6 +25,8 @@
 #include "Engine/World.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Widgets/SViewport.h"
+#include "Async/Async.h"
+#include "Misc/App.h"
 
 namespace
 {
@@ -161,7 +163,7 @@ void UZoogiAwakenWidget::RegisterControl(FName Action, int32 Index, UWidget* W)
 	Controls.Add(C);
 }
 
-UWidget* UZoogiAwakenWidget::MakeButton(UCanvasPanel* Parent, const FString& Label, FVector2D Pos, FVector2D Size, FName Action, int32 Index, const FLinearColor& Accent, bool bSelected, bool bEnabled)
+UWidget* UZoogiAwakenWidget::MakeButton(UCanvasPanel* Parent, const FString& Label, FVector2D Pos, FVector2D Size, FName Action, int32 Index, const FLinearColor& Accent, bool bSelected, bool bEnabled, float Shimmer)
 {
 	// Same look as AZoogiHUD::Button: dark (or accent when selected) plate, 4 px accent bar at the bottom, bold label.
 	UButton* Btn = WidgetTree->ConstructWidget<UZoogiButton>(UZoogiButton::StaticClass());
@@ -189,8 +191,18 @@ UWidget* UZoogiAwakenWidget::MakeButton(UCanvasPanel* Parent, const FString& Lab
 	BarBox->SetHeightOverride(4.f);
 	BarBox->AddChild(MakePanel(Accent.CopyWithNewOpacity(1.f)));
 	if (UOverlaySlot* S = O->AddChildToOverlay(BarBox)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Bottom); }
+	O->SetClipping(EWidgetClipping::ClipToBounds);
+	FBtnFx Fx;
+	Fx.Btn = Btn;
+	Fx.W = Size.X;
+	Fx.H = Size.Y;
+	Fx.Shimmer = bEnabled ? (Shimmer > 0.f ? Shimmer : (bSelected ? 0.12f : 0.f)) : 0.f;
+	Fx.Offset = FMath::Frac(Pos.X * 0.0037f);
+	if (Fx.Shimmer > 0.f) Fx.Band = AddBand(O, FVector2D(FMath::Max(40.f, Size.Y * 0.9f), Size.Y * 2.2f), FLinearColor(1.f, 0.97f, 0.88f));
+	BtnFx.Add(Fx);
 	if (UButtonSlot* S = Cast<UButtonSlot>(Btn->AddChild(O))) { S->SetPadding(FMargin(0.f)); S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); }
 	Place(Parent, Btn, Pos, Size);
+	Btn->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
 
 	UZoogiAwakenClick* C = NewObject<UZoogiAwakenClick>(this);
 	C->Owner = this;
@@ -308,6 +320,8 @@ void UZoogiAwakenWidget::BuildAwaken(AZoogiGameMode* G)
 	UZoogiArtifactComponent* AC = B->Artifact;
 	const FLinearColor PC = ZoogiUtil::PlayerColor(B->PlayerIndex);
 	bBuildingAim = false;
+	if (!DotTex) DotTex = ZoogiUIFx::ToTexture(ZoogiUIFx::SoftDot(128));
+	if (!BandTex) BandTex = ZoogiUIFx::ToTexture(ZoogiUIFx::ShimmerBand(64, 256));
 
 	TArray<TPair<int32, EZoogiArtifact>> Cards;
 	if (AC->Drawn != EZoogiArtifact::None) Cards.Add({ 0, AC->Drawn });
@@ -354,6 +368,7 @@ void UZoogiAwakenWidget::BuildAwaken(AZoogiGameMode* G)
 	int32 Pick = G->AwakenPick;
 	if (!Cards.ContainsByPredicate([Pick](const TPair<int32, EZoogiArtifact>& C) { return C.Key == Pick; }) && Cards.Num()) Pick = Cards[0].Key;
 	SelGem = nullptr;
+	CardFx.Reset();
 	float X = 20.f;
 	for (const TPair<int32, EZoogiArtifact>& C : Cards)
 	{
@@ -390,17 +405,73 @@ void UZoogiAwakenWidget::BuildAwaken(AZoogiGameMode* G)
 			Plate->SetContent(Card);
 			Place(P, Plate, FVector2D(X, Y0), FVector2D(AwCW, AwCH));
 		}
-		if (UTexture2D* Tex = GemTexture((uint8)C.Value))
+		// Card fx: light sweep across the card (clipped), a pulsing glow behind the stone, the stone itself turning
+		// in 3D (pre-rendered frames, two stacked images cross-faded), a pulsing rim on the picked card.
+		FCardFx Fx;
+		Fx.Card = Card->GetParent() ? (UWidget*)Card->GetParent() : (UWidget*)Card;
+		Fx.Btn = Cast<UButton>(Card->GetParent());
+		Fx.Artifact = (uint8)C.Value;
+		Fx.Key = C.Key;
+		Fx.Slot = CardFx.Num();
+		Fx.bSel = bSel;
+		Fx.Lift = bSel ? 1.f : 0.f;
+		if (UWidget* CW = Fx.Card.Get()) CW->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
+		Card->SetClipping(EWidgetClipping::ClipToBounds);
 		{
-			UImage* Img = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
+			UImage* Glow = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
 			FSlateBrush GB;
-			GB.SetResourceObject(Tex);
-			GB.ImageSize = FVector2D(160.f, 160.f);
-			Img->SetBrush(GB);
-			Img->SetVisibility(ESlateVisibility::HitTestInvisible);
-			Place(Card, Img, FVector2D(AwCW * 0.5f, 82.f), FVector2D(160.f, 160.f), FVector2D(0.5f, 0.5f));
-			if (bSel) SelGem = Img;
+			GB.SetResourceObject(DotTex);
+			GB.ImageSize = FVector2D(220.f, 220.f);
+			GB.TintColor = FSlateColor(FLinearColor(R.RimColor.R, R.RimColor.G, R.RimColor.B, 1.f));
+			Glow->SetBrush(GB);
+			Glow->SetVisibility(ESlateVisibility::HitTestInvisible);
+			Glow->SetRenderOpacity(bSel ? 0.55f : 0.32f);
+			Glow->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
+			Place(Card, Glow, FVector2D(AwCW * 0.5f, 80.f), FVector2D(220.f, 220.f), FVector2D(0.5f, 0.5f));
+			Fx.Glow = Glow;
 		}
+		{
+			UOverlay* Stone = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass());
+			Stone->SetVisibility(ESlateVisibility::HitTestInvisible);
+			Stone->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
+			UImage* Imgs[2];
+			for (int32 k = 0; k < 2; ++k)
+			{
+				Imgs[k] = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
+				Imgs[k]->SetVisibility(ESlateVisibility::HitTestInvisible);
+				FSlateBrush SB;
+				SB.ImageSize = FVector2D(148.f, 148.f);
+				Imgs[k]->SetBrush(SB);
+				if (UOverlaySlot* OS = Stone->AddChildToOverlay(Imgs[k])) { OS->SetHorizontalAlignment(HAlign_Fill); OS->SetVerticalAlignment(VAlign_Fill); }
+			}
+			UTexture2D* A = nullptr; UTexture2D* Bt = nullptr; float Blend = 0.f;
+			float& Ang = CardAngle.FindOrAdd(Fx.Slot, Fx.Slot * 37.f);
+			if (GemFrameAt(Fx.Artifact, Ang, A, Bt, Blend))
+			{
+				Imgs[0]->SetBrushFromTexture(A, false);
+				Imgs[1]->SetBrushFromTexture(Bt, false);
+				Imgs[1]->SetRenderOpacity(Blend);
+			}
+			else if (UTexture2D* Tex = GemTexture((uint8)C.Value))
+			{
+				Imgs[0]->SetBrushFromTexture(Tex, false);
+				Imgs[1]->SetRenderOpacity(0.f);
+			}
+			Place(Card, Stone, FVector2D(AwCW * 0.5f, 80.f), FVector2D(148.f, 148.f), FVector2D(0.5f, 0.5f));
+			Fx.Stone = Stone;
+			Fx.StoneA = Imgs[0];
+			Fx.StoneB = Imgs[1];
+			if (bSel) SelGem = Imgs[0];
+		}
+		Fx.Band = AddBand(Card, FVector2D(70.f, AwCH * 1.6f), FLinearColor(R.RimColor.R * 0.5f + 0.5f, R.RimColor.G * 0.5f + 0.5f, R.RimColor.B * 0.5f + 0.5f, 1.f));
+		if (bSel)
+		{
+			UBorder* Rim = MakePanel(FLinearColor::Transparent, FLinearColor(R.RimColor.R * 0.5f + 0.5f, R.RimColor.G * 0.5f + 0.5f, R.RimColor.B * 0.5f + 0.5f, 1.f), 3.f);
+			Rim->SetVisibility(ESlateVisibility::HitTestInvisible);
+			Place(Card, Rim, FVector2D(2.f, 2.f), FVector2D(AwCW - 4.f, AwCH - 4.f));
+			Fx.SelRim = Rim;
+		}
+		CardFx.Add(Fx);
 		PlaceText(Card, FString::Printf(TEXT("%s%s"), B->bCPU ? TEXT("") : *FString::Printf(TEXT("[%d] "), C.Key + 1), C.Key == 0 ? TEXT("NEW") : *FString::Printf(TEXT("SAVED %d"), C.Key)),
 			FVector2D(12.f, 8.f), 0.34f, C.Key == 0 ? FLinearColor(1.f, 0.85f, 0.3f) : FLinearColor(0.7f, 0.75f, 0.85f), false);
 		if (bFullHand && C.Key == 1) PlaceText(Card, TEXT("discarded on SAVE"), FVector2D(AwCW * 0.5f, AwCH - 28.f), 0.3f, FLinearColor(1.f, 0.55f, 0.35f), false, 0.5f);
@@ -446,8 +517,8 @@ void UZoogiAwakenWidget::BuildAwaken(AZoogiGameMode* G)
 	{
 		const float BY = Y0 + AwCH - 56.f;
 		const bool bHas = PA != EZoogiArtifact::None;
-		MakeButton(P, TEXT("INFUSE"), FVector2D(RX - 10.f, BY), FVector2D(130.f, 56.f), TEXT("Infuse"), Pick, FLinearColor(1.f, 0.5f, 0.15f), bHas, bHas);
-		MakeButton(P, TEXT("GUARD"), FVector2D(RX + 128.f, BY), FVector2D(130.f, 56.f), TEXT("Guard"), Pick, FLinearColor(0.35f, 0.7f, 1.f), bHas, bHas);
+		MakeButton(P, TEXT("INFUSE"), FVector2D(RX - 10.f, BY), FVector2D(130.f, 56.f), TEXT("Infuse"), Pick, FLinearColor(1.f, 0.5f, 0.15f), bHas, bHas, 0.3f);
+		MakeButton(P, TEXT("GUARD"), FVector2D(RX + 128.f, BY), FVector2D(130.f, 56.f), TEXT("Guard"), Pick, FLinearColor(0.35f, 0.7f, 1.f), bHas, bHas, 0.22f);
 		MakeButton(P, TEXT("SAVE"), FVector2D(RX + 266.f, BY), FVector2D(124.f, 56.f), TEXT("Save"), 0, FLinearColor(0.6f, 0.65f, 0.75f), false);
 	}
 }
@@ -463,6 +534,7 @@ FString UZoogiAwakenWidget::AimSignature(AZoogiGameMode* G) const
 void UZoogiAwakenWidget::BuildAim(AZoogiGameMode* G)
 {
 	bBuildingAim = true;
+	if (!BandTex) BandTex = ZoogiUIFx::ToTexture(ZoogiUIFx::ShimmerBand(64, 256));
 	const float PW = 1180.f, PH = 118.f;
 	AimPanel = MakePanel(GPanelCol);
 	AimPanel->SetVisibility(ESlateVisibility::Visible);
@@ -502,7 +574,7 @@ void UZoogiAwakenWidget::BuildAim(AZoogiGameMode* G)
 	X += 18.f;
 	MakeButton(P, TEXT("NEXT"), FVector2D(X, BY), FVector2D(110.f, BH), TEXT("AimNext"), 0, Acc, false); X += 118.f;
 	}
-	MakeButton(P, TEXT("CONFIRM"), FVector2D(X, BY), FVector2D(170.f, BH), TEXT("AimConfirm"), 0, FLinearColor(0.35f, 1.f, 0.45f), G->HasAim()); X += 178.f;
+	MakeButton(P, TEXT("CONFIRM"), FVector2D(X, BY), FVector2D(170.f, BH), TEXT("AimConfirm"), 0, FLinearColor(0.35f, 1.f, 0.45f), G->HasAim(), true, G->HasAim() ? 0.35f : 0.f); X += 178.f;
 	MakeButton(P, TEXT("CANCEL"), FVector2D(X, BY), FVector2D(150.f, BH), TEXT("AimCancel"), 0, FLinearColor(1.f, 0.4f, 0.35f), false);
 	bBuildingAim = false;
 }
@@ -512,6 +584,9 @@ void UZoogiAwakenWidget::BuildAim(AZoogiGameMode* G)
 void UZoogiAwakenWidget::Refresh(float DeltaSeconds, bool bHideAll)
 {
 	Time += DeltaSeconds;
+	if (!bGemJobsStarted) StartGemJobs();
+	PumpGemJobs();
+	BtnFx.RemoveAll([](const FBtnFx& F) { return !F.Btn.IsValid() || !F.Btn->GetParent(); });
 	AZoogiGameMode* G = GetWorld() ? GetWorld()->GetAuthGameMode<AZoogiGameMode>() : nullptr;
 	bool bWantAwaken = false, bWantAim = false;
 	if (G && Root && !bHideAll && G->Phase == EZoogiPhase::Aiming)
@@ -533,7 +608,6 @@ void UZoogiAwakenWidget::Refresh(float DeltaSeconds, bool bHideAll)
 			AwakenSig = Sig;
 			++NumRebuilds;
 		}
-		if (SelGem) SelGem->SetRenderTranslation(FVector2D(0.f, 4.f * FMath::Sin(Time * 4.f)));
 	}
 	if (AwakenPanel)
 	{
@@ -575,6 +649,192 @@ void UZoogiAwakenWidget::Refresh(float DeltaSeconds, bool bHideAll)
 	}
 	bAwakenShown = bWantAwaken && AwakenPanel != nullptr;
 	bAimShown = bWantAim && AimPanel != nullptr;
+	if (bAwakenShown && !bAwakenWasShown) AwakenIntro = 0.f;
+	if (bAimShown && !bAimWasShown) AimIntro = 0.f;
+	bAwakenWasShown = bAwakenShown;
+	bAimWasShown = bAimShown;
+	AnimateFx(DeltaSeconds);
+}
+
+// ------------------------------------------------------------------ ui-polish fx
+
+UImage* UZoogiAwakenWidget::AddBand(UPanelWidget* Clip, FVector2D Size, const FLinearColor& Tint)
+{
+	if (!BandTex) BandTex = ZoogiUIFx::ToTexture(ZoogiUIFx::ShimmerBand(64, 256));
+	UImage* Band = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
+	FSlateBrush B;
+	B.SetResourceObject(BandTex);
+	B.ImageSize = Size;
+	B.TintColor = FSlateColor(Tint);
+	Band->SetBrush(B);
+	Band->SetVisibility(ESlateVisibility::HitTestInvisible);
+	Band->SetRenderOpacity(0.f);
+	if (UCanvasPanel* CP = Cast<UCanvasPanel>(Clip))
+	{
+		Place(CP, Band, FVector2D(0.f, -Size.Y * 0.2f), Size);
+	}
+	else if (UOverlay* O = Cast<UOverlay>(Clip))
+	{
+		if (UOverlaySlot* OS = O->AddChildToOverlay(Band)) { OS->SetHorizontalAlignment(HAlign_Left); OS->SetVerticalAlignment(VAlign_Center); }
+	}
+	return Band;
+}
+
+void UZoogiAwakenWidget::StartGemJobs()
+{
+	// The five stones are ray-traced once on the thread pool (a few hundred ms in total); until a stone's frames
+	// are in, its card shows the flat procedural gem.
+	bGemJobsStarted = true;
+	const EZoogiArtifact All[5] = { EZoogiArtifact::Ember, EZoogiArtifact::Storm, EZoogiArtifact::Frost, EZoogiArtifact::Titan, EZoogiArtifact::Void };
+	for (EZoogiArtifact A : All)
+	{
+		const FZoogiArtifactRow& Row = ZoogiArtifacts::Get(A);
+		TSharedPtr<FGemJob, ESPMode::ThreadSafe> Job = MakeShared<FGemJob, ESPMode::ThreadSafe>();
+		GemJobs.Add(Job);
+		const uint8 Id = (uint8)A;
+		const FLinearColor Core = Row.CoreColor, Rim = Row.RimColor;
+		(void)Async(EAsyncExecution::ThreadPool, [Job, Id, Core, Rim]()
+		{
+			Job->Result = ZoogiUIFx::RenderGem(Id, Core, Rim, 176, 2.5f);
+			Job->bDone.store(true);
+		});
+	}
+}
+
+void UZoogiAwakenWidget::PumpGemJobs()
+{
+	for (int32 j = GemJobs.Num() - 1; j >= 0; --j)
+	{
+		if (!GemJobs[j]->bDone.load()) continue;
+		GemPending.Add(MoveTemp(GemJobs[j]->Result));
+		GemJobs.RemoveAt(j);
+	}
+	// Turn finished frames into textures, a few per frame (each is a 176x176 upload).
+	int32 Budget = 10;
+	while (Budget > 0 && GemPending.Num())
+	{
+		ZoogiUIFx::FGemFrames& F = GemPending[0];
+		if (F.Frames.Num() == 0) { GemPending.RemoveAt(0); GemPendingFrame = 0; continue; }
+		if (GemPendingFrame == 0) GemRange.Add(F.Artifact, FIntPoint(GemFrameTex.Num(), 0)); // count stays 0 until complete
+		GemFrameTex.Add(ZoogiUIFx::ToTexture(F.Frames[GemPendingFrame]));
+		--Budget;
+		if (++GemPendingFrame >= F.Frames.Num())
+		{
+			GemRange.FindChecked(F.Artifact).Y = F.Frames.Num();
+			GemPeriod.Add(F.Artifact, F.PeriodDeg);
+			UE_LOG(LogZoogi, Log, TEXT("Awaken stone %d ready: %d frames over %.0f deg"), (int32)F.Artifact, F.Frames.Num(), F.PeriodDeg);
+			GemPending.RemoveAt(0);
+			GemPendingFrame = 0;
+		}
+	}
+}
+
+bool UZoogiAwakenWidget::GemFrameAt(uint8 Artifact, float AngleDeg, UTexture2D*& OutA, UTexture2D*& OutB, float& OutBlend) const
+{
+	const FIntPoint* R = GemRange.Find(Artifact);
+	const float* Per = GemPeriod.Find(Artifact);
+	if (!R || !Per || R->Y <= 0) return false;
+	const float Step = *Per / R->Y;
+	float F = FMath::Fmod(AngleDeg, *Per);
+	if (F < 0.f) F += *Per;
+	const float Fi = F / Step;
+	const int32 I0 = FMath::FloorToInt(Fi) % R->Y;
+	const int32 I1 = (I0 + 1) % R->Y;
+	OutA = GemFrameTex[R->X + I0];
+	OutB = GemFrameTex[R->X + I1];
+	OutBlend = Fi - FMath::FloorToFloat(Fi);
+	return OutA && OutB;
+}
+
+void UZoogiAwakenWidget::AnimateFx(float Dt)
+{
+	using namespace ZoogiUIFx;
+	Dt = FMath::Clamp(Dt, 0.f, 0.1f);
+	AwakenIntro += Dt;
+	AimIntro += Dt;
+	// Panels rise + fade in when they appear.
+	if (AwakenPanel && bAwakenShown)
+	{
+		const float K = EaseOutCubic(FMath::Clamp(AwakenIntro / 0.38f, 0.f, 1.f));
+		AwakenPanel->SetRenderTranslation(FVector2D(0.f, 46.f * (1.f - K)));
+		AwakenPanel->SetRenderOpacity(K);
+	}
+	if (AimPanel && bAimShown)
+	{
+		const float K = EaseOutCubic(FMath::Clamp(AimIntro / 0.3f, 0.f, 1.f));
+		AimPanel->SetRenderTranslation(FVector2D(0.f, 30.f * (1.f - K)));
+		AimPanel->SetRenderOpacity(K);
+	}
+	if (bAwakenShown)
+	{
+		for (FCardFx& C : CardFx)
+		{
+			UWidget* CW = C.Card.Get();
+			if (!CW) continue;
+			const bool bHover = C.Btn.IsValid() && C.Btn->IsHovered();
+			const bool bPress = C.Btn.IsValid() && C.Btn->IsPressed();
+			const float HoverT = bPress ? 0.97f : (bHover ? 1.045f : 1.f);
+			C.Hover = FMath::FInterpTo(C.Hover, HoverT, Dt, 14.f);
+			C.Lift = FMath::FInterpTo(C.Lift, C.bSel ? 1.f : 0.f, Dt, 8.f);
+			// Cards come in one after another, then float gently (each on its own phase).
+			const float In = EaseOutBack(FMath::Clamp((AwakenIntro - 0.06f * C.Slot) / 0.45f, 0.f, 1.f));
+			const float Bob = 3.f * FMath::Sin(Time * 1.5f + C.Slot * 1.3f);
+			const float S = C.Hover * (1.f + 0.02f * C.Lift);
+			CW->SetRenderTransform(FWidgetTransform(FVector2D(0.f, Bob - 8.f * C.Lift + 60.f * (1.f - In)), FVector2D(S, S), FVector2D::ZeroVector, 0.f));
+			// The stone turns (faster on the picked card) and bobs; frame pair cross-fade keeps the turn smooth.
+			float& Ang = CardAngle.FindOrAdd(C.Slot, C.Slot * 37.f);
+			Ang = FMath::Fmod(Ang + Dt * (C.bSel ? 44.f : 28.f), 360000.f);
+			UTexture2D* A = nullptr; UTexture2D* B = nullptr; float Blend = 0.f;
+			if (GemFrameAt(C.Artifact, Ang, A, B, Blend) && C.StoneA.IsValid() && C.StoneB.IsValid())
+			{
+				if (C.StoneA->GetBrush().GetResourceObject() != A) C.StoneA->SetBrushFromTexture(A, false);
+				if (C.StoneB->GetBrush().GetResourceObject() != B) C.StoneB->SetBrushFromTexture(B, false);
+				C.StoneB->SetRenderOpacity(Blend);
+			}
+			if (UWidget* St = C.Stone.Get())
+			{
+				const float SB = (C.bSel ? 4.f : 2.5f) * FMath::Sin(Time * (C.bSel ? 2.6f : 1.9f) + C.Slot);
+				const float SS = 1.f + (C.bSel ? 0.04f : 0.f) + 0.015f * FMath::Sin(Time * 2.2f + C.Slot * 0.7f);
+				St->SetRenderTransform(FWidgetTransform(FVector2D(0.f, SB), FVector2D(SS, SS), FVector2D::ZeroVector, 0.f));
+			}
+			if (UWidget* Gw = C.Glow.Get())
+			{
+				const float P = 0.5f + 0.5f * FMath::Sin(Time * 2.4f + C.Slot * 1.7f);
+				Gw->SetRenderOpacity((C.bSel ? 0.48f : 0.26f) + (C.bSel ? 0.22f : 0.12f) * P);
+				const float GS = 0.92f + 0.12f * P;
+				Gw->SetRenderScale(FVector2D(GS, GS));
+			}
+			if (UWidget* Bd = C.Band.Get())
+			{
+				const float Ph = SweepPhase(Time, 4.2f, C.Slot * 0.23f, 0.3f);
+				if (Ph < 0.f) Bd->SetRenderOpacity(0.f);
+				else
+				{
+					Bd->SetRenderTransform(FWidgetTransform(FVector2D(-110.f + Ph * (AwCW + 180.f), 0.f), FVector2D(1.f, 1.f), FVector2D::ZeroVector, 18.f));
+					Bd->SetRenderOpacity((C.bSel ? 0.28f : 0.16f) * FMath::Sin(Ph * UE_PI));
+				}
+			}
+			if (UWidget* Rm = C.SelRim.Get()) Rm->SetRenderOpacity(0.25f + 0.45f * (0.5f + 0.5f * FMath::Sin(Time * 3.4f)));
+		}
+	}
+	for (FBtnFx& F : BtnFx)
+	{
+		UButton* Bt = F.Btn.Get();
+		if (!Bt || !Bt->GetIsEnabled()) { if (Bt) Bt->SetRenderScale(FVector2D(1.f, 1.f)); continue; }
+		const float T = Bt->IsPressed() ? 0.95f : (Bt->IsHovered() ? 1.06f : 1.f);
+		F.Scale = FMath::FInterpTo(F.Scale, T, Dt, 16.f);
+		Bt->SetRenderScale(FVector2D(F.Scale, F.Scale));
+		if (UWidget* Bd = F.Band.Get())
+		{
+			const float Ph = SweepPhase(Time, 3.2f, F.Offset, 0.35f);
+			if (Ph < 0.f) Bd->SetRenderOpacity(0.f);
+			else
+			{
+				Bd->SetRenderTransform(FWidgetTransform(FVector2D(-F.H * 1.4f + Ph * (F.W + F.H * 2.f), 0.f), FVector2D(1.f, 1.f), FVector2D::ZeroVector, 18.f));
+				Bd->SetRenderOpacity(F.Shimmer * FMath::Sin(Ph * UE_PI));
+			}
+		}
+	}
 }
 
 // ------------------------------------------------------------------ hit tests + test helpers
