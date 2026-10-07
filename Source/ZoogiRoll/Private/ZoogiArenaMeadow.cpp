@@ -14,10 +14,9 @@
 #include "Components/PointLightComponent.h"
 #include "Engine/StaticMesh.h"
 
-using namespace ZoogiMeadow;
-
 void AZoogiArena::BuildMeadow()
 {
+	using namespace ZoogiMeadow; // function scope: unity builds also pull in ZoogiFrozen's WallR/GateYaw/...
 	const FLinearColor Green = ZoogiUtil::Hex(TEXT("#39E37A"));
 	const FLinearColor Soil = ZoogiUtil::Hex(TEXT("#9C8B73"));
 	const FLinearColor Wood = ZoogiUtil::Hex(TEXT("#8B5A2B"));
