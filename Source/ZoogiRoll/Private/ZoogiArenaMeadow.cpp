@@ -14,6 +14,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Engine/StaticMesh.h"
+#include "ZoogiMeadowBatch1.inl"
 
 void AZoogiArena::BuildMeadow()
 {
@@ -217,7 +218,7 @@ void AZoogiArena::BuildMeadow()
 				const int32 k = CrateN++ % 3;
 				const TCHAR* N = k == 0 ? TEXT("SM_MeadowCrate_A") : (k == 1 ? TEXT("SM_MeadowCrate_C") : TEXT("SM_MeadowCrate_B"));
 				const float Base = k == 0 ? 100.f : (k == 1 ? 60.f : 100.f);
-				if (KitPart(P, N, C - FVector(0, 0, E * 0.5f), Yw + 90.f, E / Base)) return;
+				if (KitPart(P, N, C - FVector(0, 0, E * 0.5f), Yw + 90.f, 1.45f * E / Base)) return; // r23: v4 crates are bigger
 			}
 			const FRotator Rr(0.f, Yw, 0.f);
 			P->AddBox(C, FVector(E - 4.f), Rr, CrateWood);
@@ -245,7 +246,7 @@ void AZoogiArena::BuildMeadow()
 				Crate(P, FVector(-20.f, 0, 40.f), 80.f, 0.f);
 				Crate(P, FVector(48.f, 4.f, 28.f), 56.f, 14.f);
 				if (b % 4 == 0) Crate(P, FVector(-16.f, 2.f, 104.f), 48.f, -10.f);
-				P->AddColliderBox(FVector(8.f, 0, 40.f), FVector(150.f, 84.f, 80.f), FRotator::ZeroRotator, TEXT("ZWall"), WallPM);
+				P->AddColliderBox(FVector(8.f, 0, 52.f), FVector(190.f, 116.f, 104.f), FRotator::ZeroRotator, TEXT("ZWall"), WallPM);
 				P->SetPathBlock(FVector2D(P->GetActorLocation()), 85.f * MeadowScale); // r22: CPU planning + IsSpotClear
 			}
 			else
@@ -269,7 +270,7 @@ void AZoogiArena::BuildMeadow()
 			if (!P) continue;
 			Crate(P, FVector(-14.f, 0, 36.f), 72.f, 6.f);
 			Crate(P, FVector(40.f, 6.f, 26.f), 52.f, -12.f);
-			P->AddColliderBox(FVector(6.f, 0, 36.f), FVector(130.f, 80.f, 72.f), FRotator::ZeroRotator, TEXT("ZWall"), WallPM);
+			P->AddColliderBox(FVector(6.f, 0, 48.f), FVector(170.f, 110.f, 96.f), FRotator::ZeroRotator, TEXT("ZWall"), WallPM);
 			P->SetPathBlock(FVector2D(P->GetActorLocation()), 75.f * MeadowScale);
 			P->FinishBuild();
 			if (Forming) Forming->AddActor(P, EZoogiFormStyle::Rise, FVector(0, 0, -150.f), 1.5f + 0.05f * b, 0.6f);
@@ -290,8 +291,120 @@ void AZoogiArena::BuildMeadow()
 	ScatterInstances(SphereMesh, ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#B4A68C")), 0.95f), 120, 1750.f, 4200.f, FVector2D(0.35f, 0.9f), -60.f, Rng); // r15: field rocks
 	ScatterInstances(SphereMesh, ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#C4A0E8")), 0.6f), 240, 1700.f, 4200.f, FVector2D(0.28f, 0.45f), -38.f, Rng, true); // r15: lavender flowers
 
-	for (int32 i = 0; i < NumStands; ++i)
-		AddStands(StandCenters[i], StandArcs[i], StandRIn, -40.f, StandTiers, 72.f, 50.f, Seat, SeatAlt, SeatRiser, Stone);
+	// r23: Meadow Arena Builder batch 1 (tall stands, boulders, trees, houses, hills, shrine gates, path ribbons).
+	// Placement is world cm (PLACEMENT_batch1_cm.json, R 2015); the arena is actor-scaled by MeadowScale, so /A here.
+	// Reachable pieces (stands, boulders, trees inside the kill zone) are breakable pieces with colliders; the rest is visual.
+	bool bB1 = false;
+	{
+		const int32 NM = UE_ARRAY_COUNT(ZoogiMeadowB1::Meshes);
+		TArray<TArray<UStaticMesh*>> Sets; Sets.SetNum(NM);
+		for (const ZoogiMeadowB1::FPart& Pt : ZoogiMeadowB1::Parts)
+			if (UStaticMesh* SM = LoadObject<UStaticMesh>(nullptr, Pt.Path)) Sets[Pt.Mesh].Add(SM);
+		bB1 = Sets[0].Num() > 0;
+		TMap<FName, UMaterialInterface*> BMats;
+		auto BMat = [&](FName Slot) -> UMaterialInterface*
+		{
+			if (UMaterialInterface** F = BMats.Find(Slot)) return *F;
+			const FString S = Slot.ToString();
+			UMaterialInterface* M = nullptr;
+			auto Sf = [&](const TCHAR* H, float R) { return ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(H), R); };
+			if (S.Contains(TEXT("Glow"))) M = ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#39E37A")), 2.5f);
+			else if (S.Contains(TEXT("Foliage2"))) M = Sf(TEXT("#7DB24A"), 0.9f);
+			else if (S.Contains(TEXT("Foliage"))) M = Sf(TEXT("#5E9E3C"), 0.9f);
+			else if (S.Contains(TEXT("Bark"))) M = Sf(TEXT("#6B4A2E"), 0.9f);
+			else if (S.Contains(TEXT("Moss"))) M = Sf(TEXT("#6E9A3E"), 0.95f);
+			else if (S.Contains(TEXT("Rock"))) M = Sf(TEXT("#9C9480"), 0.9f);
+			else if (S.Contains(TEXT("Grass"))) M = GrassTop;
+			else if (S.Contains(TEXT("Path"))) M = Sf(TEXT("#C9B581"), 0.9f);
+			else if (S.Contains(TEXT("Plaster"))) M = Sf(TEXT("#EFE4CC"), 0.85f);
+			else if (S.Contains(TEXT("Roof"))) M = Sf(TEXT("#D0582F"), 0.6f);
+			else if (S.Contains(TEXT("Trim"))) M = Sf(TEXT("#A8322A"), 0.6f);
+			else if (S.Contains(TEXT("Wood"))) M = Sf(TEXT("#A87A4C"), 0.8f);
+			else M = Sf(TEXT("#B4A88E"), 0.85f);
+			BMats.Add(Slot, M);
+			return M;
+		};
+		auto Dress = [&](UStaticMeshComponent* C, UStaticMesh* SM)
+		{
+			C->SetStaticMesh(SM);
+			for (int32 k = 0; k < SM->GetStaticMaterials().Num(); ++k) C->SetMaterial(k, BMat(SM->GetStaticMaterials()[k].MaterialSlotName));
+		};
+		const float A = MeadowScale, KillR = 2700.f * A;
+		int32 NPieces = 0, NVis = 0;
+		for (const ZoogiMeadowB1::FPlace& Pl : ZoogiMeadowB1::Places)
+		{
+			const TArray<UStaticMesh*>& Set = Sets[Pl.Mesh];
+			if (Set.Num() == 0) continue;
+			const FString Name = ZoogiMeadowB1::Meshes[Pl.Mesh];
+			const bool bStand = Name.Contains(TEXT("Stands")), bRock = Name.Contains(TEXT("Boulder")), bTree = Name.Contains(TEXT("Tree"));
+			float RW = FMath::Sqrt(Pl.X * Pl.X + Pl.Y * Pl.Y);
+			if (bRock)
+			{
+				const float Ang = FMath::RadiansToDegrees(FMath::Atan2(Pl.Y, Pl.X));
+				bool bBlocked = false;
+				for (const ZoogiMeadowB1::FPlace& O : ZoogiMeadowB1::Places)
+					if (FCString::Strstr(ZoogiMeadowB1::Meshes[O.Mesh], TEXT("Stands")) && FMath::Abs(FMath::FindDeltaAngleDegrees(Ang, O.Yaw)) < 22.f) bBlocked = true;
+				for (float Gy : GateYaw) if (FMath::Abs(FMath::FindDeltaAngleDegrees(Ang, Gy)) < 12.f) bBlocked = true;
+				if (bBlocked) continue; // r23: no boulder inside a stand arc or against a shrine
+			}
+			const float Push = (bRock && RW < 2240.f) ? 2240.f / RW : 1.f; // r23: boulders clear of the seat wall (outer r 2062)
+			RW *= Push;
+			const FVector L(Pl.X * Push / A, Pl.Y * Push / A, Pl.Z / A - 40.f);
+			const float Sc = Pl.Scale / A;
+			if (bStand || bRock || (bTree && RW < KillR))
+			{
+				AZoogiArenaPiece* P = SpawnPiece(L, Pl.Yaw, bStand ? TEXT("stand") : (bRock ? TEXT("boulder") : TEXT("tree")), bRock ? TEXT("Stone") : TEXT("Wood"), bStand ? 520.f : 160.f, false);
+				if (!P) continue;
+				TMap<int32, FBox> Bays; FBox All(ForceInit);
+				for (UStaticMesh* SM : Set)
+				{
+					Dress(P->AddShape(TEXT("Cube"), FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector(Sc)), nullptr), SM);
+					const FBox B = SM->GetBoundingBox();
+					const FString MN = SM->GetName();
+					if (bTree && !MN.Contains(TEXT("Trunk"))) continue; // trees: only the trunk is solid
+					const int32 Bay = MN.Contains(TEXT("Bay0")) ? 0 : (MN.Contains(TEXT("Bay1")) ? 1 : (MN.Contains(TEXT("Bay2")) ? 2 : -1));
+					if (bStand && Bay >= 0) Bays.FindOrAdd(Bay, FBox(ForceInit)) += B;
+					All += B;
+				}
+				if (bStand) for (auto& KV : Bays)
+				{
+					bool bShared = false;
+					for (const ZoogiMeadowB1::FPlace& O : ZoogiMeadowB1::Places)
+						if (&O != &Pl && FCString::Strstr(ZoogiMeadowB1::Meshes[O.Mesh], TEXT("Stands")))
+						{
+							const float D = FMath::FindDeltaAngleDegrees(Pl.Yaw, O.Yaw);
+							if ((KV.Key == 0 && D > 0.f && D < 29.f) || (KV.Key == 2 && D < 0.f && D > -29.f)) bShared = true;
+						}
+					if (bShared) continue; // r23: adjoining stands share this end; the neighbour's bay covers it
+					// r23: each 10-deg bay gets a box along its own radial (arc centre 2140 behind the pivot), behind the seat wall.
+					const float Rc = 2140.f, Ab = (1 - KV.Key) * 10.f, Rad = FMath::DegreesToRadians(Ab);
+					const float D0 = 80.f, D1 = KV.Value.Max.X + 20.f, Wd = 2.f * Rc * FMath::Sin(FMath::DegreesToRadians(5.f)) * 0.45f;
+					const FVector Ctr(FMath::Cos(Rad) * (Rc + (D0 + D1) * 0.5f) - Rc, FMath::Sin(Rad) * (Rc + (D0 + D1) * 0.5f), KV.Value.Max.Z * 0.5f);
+					P->AddColliderBox(Ctr * Sc, FVector(D1 - D0, Wd, KV.Value.Max.Z) * Sc, FRotator(0.f, Ab, 0.f), TEXT("ZWall"), WallPM);
+				}
+				else if (All.IsValid) P->AddColliderBox(All.GetCenter() * Sc, All.GetSize() * Sc * 0.8f, FRotator::ZeroRotator, TEXT("ZWall"), bRock ? StonePM : WallPM);
+				if (bRock && RW < 2015.f + 300.f) P->SetPathBlock(FVector2D(P->GetActorLocation()), All.GetExtent().X * Pl.Scale);
+				P->RubbleKeepZ = bStand ? 60.f : 25.f;
+				P->FinishBuild();
+				++NPieces;
+			}
+			else
+			{
+				for (UStaticMesh* SM : Set)
+				{
+					UStaticMeshComponent* C = AddMesh(SM, nullptr, false, RW < 9000.f);
+					Dress(C, SM);
+					C->SetRelativeLocationAndRotation(L, FRotator(0.f, Pl.Yaw, 0.f));
+					C->SetRelativeScale3D(FVector(Sc));
+				}
+				++NVis;
+			}
+		}
+		UE_LOG(LogZoogi, Log, TEXT("Meadow batch1: %s, %d pieces, %d visual"), bB1 ? TEXT("loaded") : TEXT("MISSING"), NPieces, NVis);
+	}
+	if (!bB1)
+		for (int32 i = 0; i < NumStands; ++i)
+			AddStands(StandCenters[i], StandArcs[i], StandRIn, -40.f, StandTiers, 72.f, 50.f, Seat, SeatAlt, SeatRiser, Stone);
 
 	// Recovery Gate shrines (visual portal + return pad near south rim; Combo uses its own gate for Meadow).
 	UMaterialInterface* Trim = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#B8352B")), 0.7f);
@@ -422,8 +535,8 @@ void AZoogiArena::BuildMeadow()
 	// r5: the two small red shrines behind the NE stand (art), at the stand's outer edge.
 	for (int32 i = 0; i < 2; ++i)
 	{
-		const float Yw = i ? 343.f : 326.f;
-		HallPiece(Pol(2120.f, Yw, -40.f), Yw, TEXT("shrine"), 80.f, 100.f, 170.f, false, 1);
+		const float Yw = i ? 353.f : 338.f; // r23: clear of the gatehouse
+		HallPiece(Pol(2420.f, Yw, -40.f), Yw, TEXT("shrine"), 80.f, 100.f, 170.f, false, 1);
 	}
 
 	// r4: crisp layered mountains (3 ridges, near green -> far blue) with tall waterfalls, replacing the pale haze.
@@ -629,11 +742,12 @@ void AZoogiArena::BuildMeadow()
 		{ FZoogiArenaCheck C; C.Name = TEXT("bench_crack_67"); C.Kind = FZoogiArenaCheck::ZoogiDamages; C.From = Pol(1050.f, 67.f); C.Vel = FVector2D(Pol(-NormalShot, 67.f));
 		  C.PieceKind = TEXT("bench"); C.Near = Pol(BenchR, 67.f); C.Radius = 150.f; C.Wait = 1.6f; PT->Checks.Add(C); }
 		// r19: normal shots into each stand section must hit the (taller) seat wall, damage it and roll back onto the court.
-		for (int32 i = 0; i < NumStands; ++i)
+		const float BounceYaw[6] = { 25.f, 155.f, 205.f, 231.f, 309.f, 335.f }; // r23: the batch-1 tall stands
+		for (float Sy : BounceYaw)
 		{
-			FZoogiArenaCheck C; C.Name = FString::Printf(TEXT("stand_bounce_%03.0f"), StandCenters[i]); C.Kind = FZoogiArenaCheck::ZoogiBounceBack;
-			C.From = Pol(1150.f, StandCenters[i]); C.Vel = FVector2D(Pol(NormalShot, StandCenters[i]));
-			C.PieceKind = TEXT("seatwall"); C.Near = Pol(FloorR + 18.f, StandCenters[i]); C.Radius = 350.f; C.Wait = 3.5f; PT->Checks.Add(C);
+			FZoogiArenaCheck C; C.Name = FString::Printf(TEXT("stand_bounce_%03.0f"), Sy); C.Kind = FZoogiArenaCheck::ZoogiBounceBack;
+			C.From = Pol(1150.f, Sy); C.Vel = FVector2D(Pol(NormalShot, Sy));
+			C.PieceKind = TEXT("seatwall"); C.Near = Pol(FloorR + 18.f, Sy); C.Radius = 350.f; C.Wait = 3.5f; PT->Checks.Add(C);
 		}
 		// r19: the arena is built at MeadowScale; checks are authored in layout units.
 		for (FZoogiArenaCheck& C : PT->Checks)

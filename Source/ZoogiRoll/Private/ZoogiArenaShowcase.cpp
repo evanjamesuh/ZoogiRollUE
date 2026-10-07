@@ -56,8 +56,9 @@ void AZoogiArenaShowcase::MaybeStart(UWorld* World, const FString& ArenaSlug)
 		S->Poses.Insert(FPose{ TEXT("buzzy_spiral"), FVector(0, -60, 40),     270.f, 42.f, 1700.f, 70.f }, 0);
 		S->Poses.Insert(FPose{ TEXT("buzzy_lips"),   FVector(0, 1250, 40),     270.f, 30.f, 1900.f, 75.f }, 0);
 		S->Poses.Insert(FPose{ TEXT("buzzy_ramps"),  FVector(0, -1450, 120),   270.f, 20.f, 2300.f, 72.f }, 0);
-		S->Poses.Insert(FPose{ TEXT("buzzy_hero"),   FVector(0, -250, -150),   270.f, 34.f, 5000.f, 62.f }, 0);
-		S->Poses.Insert(FPose{ TEXT("buzzy_34"),     FVector(0, -250, -100),   270.f, 40.f, 4900.f, 62.f }, 0);
+		S->Poses.Insert(FPose{ TEXT("buzzy_hero"),   FVector(0, -900, 300),    270.f, 15.f, 5200.f, 62.f }, 0); // r23: lower, horizon + sky like v4
+		S->Poses.Insert(FPose{ TEXT("match55"),      FVector(0, -100, 0),      270.f, 55.f, 4300.f, 62.f }, 0);
+		S->Poses.Insert(FPose{ TEXT("buzzy_34"),     FVector(0, -300, -100),   270.f, 29.f, 4400.f, 80.f }, 0);
 		S->Poses.Insert(FPose{ TEXT("buzzy_top"),    FVector(0, 0, 0),         270.f, 86.f, 5400.f, 62.f }, 0);
 	}
 	if (ArenaSlug.Contains(TEXT("ice")) || ArenaSlug.Contains(TEXT("frozen")))
@@ -75,6 +76,8 @@ void AZoogiArenaShowcase::MaybeStart(UWorld* World, const FString& ArenaSlug)
 		S->Poses.Insert(FPose{ TEXT("stands_close_E"), IsletLook(354.f, 2890.f, 140.f), 354.f, 16.f, 1250.f, 70.f }, 0);
 		S->Poses.Insert(FPose{ TEXT("stands_close_W"), IsletLook(186.f, 2750.f, 140.f), 186.f, 16.f, 1250.f, 70.f }, 0);
 	}
+	if (ArenaSlug.Contains(TEXT("meadow")))
+		for (FPose& P : S->Poses) { P.Look *= 1.3f; P.Dist *= 1.3f; } // r19: Meadow is built 1.3x larger
 	UE_LOG(LogZoogi, Log, TEXT("Arena showcase: %d views for %s -> %s"), S->Poses.Num(), *ArenaSlug, *ShotDir);
 }
 
