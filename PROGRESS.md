@@ -3,6 +3,15 @@
 Project: `C:\dev\ZoogiRollUnreal\ZoogiRoll.uproject` (C++ module `ZoogiRoll`, Chaos physics).
 The web game at `C:\dev\ZoogiRollUE` is read-only reference and is never modified.
 
+## Frozen Ring polish round 2: Tue Oct 6, 9:45 PM CT (merge 39f4ef4, code 32bdc94)
+Packaged Development Win64 at **9:41–9:43 PM CT**, giving `Packaged\Windows\ZoogiRoll.exe` (exe written 9:42 PM CT, 334 MB). The editor DLL was rebuilt at 9:31 PM CT. Local git only, never pushed. A packaged smoke run (`-ZoogiCombo -ZoogiArena=1`) confirmed that forming completes in 2.6 s (colliders on) and the Recovery Gate returns players. Classic Frozen ran to game over with a ring-out crash on a bridge.
+* Look: the aurora and rainbow sky panorama is rebuilt from the Buzzy hero image with feathered seams. The snow rim is raised and lumpy. A bright cyan boundary ring and the hub rune circles and spokes are added. Cliffs and the underside are paler, and the mountains sit further out and lower, fading into a pale haze (fog starts at 90 m so the court stays crisp).
+* Forming: the 4 hub pillars now break through the floor at 1.3/1.4/1.5/1.6 s with a +14 cm overshoot and are settled by 2.6 s, following the timing in `reskin-incoming/02-frozen-ring/animations/forming/forming_spec.md`.
+* Destruction: floor craters are now art-scale (charcoal crater plus a cyan crack web, no bloom blow-out). The black 2v2 hex-section slab when damaged or cracked is fixed. A ring-out with no piece in its flight cone now damages the nearest rim piece.
+* Shots (`-ZoogiDamageShots`): new Buzzy-framed overview, HUD hidden, exposure settles per view.
+* Note: the working tree also carries another agent's uncommitted Bible-characters work (ZoogiTypes/Powers/Ball/Expression, portraits, DefaultGame.ini). This package includes it, because it compiles from the shared tree.
+* Side-by-sides: `/workspace/zoogi-unreal/shots/arenas/frozen-buzzy/r2_*.jpg` on the agent box.
+
 ## Frozen Ring rebuilt from the Buzzy art (round 1): Tue Oct 6, 8:45 PM CT (merge 5bd6ea3, code 4386d51)
 Packaged Development Win64 at **8:40–8:43 PM CT**, giving `Packaged\Windows\ZoogiRoll.exe` (exe written 8:41 PM CT, 334 MB). The editor DLL was rebuilt at 8:38 PM CT. Branch `frozen-buzzy` was merged into `main` locally and never pushed. A packaged smoke run (`-ZoogiCombo -ZoogiArena=1`) confirmed that Frozen 2v2 forms the stage (84 pieces in 2.6 s, colliders switch on once each piece settles) and that the Recovery Gate returns players. A Meadow regression smoke run is unchanged.
 
