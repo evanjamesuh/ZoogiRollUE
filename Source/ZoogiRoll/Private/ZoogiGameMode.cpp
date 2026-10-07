@@ -693,7 +693,6 @@ void AZoogiGameMode::CheckKnockoffs()
 				BigColor = ZoogiUtil::PlayerColor(A->PlayerIndex);
 				BigAge = 0.f;
 				AZoogiFX::Spawn(GetWorld(), EdgePoint(L, Arena) - FVector(0, 0, 20.f), BigColor, 420.f, 0.8f, true, 12.f);
-				AZoogiFX::KFX(GetWorld(), TEXT("Effect17_Collision"), EdgePoint(L, Arena), 0.7f, 2.5f); // KriptoFX red shatter on KNOCKOUT
 				if (AZoogiPlayerController* PCtl = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PCtl->OnImpact(1.f);
 				TakeShotDelayed(TEXT("knockout"), 0.25f);
 			}

@@ -586,7 +586,6 @@ void AZoogiBall::OnSphereHit(UPrimitiveComponent* HitComp, AActor* OtherActor, U
 			const EZoogiArtifact E = (Artifact && Artifact->Infused != EZoogiArtifact::None) ? Artifact->Infused : ((OB->Artifact && OB->Artifact->Infused != EZoogiArtifact::None) ? OB->Artifact->Infused : EZoogiArtifact::None);
 			const FVector P(Hit.ImpactPoint.X, Hit.ImpactPoint.Y, 0.f);
 			if (AZoogiFloorScars* Sc = G->Arena->GetScars()) Sc->Impact(P, Imp / 12000.f, E);
-			AZoogiFX::KFX(GetWorld(), TEXT("Effect3"), P + FVector(0, 0, 2.f), FMath::Clamp(Imp / 30000.f, 0.35f, 0.8f), 1.5f); // KriptoFX ground cracks on big bumps
 			if (E != EZoogiArtifact::None) AZoogiArenaPiece::DamageArea(GetWorld(), P, 260.f, 22.f, E, this); // Ember melts, Frost refreezes, Storm shocks, Titan crushes
 		}
 	}

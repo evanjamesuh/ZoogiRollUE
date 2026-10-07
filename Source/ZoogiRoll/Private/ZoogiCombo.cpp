@@ -446,7 +446,6 @@ bool AZoogiGameMode::ComboAcceptFollowUp()
 	BigColor = TeamColor(ComboTeam);
 	BigAge = 0.f;
 	AZoogiFX::Spawn(GetWorld(), P->BallLocation(), TeamColor(ComboTeam), 240.f, 0.6f, true, 12.f);
-	AZoogiFX::KFX(GetWorld(), TEXT("Effect7"), P->BallLocation() - FVector(0, 0, ZoogiConst::ZoogiRadius - 3.f), 0.55f, 2.5f); // KriptoFX blue blast: Partner Follow-Up
 	ComboBeginShot(P->PlayerIndex);
 	bInFollowUp = true;
 	ComboShot(TEXT("followup_start"), 0.35f);
@@ -770,7 +769,6 @@ void AZoogiGameMode::ComboCheckKnockoffs()
 		if (!(L.Z < ZoogiConst::FallOutZ || FVector2D(L.X, L.Y).Size() > 8000.f)) continue;
 		AZoogiFX::Spawn(GetWorld(), Edge(L), FLinearColor(1.f, 0.3f, 0.25f), 220.f, 0.7f, false, 7.f);
 		AZoogiFX::Niagara(GetWorld(), TEXT("NS_Burst_Red"), Edge(L), FRotator::ZeroRotator, 1.4f);
-		AZoogiFX::KFX(GetWorld(), TEXT("Effect17_Collision"), Edge(L), 0.7f, 2.5f); // KriptoFX red shatter on ring-out
 		B->SetOut();
 		ZoogiUtil::PlaySfx(this, TEXT("Fall"), 0.7f);
 		B->RingMarks = FMath::Max(0, B->RingMarks - 1);
