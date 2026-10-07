@@ -99,8 +99,9 @@ public:
 	/** Crack glow colour (Frozen: cyan #19C3E6). */
 	FLinearColor CrackColor = FLinearColor(0.10f, 0.76f, 0.90f);
 	/** Damage per cm/s of normal contact speed above HitSpeedMin. */
-	float HitSpeedMin = 500.f;
-	float HitDamagePerSpeed = 1.f / 42.f;
+	// Round 3c (Evan 10:57 PM): half the contact speed per damage stage (was 500 cm/s and 1/42 per cm/s).
+	float HitSpeedMin = 250.f;
+	float HitDamagePerSpeed = 1.f / 21.f;
 
 	virtual void Tick(float DeltaSeconds) override;
 

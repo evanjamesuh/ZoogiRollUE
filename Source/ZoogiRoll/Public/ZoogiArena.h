@@ -37,6 +37,8 @@ public:
 	FVector GetSpawnPoint(int32 PlayerIndex) const;
 	float GetSpawnYaw(int32 PlayerIndex) const;
 	float GetKnockoffRadius() const { return ZoogiConst::KnockoffRadius; }
+	/** Extra orb spots off the main disc (Frozen bleacher islets, round 3c); world positions, Z = orb centre. Rebuilt per arena. */
+	TArray<FVector> ExtraOrbSpots;
 	/** True past the knockout line (circle, or the Night Circuit rectangle). */
 	bool IsOffCourt(const FVector2D& P) const;
 	/** False if a ball of this radius would overlap a solid court piece (Night Circuit pads/posts). */

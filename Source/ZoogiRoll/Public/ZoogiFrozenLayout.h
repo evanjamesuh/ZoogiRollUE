@@ -46,9 +46,18 @@ namespace ZoogiFrozen
 	constexpr float RockDist = 14.0f, RockRad = 0.55f, RockH = 1.5f;
 	// Stand islets: yaw, distance, and whether a pavilion stands behind the bleachers.
 	constexpr float IsletYaw[4] = { 186.f, 354.f, 140.f, 36.f };
-	constexpr float IsletDist[4] = { 2580.f, 2720.f, 2360.f, 2520.f };
+	constexpr float IsletDist[4] = { 2750.f, 2890.f, 2530.f, 2690.f }; // round 3c: bigger islets moved out
 	constexpr bool IsletPavilion[4] = { false, false, true, true };
-	constexpr float IsletR = 470.f;
+	constexpr float IsletR = 640.f;              // radial semi-axis (toward the court)
+	constexpr float IsletStretch = 1.4f;         // tangential semi-axis = IsletR * IsletStretch (elliptic islet)
+	constexpr float IsletTopZ = -60.f;           // islet snow top (walkable, collision)
+	constexpr float IsletLipH = 30.f;            // low snow lip rail: stops normal rolls, hard hits hop it (ring out)
+	// Open curved bleachers (round 3c, no roof): 6 rows, focus distance (curvature), row depth / rise, front half width.
+	constexpr int32 StandRows = 6;
+	constexpr float StandX0 = 200.f, StandFocus = 2300.f, StandDepth = 110.f, StandRise = 52.f, StandHalfW = 560.f;
+	// Rollable bridges (court edge -> islet apron): deck half width, low rail height, islet lip opening (deg, local).
+	constexpr float BridgeHalfW = 95.f, BridgeRailH = 30.f, BridgeGapDeg = 14.f;
+	inline bool NearIsletYaw(float A, float Tol) { for (float Y : IsletYaw) if (FMath::Abs(FMath::FindDeltaAngleDegrees(A, Y)) < Tol) return true; return false; }
 	// NW snowy outcrop and the two rim falls.
 	constexpr float OutcropYaw = 242.f, OutcropDist = 1980.f;
 	constexpr float FallYaw[2] = { 126.f, 62.f };

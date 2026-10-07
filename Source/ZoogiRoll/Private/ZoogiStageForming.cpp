@@ -57,11 +57,27 @@ void UZoogiStageForming::AddParamRamp(UMaterialInstanceDynamic* M, FName Param, 
 	Ramps.Add(R);
 }
 
+void UZoogiStageForming::AddParamPulse(UMaterialInstanceDynamic* M, FName Param, float Peak, float Delay, float Rise, float Hold, float Fall)
+{
+	if (!M) return;
+	FRamp R;
+	R.M = M;
+	R.Param = Param;
+	R.From = 0.f;
+	R.To = 0.f;
+	R.Peak = Peak;
+	R.Delay = Delay;
+	R.Duration = FMath::Max(0.02f, Rise);
+	R.Hold = FMath::Max(0.f, Hold);
+	R.Fall = FMath::Max(0.05f, Fall);
+	Ramps.Add(R);
+}
+
 float UZoogiStageForming::GetLength() const
 {
 	float L = 0.f;
 	for (const FEntry& E : Entries) L = FMath::Max(L, E.Delay + E.Duration);
-	for (const FRamp& R : Ramps) L = FMath::Max(L, R.Delay + R.Duration);
+	for (const FRamp& R : Ramps) L = FMath::Max(L, R.Delay + R.Duration + R.Hold + R.Fall);
 	return L;
 }
 
@@ -191,6 +207,13 @@ void UZoogiStageForming::TickComponent(float DeltaTime, ELevelTick TickType, FAc
 	{
 		if (!R.M.IsValid()) continue;
 		const float U = FMath::Clamp((Time - R.Delay) / R.Duration, 0.f, 1.f);
+		if (R.Fall > 0.f)
+		{
+			const float U2 = FMath::Clamp((Time - R.Delay - R.Duration - R.Hold) / R.Fall, 0.f, 1.f);
+			R.M->SetScalarParameterValue(R.Param, R.Peak * U * U * (3.f - 2.f * U) * (1.f - U2 * U2 * (3.f - 2.f * U2)));
+			if (Time < R.Delay + R.Duration + R.Hold + R.Fall) bAll = false;
+			continue;
+		}
 		R.M->SetScalarParameterValue(R.Param, FMath::Lerp(R.From, R.To, U * U * (3.f - 2.f * U)));
 		if (Time < R.Delay + R.Duration) bAll = false;
 	}
