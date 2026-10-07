@@ -41,14 +41,16 @@ def fresh(name, cls=unreal.Material, factory=None, folder='/Materials'):
     if EAL.does_asset_exist(p): EAL.delete_asset(p)
     return AT.create_asset(name, ROOT + folder, cls, factory or unreal.MaterialFactoryNew())
 def E(m, cls, x=0, y=0): return MEL.create_material_expression(m, cls, x, y)
-def C(a, ao, b, bi): MEL.connect_material_expressions(a, ao, b, bi)
+def C(a, ao, b, bi):
+    if ao == 'RGB' and isinstance(a, (unreal.MaterialExpressionVectorParameter, unreal.MaterialExpressionVertexColor)): ao = ''  # default output is RGB
+    if not MEL.connect_material_expressions(a, ao, b, bi): log('CONNECT FAILED %s.%s -> %s.%s' % (a.get_class().get_name(), ao, b.get_class().get_name(), bi))
 def S(m, name, v):
     e = E(m, unreal.MaterialExpressionScalarParameter); e.set_editor_property('parameter_name', name); e.set_editor_property('default_value', v); return e
 def V(m, name, v):
     e = E(m, unreal.MaterialExpressionVectorParameter); e.set_editor_property('parameter_name', name); e.set_editor_property('default_value', v); return e
 def K(m, v):
     e = E(m, unreal.MaterialExpressionConstant); e.set_editor_property('r', v); return e
-def TX(m, name, uv, default='/Engine/EngineResources/WhiteSquareTexture'):
+def TX(m, name, uv, default=ROOT + '/Textures/T_ZAFX_White'):  # linear white (sampler type Linear Color)
     e = E(m, unreal.MaterialExpressionTextureSampleParameter2D); e.set_editor_property('parameter_name', name)
     e.set_editor_property('texture', unreal.load_asset(default)); e.set_editor_property('sampler_type', unreal.MaterialSamplerType.SAMPLERTYPE_LINEAR_COLOR)
     if uv is not None: C(uv, '', e, 'UVs')
@@ -113,6 +115,18 @@ def build_add():
     MEL.connect_material_property(em, '', unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     return finish(m)
 
+def build_rock():
+    # opaque lit stone for the Void rock + debris: BaseColor = Tint * (0.55 + 0.9 * noise), rough, violet fresnel rim
+    m = fresh('M_ZAFX_Rock')
+    uv = mul(m, tc(m, 0), K(m, 2.0))
+    t = TX(m, 'Tex', uv)
+    bc = mul(m, add(m, mul(m, t, K(m, 0.9), 'R'), K(m, 0.55)), V(m, 'Tint', LC(0.1, 0.1, 0.1, 1)), '', 'RGB')
+    MEL.connect_material_property(bc, '', unreal.MaterialProperty.MP_BASE_COLOR)
+    MEL.connect_material_property(K(m, 0.85), '', unreal.MaterialProperty.MP_ROUGHNESS)
+    fr = E(m, unreal.MaterialExpressionFresnel)
+    MEL.connect_material_property(mul(m, fr, V(m, 'RimColor', LC(0, 0, 0, 1)), '', 'RGB'), '', unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    return finish(m)
+
 def build_portal():
     # translucent unlit portal interior: dark violet void, slowly rotating stars + nebula, glowing inner edge; disc from PortalRim.G
     m = fresh('M_ZAFX_Portal')
@@ -171,36 +185,33 @@ def mi(name, master, params):
         else: MEL.set_material_instance_scalar_parameter_value(a, k, float(v))
     EAL.save_loaded_asset(a); return a
 
-ORANGE = LC(1.0, 0.42, 0.10, 1); FLAME = LC(1.0, 0.50, 0.16, 1)
-VIOLET = LC(0.62, 0.30, 1.0, 1); BOLT = LC(0.50, 0.32, 1.0, 1)
+ORANGE = LC(1.0, 0.34, 0.06, 1); FLAME = LC(1.0, 0.32, 0.05, 1)
+VIOLET = LC(0.62, 0.30, 1.0, 1); BOLT = LC(0.45, 0.24, 1.0, 1)
 R1, G1, B1 = LC(1, 0, 0, 0), LC(0, 1, 0, 0), LC(0, 0, 1, 0)
 
 def build_mis():
     # --- launch ring (Effect4 orange)
-    mi('MI_ZAFX_RingDecal', 'Decal', {'Tex': T('T_ZAFX_Ring'), 'Chan': R1, 'Tint': ORANGE, 'Glow': 3.0, 'Darken': 0.85, 'EmisOpac': 1.0,
+    mi('MI_ZAFX_RingDecal', 'Decal', {'Tex': T('T_ZAFX_Ring'), 'Chan': R1, 'Tint': ORANGE, 'Glow': 2.4, 'Darken': 0.85, 'EmisOpac': 1.0,
                                        'BaseTint': LC(0.025, 0.018, 0.012, 1), 'UseReveal': 1.0, 'RevealSharp': 25.0, 'Contrast': 1.2})
-    mi('MI_ZAFX_RingInner', 'DecalGlow', {'Tex': T('T_ZAFX_RingInner'), 'Chan': R1, 'Tint': LC(1.0, 0.45, 0.13, 1), 'Glow': 0.5})
+    mi('MI_ZAFX_RingInner', 'DecalGlow', {'Tex': T('T_ZAFX_RingInner'), 'Chan': R1, 'Tint': LC(1.0, 0.42, 0.1, 1), 'Glow': 0.75})
     mi('MI_ZAFX_Flame', 'Add', {'Tex': T('T_ZAFX_Noise'), 'MaskTex': T('T_ZAFX_Flame'), 'Chan': R1, 'TileU': 1.0, 'TileV': 0.6, 'PanV': 1.3,
-                                 'RandOffset': 7.31, 'Contrast': 2.4, 'Bias': 0.35, 'Tint': FLAME, 'Glow': 2.6})
+                                 'RandOffset': 7.31, 'Contrast': 2.4, 'Bias': 0.35, 'Tint': FLAME, 'Glow': 1.6})
     mi('MI_ZAFX_Ember', 'Add', {'Tex': T('T_ZAFX_Dot'), 'Chan': R1, 'Tint': LC(1.0, 0.55, 0.18, 1), 'Glow': 6.0})
     # --- shock chain (Effect25 purple)
-    mi('MI_ZAFX_Bolt', 'Add', {'Tex': T('T_ZAFX_Bolt'), 'Chan': R1, 'Tint': BOLT, 'Glow': 4.0, 'CoreGlow': 5.0, 'CoreTint': LC(0.85, 0.8, 1.0, 1)})
+    mi('MI_ZAFX_Bolt', 'Add', {'Tex': T('T_ZAFX_Bolt'), 'Chan': R1, 'Tint': BOLT, 'Glow': 3.2, 'CoreGlow': 2.2, 'CoreTint': LC(0.85, 0.8, 1.0, 1)})
     mi('MI_ZAFX_Orb', 'Add', {'Tex': T('T_ZAFX_Glow'), 'Chan': R1, 'Tint': VIOLET, 'Glow': 2.5})
     mi('MI_ZAFX_Flash', 'Add', {'Tex': T('T_ZAFX_Glow'), 'Chan': R1, 'Tint': LC(0.75, 0.62, 1.0, 1), 'Glow': 6.0})
-    mi('MI_ZAFX_Splat', 'Decal', {'Tex': T('T_ZAFX_Splat'), 'Chan': R1, 'Tint': LC(0.6, 0.35, 1.0, 1), 'Glow': 1.6, 'Darken': 0.92, 'EmisOpac': 1.0,
-                                   'BaseTint': LC(0.010, 0.008, 0.012, 1), 'UseReveal': 0.0})
+    mi('MI_ZAFX_Splat', 'Decal', {'Tex': T('T_ZAFX_Splat'), 'Chan': R1, 'Tint': LC(0.6, 0.35, 1.0, 1), 'Glow': 1.6, 'Darken': 1.8, 'EmisOpac': 1.0,
+                                   'BaseTint': LC(0.004, 0.003, 0.006, 1), 'UseReveal': 0.0})
     mi('MI_ZAFX_Spark', 'Add', {'Tex': T('T_ZAFX_Dot'), 'Chan': R1, 'Tint': LC(0.72, 0.52, 1.0, 1), 'Glow': 9.0})
     # --- void portal (Effect5 violet)
     mi('MI_ZAFX_PortalInner', 'Portal', {'RimTex': T('T_ZAFX_PortalRim'), 'StarTex': T('T_ZAFX_Stars'), 'NebTex': T('T_ZAFX_Stars')})
-    mi('MI_ZAFX_PortalRim', 'Add', {'Tex': T('T_ZAFX_PortalRim'), 'Chan': R1, 'Spin': 0.35, 'Tint': LC(0.72, 0.30, 1.0, 1), 'Glow': 4.0, 'Contrast': 1.3})
-    mi('MI_ZAFX_PortalGlow', 'Add', {'Tex': T('T_ZAFX_Glow'), 'Chan': R1, 'Tint': LC(0.55, 0.20, 1.0, 1), 'Glow': 0.45})
+    mi('MI_ZAFX_PortalRim', 'Add', {'Tex': T('T_ZAFX_PortalRim'), 'Chan': R1, 'Spin': 0.35, 'Tint': LC(0.62, 0.24, 1.0, 1), 'Glow': 2.0, 'Contrast': 1.3})
+    mi('MI_ZAFX_PortalGlow', 'Add', {'Tex': T('T_ZAFX_Glow'), 'Chan': R1, 'Tint': LC(0.50, 0.16, 1.0, 1), 'Glow': 0.12})
     mi('MI_ZAFX_Mote', 'Add', {'Tex': T('T_ZAFX_Dot'), 'Chan': R1, 'Tint': LC(0.8, 0.55, 1.0, 1), 'Glow': 5.0})
-    mi('MI_ZAFX_Spill', 'DecalGlow', {'Tex': T('T_ZAFX_Glow'), 'Chan': R1, 'Tint': LC(0.62, 0.24, 1.0, 1), 'Glow': 0.6})
-    lit = unreal.load_asset('/Game/VFX/KriptoFX/Materials/M_KFX_MeshLit')
-    if lit:
-        MASTER['Lit'] = lit
-        mi('MI_ZAFX_Rock', 'Lit', {'Tex': T('T_ZAFX_Noise'), 'Tint': LC(0.11, 0.10, 0.12, 1), 'Roughness': 0.85, 'RimColor': LC(0.30, 0.10, 0.75, 1), 'Glow': LC(0, 0, 0, 1)})
-    else: log('M_KFX_MeshLit missing: rock keeps its imported material')
+    mi('MI_ZAFX_Spill', 'Decal', {'Tex': T('T_ZAFX_Glow'), 'Chan': R1, 'Tint': LC(0.62, 0.24, 1.0, 1), 'Glow': 0.3, 'Darken': 0.8, 'EmisOpac': 0.0,
+                                   'BaseTint': LC(0.24, 0.07, 0.45, 1), 'UseReveal': 0.0})
+    mi('MI_ZAFX_Rock', 'Rock', {'Tex': T('T_ZAFX_Noise'), 'Tint': LC(0.10, 0.095, 0.11, 1), 'RimColor': LC(0.35, 0.12, 0.85, 1)})
 
 # ------------------------------------------------------------ Niagara
 def system(name, tpl, mat, cfg):
@@ -240,6 +251,7 @@ def build_niagara():
 import_textures()
 MASTER['Add'] = build_add()
 MASTER['Portal'] = build_portal()
+MASTER['Rock'] = build_rock()
 MASTER['Decal'] = build_decal('M_ZAFX_Decal', True)
 MASTER['DecalGlow'] = build_decal('M_ZAFX_DecalGlow', False)
 build_mis()

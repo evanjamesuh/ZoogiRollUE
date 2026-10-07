@@ -47,6 +47,7 @@ protected:
 	UPROPERTY() TArray<TObjectPtr<AActor>> Spawned;
 	bool LoadPlan(const FString& File);
 	void NextPlan();
+	void FinishShaders();
 	void TickPlan(float Dt);
 	void ClearPlanShot();
 };

@@ -36,7 +36,8 @@ u = (xx + 0.5) / N * 2 - 1; v = (yy + 0.5) / N * 2 - 1
 r = np.sqrt(u * u + v * v); ang = (np.arctan2(v, u) + math.pi) / (2 * math.pi)
 
 # 1. soft radial glow
-save('T_ZAFX_Glow', np.exp(-(r / 0.42) ** 2) * (r < 1))
+_g = np.exp(-(r / 0.42) ** 2) * (r < 1); save('T_ZAFX_Glow', _g, _g, _g)  # grey: B doubles as the stain mask in decals
+save('T_ZAFX_White', np.ones((8, 8)), np.ones((8, 8)), np.ones((8, 8)))  # linear white default for the masters' texture parameters
 
 # 2. tileable fbm noise (pan in materials) + streaky vertical noise
 noise = tile_noise(256, 5, 4, 1); save('T_ZAFX_Noise', noise, tile_noise(256, 5, 8, 2), tile_noise(256, 4, 2, 3))
@@ -46,11 +47,11 @@ R0 = 0.86
 noise_a = tile_noise(512, 5, 6, 4)
 jit = (np.interp(ang * 512, np.arange(512), noise_a[0]) - 0.5) * 0.025
 d = r - (R0 + jit)
-core = np.exp(-(d / 0.0065) ** 2)
-glow = np.exp(-(d / 0.03) ** 2) * 0.45
+core = np.exp(-(d / 0.012) ** 2)
+glow = np.exp(-(d / 0.05) ** 2) * 0.55
 licks = np.zeros_like(r)
-for k in range(140):
-    a0 = rng.random(); w = 0.002 + rng.random() * 0.004; L = 0.02 + rng.random() * 0.06
+for k in range(260):
+    a0 = rng.random(); w = 0.003 + rng.random() * 0.005; L = 0.025 + rng.random() * 0.07
     da = np.abs(((ang - a0 + 0.5) % 1) - 0.5) * 2 * math.pi * R0
     side = 1 if rng.random() < 0.65 else -1
     t = np.clip(d * side / L, 0, 1)

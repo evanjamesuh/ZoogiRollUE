@@ -20,6 +20,9 @@
 #include "Misc/Paths.h"
 #include "UObject/UObjectIterator.h"
 #include "EngineUtils.h"
+#if WITH_EDITOR
+#include "ShaderCompiler.h"
+#endif
 
 static FVector KFXBase(30000.f, 0.f, 0.f); // -ZoogiKFXBase=x,y,z moves the stage (e.g. up into open sky, away from the arena hills)
 
@@ -136,6 +139,13 @@ void AZoogiKFXPreview::ClearPlanShot()
 	for (TActorIterator<AZoogiAwakenFX> It(GetWorld()); It; ++It) It->Destroy();
 }
 
+void AZoogiKFXPreview::FinishShaders()
+{
+#if WITH_EDITOR
+	if (GShaderCompilingManager) GShaderCompilingManager->FinishAllCompilation();
+#endif
+}
+
 void AZoogiKFXPreview::NextPlan()
 {
 	ClearPlanShot();
@@ -147,6 +157,7 @@ void AZoogiKFXPreview::NextPlan()
 		else { bDone = true; UE_LOG(LogZoogi, Log, TEXT("KFX plan: done")); if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiKFXQuit"))) FPlatformMisc::RequestExit(false); return; }
 	}
 	FPlanShot& S = Plan[PlanIndex];
+	FinishShaders();
 	for (FPlanEvent& E : S.Events) E.bFired = false;
 	Shot = 0;
 	T = -0.6f; // let the previous shot's leftovers vanish
@@ -211,6 +222,7 @@ void AZoogiKFXPreview::TickPlan(float Dt)
 	}
 	if (PlanPass == 1 && S.Times.IsValidIndex(Shot) && T >= S.Times[Shot])
 	{
+		FinishShaders(); // materials first seen in this shot (pass 0 queued them) must not render as the default material
 		Capture->CaptureScene();
 		const FString Name = FString::Printf(TEXT("%s_%05d.png"), *S.Name, FMath::RoundToInt(S.Times[Shot] * 1000.f));
 		UKismetRenderingLibrary::ExportRenderTarget(this, RT, ShotDir, Name);

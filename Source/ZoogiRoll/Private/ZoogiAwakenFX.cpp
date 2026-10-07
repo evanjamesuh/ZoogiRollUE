@@ -123,8 +123,9 @@ UDecalComponent* AZoogiAwakenFX::MakeDecal(const TCHAR* Mat, float Half, float D
 	UDecalComponent* C = NewObject<UDecalComponent>(this);
 	C->SetupAttachment(RootComponent);
 	C->SetDecalMaterial(MID(Mat));
-	C->DecalSize = FVector(Depth, Half, Half);
+	C->DecalSize = FVector(Depth, 100.f, 100.f); // resized later through the component scale (Y/Z = half size / 100)
 	C->SetRelativeRotation(FRotator(-90.f, 0.f, 0.f));
+	C->SetRelativeScale3D(FVector(1.f, Half / 100.f, Half / 100.f));
 	C->RegisterComponent();
 	return C;
 }
@@ -177,8 +178,8 @@ void AZoogiAwakenFX::Init()
 	case EZoogiAwakenFX::ShockChain:
 		Quads->SetMaterial(0, MID(TEXT("MI_ZAFX_Bolt")));
 		Quads->SetMaterial(1, MID(TEXT("MI_ZAFX_Orb")));
-		Light = MakeLight(ShockTint, 700.f * S);
-		for (int32 k = 0; k < 3; ++k) HitLights.Add(MakeLight(ShockTint, 380.f * S));
+		Light = MakeLight(ShockTint, 1000.f * S);
+		for (int32 k = 0; k < 3; ++k) HitLights.Add(MakeLight(ShockTint, 450.f * S));
 		Bolts.SetNum(3);
 		for (int32 k = 0; k < 3; ++k) Bolts[k].NextMove = 0.f;
 		if (AZoogiBall* B = Ball.Get()) B->Sphere->OnComponentHit.AddDynamic(this, &AZoogiAwakenFX::OnBallHit);
@@ -202,7 +203,7 @@ void AZoogiAwakenFX::Init()
 		for (int32 k = 0; k < 9; ++k) Chunks.Add(MakeCard(TEXT("MI_ZAFX_Rock"), TEXT("/Game/VFX/KriptoFX/Effect5/Meshes/SM_Rock.SM_Rock")));
 		Decal2 = MakeDecal(TEXT("MI_ZAFX_Spill"), 380.f * S, 400.f * S);
 		Decal2->SetUsingAbsoluteLocation(true);
-		Light = MakeLight(VoidTint, 950.f * S);
+		Light = MakeLight(VoidTint, 800.f * S);
 		Light->SetUsingAbsoluteLocation(true);
 		Light2 = MakeLight(VoidTint, 600.f * S);
 		Light2->SetUsingAbsoluteLocation(true);
@@ -282,12 +283,13 @@ void AZoogiAwakenFX::SplatAt(const FVector& P, float Size, float Glow)
 		C->SetupAttachment(RootComponent);
 		C->SetUsingAbsoluteLocation(true); C->SetUsingAbsoluteRotation(true);
 		C->SetDecalMaterial(MID(TEXT("MI_ZAFX_Splat")));
+		C->DecalSize = FVector(60.f * S + 30.f, 100.f, 100.f);
 		C->RegisterComponent();
 		Splats.Add(C); SplatBorn.Add(Age);
 	}
 	const float H = 95.f * S * Size;
-	C->DecalSize = FVector(60.f * S + 30.f, H, H);
 	C->SetWorldLocationAndRotation(P, FRotator(-90.f, Rng.FRandRange(0.f, 360.f), 0.f));
+	C->SetWorldScale3D(FVector(1.f, H / 100.f, H / 100.f));
 	if (UMaterialInstanceDynamic* M = Cast<UMaterialInstanceDynamic>(C->GetDecalMaterial())) { M->SetScalarParameterValue(TEXT("Glow"), Glow); M->SetScalarParameterValue(TEXT("Fade"), 1.f); }
 }
 
@@ -353,7 +355,7 @@ void AZoogiAwakenFX::TickRing(float Dt, float Fade)
 	const float Half = R / 0.86f;                                   // ring line sits at 0.86 of the texture radius
 	if (Decal)
 	{
-		Decal->DecalSize = FVector(80.f * S + 40.f, Half, Half);
+		Decal->SetRelativeScale3D(FVector(1.f, Half / 100.f, Half / 100.f));
 		if (UMaterialInstanceDynamic* M = Cast<UMaterialInstanceDynamic>(Decal->GetDecalMaterial()))
 		{
 			M->SetScalarParameterValue(TEXT("Reveal"), Sweep);
@@ -362,19 +364,19 @@ void AZoogiAwakenFX::TickRing(float Dt, float Fade)
 	}
 	if (Decal2)
 	{
-		Decal2->DecalSize = FVector(80.f * S + 40.f, Half, Half);
+		Decal2->SetRelativeScale3D(FVector(1.f, Half / 100.f, Half / 100.f));
 		if (UMaterialInstanceDynamic* M = Cast<UMaterialInstanceDynamic>(Decal2->GetDecalMaterial())) M->SetScalarParameterValue(TEXT("Fade"), I * Ignite);
 	}
 	if (Light)
 	{
 		Light->SetAttenuationRadius(R * 2.3f);
-		Light->SetIntensity(9.f * I * Ignite * (0.9f + 0.1f * FMath::Sin(Age * 17.f)));
+		Light->SetIntensity(28.f * I * Ignite * (0.9f + 0.1f * FMath::Sin(Age * 17.f)));
 	}
 	if (Niagara) Niagara->SetRelativeScale3D(FVector(R / 100.f, R / 100.f, 1.f));
 
 	// flame licks round the ring (camera-facing, base on the floor), only where the sweep has passed
 	BeginQuads();
-	constexpr int32 N = 44;
+	constexpr int32 N = 110;
 	for (int32 k = 0; k < N; ++k)
 	{
 		FRandomStream FR(k * 7919 + 13);
@@ -384,9 +386,9 @@ void AZoogiAwakenFX::TickRing(float Dt, float Fade)
 		const float Ph = FR.FRand() * 20.f;
 		const float Fl = 0.72f + 0.28f * FMath::Sin(Age * (9.f + FR.FRand() * 6.f) + Ph);
 		const float Born = FMath::Clamp((Sweep - A01) * 6.f, 0.f, 1.f);
-		const float H = S * FR.FRandRange(28.f, 70.f) * (0.55f + 0.45f * Power) * Fl * Born;
+		const float H = S * FR.FRandRange(30.f, 85.f) * (0.55f + 0.45f * Power) * Fl * Born;
 		const FVector P = Ground + FVector(FMath::Cos(A), FMath::Sin(A), 0.f) * R * FR.FRandRange(0.985f, 1.03f) + FVector(0, 0, -2.f);
-		Billboard(P, H * 0.62f, H, FLinearColor(I, I, I, 1.f), FR.FRand(), true);
+		Billboard(P, H * 0.8f, H, FLinearColor(I, I, I, 1.f), FR.FRand(), true);
 	}
 	EndQuads(0);
 	if (EndAt >= 0.f && Fade <= 0.f) { BeginQuads(); EndQuads(0); }
@@ -415,13 +417,13 @@ void AZoogiAwakenFX::TickShock(float Dt, float Fade)
 	for (int32 k = 0; k < Bolts.Num() && EndAt < 0.f; ++k)
 	{
 		FBolt& Bo = Bolts[k];
-		const bool bTooFar = FVector::Dist2D(Bo.End, Ground) > 420.f * S * 1.4f;
+		const bool bTooFar = FVector::Dist2D(Bo.End, Ground) > 480.f * S * 1.4f;
 		if (Age >= Bo.NextMove || bTooFar)
 		{
 			const float A = FMath::DegreesToRadians(k * 120.f + Rng.FRandRange(-40.f, 40.f) + Age * 25.f);
-			Bo.End = Ground + FVector(FMath::Cos(A), FMath::Sin(A), 0.f) * S * Rng.FRandRange(230.f, 400.f);
+			Bo.End = Ground + FVector(FMath::Cos(A), FMath::Sin(A), 0.f) * S * Rng.FRandRange(280.f, 460.f);
 			Bo.NextMove = Age + Rng.FRandRange(0.8f, 1.4f);
-			SplatAt(Bo.End, Rng.FRandRange(0.8f, 1.15f), 1.6f);
+			SplatAt(Bo.End, Rng.FRandRange(1.2f, 1.6f), 1.6f);
 			Burst(GetWorld(), TEXT("NS_ZAFX_Sparks"), Bo.End + FVector(0, 0, 10.f), S);
 			if (B && k == 0) ZoogiUtil::PlaySfx(this, TEXT("Zap"), 0.12f, Rng.FRandRange(1.2f, 1.6f));
 		}
@@ -451,7 +453,8 @@ void AZoogiAwakenFX::TickShock(float Dt, float Fade)
 			Pts.Add(Src + D * T + FVector(0, 0, Arc * 4.f * T * (1.f - T)) + (Side * O1 + Up2 * O2) * 0.045f * Len * FMath::Max(Env, 0.15f) * (i == 0 || i == NP ? 0.f : 1.f));
 		}
 		const float Iv = Bo.Flick * Run;
-		Ribbon(Pts, 30.f * S, FLinearColor(Iv, Iv, Iv, 1.f));
+		Ribbon(Pts, 130.f * S, FLinearColor(0.22f * Iv, 0.22f * Iv, 0.22f * Iv, 1.f)); // soft glow sheath (the demo's bloom)
+		Ribbon(Pts, 42.f * S, FLinearColor(Iv, Iv, Iv, 1.f));
 		for (int32 b = 0; b < 3; ++b)
 		{
 			const int32 i0 = R.RandRange(5, NP - 6);
@@ -466,7 +469,7 @@ void AZoogiAwakenFX::TickShock(float Dt, float Fade)
 		if (UPointLightComponent* L = HitLights.IsValidIndex(k) ? HitLights[k].Get() : nullptr)
 		{
 			L->SetWorldLocation(Bo.End + FVector(0, 0, 45.f * S));
-			L->SetIntensity(7.f * Iv);
+			L->SetIntensity(20.f * Iv);
 		}
 	}
 	EndQuads(0);
@@ -478,7 +481,7 @@ void AZoogiAwakenFX::TickShock(float Dt, float Fade)
 		Billboard(Src, 45.f * S, 45.f * S, FLinearColor(2.f * Run, 2.f * Run, 2.f * Run, 1.f), 0.5f, false);
 	}
 	EndQuads(1);
-	if (Light) { Light->SetWorldLocation(Src); Light->SetIntensity(14.f * Run * (0.85f + 0.15f * FMath::Sin(Age * 40.f))); }
+	if (Light) { Light->SetWorldLocation(Src); Light->SetIntensity(35.f * Run * (0.85f + 0.15f * FMath::Sin(Age * 40.f))); }
 	for (int32 i = 0; i < Splats.Num(); ++i)
 	{
 		const float A = Age - SplatBorn[i];
@@ -545,7 +548,7 @@ void AZoogiAwakenFX::TickVoid(float Dt)
 	if (Card0) { Card0->SetVisibility(K > 0.01f); Card0->SetWorldLocationAndRotation(PortalC, Rot); Card0->SetWorldScale3D(FVector(D / 0.8f / 100.f * K)); }
 	if (Card1) { Card1->SetVisibility(K > 0.01f); Card1->SetWorldLocationAndRotation(PortalC + PortalN * 2.f, Rot); Card1->SetWorldScale3D(FVector(D / 0.8f / 100.f * K * Wob, D / 0.8f / 100.f * K, 1.f)); }
 	if (Card2) { Card2->SetVisibility(K > 0.01f); Card2->SetWorldLocationAndRotation(PortalC - PortalN * 2.f, Rot); Card2->SetWorldScale3D(FVector(D * 1.9f / 100.f * K)); }
-	if (Light) Light->SetIntensity(12.f * K);
+	if (Light) Light->SetIntensity(25.f * K);
 	if (Decal2) if (UMaterialInstanceDynamic* M = Cast<UMaterialInstanceDynamic>(Decal2->GetDecalMaterial())) M->SetScalarParameterValue(TEXT("Fade"), K);
 
 	// rock
@@ -553,7 +556,7 @@ void AZoogiAwakenFX::TickVoid(float Dt)
 	FVector To = TargetActor.IsValid() ? TargetActor->GetActorLocation() : Ground + Param;
 	if (!TargetActor.IsValid()) To.Z = Ground.Z + 55.f * S;
 	const float FlyT = FMath::Clamp(FVector::Dist(Out, To) / 1500.f, 0.35f, 0.75f);
-	const float RockSize = 120.f * S;
+	const float RockSize = 150.f * S;
 	float RockScale = 0.f;
 	FVector RockP = PortalC;
 	FRotator RockR(Age * 40.f, Age * 70.f, 0.f);
@@ -609,7 +612,6 @@ void AZoogiAwakenFX::TickVoid(float Dt)
 			if (P.Z < Ground.Z + 5.f) { P.Z = Ground.Z + 5.f; ChunkVel[c] *= FVector(0.6f, 0.6f, -0.3f); }
 			Chunks[c]->SetWorldLocation(P);
 			Chunks[c]->AddWorldRotation(FRotator(200.f * Dt, 150.f * Dt, 0.f));
-			if (A > 1.6f) Chunks[c]->SetVisibility(false);
 		}
 		if (Light2) { Light2->SetWorldLocation(RockTo + FVector(0, 0, 60.f * S)); Light2->SetIntensity(25.f * FMath::Exp(-A * 4.f)); }
 
