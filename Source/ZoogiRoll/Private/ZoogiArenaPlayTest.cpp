@@ -92,12 +92,54 @@ void AZoogiArenaPlayTest::Tick(float DeltaSeconds)
 			if (APlayerController* PC = W->GetFirstPlayerController()) if (APawn* Pw = PC->GetPawn()) PC->SetViewTarget(Pw);
 		}
 	};
+	if (C.Kind == FZoogiArenaCheck::PieceOverlap)
+	{
+		// r19 (Evan 7:21): every blocking part of every map piece (and the 2v2 combo props) against every other piece.
+		struct FCol { UPrimitiveComponent* C; AActor* A; FString Name; };
+		TArray<FCol> Cs;
+		for (TActorIterator<AActor> It(W); It; ++It)
+		{
+			AActor* A = *It;
+			const AZoogiArenaPiece* Pc = Cast<AZoogiArenaPiece>(A);
+			const bool bCombo = A->GetClass()->GetName().Contains(TEXT("ComboArena"));
+			if (!Pc && !bCombo) continue;
+			if (Pc && Pc->IsBroken()) continue;
+			TInlineComponentArray<UPrimitiveComponent*> Prims(A);
+			for (UPrimitiveComponent* P : Prims)
+			{
+				if (!P->IsRegistered() || P->GetCollisionEnabled() == ECollisionEnabled::NoCollision || P->GetCollisionResponseToChannel(ECC_PhysicsBody) != ECR_Block) continue;
+				if (bCombo && P->Bounds.BoxExtent.Z < 6.f) continue; // flat floor sections
+				Cs.Add({ P, A, Pc ? Pc->GetKind().ToString() : FString(TEXT("combo:")) + P->GetName() });
+			}
+		}
+		int32 NOver = 0;
+		TSet<FString> Pairs;
+		for (int32 i = 0; i < Cs.Num(); ++i) for (int32 j = i + 1; j < Cs.Num(); ++j)
+		{
+			if (Cs[i].A == Cs[j].A) continue;
+			const bool bSameKind = Cs[i].Name == Cs[j].Name && !Cs[i].Name.StartsWith(TEXT("combo:"));
+			if (bSameKind && (Cs[i].Name == TEXT("seatwall") || Cs[i].Name == TEXT("spiralramp"))) continue; // joined segments
+			const FBox Ba = Cs[i].C->Bounds.GetBox(), Bb = Cs[j].C->Bounds.GetBox();
+			if (!Ba.Intersect(Bb)) continue;
+			const FBox Ov = Ba.Overlap(Bb);
+			const FVector E = Ov.GetSize();
+			if (E.X < 2.f || E.Y < 2.f || E.Z < 2.f) continue; // touching
+			if (!Cs[i].C->ComponentOverlapComponent(Cs[j].C, Cs[j].C->GetComponentLocation(), Cs[j].C->GetComponentQuat(), FCollisionQueryParams())) continue;
+			const FString Key = FString::Printf(TEXT("%s@%s x %s@%s"), *Cs[i].Name, *Cs[i].A->GetActorLocation().ToCompactString(), *Cs[j].Name, *Cs[j].A->GetActorLocation().ToCompactString());
+			if (Pairs.Contains(Key)) continue;
+			Pairs.Add(Key); ++NOver;
+			UE_LOG(LogZoogi, Log, TEXT("ARENATEST overlap: %s (at %.0f,%.0f,%.0f)"), *Key, Ov.GetCenter().X, Ov.GetCenter().Y, Ov.GetCenter().Z);
+		}
+		Next(FString::Printf(TEXT("%s: %d blocking parts checked, %d overlapping pairs %s"), *C.Name, Cs.Num(), NOver, NOver == 0 ? TEXT("PASS") : TEXT("FAIL")));
+		return;
+	}
 	if (C.Kind == FZoogiArenaCheck::ZoogiLaunch)
 	{
 		AZoogiBall* B = TestBall.Get();
 		if (!B) { Next(C.Name + TEXT(": no Zoogi FAIL")); return; }
 		if (Before < 0)
 		{
+			Arena->ResetPieces();
 			Before = CountDamaged(C.PieceKind, C.Near, 400.f);
 			B->PlaceAt(C.From + FVector(0, 0, ZoogiConst::ZoogiRadius + 1.f), Yaw);
 			B->Launch(C.Vel);
@@ -110,16 +152,17 @@ void AZoogiArenaPlayTest::Tick(float DeltaSeconds)
 		{
 			const float Rise = MaxZ - StartZ;
 			const int32 N = CountDamaged(C.PieceKind, C.Near, 400.f);
-			Next(FString::Printf(TEXT("%s: %.0f cm/s Zoogi roll -> peak rise %.0f cm (need %.0f), %s pieces damaged %d->%d %s"), *C.Name, C.Vel.Size(), Rise, C.Radius, *C.PieceKind.ToString(), Before, N, Rise >= C.Radius ? TEXT("PASS") : TEXT("FAIL")));
+			Next(FString::Printf(TEXT("%s: %.0f cm/s Zoogi roll -> peak rise %.0f cm (need %.0f), %s pieces damaged %d->%d %s"), *C.Name, C.Vel.Size(), Rise, C.Radius, *C.PieceKind.ToString(), Before, N, (Rise >= C.Radius && N == Before) ? TEXT("PASS") : TEXT("FAIL")));
 		}
 		return;
 	}
-	if (C.Kind == FZoogiArenaCheck::ZoogiDamages)
+	if (C.Kind == FZoogiArenaCheck::ZoogiDamages || C.Kind == FZoogiArenaCheck::ZoogiBounceBack)
 	{
 		AZoogiBall* B = TestBall.Get();
 		if (!B) { Next(C.Name + TEXT(": no Zoogi FAIL")); return; }
 		if (Before < 0)
 		{
+			Arena->ResetPieces(); // r19: each shot starts from intact pieces (earlier shots may have cracked neighbours)
 			Before = CountDamaged(C.PieceKind, C.Near, C.Radius);
 			B->PlaceAt(C.From + FVector(0, 0, ZoogiConst::ZoogiRadius + 1.f), Yaw);
 			B->Launch(C.Vel);
@@ -129,6 +172,15 @@ void AZoogiArenaPlayTest::Tick(float DeltaSeconds)
 		if (T > C.Wait)
 		{
 			const int32 N = CountDamaged(C.PieceKind, C.Near, C.Radius);
+			if (C.Kind == FZoogiArenaCheck::ZoogiBounceBack)
+			{
+				const FVector L = B->GetActorLocation();
+				const bool bIn = L.Z > -100.f && !Arena->IsOffCourt(FVector2D(L.X, L.Y));
+				Next(FString::Printf(TEXT("%s: %.0f cm/s Zoogi shot at the stand -> %d %s piece(s) damaged (before %d), ends (%.0f, %.0f, %.0f) r %.0f %s -> %s"), *C.Name, C.Vel.Size(), N, *C.PieceKind.ToString(), Before,
+					L.X, L.Y, L.Z, FVector2D(L.X, L.Y).Size(), bIn ? TEXT("back on court") : TEXT("WENT OVER/OUT"), (N > Before && bIn) ? TEXT("PASS") : TEXT("FAIL")));
+				B->PlaceAt(FVector(0.f, 300.f, ZoogiConst::ZoogiRadius + 1.f), 0.f);
+			}
+			else
 			Next(FString::Printf(TEXT("%s: %.0f cm/s Zoogi shot -> %d %s piece(s) damaged or worse (before %d) %s"), *C.Name, C.Vel.Size(), N, *C.PieceKind.ToString(), Before, N > Before ? TEXT("PASS") : TEXT("FAIL")));
 		}
 		return;

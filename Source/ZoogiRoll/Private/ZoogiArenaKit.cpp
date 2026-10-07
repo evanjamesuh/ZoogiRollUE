@@ -101,7 +101,7 @@ UMaterialInterface* AZoogiArena::KitFloorMaterial(const TCHAR* Key, const FLinea
 	MID->SetTextureParameterValue(TEXT("Base"), Base);
 	MID->SetTextureParameterValue(TEXT("Glow"), Glow);
 	if (Detail) MID->SetTextureParameterValue(TEXT("Detail"), Detail);
-	MID->SetScalarParameterValue(TEXT("Radius"), ZoogiConst::KnockoffRadius);
+	MID->SetScalarParameterValue(TEXT("Radius"), ZoogiConst::KnockoffRadius * BuildScale); // r19: world radius at the per-map scale
 	MID->SetVectorParameterValue(TEXT("GlowColor"), GlowColor);
 	MID->SetScalarParameterValue(TEXT("GlowStrength"), GlowStrength);
 	MID->SetScalarParameterValue(TEXT("BaseBright"), BaseBright);

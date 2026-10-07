@@ -225,11 +225,12 @@ void AZoogiGameMode::SpawnOrbs()
 {
 	const float Decel = Arena ? Arena->GetRollingDecel() : ZoogiConst::RollingDecel;
 	// createOrbs: 15 orbs on a ring of radius 5, plus a small centre triangle for a fuller court.
-	for (int32 i = 0; i < ZoogiConst::OrbCount; ++i)
+	const int32 NRing = (Arena && Arena->OrbCountOverride > 0) ? Arena->OrbCountOverride : ZoogiConst::OrbCount; // r19: Meadow 6
+	for (int32 i = 0; i < NRing; ++i)
 	{
 		// Per-map ring (Meadow r9: wider ring clear of the full-size spiral); other maps keep the default ring.
 		const float RingR = (Arena && Arena->OrbRingRadiusOverride > 0.f) ? Arena->OrbRingRadiusOverride : ZoogiConst::OrbRingRadius;
-		const float A = (float)i / ZoogiConst::OrbCount * 2.f * PI + (Arena ? FMath::DegreesToRadians(Arena->OrbRingYawOffset) : 0.f);
+		const float A = (float)i / NRing * 2.f * PI + (Arena ? FMath::DegreesToRadians(Arena->OrbRingYawOffset) : 0.f);
 		FVector L(FMath::Cos(A) * RingR, FMath::Sin(A) * RingR, ZoogiConst::OrbRadius + 1.f);
 		if (!OrbSpot(L)) continue;
 		AZoogiOrb* O = GetWorld()->SpawnActor<AZoogiOrb>(AZoogiOrb::StaticClass(), FTransform(L));
@@ -240,7 +241,7 @@ void AZoogiGameMode::SpawnOrbs()
 			Orbs.Add(O);
 		}
 	}
-	for (int32 i = 0; i < 3; ++i)
+	for (int32 i = 0; i < ((Arena && Arena->OrbCountOverride > 0) ? 0 : 3); ++i)
 	{
 		const float A = i * 2.f * PI / 3.f + PI / 6.f;
 		FVector L(FMath::Cos(A) * 90.f, FMath::Sin(A) * 90.f, ZoogiConst::OrbRadius + 1.f);
@@ -615,7 +616,7 @@ static FVector EdgePoint(const FVector& L, const AZoogiArena* Arena)
 		return FVector(FMath::Clamp(P.X, -1140.f, 1140.f), FMath::Clamp(P.Y, -740.f, 740.f), 120.f);
 	}
 	if (P.Size() < 1.f) P = FVector2D(1, 0);
-	P = P.GetSafeNormal() * (ZoogiConst::KnockoffRadius - 60.f);
+	P = P.GetSafeNormal() * ((Arena ? Arena->GetKnockoffRadius() : ZoogiConst::KnockoffRadius) - 60.f);
 	return FVector(P.X, P.Y, 120.f);
 }
 

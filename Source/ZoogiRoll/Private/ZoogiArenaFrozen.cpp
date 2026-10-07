@@ -77,7 +77,7 @@ AZoogiArenaPiece* AZoogiArena::SpawnPiece(const FVector& Loc, float Yaw, FName K
 {
 	FActorSpawnParameters SP;
 	SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	AZoogiArenaPiece* P = GetWorld()->SpawnActor<AZoogiArenaPiece>(AZoogiArenaPiece::StaticClass(), FTransform(FRotator(0.f, Yaw, 0.f), Loc), SP);
+	AZoogiArenaPiece* P = GetWorld()->SpawnActor<AZoogiArenaPiece>(AZoogiArenaPiece::StaticClass(), FTransform(FRotator(0.f, Yaw, 0.f), Loc * BuildScale, FVector(BuildScale)), SP); // r19: per-map scale
 	if (!P) return nullptr;
 	P->Setup(Kind, Surface, HP, bIndestructible);
 	Pieces.Add(P);

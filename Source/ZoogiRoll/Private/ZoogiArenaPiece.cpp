@@ -1,5 +1,6 @@
 // Reusable destructible stage piece (Frozen Ring, Oct 6). See ZoogiArenaPiece.h.
 #include "ZoogiArenaPiece.h"
+#include "ZoogiArena.h"
 #include "ZoogiMeshKit.h"
 #include "ZoogiRoll.h"
 #include "ZoogiTypes.h"
@@ -56,6 +57,14 @@ UStaticMeshComponent* AZoogiArenaPiece::AddShape(const TCHAR* Shape, const FTran
 	if (Mat) C->SetMaterial(0, Mat);
 	FPart P; P.C = C; Parts.Add(P);
 	return C;
+}
+
+void AZoogiArenaPiece::AdoptPart(UPrimitiveComponent* C)
+{
+	if (!C) return;
+	C->AttachToComponent(Root, FAttachmentTransformRules::KeepWorldTransform);
+	C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	FPart P; P.C = C; Parts.Add(P);
 }
 
 UStaticMeshComponent* AZoogiArenaPiece::AddBox(const FVector& Center, const FVector& Size, const FRotator& Rot, UMaterialInterface* Mat, bool bShadow)
@@ -426,7 +435,7 @@ UMaterialInterface* AZoogiArenaPiece::PickShardMat() const
 void AZoogiArenaPiece::SpawnShards(int32 Count, const FVector& At, const FVector& Dir, float Speed, float SizeMin, float SizeMax)
 {
 	FRandomStream R(Seed * 13 + (int32)(Clock * 100.f));
-	const float FloorZ = FVector2D(At).Size() < ZoogiConst::KnockoffRadius + 40.f ? 0.f : GetActorLocation().Z;
+	const float FloorZ = FVector2D(At).Size() < AZoogiArena::ActiveKnockoffR + 40.f ? 0.f : GetActorLocation().Z;
 	for (int32 i = 0; i < Count; ++i)
 	{
 		UStaticMeshComponent* C = nullptr;
@@ -485,7 +494,7 @@ void AZoogiArenaPiece::Tick(float DeltaSeconds)
 			S.Vel.Z -= 980.f * Dt;
 			S.Pos += S.Vel * Dt;
 			S.Rot += FRotator(S.W.X * Dt, S.W.Y * Dt, S.W.Z * Dt);
-			const bool bOverFloor = S.FloorZ < -1.f || FVector2D(S.Pos).Size() < ZoogiConst::KnockoffRadius + 60.f;
+			const bool bOverFloor = S.FloorZ < -1.f || FVector2D(S.Pos).Size() < AZoogiArena::ActiveKnockoffR + 60.f;
 			if (bOverFloor && S.Pos.Z < S.FloorZ + 2.f && S.Vel.Z < 0.f)
 			{
 				S.Pos.Z = S.FloorZ + 2.f;
@@ -523,7 +532,7 @@ AZoogiArenaPiece* AZoogiArenaPiece::RingOutCrash(UWorld* World, const FVector& E
 	// Mostly vertical fall (the ball is already well below the rim when it is called out): use the radial direction.
 	const FVector2D Hz(Dir);
 	const FVector2D D2 = (Hz.Size() > 0.3f * Dir.Size() && Hz.Size() > 20.f) ? Hz.GetSafeNormal() : FVector2D(ExitPoint).GetSafeNormal();
-	const FVector2D E2 = FVector2D(ExitPoint).GetSafeNormal() * FMath::Min(FVector2D(ExitPoint).Size(), ZoogiConst::KnockoffRadius + 60.f);
+	const FVector2D E2 = FVector2D(ExitPoint).GetSafeNormal() * FMath::Min(FVector2D(ExitPoint).Size(), AZoogiArena::ActiveKnockoffR + 60.f);
 	AZoogiArenaPiece* Best = nullptr;
 	float BestScore = 1e9f;
 	for (TActorIterator<AZoogiArenaPiece> It(World); It; ++It)
@@ -531,7 +540,7 @@ AZoogiArenaPiece* AZoogiArenaPiece::RingOutCrash(UWorld* World, const FVector& E
 		AZoogiArenaPiece* A = *It;
 		if (A->bIndestructible || A->State == EZoogiPieceState::Broken) continue;
 		const FVector2D P(A->GetActorLocation());
-		if (P.Size() < ZoogiConst::KnockoffRadius - 20.f) continue;
+		if (P.Size() < AZoogiArena::ActiveKnockoffR - 20.f) continue;
 		const FVector2D To = P - E2;
 		const float Dist = To.Size();
 		if (Dist > 3200.f) continue;
@@ -548,7 +557,7 @@ AZoogiArenaPiece* AZoogiArenaPiece::RingOutCrash(UWorld* World, const FVector& E
 			AZoogiArenaPiece* A = *It;
 			if (A->bIndestructible || A->State == EZoogiPieceState::Broken) continue;
 			const FVector2D P(A->GetActorLocation());
-			if (P.Size() < ZoogiConst::KnockoffRadius - 20.f) continue;
+			if (P.Size() < AZoogiArena::ActiveKnockoffR - 20.f) continue;
 			const float Dist = FVector2D::Distance(P, E2);
 			if (Dist < 900.f && Dist < BestScore) { BestScore = Dist; Best = A; }
 		}

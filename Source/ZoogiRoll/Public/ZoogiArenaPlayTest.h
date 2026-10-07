@@ -12,7 +12,7 @@ class ACameraActor;
 /** One scripted check for -ZoogiArenaPlayTest. */
 struct FZoogiArenaCheck
 {
-	enum EKind : uint8 { OrbOut, OrbStays, ZoogiDamages, ZoogiLaunch }; // ZoogiLaunch: Radius = min rise (cm)
+	enum EKind : uint8 { OrbOut, OrbStays, ZoogiDamages, ZoogiLaunch, ZoogiBounceBack, PieceOverlap }; // ZoogiLaunch: Radius = min rise (cm); ZoogiBounceBack: damages PieceKind AND the Zoogi ends back on the court
 	FString Name;
 	EKind Kind = OrbOut;
 	FVector From = FVector::ZeroVector;   // start (Z = ground; radius is added)

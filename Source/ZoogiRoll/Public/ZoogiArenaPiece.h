@@ -56,6 +56,8 @@ public:
 	UProceduralMeshComponent* AddProc(const FZoogiMeshBuilder& M, UMaterialInterface* Mat, bool bShadow = true);
 	/** Glowing parts (runes, slits, orbs): they dim as the piece breaks and are not tinted. */
 	void MarkGlow(UPrimitiveComponent* C) { GlowParts.AddUnique(C); }
+	/** r19: take over a part built elsewhere (arena kit helpers); keeps its world transform. */
+	void AdoptPart(UPrimitiveComponent* C);
 	/** Invisible collider box / cylinder (BlockAll), optional component tag and physics material. */
 	UStaticMeshComponent* AddColliderBox(const FVector& Center, const FVector& Size, const FRotator& Rot, FName Tag, UPhysicalMaterial* PM);
 	UStaticMeshComponent* AddColliderCyl(const FVector2D& XY, float Radius, float Bottom, float Top, FName Tag, UPhysicalMaterial* PM);
@@ -100,8 +102,8 @@ public:
 	FLinearColor CrackColor = FLinearColor(0.10f, 0.76f, 0.90f);
 	/** Damage per cm/s of normal contact speed above HitSpeedMin. */
 	// Round 3c (Evan 10:57 PM): half the contact speed per damage stage (was 500 cm/s and 1/42 per cm/s).
-	float HitSpeedMin = 250.f;
-	float HitDamagePerSpeed = 1.f / 21.f;
+	float HitSpeedMin = 125.f; // r19 (Evan 7:21): soft bumps crack props (was 250)
+	float HitDamagePerSpeed = 2.f / 21.f; // r19: doubled
 
 	virtual void Tick(float DeltaSeconds) override;
 

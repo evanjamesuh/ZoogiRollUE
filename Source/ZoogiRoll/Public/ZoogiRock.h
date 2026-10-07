@@ -61,8 +61,8 @@ public:
 	EZoogiRockState GetState() const { return State; }
 	float GetRadius() const { return Radius; }
 
-	UPROPERTY(EditAnywhere, Category = "Rock") float CrackSpeed = 450.f;   // normal contact speed, cm/s (full launch is 3600; a ~half-power straight hit cracks)
-	UPROPERTY(EditAnywhere, Category = "Rock") float ShatterSpeed = 800.f; // second hit on a cracked rock (~45% of full launch)
+	UPROPERTY(EditAnywhere, Category = "Rock") float CrackSpeed = 225.f; // r19 (Evan 7:21): halved   // normal contact speed, cm/s (full launch is 3600; a ~half-power straight hit cracks)
+	UPROPERTY(EditAnywhere, Category = "Rock") float ShatterSpeed = 400.f; // r19: halved // second hit on a cracked rock (~45% of full launch)
 	UPROPERTY(EditAnywhere, Category = "Rock") int32 ChunkCount = 8;       // keep low (RX 6600 / 16 GB)
 	UPROPERTY(EditAnywhere, Category = "Rock") float ChunkLife = 3.f;
 
