@@ -19,6 +19,7 @@
 void AZoogiArena::BuildMeadow()
 {
 	using namespace ZoogiMeadow; // function scope: unity builds also pull in ZoogiFrozen's WallR/GateYaw/...
+	using ZoogiMeadow::GateYaw; // unity builds: ZoogiArenaFrozen.cpp's file-scope 'using namespace ZoogiFrozen' makes GateYaw ambiguous otherwise
 	const FLinearColor Green = ZoogiUtil::Hex(TEXT("#39E37A"));
 	// r19 (Evan 7:16): whole Meadow 1.3x larger (actor + every piece scale together), 6 orbs.
 	BuildScale = MeadowScale; SetActorScale3D(FVector(MeadowScale));
@@ -444,26 +445,26 @@ void AZoogiArena::BuildMeadow()
 		}
 	};
 	// Hall in piece-local space (front = -X, faces the arena).
-	auto Hall = [&](AZoogiArenaPiece* P, float HX, float HY, float WallH, bool bTwoTier, int32 Doors)
+	auto Hall = [&](AZoogiArenaPiece* P, float HX, float HY, float HallWallH, bool bTwoTier, int32 Doors)
 	{
 		const FRotator R0r = FRotator::ZeroRotator;
 		P->AddBox(FVector(0, 0, 18.f), FVector(2.f * HX + 90.f, 2.f * HY + 90.f, 36.f), R0r, PStone);
 		P->AddBox(FVector(0, 0, 46.f), FVector(2.f * HX + 46.f, 2.f * HY + 46.f, 20.f), R0r, PStoneDark);
 		const float Z0 = 56.f;
-		P->AddBox(FVector(0, 0, Z0 + WallH * 0.5f), FVector(2.f * HX, 2.f * HY, WallH), R0r, Cream);
+		P->AddBox(FVector(0, 0, Z0 + HallWallH * 0.5f), FVector(2.f * HX, 2.f * HY, HallWallH), R0r, Cream);
 		const int32 NP = FMath::Max(2, FMath::RoundToInt(2.f * HY / 170.f)) + 1;
 		for (int32 i = 0; i < NP; ++i)
 		{
 			const float Y = -HY + i * (2.f * HY / (NP - 1));
-			for (int32 sx = -1; sx <= 1; sx += 2) P->AddBox(FVector(sx * (HX + 8.f), Y, Z0 + WallH * 0.5f), FVector(22.f, 22.f, WallH), R0r, i == 0 || i == NP - 1 ? DarkWood : Trim);
+			for (int32 sx = -1; sx <= 1; sx += 2) P->AddBox(FVector(sx * (HX + 8.f), Y, Z0 + HallWallH * 0.5f), FVector(22.f, 22.f, HallWallH), R0r, i == 0 || i == NP - 1 ? DarkWood : Trim);
 		}
-		for (int32 sy = -1; sy <= 1; sy += 2) P->AddBox(FVector(0, sy * (HY + 8.f), Z0 + WallH * 0.5f), FVector(2.f * HX, 18.f, WallH), R0r, DarkWood);
+		for (int32 sy = -1; sy <= 1; sy += 2) P->AddBox(FVector(0, sy * (HY + 8.f), Z0 + HallWallH * 0.5f), FVector(2.f * HX, 18.f, HallWallH), R0r, DarkWood);
 		for (int32 sx = -1; sx <= 1; sx += 2)
 		{
-			P->AddBox(FVector(sx * (HX + 12.f), 0, Z0 + WallH - 12.f), FVector(18.f, 2.f * HY + 40.f, 24.f), R0r, DarkWood);
+			P->AddBox(FVector(sx * (HX + 12.f), 0, Z0 + HallWallH - 12.f), FVector(18.f, 2.f * HY + 40.f, 24.f), R0r, DarkWood);
 			P->AddBox(FVector(sx * (HX + 12.f), 0, Z0 + 12.f), FVector(16.f, 2.f * HY + 20.f, 16.f), R0r, DarkWood);
 		}
-		const float DoorW = FMath::Min(120.f, 2.f * HY / (Doors + 1)), DoorH = WallH * 0.72f;
+		const float DoorW = FMath::Min(120.f, 2.f * HY / (Doors + 1)), DoorH = HallWallH * 0.72f;
 		for (int32 d = 0; d < Doors; ++d)
 		{
 			const float Y = (d - (Doors - 1) * 0.5f) * (2.f * HY / FMath::Max(1, Doors));
@@ -476,8 +477,8 @@ void AZoogiArena::BuildMeadow()
 		{
 			const float Y = (w - Doors * 0.5f) * (2.f * HY / FMath::Max(1, Doors));
 			if (FMath::Abs(Y) > HY - 50.f) continue;
-			P->AddBox(FVector(-HX - 3.f, Y, Z0 + WallH * 0.62f), FVector(4.f, 60.f, 56.f), R0r, Panel);
-			for (int32 l = -1; l <= 1; ++l) P->AddBox(FVector(-HX - 6.f, Y + l * 18.f, Z0 + WallH * 0.62f), FVector(3.f, 4.f, 56.f), R0r, DarkWood);
+			P->AddBox(FVector(-HX - 3.f, Y, Z0 + HallWallH * 0.62f), FVector(4.f, 60.f, 56.f), R0r, Panel);
+			for (int32 l = -1; l <= 1; ++l) P->AddBox(FVector(-HX - 6.f, Y + l * 18.f, Z0 + HallWallH * 0.62f), FVector(3.f, 4.f, 56.f), R0r, DarkWood);
 		}
 		auto Roofs = [&](float hx, float hy, float Z, float Hr, float Lift)
 		{
@@ -487,16 +488,16 @@ void AZoogiArena::BuildMeadow()
 			P->AddBox(FVector(0, 0, Z + Hr + 8.f), FVector(24.f, 2.f * hy * 0.6f + 30.f, 22.f), R0r, DarkWood); // ridge beam
 			for (int32 sy = -1; sy <= 1; sy += 2) P->AddBox(FVector(0, sy * (hy * 0.6f + 22.f), Z + Hr + 26.f), FVector(20.f, 30.f, 46.f), FRotator(0.f, 0.f, sy * 25.f), DarkWood); // ridge horns
 		};
-		const float RoofZ = Z0 + WallH + 4.f;
+		const float RoofZ = Z0 + HallWallH + 4.f;
 		Roofs(HX + 110.f, HY + 120.f, RoofZ, FMath::Max(90.f, HX * 0.75f), 46.f);
 		if (bTwoTier)
 		{
 			const float Zu = RoofZ + HX * 0.36f;
-			P->AddBox(FVector(0, 0, Zu + WallH * 0.25f), FVector(HX * 1.1f, HY * 1.3f, WallH * 0.5f), R0r, Cream);
-			for (int32 sx = -1; sx <= 1; sx += 2) for (int32 sy = -1; sy <= 1; sy += 2) P->AddBox(FVector(sx * HX * 0.55f, sy * HY * 0.65f, Zu + WallH * 0.25f), FVector(18.f, 18.f, WallH * 0.5f), R0r, Trim);
-			Roofs(HX * 0.55f + 80.f, HY * 0.65f + 90.f, Zu + WallH * 0.5f, FMath::Max(70.f, HX * 0.6f), 36.f);
+			P->AddBox(FVector(0, 0, Zu + HallWallH * 0.25f), FVector(HX * 1.1f, HY * 1.3f, HallWallH * 0.5f), R0r, Cream);
+			for (int32 sx = -1; sx <= 1; sx += 2) for (int32 sy = -1; sy <= 1; sy += 2) P->AddBox(FVector(sx * HX * 0.55f, sy * HY * 0.65f, Zu + HallWallH * 0.25f), FVector(18.f, 18.f, HallWallH * 0.5f), R0r, Trim);
+			Roofs(HX * 0.55f + 80.f, HY * 0.65f + 90.f, Zu + HallWallH * 0.5f, FMath::Max(70.f, HX * 0.6f), 36.f);
 		}
-		const float TopZ = RoofZ + (bTwoTier ? HX * 0.36f + WallH * 0.5f + HX * 0.6f : HX * 0.75f);
+		const float TopZ = RoofZ + (bTwoTier ? HX * 0.36f + HallWallH * 0.5f + HX * 0.6f : HX * 0.75f);
 		P->AddColliderBox(FVector(0, 0, TopZ * 0.5f), FVector(2.f * HX + 90.f, 2.f * HY + 90.f, TopZ), R0r, TEXT("ZWall"), StonePM);
 	};
 	auto Adopt = [&](int32 Mark, const FVector& Base, float Yaw, const TCHAR* Kind, float HP) -> AZoogiArenaPiece*
@@ -507,7 +508,7 @@ void AZoogiArena::BuildMeadow()
 		P->RubbleKeepZ = 40.f;
 		return P;
 	};
-	auto HallPiece = [&](const FVector& Base, float Yaw, const TCHAR* Kind, float HX, float HY, float WallH, bool bTwo, int32 Doors) -> AZoogiArenaPiece*
+	auto HallPiece = [&](const FVector& Base, float Yaw, const TCHAR* Kind, float HX, float HY, float HallWallH, bool bTwo, int32 Doors) -> AZoogiArenaPiece*
 	{
 		AZoogiArenaPiece* P = SpawnPiece(Base, Yaw, Kind, TEXT("Wood"), 220.f, false);
 		if (!P) return nullptr;
@@ -519,7 +520,7 @@ void AZoogiArena::BuildMeadow()
 			const float HxK = (bGate ? 390.f : 254.f) * Sc, HyK = (bGate ? 563.f : 254.f) * Sc, HzK = (bGate ? 1205.f : 520.f) * Sc;
 			P->AddColliderBox(FVector(0, 0, HzK * 0.5f), FVector(2.f * HxK, 2.f * HyK, HzK), FRotator::ZeroRotator, TEXT("ZWall"), StonePM);
 		}
-		else Hall(P, HX, HY, WallH, bTwo, Doors);
+		else Hall(P, HX, HY, HallWallH, bTwo, Doors);
 		P->RubbleKeepZ = 45.f;
 		P->FinishBuild();
 		return P;
@@ -603,22 +604,22 @@ void AZoogiArena::BuildMeadow()
 			AddFrozenProc(Ravine, GrassTop, nullptr, false); // r15: grassy banks, no hard cliff cut
 		}
 		// r6: three waterfalls spilling off grassy cliff mesas in the valley (art: NW, N, NE), facing the arena.
-		const float FallYaw[5] = { 222.f, 244.f, 268.f, 292.f, 316.f }, FallR[5] = { 10500.f, 9200.f, 12500.f, 9600.f, 11000.f }, MesaTop[5] = { 1100.f, 800.f, 1500.f, 900.f, 1200.f }; // r18: 5 tall falls
+		const float MesaFallYaw[5] = { 222.f, 244.f, 268.f, 292.f, 316.f }, FallR[5] = { 10500.f, 9200.f, 12500.f, 9600.f, 11000.f }, MesaTop[5] = { 1100.f, 800.f, 1500.f, 900.f, 1200.f }; // r18: 5 tall falls
 		for (int32 i = 0; i < 5; ++i)
 		{
-			const FVector2D M(Pol(FallR[i] + 900.f, FallYaw[i]));
+			const FVector2D M(Pol(FallR[i] + 900.f, MesaFallYaw[i]));
 			{ // r21: rounded grassy hill with a rock face, not a drum
 				UStaticMeshComponent* Hl = AddMesh(ZoogiUtil::BasicShape(TEXT("Sphere")), GrassTop, false, false);
 				Hl->SetRelativeLocation(FVector(M.X, M.Y, -1000.f));
 				Hl->SetRelativeScale3D(FVector(30.f, 34.f, 2.f * (MesaTop[i] + 1000.f) / 100.f));
 				UStaticMeshComponent* Rk = AddMesh(ZoogiUtil::BasicShape(TEXT("Sphere")), CliffDark, false, false);
-				Rk->SetRelativeLocation(FVector(M.X, M.Y, -1000.f) - FVector(Pol(1.f, FallYaw[i])) * 260.f);
+				Rk->SetRelativeLocation(FVector(M.X, M.Y, -1000.f) - FVector(Pol(1.f, MesaFallYaw[i])) * 260.f);
 				Rk->SetRelativeScale3D(FVector(26.f, 18.f, 1.9f * (MesaTop[i] + 1000.f) / 100.f));
-				Rk->SetRelativeRotation(FRotator(0.f, FallYaw[i], 0.f));
+				Rk->SetRelativeRotation(FRotator(0.f, MesaFallYaw[i], 0.f));
 			}
-			const FVector Lip = Pol(FallR[i] + 160.f, FallYaw[i], -1000.f + 0.86f * (MesaTop[i] + 1000.f));
-			AddWaterfall(Lip, FallYaw[i] + 180.f, 300.f, Lip.Z + 1000.f, 80.f);
-			AddWaterfall(Lip + Pol(1.f, FallYaw[i] + 90.f) * 300.f, FallYaw[i] + 180.f, 160.f, Lip.Z + 1000.f, 60.f);
+			const FVector Lip = Pol(FallR[i] + 160.f, MesaFallYaw[i], -1000.f + 0.86f * (MesaTop[i] + 1000.f));
+			AddWaterfall(Lip, MesaFallYaw[i] + 180.f, 300.f, Lip.Z + 1000.f, 80.f);
+			AddWaterfall(Lip + Pol(1.f, MesaFallYaw[i] + 90.f) * 300.f, MesaFallYaw[i] + 180.f, 160.f, Lip.Z + 1000.f, 60.f);
 		}
 	}
 
