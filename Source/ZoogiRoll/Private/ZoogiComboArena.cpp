@@ -1,5 +1,6 @@
 // 2v2 Combo prototype props on the Meadow arena (Part 4 "Vertical Arena + Reactive Terrain").
 #include "ZoogiCombo.h"
+#include "ZoogiMeadowLayout.h"
 #include "ZoogiRoll.h"
 #include "ZoogiTypes.h"
 #include "ZoogiPhysics.h"
@@ -83,7 +84,13 @@ void AZoogiComboArena::SetLayout(EZoogiArena Theme)
 		LSecMin = FVector2D(-150.f, 200.f); LSecMax = FVector2D(250.f, 600.f);
 		LPlat = FVector2D(750.f, 900.f); PlatformR = 200.f; PlatformH = 55.f;
 		LGate = FVector2D(0.f, -1450.f); LGateReturn = FVector(0.f, -1180.f, 52.f);
-		B = { FVector2D(420.f, -420.f), FVector2D(-500.f, 950.f), FVector2D(850.f, -850.f) };
+		B = { FVector2D(575.f, -996.f), FVector2D(-500.f, 950.f), FVector2D(850.f, -850.f) }; // r19: bumper off the spiral
+		LPlat = FVector2D(1111.f, -298.f); // r19: platform clear of the curved lip (was 750,900)
+		// r19: Meadow is built 1.3x larger; scale the prop layout with it.
+		const float K = ZoogiMeadow::MeadowScale;
+		WallR *= K; LRampMin *= K; LRampMax *= K; LSecMin *= K; LSecMax *= K; LPlat *= K; LGate *= K;
+		LGateReturn = FVector(LGateReturn.X * K, LGateReturn.Y * K, LGateReturn.Z);
+		for (FVector2D& Xy : B) Xy *= K;
 	}
 }
 
@@ -180,7 +187,8 @@ void AZoogiComboArena::Build()
 		}
 	}
 
-	// 2) Launch ramp (rises toward +X, lip RampH high at RampMax().X).
+	// 2) Launch ramp (rises toward +X, lip RampH high at RampMax().X). r20: not on Meadow.
+	if (HasRamp())
 	{
 		UStaticMeshComponent* R = AddPiece(TEXT("Cube"), ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#C08A4A")), 0.7f), true, TEXT("ZRamp"), StonePM);
 		PlaceSlab(R, RampMin().X, 0.f, RampMax().X, RampH, RampMin().Y, RampMax().Y, 60.f);

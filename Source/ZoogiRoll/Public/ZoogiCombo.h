@@ -41,6 +41,8 @@ public:
 	static float WallA0;
 	static float WallA1;
 	static float WallH;
+	/** r20 (Evan 7:42): Meadow has no ramps; only the Frozen layout keeps its launch ramp. */
+	static bool HasRamp() { return bFrozenLayout; }
 	static FVector2D RampMin() { return LRampMin; }
 	static FVector2D RampMax() { return LRampMax; }
 	static float RampH;

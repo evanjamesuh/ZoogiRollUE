@@ -19,6 +19,10 @@ void AZoogiArena::BuildMeadow()
 {
 	using namespace ZoogiMeadow; // function scope: unity builds also pull in ZoogiFrozen's WallR/GateYaw/...
 	const FLinearColor Green = ZoogiUtil::Hex(TEXT("#39E37A"));
+	// r19 (Evan 7:16): whole Meadow 1.3x larger (actor + every piece scale together), 6 orbs.
+	BuildScale = MeadowScale; SetActorScale3D(FVector(MeadowScale));
+	KnockoffRadiusOverride = FloorR * MeadowScale; ActiveKnockoffR = KnockoffRadiusOverride;
+	SpawnRadiusOverride = ZoogiConst::SpawnRadius * MeadowScale; OrbCountOverride = MeadowOrbs;
 	constexpr float SealGlow = 7.0f; // r8: lower strength + deeper green so the tonemapper keeps it saturated // r4: bold seal (T_MeadowGlow rebaked: thick core + soft halo)
 	const FLinearColor Soil = ZoogiUtil::Hex(TEXT("#9C8B73"));
 	const FLinearColor Wood = ZoogiUtil::Hex(TEXT("#CDA28B"));
@@ -52,10 +56,12 @@ void AZoogiArena::BuildMeadow()
 	UPhysicalMaterial* WallPM = ZoogiPhysics::MakeMaterial(this, 0.2f, 0.85f, false);
 	UPhysicalMaterial* StonePM = ZoogiPhysics::MakeMaterial(this, 0.3f, 0.35f, false);
 
-	AddHubCore(FVector(0, 0, 290.f), 55.f, Crystal);
-	OrbRingRadiusOverride = OrbRingR; OrbRingYawOffset = OrbRingYaw;
+	AddHubCore(FVector(0, 0, 175.f), 46.f, Crystal); // r20: sits in the hub cup
+	OrbRingRadiusOverride = OrbRingR * MeadowScale; OrbRingYawOffset = OrbRingYaw;
 
 	// 4 Resonance pillars (unbreakable), rise at match start.
+	UMaterialInterface* PilStone = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#A89A86")), 0.9f);
+	UMaterialInterface* PilDark = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#7E7262")), 0.9f);
 	for (int32 k = 0; k < 4; ++k)
 	{
 		const float Yaw = PillarYaw[k];
@@ -64,12 +70,12 @@ void AZoogiArena::BuildMeadow()
 		AZoogiArenaPiece* P = SpawnPiece(Loc, Yaw, *FString::Printf(TEXT("pillar_%d"), k), TEXT("Stone"), 1000.f, true);
 		if (!P) continue;
 		const float S = PillarS;
-		P->AddBox(FVector(0, 0, 18.f), FVector(150.f * S, 150.f * S, 36.f), FRotator::ZeroRotator, StoneDark);
-		P->AddBox(FVector(0, 0, 50.f), FVector(118.f * S, 118.f * S, 30.f), FRotator::ZeroRotator, Stone);
+		P->AddBox(FVector(0, 0, 18.f), FVector(150.f * S, 150.f * S, 36.f), FRotator::ZeroRotator, PilDark);
+		P->AddBox(FVector(0, 0, 50.f), FVector(118.f * S, 118.f * S, 30.f), FRotator::ZeroRotator, PilStone);
 		FZoogiMeshBuilder Shaft;
 		Shaft.Prism(FVector2D::ZeroVector, 4, 44.f * S, 34.f * S, 62.f, PillarH - 22.f, 45.f, 0.f, false);
-		P->AddProc(Shaft, Stone);
-		P->AddBox(FVector(0, 0, PillarH - 12.f), FVector(82.f * S, 82.f * S, 20.f), FRotator::ZeroRotator, Stone);
+		P->AddProc(Shaft, PilStone);
+		P->AddBox(FVector(0, 0, PillarH - 12.f), FVector(82.f * S, 82.f * S, 20.f), FRotator::ZeroRotator, PilStone);
 		for (int32 f = 0; f < 4; ++f)
 		{
 			const FRotator Fr(0.f, f * 90.f, 0.f);
@@ -90,7 +96,7 @@ void AZoogiArena::BuildMeadow()
 		}
 		P->AddShape(TEXT("Cylinder"), FTransform(FRotator::ZeroRotator, FVector(0, 0, PillarH + 14.f), FVector(0.42f * S, 0.42f * S, 0.28f)), Bronze);
 		P->AddShape(TEXT("Cone"), FTransform(FRotator(180.f, 0.f, 0.f), FVector(0, 0, PillarH + 52.f), FVector(1.2f * S, 1.2f * S, 0.5f)), Bronze);
-		UStaticMeshComponent* OrbM = P->AddShape(TEXT("Sphere"), FTransform(FRotator::ZeroRotator, FVector(0, 0, PillarH + 100.f), FVector(1.05f * S, 1.05f * S, 1.15f * S)), ZoogiUtil::GlowMID(this, Green, 2.4f), false);
+		UStaticMeshComponent* OrbM = P->AddShape(TEXT("Sphere"), FTransform(FRotator::ZeroRotator, FVector(0, 0, PillarH + 100.f), FVector(0.62f * S, 0.62f * S, 0.8f * S)), ZoogiUtil::GlowMID(this, Green, 2.4f), false);
 		P->MarkGlow(OrbM);
 		P->AddColliderBox(FVector(0, 0, 33.f), FVector(140.f * S, 140.f * S, 66.f), FRotator::ZeroRotator, TEXT("ZPillar"), PillarPM);
 		P->AddColliderBox(FVector(0, 0, PillarH * 0.5f), FVector(84.f * S, 84.f * S, PillarH), FRotator::ZeroRotator, TEXT("ZPillar"), PillarPM);
@@ -98,7 +104,7 @@ void AZoogiArena::BuildMeadow()
 		if (Forming) Forming->AddActor(P, EZoogiFormStyle::Rise, FVector(0, 0, -(PillarH + 120.f)), 1.30f + 0.10f * k, 1.0f, 14.f);
 		// Arena Orb apron in front of each pillar (toward centre), clear of the seat-wall gaps.
 		const float ApronR = PillarR + 160.f; // r9: outside the pillar (the inside is the spiral / orb ring)
-		ExtraOrbSpots.Add(FVector(FMath::Cos(Rad) * ApronR, FMath::Sin(Rad) * ApronR, ZoogiConst::OrbRadius + 1.f));
+		(void)ApronR; // r19: Meadow starts with exactly 6 orbs (no apron orbs)
 	}
 
 	// Stadium-seat wall with 4 orb-exit gaps (MEADOW ONLY). No VFX/debris in gaps.
@@ -109,11 +115,11 @@ void AZoogiArena::BuildMeadow()
 		{
 			const float Am = i * (360.f / Segs) + 180.f / Segs;
 			if (NearOrbExitGap(Am, 0.5f)) continue;
-			if (FMath::Abs(FMath::FindDeltaAngleDegrees(Am, PipeYaw[0])) < 6.f || FMath::Abs(FMath::FindDeltaAngleDegrees(Am, PipeYaw[1])) < 6.f) continue; // r5: quarter-pipes run out over the rim
+			// r20: no quarter-pipes, the seat wall runs unbroken between the 4 gaps
 			const float Rad = FMath::DegreesToRadians(Am);
 			const float SegLen = R * FMath::DegreesToRadians(360.f / Segs) * 1.05f;
 			const FVector Loc(FMath::Cos(Rad) * R, FMath::Sin(Rad) * R, 0.f);
-			AZoogiArenaPiece* P = SpawnPiece(Loc, Am, TEXT("seatwall"), TEXT("Wood"), 110.f, false);
+			AZoogiArenaPiece* P = SpawnPiece(Loc, Am, TEXT("seatwall"), TEXT("Wood"), 420.f, false); // r19: soft hits crack it; a normal shot no longer breaks it in one go
 			if (!P) continue;
 			for (int32 t = 0; t < 2; ++t)
 			{
@@ -133,158 +139,141 @@ void AZoogiArena::BuildMeadow()
 	auto Pol = [](float R, float Deg, float Z = 0.f) { const float A = FMath::DegreesToRadians(Deg); return FVector(FMath::Cos(A) * R, FMath::Sin(A) * R, Z); };
 	UMaterialInterface* RampWood = Seat;
 	UMaterialInterface* RampEdge = SeatRiser;
-	// Central spiral ramp: 4 breakable stone quarters climbing from the floor (yaw 125) to the raised disc (yaw 270).
+	(void)RampWood; (void)RampEdge;
+	// r20 (Evan 7:39, Hero v4): no centre spiral / raised disc. Flat stepped hub dais with the glowing green orb.
 	{
-		const int32 Quarters = 4, SegsPer = 10;
-		const float Wd = SpiralROut - SpiralRIn, Rm = (SpiralRIn + SpiralROut) * 0.5f;
-		auto Zt = [](float T) { return SpiralH * (T * T * (3.f - 2.f * T)); }; // flat entry, flat into the disc
-		for (int32 q = 0; q < Quarters; ++q)
+		UMaterialInterface* HubStone = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#C9B898")), 0.9f);
+		UMaterialInterface* HubStoneDark = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#A08C70")), 0.9f);
+		AZoogiArenaPiece* H = SpawnPiece(FVector::ZeroVector, 0.f, TEXT("hub"), TEXT("Stone"), 600.f, false);
+		if (H)
 		{
-			AZoogiArenaPiece* P = SpawnPiece(FVector::ZeroVector, 0.f, TEXT("spiralramp"), TEXT("Stone"), 200.f, false);
+			FZoogiMeshBuilder S1, S2, Rim;
+			S1.Prism(FVector2D::ZeroVector, 32, 270.f, 262.f, -2.f, 12.f, 0.f, 0.f, false);
+			S2.Prism(FVector2D::ZeroVector, 32, 175.f, 168.f, 10.f, 26.f, 0.f, 0.f, false);
+			H->AddProc(S1, HubStone); H->AddProc(S2, HubStoneDark);
+			for (int32 g = 0; g < 2; ++g)
+			{
+				const float Rr = g ? 150.f : 240.f, Zr = g ? 26.6f : 12.6f;
+				UStaticMeshComponent* Gl = H->AddShape(TEXT("Cylinder"), FTransform(FRotator::ZeroRotator, FVector(0, 0, Zr), FVector(Rr / 50.f, Rr / 50.f, 0.004f)), GlowTop, false);
+				H->MarkGlow(Gl);
+				H->AddShape(TEXT("Cylinder"), FTransform(FRotator::ZeroRotator, FVector(0, 0, Zr + 0.3f), FVector((Rr - 14.f) / 50.f, (Rr - 14.f) / 50.f, 0.006f)), g ? HubStoneDark : HubStone, false);
+			}
+			// carved pedestal + bronze cup holding the orb
+			FZoogiMeshBuilder Ped; Ped.Prism(FVector2D::ZeroVector, 8, 54.f, 38.f, 26.f, 96.f, 22.5f, 0.f, false);
+			H->AddProc(Ped, HubStone);
+			H->AddShape(TEXT("Cylinder"), FTransform(FRotator::ZeroRotator, FVector(0, 0, 104.f), FVector(0.9f, 0.9f, 0.16f)), Bronze);
+			H->AddShape(TEXT("Cone"), FTransform(FRotator(180.f, 0.f, 0.f), FVector(0, 0, 128.f), FVector(1.1f, 1.1f, 0.4f)), Bronze);
+			for (int32 r = 0; r < 8; ++r) { const FRotator Fr(0.f, r * 45.f + 22.5f, 0.f); H->MarkGlow(H->AddBox(Fr.RotateVector(FVector(46.f, 0, 0)) + FVector(0, 0, 62.f), FVector(3.f, 10.f, 46.f), Fr, Slit, false)); }
+			H->AddColliderCyl(FVector2D::ZeroVector, 268.f, -2.f, 12.f, TEXT("ZPlatform"), StonePM);
+			H->AddColliderCyl(FVector2D::ZeroVector, 172.f, -2.f, 26.f, TEXT("ZPlatform"), StonePM);
+			H->AddColliderCyl(FVector2D::ZeroVector, 56.f, -2.f, 130.f, TEXT("ZPillar"), PillarPM);
+			H->FinishBuild();
+			H->HitSpeedMin = 900.f; // rolling up the steps never damages it
+		}
+	}
+	// r20 (Evan 7:42): no ramps at all (spiral, disc, quarter-pipes and lips removed).
+
+	// r22: A&P Meadow kit meshes (/Game/Env/MeadowBuildings, front = -Y). Slots get SurfaceMIDs so piece damage tints work.
+	TMap<FName, UMaterialInterface*> KitMats;
+	auto KitMat = [&](FName Slot) -> UMaterialInterface*
+	{
+		if (UMaterialInterface** F = KitMats.Find(Slot)) return *F;
+		const FString S = Slot.ToString();
+		const TCHAR* Hx = TEXT("#A8A08A"); float Ro = 0.85f; bool bGlow = false;
+		if (S.StartsWith(TEXT("M_TileGray"))) Hx = TEXT("#8E9090");
+		else if (S.StartsWith(TEXT("M_Tile"))) { Hx = TEXT("#B8452E"); Ro = 0.55f; }
+		else if (S.StartsWith(TEXT("M_Ridge"))) Hx = TEXT("#6E2A1E");
+		else if (S.StartsWith(TEXT("M_WoodRed"))) { Hx = TEXT("#9A3526"); Ro = 0.6f; }
+		else if (S.StartsWith(TEXT("M_Wall"))) Hx = TEXT("#E6D8BC");
+		else if (S.StartsWith(TEXT("M_Gold"))) { Hx = TEXT("#C9A13B"); Ro = 0.4f; }
+		else if (S.StartsWith(TEXT("M_Lattice"))) Hx = TEXT("#4A2E1C");
+		else if (S.StartsWith(TEXT("M_CrateWood"))) { Hx = TEXT("#A97A4E"); Ro = 0.9f; }
+		else if (S.StartsWith(TEXT("M_Iron"))) { Hx = TEXT("#3A3530"); Ro = 0.6f; }
+		else if (S.StartsWith(TEXT("M_Moss"))) Hx = TEXT("#5E7A3A");
+		else if (S.StartsWith(TEXT("M_RuneGlow")) || S.StartsWith(TEXT("M_Gem"))) bGlow = true;
+		UMaterialInterface* M = bGlow ? ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#39E37A")), 2.f) : ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(Hx), Ro);
+		KitMats.Add(Slot, M);
+		return M;
+	};
+	auto KitPart = [&](AZoogiArenaPiece* P, const TCHAR* Name, const FVector& Loc, float Yaw, float Scale) -> UStaticMeshComponent*
+	{
+		UStaticMesh* SM = LoadObject<UStaticMesh>(nullptr, *FString::Printf(TEXT("/Game/Env/MeadowBuildings/%s.%s"), Name, Name));
+		if (!SM || !P) return nullptr;
+		UStaticMeshComponent* C = P->AddShape(TEXT("Cube"), FTransform(FRotator(0.f, Yaw - 90.f, 0.f), Loc, FVector(Scale)), nullptr);
+		C->SetStaticMesh(SM);
+		for (int32 m = 0; m < SM->GetStaticMaterials().Num(); ++m) C->SetMaterial(m, KitMat(SM->GetStaticMaterials()[m].MaterialSlotName));
+		return C;
+	};
+
+	// r19: weathered wooden crates and plank benches (art), breakable, tangential like the art.
+	{
+		UMaterialInterface* CrateWood = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#A87C52")), 0.9f);
+		UMaterialInterface* CrateEdge = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#5E4030")), 0.9f);
+		UMaterialInterface* Plank = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#B58A60")), 0.88f);
+		int32 CrateN = 0;
+		auto Crate = [&](AZoogiArenaPiece* P, const FVector& C, float E, float Yw)
+		{
+			{ // r22: A&P weathered crate mesh (A 100 / B 120x80 / C 60 cm), sized to E
+				const int32 k = CrateN++ % 3;
+				const TCHAR* N = k == 0 ? TEXT("SM_MeadowCrate_A") : (k == 1 ? TEXT("SM_MeadowCrate_C") : TEXT("SM_MeadowCrate_B"));
+				const float Base = k == 0 ? 100.f : (k == 1 ? 60.f : 100.f);
+				if (KitPart(P, N, C - FVector(0, 0, E * 0.5f), Yw + 90.f, E / Base)) return;
+			}
+			const FRotator Rr(0.f, Yw, 0.f);
+			P->AddBox(C, FVector(E - 4.f), Rr, CrateWood);
+			const float H = E * 0.5f, T = FMath::Max(7.f, E * 0.09f);
+			for (int32 a = 0; a < 3; ++a) for (int32 u = -1; u <= 1; u += 2) for (int32 v = -1; v <= 1; v += 2)
+			{
+				FVector Off, Sz;
+				if (a == 0) { Off = FVector(0, u * H, v * H); Sz = FVector(E, T, T); }
+				else if (a == 1) { Off = FVector(u * H, 0, v * H); Sz = FVector(T, E, T); }
+				else { Off = FVector(u * H, v * H, 0); Sz = FVector(T, T, E); }
+				P->AddBox(C + Rr.RotateVector(Off), Sz, Rr, CrateEdge);
+			}
+			for (int32 u = -1; u <= 1; u += 2) // diagonal braces on two faces
+			{
+				P->AddBox(C + Rr.RotateVector(FVector(u * (H + 1.f), 0, 0)), FVector(4.f, E * 1.25f, T * 0.8f), FRotator(0.f, Yw, 45.f * u), CrateEdge);
+				P->AddBox(C + Rr.RotateVector(FVector(0, u * (H + 1.f), 0)), FVector(E * 1.25f, 4.f, T * 0.8f), FRotator(45.f * u, Yw, 0.f), CrateEdge);
+			}
+		};
+		for (int32 b = 0; b < NumBenches; ++b)
+		{
+			AZoogiArenaPiece* P = SpawnPiece(Pol(BenchR, BenchYaw[b], 0.f), BenchYaw[b] + 90.f, TEXT("bench"), TEXT("Wood"), 70.f, false);
 			if (!P) continue;
-			FZoogiMeshBuilder Top, Sides, Rail;
-			for (int32 i = 0; i < SegsPer; ++i)
+			if (true) // r20: v4 has crates all round the middle ring
 			{
-				const float Ta = (q * SegsPer + i) / float(Quarters * SegsPer), Tb = (q * SegsPer + i + 1) / float(Quarters * SegsPer);
-				const float Aa = FMath::Lerp(SpiralA0, SpiralA1, Ta), Ab = FMath::Lerp(SpiralA0, SpiralA1, Tb);
-				const float Za = Zt(Ta), Zb = Zt(Tb);
-				Top.Quad(Pol(SpiralRIn, Aa, Za), Pol(SpiralROut, Aa, Za), Pol(SpiralROut, Ab, Zb), Pol(SpiralRIn, Ab, Zb), FVector::UpVector);
-				const FVector Oa = Pol(1.f, Aa, 0.f), Ob = Pol(1.f, Ab, 0.f);
-				Sides.Quad(Pol(SpiralRIn, Aa, -2.f), Pol(SpiralRIn, Ab, -2.f), Pol(SpiralRIn, Ab, Zb), Pol(SpiralRIn, Aa, Za), -(Oa + Ob));
-				Sides.Quad(Pol(SpiralROut, Aa, -2.f), Pol(SpiralROut, Ab, -2.f), Pol(SpiralROut, Ab, Zb + SpiralRailH), Pol(SpiralROut, Aa, Za + SpiralRailH), Oa + Ob);
-				Rail.Quad(Pol(SpiralROut - 18.f, Aa, Za), Pol(SpiralROut - 18.f, Ab, Zb), Pol(SpiralROut - 18.f, Ab, Zb + SpiralRailH), Pol(SpiralROut - 18.f, Aa, Za + SpiralRailH), -(Oa + Ob));
-				Rail.Quad(Pol(SpiralROut - 18.f, Aa, Za + SpiralRailH), Pol(SpiralROut - 18.f, Ab, Zb + SpiralRailH), Pol(SpiralROut, Ab, Zb + SpiralRailH), Pol(SpiralROut, Aa, Za + SpiralRailH), FVector::UpVector);
-				// Collider: solid tangent block whose top follows the ramp, plus the outer curb.
-				const float Am = (Aa + Ab) * 0.5f, Zm = (Za + Zb) * 0.5f;
-				const float L = Rm * FMath::DegreesToRadians(FMath::Abs(Ab - Aa));
-				const float Pitch = FMath::RadiansToDegrees(FMath::Atan2(Za - Zb, L)); // +X = increasing angle = downhill side
-				const float H = FMath::Max(Zm + 20.f, 30.f);
-				const FRotator R(Pitch, Am + 90.f, 0.f);
-				P->AddColliderBox(Pol(Rm, Am, Zm - H * 0.5f), FVector(L * 1.08f, Wd, H), R, TEXT("ZRamp"), StonePM);
-				P->AddColliderBox(Pol(SpiralROut - 9.f, Am, Zm + SpiralRailH * 0.5f - 5.f), FVector(L * 1.08f, 18.f, SpiralRailH + 10.f), R, TEXT("ZWall"), WallPM);
+				Crate(P, FVector(-20.f, 0, 40.f), 80.f, 0.f);
+				Crate(P, FVector(48.f, 4.f, 28.f), 56.f, 14.f);
+				if (b % 4 == 0) Crate(P, FVector(-16.f, 2.f, 104.f), 48.f, -10.f);
+				P->AddColliderBox(FVector(8.f, 0, 40.f), FVector(150.f, 84.f, 80.f), FRotator::ZeroRotator, TEXT("ZWall"), WallPM);
+				P->SetPathBlock(FVector2D(P->GetActorLocation()), 85.f * MeadowScale); // r22: CPU planning + IsSpotClear
 			}
-			P->AddProc(Top, Stone); P->AddProc(Sides, StoneDark); P->AddProc(Rail, Stone);
-			P->RubbleKeepZ = 40.f;
-			P->FinishBuild();
-			if (Forming) Forming->AddActor(P, EZoogiFormStyle::Rise, FVector(0, 0, -(SpiralH + 80.f)), 0.9f + 0.1f * q, 0.8f);
-		}
-		// r6: west half of the ring wall (art yin-yang), breakable stone, leaves the spiral foot and the disc open.
-		{
-			AZoogiArenaPiece* Hw = SpawnPiece(FVector::ZeroVector, 0.f, TEXT("hubwall"), TEXT("Stone"), 140.f, false);
-			if (Hw)
+			else
 			{
-				FZoogiMeshBuilder Wm;
-				const int32 Ns = 12; const float WH = 75.f;
-				Wm.ArcSlab(SpiralROut - 22.f, SpiralROut + 4.f, HubWallA0, HubWallA1, -2.f, WH, Ns);
-				Hw->AddProc(Wm, Stone);
-				for (int32 i = 0; i < Ns; ++i)
+				for (int32 k = -1; k <= 1; ++k) P->AddBox(FVector(0, k * 17.f, 40.f), FVector(140.f, 15.f, 8.f), FRotator(0.f, 0.f, 0.f), Plank);
+				for (int32 sx = -1; sx <= 1; sx += 2)
 				{
-					const float Am = FMath::Lerp(HubWallA0, HubWallA1, (i + 0.5f) / Ns);
-					const float L = SpiralROut * FMath::DegreesToRadians((HubWallA1 - HubWallA0) / Ns) * 1.08f;
-					Hw->AddColliderBox(Pol(SpiralROut - 9.f, Am, WH * 0.5f), FVector(26.f, L, WH), FRotator(0.f, Am, 0.f), TEXT("ZWall"), WallPM);
-					if (i % 3 == 1) { UStaticMeshComponent* G2 = Hw->AddBox(Pol(SpiralROut - 9.f, Am, WH + 1.f), FVector(28.f, L * 0.8f, 2.f), FRotator(0.f, Am, 0.f), GlowTop, false); Hw->MarkGlow(G2); }
+					for (int32 sy = -1; sy <= 1; sy += 2) P->AddBox(FVector(sx * 52.f, sy * 18.f, 18.f), FVector(10.f, 10.f, 36.f), FRotator::ZeroRotator, CrateEdge);
+					P->AddBox(FVector(sx * 52.f, 0, 22.f), FVector(8.f, 44.f, 6.f), FRotator::ZeroRotator, CrateEdge);
 				}
-				Hw->FinishBuild();
-				if (Forming) Forming->AddActor(Hw, EZoogiFormStyle::Rise, FVector(0, 0, -(WH + 60.f)), 1.25f, 0.8f);
+				P->AddBox(FVector(0, 0, 14.f), FVector(110.f, 6.f, 6.f), FRotator::ZeroRotator, CrateEdge);
+				P->AddColliderBox(FVector(0, 0, 23.f), FVector(140.f, 54.f, 46.f), FRotator::ZeroRotator, TEXT("ZWall"), WallPM);
 			}
+			P->FinishBuild();
+			if (Forming) Forming->AddActor(P, EZoogiFormStyle::Rise, FVector(0, 0, -150.f), 1.2f + 0.05f * b, 0.6f);
 		}
-		// Raised round disc at the top of the spiral (breakable stone platform).
-		AZoogiArenaPiece* D = SpawnPiece(Pol(DiscR, DiscYaw, 0.f), 0.f, TEXT("platform"), TEXT("Stone"), 180.f, false);
-		if (D)
+		const float InnerYaw[3] = { 45.f, 165.f, 285.f }; // r22: A&P layout v2 -> court crates at r620-1250
+		for (int32 b = 0; b < 3; ++b)
 		{
-			FZoogiMeshBuilder Top;
-			Top.Prism(FVector2D::ZeroVector, 16, DiscRad, DiscRad - 4.f, -2.f, SpiralH, 0.f, 0.f, false);
-			D->AddProc(Top, Stone);
-			UStaticMeshComponent* G = D->AddShape(TEXT("Cylinder"), FTransform(FRotator::ZeroRotator, FVector(0, 0, SpiralH + 0.6f), FVector((DiscRad * 0.7f) / 50.f, (DiscRad * 0.7f) / 50.f, 0.01f)), GlowTop, false);
-			D->MarkGlow(G);
-			D->AddColliderCyl(FVector2D::ZeroVector, DiscRad, -2.f, SpiralH, TEXT("ZPlatform"), StonePM);
-			D->FinishBuild();
-			if (Forming) Forming->AddActor(D, EZoogiFormStyle::Rise, FVector(0, 0, -(SpiralH + 80.f)), 1.3f, 0.8f, 4.f);
+			AZoogiArenaPiece* P = SpawnPiece(Pol(1150.f, InnerYaw[b], 0.f), InnerYaw[b] + 90.f, TEXT("bench"), TEXT("Wood"), 70.f, false);
+			if (!P) continue;
+			Crate(P, FVector(-14.f, 0, 36.f), 72.f, 6.f);
+			Crate(P, FVector(40.f, 6.f, 26.f), 52.f, -12.f);
+			P->AddColliderBox(FVector(6.f, 0, 36.f), FVector(130.f, 80.f, 72.f), FRotator::ZeroRotator, TEXT("ZWall"), WallPM);
+			P->SetPathBlock(FVector2D(P->GetActorLocation()), 75.f * MeadowScale);
+			P->FinishBuild();
+			if (Forming) Forming->AddActor(P, EZoogiFormStyle::Rise, FVector(0, 0, -150.f), 1.5f + 0.05f * b, 0.6f);
 		}
-	}
-	// Two tall wooden quarter-pipes flanking the north gap: roll out, ride up the curve, launch, fall back in.
-	for (int32 k = 0; k < 2; ++k)
-	{
-		AZoogiArenaPiece* P = SpawnPiece(Pol(PipeR0, PipeYaw[k], 0.f), PipeYaw[k], TEXT("woodramp"), TEXT("Wood"), 160.f, false);
-		if (!P) continue;
-		const int32 N = 16; const float Hw = PipeWid * 0.5f;
-		FZoogiMeshBuilder Top, Sides, Rails;
-		auto Pt = [&](int32 i) { const float Th = FMath::DegreesToRadians(PipeEndDeg * i / N); return FVector(PipeRq * FMath::Sin(Th), 0.f, PipeRq * (1.f - FMath::Cos(Th))); };
-		for (int32 i = 0; i < N; ++i)
-		{
-			const FVector A = Pt(i), B = Pt(i + 1), M = (A + B) * 0.5f;
-			const float ThM = FMath::DegreesToRadians(PipeEndDeg * (i + 0.5f) / N);
-			const FVector Nn(-FMath::Sin(ThM), 0.f, FMath::Cos(ThM));
-			Top.Quad(A + FVector(0, -Hw, 0), B + FVector(0, -Hw, 0), B + FVector(0, Hw, 0), A + FVector(0, Hw, 0), Nn);
-			for (int32 s = -1; s <= 1; s += 2)
-				Sides.Quad(FVector(A.X, s * Hw, -170.f), FVector(B.X, s * Hw, -170.f), B + FVector(0, s * Hw, 0), A + FVector(0, s * Hw, 0), FVector(0, s, 0));
-			const float L = FVector::Dist(A, B);
-			const FRotator R(FMath::RadiansToDegrees(ThM), 0.f, 0.f);
-			for (int32 s = -1; s <= 1; s += 2)
-			{
-				Rails.Box(M + FVector(0, s * (Hw + 7.f), 0) + Nn * 16.f, FVector(L * 0.53f, 7.f, 16.f), R);
-				P->AddColliderBox(M + FVector(0, s * (Hw + 7.f), 0) + Nn * 16.f, FVector(L * 1.06f, 14.f, 44.f), R, TEXT("ZWall"), WallPM);
-			}
-			P->AddColliderBox(M - Nn * 20.f, FVector(L * 1.08f, PipeWid, 40.f), R, TEXT("ZRamp"), StonePM);
-			if (i % 4 == 2) { UStaticMeshComponent* Ch = P->AddBox(M + Nn * 1.2f, FVector(10.f, PipeWid * 0.6f, 1.5f), R, GlowTop, false); P->MarkGlow(Ch); }
-		}
-		const FVector E = Pt(N);
-		Sides.Quad(FVector(E.X, -Hw, -170.f), FVector(E.X, Hw, -170.f), E + FVector(0, Hw, 0), E + FVector(0, -Hw, 0), FVector::ForwardVector);
-		Rails.Box(E + FVector(6.f, 0, 8.f), FVector(12.f, Hw + 14.f, 12.f)); // coping lip
-		P->AddProc(Top, RampWood); P->AddProc(Sides, RampEdge); P->AddProc(Rails, StoneDark);
-		// Back stop over the coping so an overshoot drops back into the pipe instead of off the map.
-		P->AddColliderBox(E + FVector(14.f, 0, 90.f), FVector(20.f, PipeWid + 30.f, 180.f), FRotator::ZeroRotator, TEXT("ZWall"), WallPM);
-		P->RubbleKeepZ = 60.f;
-		P->FinishBuild();
-		if (Forming) Forming->AddActor(P, EZoogiFormStyle::Rise, FVector(0, 0, -(PipeRq + 120.f)), 1.0f + 0.15f * k, 0.9f);
-	}
-	// Two low curved lips at the front stand ends: rise toward the stand end, curling inward.
-	for (int32 k = 0; k < 2; ++k)
-	{
-		AZoogiArenaPiece* P = SpawnPiece(FVector::ZeroVector, 0.f, TEXT("woodramp"), TEXT("Wood"), 140.f, false);
-		if (!P) continue;
-		const int32 N = 16; const float Hw = LipWid * 0.5f;
-		auto C = [&](int32 i) { const float T = float(i) / N; return Pol(FMath::Lerp(LipRLow, LipRHigh, T), FMath::Lerp(LipYawLow[k], LipYawHigh[k], T), LipH * FMath::Pow(T, 2.2f)); };
-		FZoogiMeshBuilder Top, Sides, Rails;
-		for (int32 i = 0; i < N; ++i)
-		{
-			const FVector A = C(i), B = C(i + 1), M = (A + B) * 0.5f;
-			const FVector D = (B - A).GetSafeNormal();
-			const FVector Sd = FVector::CrossProduct(FVector::UpVector, D).GetSafeNormal2D();
-			const FVector Nn = FVector::CrossProduct(D, Sd).GetSafeNormal() * -1.f;
-			const FVector Up = Nn.Z > 0.f ? Nn : -Nn;
-			Top.Quad(A - Sd * Hw, B - Sd * Hw, B + Sd * Hw, A + Sd * Hw, Up);
-			for (int32 s = -1; s <= 1; s += 2)
-				Sides.Quad(A + Sd * (s * Hw) - FVector(0, 0, A.Z + 2.f), B + Sd * (s * Hw) - FVector(0, 0, B.Z + 2.f), B + Sd * (s * Hw), A + Sd * (s * Hw), Sd * s);
-			const FRotator R = D.Rotation();
-			const float L = FVector::Dist(A, B);
-			for (int32 s = -1; s <= 1; s += 2)
-			{
-				Rails.Box(M + Sd * (s * (Hw + 6.f)) + Up * 12.f, FVector(L * 0.53f, 6.f, 12.f), R);
-				P->AddColliderBox(M + Sd * (s * (Hw + 6.f)) + Up * 12.f, FVector(L * 1.06f, 12.f, 36.f), R, TEXT("ZWall"), WallPM);
-			}
-			const float H = FMath::Max(M.Z + 20.f, 30.f);
-			P->AddColliderBox(M - Up * (H * 0.5f - 0.f) , FVector(L * 1.08f, LipWid, H), R, TEXT("ZRamp"), StonePM);
-		}
-		const FVector E = C(N), Ep = C(N - 1);
-		const FVector Sd = FVector::CrossProduct(FVector::UpVector, (E - Ep).GetSafeNormal()).GetSafeNormal2D();
-		Sides.Quad(E - Sd * Hw - FVector(0, 0, E.Z + 2.f), E + Sd * Hw - FVector(0, 0, E.Z + 2.f), E + Sd * Hw, E - Sd * Hw, (E - Ep).GetSafeNormal2D());
-		Rails.Box(E + FVector(0, 0, 4.f), FVector(10.f, Hw + 12.f, 8.f), (E - Ep).Rotation()); // lip edge
-		P->AddProc(Top, RampWood); P->AddProc(Sides, RampEdge); P->AddProc(Rails, StoneDark);
-		P->RubbleKeepZ = 40.f;
-		P->FinishBuild();
-		if (Forming) Forming->AddActor(P, EZoogiFormStyle::Rise, FVector(0, 0, -(LipH + 80.f)), 1.1f + 0.1f * k, 0.8f);
-	}
-	// Wooden bench blocks (breakable), tangential like the art.
-	for (int32 b = 0; b < NumBenches; ++b)
-	{
-		AZoogiArenaPiece* P = SpawnPiece(Pol(BenchR, BenchYaw[b], 0.f), BenchYaw[b] + 90.f, TEXT("bench"), TEXT("Wood"), 70.f, false);
-		if (!P) continue;
-		P->AddBox(FVector(0, 0, 38.f), FVector(130.f, 52.f, 14.f), FRotator::ZeroRotator, SeatAlt);
-		for (int32 s = -1; s <= 1; s += 2) P->AddBox(FVector(s * 48.f, 0, 16.f), FVector(22.f, 46.f, 32.f), FRotator::ZeroRotator, SeatRiser);
-		P->AddColliderBox(FVector(0, 0, 23.f), FVector(130.f, 52.f, 46.f), FRotator::ZeroRotator, TEXT("ZWall"), WallPM);
-		P->FinishBuild();
-		if (Forming) Forming->AddActor(P, EZoogiFormStyle::Rise, FVector(0, 0, -90.f), 1.2f + 0.05f * b, 0.6f);
 	}
 
 	// r3: drop channels cut through the terrace at the 4 orb-exit gaps so an orb visibly drops off (no clipping).
@@ -310,11 +299,123 @@ void AZoogiArena::BuildMeadow()
 	UMaterialInterface* Body = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#CDB89A")), 0.85f);
 	UMaterialInterface* Panel = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#E8D7B8")), 0.8f);
 	UMaterialInterface* Portal = ZoogiUtil::GlowMID(this, Green, 2.2f);
+	// r19 (Evan 7:18/7:14): art-style buildings -- stone base, cream walls, dark wood frame, curved red tile roofs with
+	// upturned eaves, green glowing doors -- and every building is a breakable piece.
+	UMaterialInterface* PStone = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#B4A284")), 0.9f);
+	UMaterialInterface* PStoneDark = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#8C7A62")), 0.9f);
+	UMaterialInterface* DarkWood = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#4A3326")), 0.85f);
+	UMaterialInterface* TileRoof = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#C2432E")), 0.6f);
+	UMaterialInterface* Cream = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#EADBC0")), 0.85f);
+	auto HipRoof = [](FZoogiMeshBuilder& Rf, FZoogiMeshBuilder& Ud, float HX, float HY, float Z, float Hr, float Lift)
+	{
+		auto Ring = [](float hx, float hy, float z, float lift, float flare, TArray<FVector>& O)
+		{
+			const FVector2D L[8] = { {1, 0}, {1, 1}, {0, 1}, {-1, 1}, {-1, 0}, {-1, -1}, {0, -1}, {1, -1} };
+			O.Reset();
+			for (int32 k = 0; k < 8; ++k) { const bool c = (k & 1) == 1; O.Add(FVector(L[k].X * hx * (c ? flare : 1.f), L[k].Y * hy * (c ? flare : 1.f), z + (c ? lift : 0.f))); }
+		};
+		TArray<FVector> R0, R1, R2, RU;
+		Ring(HX, HY, Z, Lift, 1.1f, R0);                          // upturned eave corners
+		Ring(HX * 0.66f, HY * 0.78f, Z + Hr * 0.36f, Lift * 0.2f, 1.03f, R1); // concave sweep
+		Ring(HX * 0.1f, HY * 0.6f, Z + Hr, 0.f, 1.f, R2);           // ridge
+		Ring(HX * 0.7f, HY * 0.75f, Z - 10.f, 0.f, 1.f, RU);
+		auto Nrm = [](const FVector& A, const FVector& B) { FVector O = (A + B) * 0.5f; O.Z = 0.f; return O.GetSafeNormal() + FVector(0, 0, 0.8f); };
+		for (int32 k = 0; k < 8; ++k)
+		{
+			const int32 K1 = (k + 1) % 8;
+			Rf.Quad(R0[k], R0[K1], R1[K1], R1[k], Nrm(R0[k], R0[K1]));
+			Rf.Quad(R1[k], R1[K1], R2[K1], R2[k], Nrm(R1[k], R1[K1]));
+			Ud.Quad(R0[k], R0[K1], RU[K1], RU[k], FVector(0, 0, -1));
+			Ud.Quad(R0[k], R0[K1], R0[K1] - FVector(0, 0, 14.f), R0[k] - FVector(0, 0, 14.f), Nrm(R0[k], R0[K1]) - FVector(0, 0, 0.8f));
+			Rf.FlatTri(FVector(0, 0, Z + Hr), R2[k], R2[K1], FVector::UpVector);
+		}
+	};
+	// Hall in piece-local space (front = -X, faces the arena).
+	auto Hall = [&](AZoogiArenaPiece* P, float HX, float HY, float WallH, bool bTwoTier, int32 Doors)
+	{
+		const FRotator R0r = FRotator::ZeroRotator;
+		P->AddBox(FVector(0, 0, 18.f), FVector(2.f * HX + 90.f, 2.f * HY + 90.f, 36.f), R0r, PStone);
+		P->AddBox(FVector(0, 0, 46.f), FVector(2.f * HX + 46.f, 2.f * HY + 46.f, 20.f), R0r, PStoneDark);
+		const float Z0 = 56.f;
+		P->AddBox(FVector(0, 0, Z0 + WallH * 0.5f), FVector(2.f * HX, 2.f * HY, WallH), R0r, Cream);
+		const int32 NP = FMath::Max(2, FMath::RoundToInt(2.f * HY / 170.f)) + 1;
+		for (int32 i = 0; i < NP; ++i)
+		{
+			const float Y = -HY + i * (2.f * HY / (NP - 1));
+			for (int32 sx = -1; sx <= 1; sx += 2) P->AddBox(FVector(sx * (HX + 8.f), Y, Z0 + WallH * 0.5f), FVector(22.f, 22.f, WallH), R0r, i == 0 || i == NP - 1 ? DarkWood : Trim);
+		}
+		for (int32 sy = -1; sy <= 1; sy += 2) P->AddBox(FVector(0, sy * (HY + 8.f), Z0 + WallH * 0.5f), FVector(2.f * HX, 18.f, WallH), R0r, DarkWood);
+		for (int32 sx = -1; sx <= 1; sx += 2)
+		{
+			P->AddBox(FVector(sx * (HX + 12.f), 0, Z0 + WallH - 12.f), FVector(18.f, 2.f * HY + 40.f, 24.f), R0r, DarkWood);
+			P->AddBox(FVector(sx * (HX + 12.f), 0, Z0 + 12.f), FVector(16.f, 2.f * HY + 20.f, 16.f), R0r, DarkWood);
+		}
+		const float DoorW = FMath::Min(120.f, 2.f * HY / (Doors + 1)), DoorH = WallH * 0.72f;
+		for (int32 d = 0; d < Doors; ++d)
+		{
+			const float Y = (d - (Doors - 1) * 0.5f) * (2.f * HY / FMath::Max(1, Doors));
+			P->AddBox(FVector(-HX - 4.f, Y, Z0 + DoorH * 0.5f + 6.f), FVector(6.f, DoorW + 26.f, DoorH + 20.f), R0r, DarkWood);
+			P->MarkGlow(P->AddBox(FVector(-HX - 9.f, Y, Z0 + DoorH * 0.5f + 4.f), FVector(4.f, DoorW, DoorH), R0r, Portal, false));
+			P->AddBox(FVector(-HX - 12.f, Y, Z0 + DoorH * 0.5f + 4.f), FVector(3.f, 6.f, DoorH), R0r, DarkWood);
+		}
+		// lattice windows between the doors
+		for (int32 w = 0; w <= Doors; ++w)
+		{
+			const float Y = (w - Doors * 0.5f) * (2.f * HY / FMath::Max(1, Doors));
+			if (FMath::Abs(Y) > HY - 50.f) continue;
+			P->AddBox(FVector(-HX - 3.f, Y, Z0 + WallH * 0.62f), FVector(4.f, 60.f, 56.f), R0r, Panel);
+			for (int32 l = -1; l <= 1; ++l) P->AddBox(FVector(-HX - 6.f, Y + l * 18.f, Z0 + WallH * 0.62f), FVector(3.f, 4.f, 56.f), R0r, DarkWood);
+		}
+		auto Roofs = [&](float hx, float hy, float Z, float Hr, float Lift)
+		{
+			FZoogiMeshBuilder Rf, Ud;
+			HipRoof(Rf, Ud, hx, hy, Z, Hr, Lift);
+			P->AddProc(Rf, TileRoof); P->AddProc(Ud, DarkWood);
+			P->AddBox(FVector(0, 0, Z + Hr + 8.f), FVector(24.f, 2.f * hy * 0.6f + 30.f, 22.f), R0r, DarkWood); // ridge beam
+			for (int32 sy = -1; sy <= 1; sy += 2) P->AddBox(FVector(0, sy * (hy * 0.6f + 22.f), Z + Hr + 26.f), FVector(20.f, 30.f, 46.f), FRotator(0.f, 0.f, sy * 25.f), DarkWood); // ridge horns
+		};
+		const float RoofZ = Z0 + WallH + 4.f;
+		Roofs(HX + 110.f, HY + 120.f, RoofZ, FMath::Max(90.f, HX * 0.75f), 46.f);
+		if (bTwoTier)
+		{
+			const float Zu = RoofZ + HX * 0.36f;
+			P->AddBox(FVector(0, 0, Zu + WallH * 0.25f), FVector(HX * 1.1f, HY * 1.3f, WallH * 0.5f), R0r, Cream);
+			for (int32 sx = -1; sx <= 1; sx += 2) for (int32 sy = -1; sy <= 1; sy += 2) P->AddBox(FVector(sx * HX * 0.55f, sy * HY * 0.65f, Zu + WallH * 0.25f), FVector(18.f, 18.f, WallH * 0.5f), R0r, Trim);
+			Roofs(HX * 0.55f + 80.f, HY * 0.65f + 90.f, Zu + WallH * 0.5f, FMath::Max(70.f, HX * 0.6f), 36.f);
+		}
+		const float TopZ = RoofZ + (bTwoTier ? HX * 0.36f + WallH * 0.5f + HX * 0.6f : HX * 0.75f);
+		P->AddColliderBox(FVector(0, 0, TopZ * 0.5f), FVector(2.f * HX + 90.f, 2.f * HY + 90.f, TopZ), R0r, TEXT("ZWall"), StonePM);
+	};
+	auto Adopt = [&](int32 Mark, const FVector& Base, float Yaw, const TCHAR* Kind, float HP) -> AZoogiArenaPiece*
+	{
+		AZoogiArenaPiece* P = SpawnPiece(Base, Yaw, Kind, TEXT("Stone"), HP, false);
+		if (!P) return nullptr;
+		for (int32 i = Mark; i < Built.Num(); ++i) if (UPrimitiveComponent* C = Cast<UPrimitiveComponent>(Built[i].Get())) P->AdoptPart(C);
+		P->RubbleKeepZ = 40.f;
+		return P;
+	};
+	auto HallPiece = [&](const FVector& Base, float Yaw, const TCHAR* Kind, float HX, float HY, float WallH, bool bTwo, int32 Doors) -> AZoogiArenaPiece*
+	{
+		AZoogiArenaPiece* P = SpawnPiece(Base, Yaw, Kind, TEXT("Wood"), 220.f, false);
+		if (!P) return nullptr;
+		// r22: A&P kit hall/shrine when imported (front faces the arena = local -X), hand-built fallback.
+		const bool bGate = FCString::Strcmp(Kind, TEXT("gatehouse")) == 0;
+		const float Sc = bGate ? (2.f * HY + 40.f) / 1125.f : (2.f * HY + 200.f) / 507.f;
+		if (KitPart(P, bGate ? TEXT("SM_MeadowGatehouse") : TEXT("SM_MeadowShrine"), FVector::ZeroVector, 0.f, Sc))
+		{
+			const float HxK = (bGate ? 390.f : 254.f) * Sc, HyK = (bGate ? 563.f : 254.f) * Sc, HzK = (bGate ? 1205.f : 520.f) * Sc;
+			P->AddColliderBox(FVector(0, 0, HzK * 0.5f), FVector(2.f * HxK, 2.f * HyK, HzK), FRotator::ZeroRotator, TEXT("ZWall"), StonePM);
+		}
+		else Hall(P, HX, HY, WallH, bTwo, Doors);
+		P->RubbleKeepZ = 45.f;
+		P->FinishBuild();
+		return P;
+	};
 	for (int32 i = 0; i < 2; ++i)
 	{
 		const float A = FMath::DegreesToRadians(GateYaw[i]);
 		const FVector Base(FMath::Cos(A) * GateR, FMath::Sin(A) * GateR, -40.f);
-		AddShrineGate(Base, GateYaw[i] + 180.f, 1.0f, Stone, Trim, Bronze, Portal, Stone);
+		HallPiece(Base, GateYaw[i], TEXT("shrine"), 95.f, 120.f, 190.f, false, 1); // r19: art shrine (red roof, green door), breakable
 		AddCylinder(FVector2D(Base.X * 0.92f, Base.Y * 0.92f), 70.f, 2.f, 2.f, ZoogiUtil::GlowMID(this, Green, 1.4f), false);
 	}
 
@@ -322,7 +423,7 @@ void AZoogiArena::BuildMeadow()
 	for (int32 i = 0; i < 2; ++i)
 	{
 		const float Yw = i ? 343.f : 326.f;
-		AddPagoda(Pol(2120.f, Yw, -40.f), Yw + 180.f, 1, 62.f, Body, Panel, Roof, Trim, Stone, Bronze);
+		HallPiece(Pol(2120.f, Yw, -40.f), Yw, TEXT("shrine"), 80.f, 100.f, 170.f, false, 1);
 	}
 
 	// r4: crisp layered mountains (3 ridges, near green -> far blue) with tall waterfalls, replacing the pale haze.
@@ -331,9 +432,9 @@ void AZoogiArena::BuildMeadow()
 		FRandomStream MR(4242);
 		struct FRidge { float R; float HMin, HMax; FLinearColor A, B; int32 N; };
 		const FRidge Ridges[3] = {
-			{ 20000.f, 1800.f, 3200.f, ZoogiUtil::Hex(TEXT("#8FA872")), ZoogiUtil::Hex(TEXT("#A3B884")), 40 },
-			{ 32000.f, 4200.f, 6200.f, ZoogiUtil::Hex(TEXT("#A4BCA0")), ZoogiUtil::Hex(TEXT("#B4C8AE")), 44 },
-			{ 50000.f, 7000.f, 10500.f, ZoogiUtil::Hex(TEXT("#AFC6D8")), ZoogiUtil::Hex(TEXT("#C3D5E3")), 48 } };
+			{ 17000.f, 700.f, 1300.f, ZoogiUtil::Hex(TEXT("#98AE52")), ZoogiUtil::Hex(TEXT("#A8BA62")), 44 },   // r18: low near downs (horizon open)
+			{ 28000.f, 3000.f, 5500.f, ZoogiUtil::Hex(TEXT("#968A78")), ZoogiUtil::Hex(TEXT("#AA9E8A")), 40 },  // r18: rocky mountains
+			{ 46000.f, 5000.f, 8200.f, ZoogiUtil::Hex(TEXT("#A9C0D6")), ZoogiUtil::Hex(TEXT("#BDD0E2")), 48 } }; // far blue peaks
 		UMaterialInterface* Snow = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#EEF4F8")), 0.8f);
 		for (int32 r = 0; r < 3; ++r)
 		{
@@ -344,14 +445,14 @@ void AZoogiArena::BuildMeadow()
 			{
 				const float A = (i + MR.FRandRange(-0.3f, 0.3f)) * 2.f * PI / Rg.N;
 				const float D = Rg.R * MR.FRandRange(0.92f, 1.1f);
-				const float H = MR.FRandRange(Rg.HMin, Rg.HMax), W = H * MR.FRandRange(2.6f, 3.6f);
+				const float H = MR.FRandRange(Rg.HMin, Rg.HMax), W = (r == 0 ? 5000.f : H) * MR.FRandRange(2.2f, 3.2f);
 				const FVector P(FMath::Cos(A) * D, FMath::Sin(A) * D, -1000.f + H * 0.5f);
 				// r5: near/mid ridges are rounded rolling hills (the art's soft green downs); only the far ridge is peaked.
-				const bool bHill = r < 2;
+				const bool bHill = r == 0;
 				UStaticMeshComponent* C = AddMesh(bHill ? ZoogiUtil::BasicShape(TEXT("Sphere")) : Cone, (i & 1) ? MA : MB, false, false);
 				C->SetRelativeLocationAndRotation(bHill ? FVector(P.X, P.Y, -1000.f) : P, FRotator(0.f, MR.FRandRange(0.f, 360.f), 0.f));
 				C->SetRelativeScale3D(bHill ? FVector(W * 0.75f / 100.f, W * 0.75f / 100.f * MR.FRandRange(0.8f, 1.2f), 2.f * H / 100.f) : FVector(W / 100.f, W / 100.f * MR.FRandRange(0.8f, 1.2f), H / 100.f));
-				if (r == 2 && H > 9000.f) // snow caps on the tallest far peaks
+				if (r >= 1 && H > (r == 1 ? 4800.f : 7000.f)) // snow caps on the tallest far peaks
 				{
 					UStaticMeshComponent* Cap = AddMesh(Cone, Snow, false, false);
 					Cap->SetRelativeLocation(P + FVector(0, 0, H * 0.35f));
@@ -389,15 +490,22 @@ void AZoogiArena::BuildMeadow()
 			AddFrozenProc(Ravine, GrassTop, nullptr, false); // r15: grassy banks, no hard cliff cut
 		}
 		// r6: three waterfalls spilling off grassy cliff mesas in the valley (art: NW, N, NE), facing the arena.
-		const float FallYaw[3] = { 236.f, 268.f, 304.f }, FallR[3] = { 5200.f, 6800.f, 5600.f }, MesaTop[3] = { 500.f, 800.f, 600.f };
-		for (int32 i = 0; i < 3; ++i)
+		const float FallYaw[5] = { 222.f, 244.f, 268.f, 292.f, 316.f }, FallR[5] = { 10500.f, 9200.f, 12500.f, 9600.f, 11000.f }, MesaTop[5] = { 1100.f, 800.f, 1500.f, 900.f, 1200.f }; // r18: 5 tall falls
+		for (int32 i = 0; i < 5; ++i)
 		{
 			const FVector2D M(Pol(FallR[i] + 900.f, FallYaw[i]));
-			AddCylinder(M, 1100.f, 60.f, MesaTop[i], GrassTop, false);
-			AddCylinder(M, 1080.f, MesaTop[i] + 1000.f, MesaTop[i] - 40.f, CliffDark, false);
-			const FVector Lip = Pol(FallR[i] - 160.f, FallYaw[i], MesaTop[i] + 2.f);
-			AddWaterfall(Lip, FallYaw[i] + 180.f, 300.f, MesaTop[i] + 170.f, 80.f);
-			AddWaterfall(Lip + Pol(1.f, FallYaw[i] + 90.f) * 300.f, FallYaw[i] + 180.f, 160.f, MesaTop[i] + 170.f, 60.f);
+			{ // r21: rounded grassy hill with a rock face, not a drum
+				UStaticMeshComponent* Hl = AddMesh(ZoogiUtil::BasicShape(TEXT("Sphere")), GrassTop, false, false);
+				Hl->SetRelativeLocation(FVector(M.X, M.Y, -1000.f));
+				Hl->SetRelativeScale3D(FVector(30.f, 34.f, 2.f * (MesaTop[i] + 1000.f) / 100.f));
+				UStaticMeshComponent* Rk = AddMesh(ZoogiUtil::BasicShape(TEXT("Sphere")), CliffDark, false, false);
+				Rk->SetRelativeLocation(FVector(M.X, M.Y, -1000.f) - FVector(Pol(1.f, FallYaw[i])) * 260.f);
+				Rk->SetRelativeScale3D(FVector(26.f, 18.f, 1.9f * (MesaTop[i] + 1000.f) / 100.f));
+				Rk->SetRelativeRotation(FRotator(0.f, FallYaw[i], 0.f));
+			}
+			const FVector Lip = Pol(FallR[i] + 160.f, FallYaw[i], -1000.f + 0.86f * (MesaTop[i] + 1000.f));
+			AddWaterfall(Lip, FallYaw[i] + 180.f, 300.f, Lip.Z + 1000.f, 80.f);
+			AddWaterfall(Lip + Pol(1.f, FallYaw[i] + 90.f) * 300.f, FallYaw[i] + 180.f, 160.f, Lip.Z + 1000.f, 60.f);
 		}
 	}
 
@@ -409,14 +517,23 @@ void AZoogiArena::BuildMeadow()
 		// 5-storey pagoda tower on the NW hill with two small halls (art: top-left cluster).
 		{
 			const FVector2D P(Pol(2550.f, 226.f, 0.f));
-			AddCylinder(P, 520.f, 900.f, 300.f, HillTop, false);
-			AddUnderCone(P, 520.f, 1300.f, -600.f, Cliff);
-			AddPagoda(FVector(P.X, P.Y, 300.f), 46.f, 5, 105.f, Body, Panel, Roof, Trim, Stone, Bronze);
+			AddCylinder(P, 720.f, 900.f, 300.f, HillTop, false);
+			AddUnderCone(P, 720.f, 1500.f, -600.f, Cliff);
+			int32 Mk = Built.Num();
+			UStaticMesh* KitPag = LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Env/MeadowBuildings/SM_MeadowPagoda5.SM_MeadowPagoda5"));
+			if (!KitPag) AddPagoda(FVector(P.X, P.Y, 300.f), 46.f, 6, 150.f, Cream, DarkWood, TileRoof, DarkWood, PStone, Bronze);
+			if (AZoogiArenaPiece* TP = Adopt(Mk, FVector(P.X, P.Y, 300.f), 46.f, TEXT("pagoda"), 300.f))
+			{
+				if (KitPag) KitPart(TP, TEXT("SM_MeadowPagoda5"), FVector::ZeroVector, 180.f, 0.85f); // r22: A&P 5-tier pagoda
+				TP->AddColliderBox(FVector(0, 0, 450.f), FVector(320.f, 320.f, 900.f), FRotator::ZeroRotator, TEXT("ZWall"), StonePM); TP->RubbleKeepZ = 120.f; TP->FinishBuild(); }
 			for (int32 j = 0; j < 2; ++j)
 			{
-				const FVector2D Q(Pol(2650.f, j ? 238.f : 212.f, 0.f));
+				const FVector2D Q(Pol(2800.f, j ? 232.f : 210.f, 0.f));
 				AddCylinder(Q, 330.f, 700.f, 180.f, HillTop, false);
-				AddPagoda(FVector(Q.X, Q.Y, 180.f), 46.f, 2, 70.f, Body, Panel, Roof, Trim, Stone, Bronze);
+				const int32 Mq = Built.Num();
+				AddPagoda(FVector(Q.X, Q.Y, 180.f), 46.f, 2, 100.f, Cream, DarkWood, TileRoof, DarkWood, PStone, Bronze);
+				if (AZoogiArenaPiece* QP = Adopt(Mq, FVector(Q.X, Q.Y, 180.f), 46.f, TEXT("pagoda"), 220.f))
+				{ QP->AddColliderBox(FVector(0, 0, 200.f), FVector(250.f, 250.f, 400.f), FRotator::ZeroRotator, TEXT("ZWall"), StonePM); QP->FinishBuild(); }
 			}
 		}
 		// Wide gatehouse on the NE hill (art: top-right): long hall, red colonnade, broad grey hip roof, gate doors.
@@ -429,37 +546,26 @@ void AZoogiArena::BuildMeadow()
 			AddUnderCone(P, 950.f, 1400.f, -900.f, Cliff);
 			for (int32 s2 = 0; s2 < 3; ++s2)
 				AddBoxR(At(0, 0, 220.f + s2 * 36.f), FVector(720.f - s2 * 60.f, 1700.f - s2 * 80.f, 36.f), Rot, Stone);
-			const float Zc = 310.f, Hh = 380.f, Lw = 1400.f, Dp = 520.f;
-			AddBoxR(At(0, 0, Zc + Hh * 0.5f), FVector(Dp, Lw, Hh), Rot, Body);
-			for (int32 c = 0; c < 9; ++c)
-				AddBoxR(At(-Dp * 0.5f - 30.f, -Lw * 0.5f + c * (Lw / 8.f), Zc + Hh * 0.5f), FVector(40.f, 40.f, Hh), Rot, Red);
-			AddBoxR(At(-Dp * 0.5f - 6.f, 0, Zc + 150.f), FVector(8.f, 300.f, 300.f), Rot, Portal);       // gate doors
-			AddBoxR(At(-Dp * 0.5f - 30.f, 0, Zc + Hh + 10.f), FVector(70.f, Lw + 80.f, 30.f), Rot, Red);   // lintel beam
-			for (int32 w = -1; w <= 1; w += 2) AddBoxR(At(-Dp * 0.5f - 8.f, w * 450.f, Zc + 230.f), FVector(6.f, 220.f, 90.f), Rot, Panel); // windows
-			// Broad hip roof: two pitched slabs meeting at a ridge, wide eaves, plus a ridge beam and end hips.
-			const float Ez = Zc + Hh + 30.f, Pit = 26.f, Run = Dp * 0.5f + 180.f;
-			for (int32 s2 = -1; s2 <= 1; s2 += 2)
-				AddBoxR(At(s2 * Run * 0.5f, 0, Ez + Run * 0.5f * FMath::Tan(FMath::DegreesToRadians(Pit))), FVector(Run / FMath::Cos(FMath::DegreesToRadians(Pit)) + 10.f, Lw + 360.f, 26.f), FRotator(-s2 * Pit, Yaw, 0.f), RoofGrey);
-			const float RidgeZ = Ez + Run * FMath::Tan(FMath::DegreesToRadians(Pit));
-			AddBoxR(At(0, 0, RidgeZ + 8.f), FVector(40.f, Lw + 300.f, 30.f), Rot, Trim);
-			for (int32 s2 = -1; s2 <= 1; s2 += 2)
-				AddBoxR(At(0, s2 * (Lw * 0.5f + 140.f), Ez + 80.f), FVector(Run * 1.6f, 120.f, 160.f), FRotator(0.f, Yaw, s2 * 30.f), RoofGrey);
+			HallPiece(FVector(P.X, P.Y, 310.f), Yaw, TEXT("gatehouse"), 240.f, 640.f, 300.f, true, 3); // r19: art gatehouse hall, breakable
+			(void)Red; (void)RoofGrey; (void)At;
 		}
 		// Stone golem statue behind the north-west quarter-pipe (art).
 		{
-			UMaterialInterface* GolemStone = ZoogiUtil::GroundMID(this, ZoogiUtil::Hex(TEXT("#8E8A78")), ZoogiUtil::Hex(TEXT("#6D6A5C")), 0.01f, 0.9f);
+			UMaterialInterface* GolemStone = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#8E8A78")), 0.9f);
 			UMaterialInterface* Moss = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#5E9A3A")), 0.9f);
-			const FVector G = Pol(2250.f, 246.f, -40.f);
+			const int32 GolemMark = Built.Num();
+			const float GK = 1.7f; // r18: art golem towers over the stand
+			const FVector G = Pol(2750.f, 246.f, -40.f);
 			const FRotator Rg(0.f, 246.f + 180.f, 0.f);
-			auto GA2 = [&](float X, float Y, float Z) { return G + Rg.RotateVector(FVector(X, Y, Z)); };
-			for (int32 s2 = -1; s2 <= 1; s2 += 2) AddBoxR(GA2(0, s2 * 70.f, 110.f), FVector(90.f, 80.f, 220.f), Rg, GolemStone);
-			AddBoxR(GA2(0, 0, 330.f), FVector(150.f, 260.f, 220.f), Rg, GolemStone);
-			AddBoxR(GA2(0, 0, 330.f + 140.f), FVector(160.f, 280.f, 40.f), Rg, Moss);
-			for (int32 s2 = -1; s2 <= 1; s2 += 2) AddBoxR(GA2(10.f, s2 * 175.f, 280.f), FVector(80.f, 70.f, 260.f), FRotator(0.f, 246.f + 180.f, s2 * 8.f), GolemStone);
-			AddBoxR(GA2(-10.f, 0, 520.f), FVector(110.f, 120.f, 100.f), Rg, GolemStone);
+			auto GA2 = [&](float X, float Y, float Z) { return G + Rg.RotateVector(FVector(X, Y, Z) * GK); };
+			for (int32 s2 = -1; s2 <= 1; s2 += 2) AddBoxR(GA2(0, s2 * 70.f, 110.f), FVector(90.f, 80.f, 220.f) * GK, Rg, GolemStone);
+			AddBoxR(GA2(0, 0, 330.f), FVector(150.f, 260.f, 220.f) * GK, Rg, GolemStone);
+			AddBoxR(GA2(0, 0, 330.f + 140.f), FVector(160.f, 280.f, 40.f) * GK, Rg, Moss);
+			for (int32 s2 = -1; s2 <= 1; s2 += 2) AddBoxR(GA2(10.f, s2 * 175.f, 280.f), FVector(80.f, 70.f, 260.f) * GK, FRotator(0.f, 246.f + 180.f, s2 * 8.f), GolemStone);
+			AddBoxR(GA2(-10.f, 0, 520.f), FVector(110.f, 120.f, 100.f) * GK, Rg, GolemStone);
 			// r13: rounder silhouette like the art's mossy golem: boulder shoulders, fists, head and a moss cap.
 			UStaticMesh* Sph = ZoogiUtil::BasicShape(TEXT("Sphere"));
-			auto Blob = [&](const FVector& At, const FVector& Sc, UMaterialInterface* Mt) { UStaticMeshComponent* Bc = AddMesh(Sph, Mt, false, true); Bc->SetRelativeLocationAndRotation(At, Rg); Bc->SetRelativeScale3D(Sc); };
+			auto Blob = [&](const FVector& At, const FVector& Sc, UMaterialInterface* Mt) { UStaticMeshComponent* Bc = AddMesh(Sph, Mt, false, true); Bc->SetRelativeLocationAndRotation(At, Rg); Bc->SetRelativeScale3D(Sc * GK); };
 			for (int32 s2 = -1; s2 <= 1; s2 += 2)
 			{
 				Blob(GA2(0, s2 * 165.f, 420.f), FVector(1.5f, 1.4f, 1.3f), GolemStone);
@@ -468,8 +574,12 @@ void AZoogiArena::BuildMeadow()
 			}
 			Blob(GA2(-10.f, 0, 560.f), FVector(1.3f, 1.3f, 1.1f), GolemStone);
 			Blob(GA2(-10.f, 0, 610.f), FVector(1.0f, 1.0f, 0.35f), Moss);
-			UStaticMeshComponent* Eye = AddBoxR(GA2(-70.f, 0, 560.f), FVector(4.f, 70.f, 12.f), Rg, Portal, false);
+			for (int32 m2 = 0; m2 < 6; ++m2) Blob(GA2(-60.f + 20.f * (m2 % 3), -120.f + 48.f * m2, 330.f + 60.f * (m2 & 1)), FVector(0.45f, 0.45f, 0.3f), Moss); // r18: moss patches
+			AddBoxR(GA2(0, 0, -10.f), FVector(320.f, 520.f, 40.f) * GK, Rg, PStone); // plinth
+			UStaticMeshComponent* Eye = AddBoxR(GA2(-70.f, 0, 560.f), FVector(4.f, 70.f, 12.f) * GK, Rg, Portal, false);
 			(void)Eye;
+			if (AZoogiArenaPiece* GP = Adopt(GolemMark, G, 246.f + 180.f, TEXT("golem"), 320.f))
+			{ GP->AddColliderBox(FVector(0, 0, 330.f * GK), FVector(260.f, 460.f, 660.f) * GK, FRotator::ZeroRotator, TEXT("ZWall"), StonePM); GP->RubbleKeepZ = 90.f; GP->FinishBuild(); }
 		}
 	}
 
@@ -484,7 +594,7 @@ void AZoogiArena::BuildMeadow()
 		Scars = GetWorld()->SpawnActor<AZoogiFloorScars>(AZoogiFloorScars::StaticClass(), FTransform::Identity, SP);
 		if (Scars)
 		{
-			Scars->Init(ZoogiConst::KnockoffRadius - 60.f);
+			Scars->Init((ZoogiConst::KnockoffRadius - 60.f) * MeadowScale);
 			Scars->SlabMat = Stone; // SpawnCraterSlabs hook uses sandstone
 			// A&P CraterSlab kit (SM_MeadowCraterSlab_A..D); falls back to the placeholder ring if not imported.
 			for (const TCHAR* Nm : { TEXT("A"), TEXT("B"), TEXT("C"), TEXT("D") })
@@ -500,8 +610,12 @@ void AZoogiArena::BuildMeadow()
 	if (Forming && FloorMID) Forming->AddParamRamp(FloorMID, TEXT("GlowStrength"), 0.f, SealGlow, 2.6f, 0.5f);
 	// -ZoogiArenaPlayTest: orb out through each orb-exit gap (must count as ORB OUT), a control shot into the seat wall
 	// (must stay in), normal Zoogi shots that must crack the seat wall and a bench, and ramp roll-and-launch checks.
+	// r19: riding a ramp must never damage it (soft-bump threshold is 125 cm/s for everything else).
+	for (AZoogiArenaPiece* Pc : Pieces)
+		if (IsValid(Pc) && (Pc->GetKind() == TEXT("hub"))) Pc->HitSpeedMin = 900.f;
 	if (AZoogiArenaPlayTest* PT = AZoogiArenaPlayTest::MaybeSpawn(this))
 	{
+		{ FZoogiArenaCheck C; C.Name = TEXT("piece_overlap"); C.Kind = FZoogiArenaCheck::PieceOverlap; C.Wait = 0.2f; PT->Checks.Add(C); }
 		const float NormalShot = 0.55f * ZoogiConst::FullLaunchSpeed;
 		for (int32 g = 0; g < 4; ++g)
 		{
@@ -514,40 +628,31 @@ void AZoogiArena::BuildMeadow()
 		  C.PieceKind = TEXT("seatwall"); C.Near = Pol(FloorR + 18.f, 225.f); C.Radius = 350.f; C.Wait = 1.6f; PT->Checks.Add(C); }
 		{ FZoogiArenaCheck C; C.Name = TEXT("bench_crack_67"); C.Kind = FZoogiArenaCheck::ZoogiDamages; C.From = Pol(1050.f, 67.f); C.Vel = FVector2D(Pol(-NormalShot, 67.f));
 		  C.PieceKind = TEXT("bench"); C.Near = Pol(BenchR, 67.f); C.Radius = 150.f; C.Wait = 1.6f; PT->Checks.Add(C); }
-		// Ramp roll-and-launch: a normal-power Zoogi must ride each ramp and get airborne (rise >= Radius cm).
-		for (int32 k = 0; k < 2; ++k)
+		// r19: normal shots into each stand section must hit the (taller) seat wall, damage it and roll back onto the court.
+		for (int32 i = 0; i < NumStands; ++i)
 		{
-			FZoogiArenaCheck C; C.Name = FString::Printf(TEXT("pipe_launch_%03.0f"), PipeYaw[k]); C.Kind = FZoogiArenaCheck::ZoogiLaunch;
-			C.From = Pol(850.f, PipeYaw[k]); C.Vel = FVector2D(Pol(NormalShot, PipeYaw[k])); C.Radius = 150.f; C.Wait = 3.0f;
-			C.PieceKind = TEXT("woodramp"); C.Near = Pol(PipeR0 + 250.f, PipeYaw[k]); PT->Checks.Add(C);
+			FZoogiArenaCheck C; C.Name = FString::Printf(TEXT("stand_bounce_%03.0f"), StandCenters[i]); C.Kind = FZoogiArenaCheck::ZoogiBounceBack;
+			C.From = Pol(1150.f, StandCenters[i]); C.Vel = FVector2D(Pol(NormalShot, StandCenters[i]));
+			C.PieceKind = TEXT("seatwall"); C.Near = Pol(FloorR + 18.f, StandCenters[i]); C.Radius = 350.f; C.Wait = 3.5f; PT->Checks.Add(C);
 		}
-		for (int32 k = 0; k < 2; ++k)
+		// r19: the arena is built at MeadowScale; checks are authored in layout units.
+		for (FZoogiArenaCheck& C : PT->Checks)
 		{
-			const FVector L0 = Pol(LipRLow, LipYawLow[k]), L1 = Pol(FMath::Lerp(LipRLow, LipRHigh, 0.08f), FMath::Lerp(LipYawLow[k], LipYawHigh[k], 0.08f));
-			const FVector D = (L1 - L0).GetSafeNormal2D();
-			FZoogiArenaCheck C; C.Name = FString::Printf(TEXT("lip_launch_%d"), k); C.Kind = FZoogiArenaCheck::ZoogiLaunch;
-			C.From = L0 - D * 260.f; C.Vel = FVector2D(D * NormalShot); C.Radius = 60.f; C.Wait = 2.5f;
-			C.PieceKind = TEXT("woodramp"); C.Near = L0; PT->Checks.Add(C);
-		}
-		{
-			const FVector L0 = Pol((SpiralRIn + SpiralROut) * 0.5f, SpiralA0), L1 = Pol((SpiralRIn + SpiralROut) * 0.5f, SpiralA0 - 6.f);
-			const FVector D = (L1 - L0).GetSafeNormal2D();
-			FZoogiArenaCheck C; C.Name = TEXT("spiral_ride"); C.Kind = FZoogiArenaCheck::ZoogiLaunch;
-			C.From = L0 - D * 150.f; C.Vel = FVector2D(D * NormalShot); C.Radius = 30.f; C.Wait = 2.5f;
-			C.PieceKind = TEXT("spiralramp"); C.Near = L0; PT->Checks.Add(C);
+			C.From *= MeadowScale; C.Near *= MeadowScale;
+			if (C.Kind == FZoogiArenaCheck::ZoogiDamages || C.Kind == FZoogiArenaCheck::ZoogiBounceBack) C.Radius *= MeadowScale;
 		}
 	}
 	{
 		// r9: orb ring clearance vs spiral band/disc, pillars, benches (edge-to-edge, cm).
 		float MinSp = 1e9f, MinPi = 1e9f, MinBe = 1e9f;
-		for (int32 i = 0; i < ZoogiConst::OrbCount; ++i)
+		for (int32 i = 0; i < MeadowOrbs; ++i)
 		{
-			const FVector O = Pol(OrbRingR, OrbRingYaw + i * 360.f / ZoogiConst::OrbCount);
-			MinSp = FMath::Min(MinSp, FMath::Min(O.Size2D() - SpiralROut, FVector::Dist2D(O, Pol(DiscR, DiscYaw)) - DiscRad) - ZoogiConst::OrbRadius);
+			const FVector O = Pol(OrbRingR, OrbRingYaw + i * 360.f / MeadowOrbs);
+			MinSp = FMath::Min(MinSp, O.Size2D() - 270.f - ZoogiConst::OrbRadius); // r20: hub dais
 			for (float Y : PillarYaw) MinPi = FMath::Min(MinPi, FVector::Dist2D(O, Pol(PillarR, Y)) - 70.f * PillarS - ZoogiConst::OrbRadius);
 			for (float Y : BenchYaw) MinBe = FMath::Min(MinBe, FVector::Dist2D(O, Pol(BenchR, Y)) - 65.f - ZoogiConst::OrbRadius);
 		}
-		UE_LOG(LogZoogi, Log, TEXT("Meadow orb ring r%.0f +%.0f deg: clearance spiral/disc %.0f, pillars %.0f, benches %.0f cm %s"), OrbRingR, OrbRingYaw, MinSp, MinPi, MinBe,
+		UE_LOG(LogZoogi, Log, TEXT("Meadow orb ring r%.0f +%.0f deg: clearance hub %.0f, pillars %.0f, benches %.0f cm %s"), OrbRingR, OrbRingYaw, MinSp, MinPi, MinBe,
 			(MinSp > 0.f && MinPi > 0.f && MinBe > 0.f) ? TEXT("CLEAR") : TEXT("OVERLAP"));
 	}
 	UE_LOG(LogZoogi, Log, TEXT("Meadow Arena built: %d pieces, %d forming, %d extra orbs, orb-exit gaps %.0f cm @ 0/90/180/270 (no Aura)"),

@@ -79,7 +79,7 @@ static constexpr float GNeonHalfX = 1200.f, GNeonHalfY = 800.f;
 bool AZoogiArena::IsOffCourt(const FVector2D& P) const
 {
 	if (Theme == EZoogiArena::Neon) return FMath::Abs(P.X) > GNeonHalfX || FMath::Abs(P.Y) > GNeonHalfY;
-	return P.Size() > ZoogiConst::KnockoffRadius;
+	return P.Size() > GetKnockoffRadius();
 }
 
 float AZoogiArena::DistanceToEdge(const FVector2D& P, const FVector2D& Dir) const
@@ -96,7 +96,7 @@ float AZoogiArena::DistanceToEdge(const FVector2D& P, const FVector2D& Dir) cons
 		const bool bRail = TX < TY ? FMath::Abs(E.Y) < GNeonHalfY - Mouth + Slack : FMath::Abs(E.X) < GNeonHalfX - Mouth + Slack;
 		return bRail ? T + 3000.f : T;
 	}
-	const float R = ZoogiConst::KnockoffRadius;
+	const float R = GetKnockoffRadius();
 	const float PD = FVector2D::DotProduct(P, Dir);
 	const float Disc = PD * PD - (P.SizeSquared() - R * R);
 	return -PD + FMath::Sqrt(FMath::Max(0.f, Disc));
@@ -110,6 +110,12 @@ bool AZoogiArena::IsSpotClear(const FVector2D& P, float Radius) const
 		if (FVector2D::Distance(C, P) < Radius + 15.f) return false;
 	}
 	for (const FVector2D& Q : SolidPosts) if (FVector2D::Distance(Q, P) < Radius + 95.5f + 15.f) return false;
+	// r22: live breakable pieces with a path block (Meadow court crates, Frozen obelisks ...) are solid too.
+	for (const AZoogiArenaPiece* Pc : Pieces)
+	{
+		FVector2D Q; float PR = 0.f;
+		if (Pc && Pc->GetPathBlock(Q, PR) && FVector2D::Distance(Q, P) < Radius + PR + 15.f) return false;
+	}
 	return true;
 }
 
@@ -194,6 +200,9 @@ void AZoogiArena::Clear()
 	SpawnRadiusOverride = 0.f;
 	OrbRingRadiusOverride = 0.f;
 	OrbRingYawOffset = 0.f;
+	BuildScale = 1.f; KnockoffRadiusOverride = 0.f; OrbCountOverride = 0;
+	ActiveKnockoffR = ZoogiConst::KnockoffRadius;
+	SetActorScale3D(FVector::OneVector);
 	SolidBoxes.Reset();
 	SolidPosts.Reset();
 }
@@ -459,6 +468,7 @@ void AZoogiArena::SetupSky(EZoogiArena InTheme)
 		P.BloomIntensity = 1.0f;
 		P.ColorSaturation = FVector4(1.08f, 1.08f, 1.08f, 1.f); // r12: art is bright and saturated (r10 mute read washed)
 		P.ColorContrast = FVector4(1.06f, 1.06f, 1.06f, 1.f);
+		Clouds->SetVisibility(true); // r18: soft cumulus like the art's sky
 		break;
 	default:
 		Sun->SetRelativeRotation(FRotator(-42.f, 35.f, 0.f));

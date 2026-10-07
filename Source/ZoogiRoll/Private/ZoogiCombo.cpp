@@ -689,7 +689,7 @@ void AZoogiGameMode::ComboTick(float Dt)
 			}
 			// Frozen Ring reactive floor: a hard landing scars the ice where it lands (visual only), and the heavy landing
 			// shakes the stage pieces next to it (power-reactive: Ember / Titan landings hit them harder).
-			else if (S.PrevVz < -250.f && Arena && Arena->GetScars() && FVector2D(L).Size() < ZoogiConst::KnockoffRadius - 60.f)
+			else if (S.PrevVz < -250.f && Arena && Arena->GetScars() && FVector2D(L).Size() < AZoogiArena::ActiveKnockoffR - 60.f)
 			{
 				const EZoogiArtifact E = (B->Artifact && B->Artifact->Infused != EZoogiArtifact::None) ? B->Artifact->Infused : EZoogiArtifact::None;
 				Arena->GetScars()->Impact(FVector(L.X, L.Y, 0.f), -S.PrevVz / 350.f, E);
@@ -730,7 +730,7 @@ void AZoogiGameMode::ComboCheckKnockoffs()
 	{
 		FVector2D P(L.X, L.Y);
 		if (P.Size() < 1.f) P = FVector2D(1, 0);
-		P = P.GetSafeNormal() * (ZoogiConst::KnockoffRadius - 60.f);
+		P = P.GetSafeNormal() * (AZoogiArena::ActiveKnockoffR - 60.f);
 		return FVector(P.X, P.Y, 120.f);
 	};
 	for (int32 i = 0; i < Orbs.Num(); ++i)
@@ -1076,7 +1076,7 @@ namespace
 				if (SegBlock(S, Ghost, W, 80.f) || SegBlock(P, Exit, W, 80.f)) { Score += 5000.f; break; }
 			}
 			const FVector2D RC = (AZoogiComboArena::RampMin() + AZoogiComboArena::RampMax()) * 0.5f;
-			if (SegBlock(S, Ghost, RC, 190.f) || SegBlock(P, Exit, RC, 190.f)) Score += 2000.f;
+			if (AZoogiComboArena::HasRamp() && (SegBlock(S, Ghost, RC, 190.f) || SegBlock(P, Exit, RC, 190.f))) Score += 2000.f; // r20: no ramp on Meadow
 		}
 		// Push transfer falls off with the cut; the shooter's tangential coast must not carry it off the edge.
 		const float Decel = G->Arena ? G->Arena->GetRollingDecel() : ZoogiConst::RollingDecel;
