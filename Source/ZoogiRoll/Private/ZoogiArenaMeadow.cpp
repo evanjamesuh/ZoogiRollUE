@@ -21,15 +21,15 @@ void AZoogiArena::BuildMeadow()
 	const FLinearColor Green = ZoogiUtil::Hex(TEXT("#39E37A"));
 	constexpr float SealGlow = 7.0f; // r8: lower strength + deeper green so the tonemapper keeps it saturated // r4: bold seal (T_MeadowGlow rebaked: thick core + soft halo)
 	const FLinearColor Soil = ZoogiUtil::Hex(TEXT("#9C8B73"));
-	const FLinearColor Wood = ZoogiUtil::Hex(TEXT("#B07A55"));
-	const FLinearColor WoodAlt = ZoogiUtil::Hex(TEXT("#C08C66"));
-	const FLinearColor Riser = ZoogiUtil::Hex(TEXT("#8A5E42"));
+	const FLinearColor Wood = ZoogiUtil::Hex(TEXT("#CDA28B"));
+	const FLinearColor WoodAlt = ZoogiUtil::Hex(TEXT("#D9B29A"));
+	const FLinearColor Riser = ZoogiUtil::Hex(TEXT("#A0705A"));
 	const FLinearColor SeatStone = ZoogiUtil::Hex(TEXT("#A8926E")); // r11: warm sandstone, not white
 	const FLinearColor RockA = ZoogiUtil::Hex(TEXT("#B9A889"));
 	const FLinearColor RockB = ZoogiUtil::Hex(TEXT("#8A7458"));
 
 	UMaterialInterface* FloorMat = KitFloorMaterial(TEXT("Meadow"), ZoogiUtil::Hex(TEXT("#00B83A")), SealGlow, 0.80f); // r10: warm tan floor like the art (was washed cream)
-	BuildIsland(ZoogiUtil::Hex(TEXT("#5E9A36")), ZoogiUtil::Hex(TEXT("#74A840")), Soil,
+	BuildIsland(ZoogiUtil::Hex(TEXT("#93A644")), ZoogiUtil::Hex(TEXT("#A6B656")), Soil,
 		ZoogiUtil::Hex(TEXT("#6E5B4A")), ZoogiUtil::Hex(TEXT("#4A3B30")), 0.3f, FloorMat);
 	FloorMID = Cast<UMaterialInstanceDynamic>(FloorMat);
 	if (FloorMID) FloorMID->SetScalarParameterValue(TEXT("GlowTint"), 1.0f); // r4: seal lines paint near-solid green into the base, not a faint tint
@@ -45,7 +45,7 @@ void AZoogiArena::BuildMeadow()
 	UMaterialInterface* Seat = ZoogiUtil::SurfaceMID(this, Wood, 0.8f);
 	UMaterialInterface* SeatAlt = ZoogiUtil::SurfaceMID(this, WoodAlt, 0.8f);
 	UMaterialInterface* SeatRiser = ZoogiUtil::SurfaceMID(this, Riser, 0.85f);
-	UMaterialInterface* GrassTop = ZoogiUtil::GroundMID(this, ZoogiUtil::Hex(TEXT("#5E9A36")), ZoogiUtil::Hex(TEXT("#74A840")), 0.004f, 0.92f);
+	UMaterialInterface* GrassTop = ZoogiUtil::GroundMID(this, ZoogiUtil::Hex(TEXT("#93A644")), ZoogiUtil::Hex(TEXT("#A6B656")), 0.004f, 0.92f);
 	UMaterialInterface* Cliff = ZoogiUtil::GroundMID(this, ZoogiUtil::Hex(TEXT("#A08A6C")), ZoogiUtil::Hex(TEXT("#8A7458")), 0.01f, 0.95f); // r11: sunlit sandstone cliffs like the art
 	UMaterialInterface* GlowTop = ZoogiUtil::GlowMID(this, Green, 1.8f);
 	UPhysicalMaterial* PillarPM = ZoogiPhysics::MakeMaterial(this, 0.25f, 0.6f, false);
@@ -290,14 +290,16 @@ void AZoogiArena::BuildMeadow()
 	// r3: drop channels cut through the terrace at the 4 orb-exit gaps so an orb visibly drops off (no clipping).
 	TerraceGapYaw = { OrbExitGapYaw[0], OrbExitGapYaw[1], OrbExitGapYaw[2], OrbExitGapYaw[3] };
 	TerraceGapHalfDeg = OrbExitGapHalfDeg + 1.2f;
-	AddTerrace(1590.f, 2400.f, -40.f, 1650.f, -20.f, GrassTop, Cliff, Cliff); // r14: grass meets the stone like the art (was a 160 cm moat step)
+	AddTerrace(1590.f, 2400.f, -40.f, 1650.f, -20.f, GrassTop, GrassTop, GrassTop); // r14: grass meets the stone like the art (was a 160 cm moat step)
 	FRandomStream Rng(77);
 	UStaticMesh* SphereMesh = ZoogiUtil::BasicShape(TEXT("Sphere"));
 	UStaticMesh* ConeMesh = ZoogiUtil::BasicShape(TEXT("Cone"));
-	ScatterInstances(ConeMesh, ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#7BC843")), 0.9f), 260, 1700.f, 2350.f, FVector2D(0.07f, 0.12f), 0.f, Rng);
-	ScatterInstances(SphereMesh, ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#FDE047")), 0.6f, ZoogiUtil::Hex(TEXT("#FDE047")), 0.4f), 140, 1700.f, 2350.f, FVector2D(0.08f, 0.12f), 4.f, Rng, true);
-	ScatterInstances(SphereMesh, ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#FFFFFF")), 0.6f), 120, 1700.f, 2350.f, FVector2D(0.07f, 0.11f), 4.f, Rng, true);
-	ScatterInstances(SphereMesh, ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#F472B6")), 0.6f, ZoogiUtil::Hex(TEXT("#F472B6")), 0.3f), 100, 1700.f, 2350.f, FVector2D(0.08f, 0.12f), 4.f, Rng, true);
+	ScatterInstances(ConeMesh, ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#9AAE4E")), 0.9f), 700, 1700.f, 4200.f, FVector2D(0.28f, 0.45f), -44.f, Rng);
+	ScatterInstances(SphereMesh, ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#FDE047")), 0.6f, ZoogiUtil::Hex(TEXT("#FDE047")), 0.4f), 420, 1700.f, 4200.f, FVector2D(0.28f, 0.45f), -38.f, Rng, true);
+	ScatterInstances(SphereMesh, ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#FFFFFF")), 0.6f), 360, 1700.f, 4200.f, FVector2D(0.28f, 0.45f), -38.f, Rng, true);
+	ScatterInstances(SphereMesh, ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#F472B6")), 0.6f, ZoogiUtil::Hex(TEXT("#F472B6")), 0.3f), 320, 1700.f, 4200.f, FVector2D(0.28f, 0.45f), -38.f, Rng, true);
+	ScatterInstances(SphereMesh, ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#B4A68C")), 0.95f), 120, 1750.f, 4200.f, FVector2D(0.35f, 0.9f), -60.f, Rng); // r15: field rocks
+	ScatterInstances(SphereMesh, ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#C4A0E8")), 0.6f), 240, 1700.f, 4200.f, FVector2D(0.28f, 0.45f), -38.f, Rng, true); // r15: lavender flowers
 
 	for (int32 i = 0; i < NumStands; ++i)
 		AddStands(StandCenters[i], StandArcs[i], StandRIn, -40.f, StandTiers, 72.f, 50.f, Seat, SeatAlt, SeatRiser, Stone);
@@ -384,7 +386,7 @@ void AZoogiArena::BuildMeadow()
 			}
 			for (int32 g = 0; g < 4; ++g)
 				Ravine.ArcSlab(3560.f, 3600.f, OrbExitGapYaw[g] - 11.f, OrbExitGapYaw[g] + 11.f, -1000.f, -46.f, 4);
-			AddFrozenProc(Ravine, Cliff, nullptr, false);
+			AddFrozenProc(Ravine, GrassTop, nullptr, false); // r15: grassy banks, no hard cliff cut
 		}
 		// r6: three waterfalls spilling off grassy cliff mesas in the valley (art: NW, N, NE), facing the arena.
 		const float FallYaw[3] = { 236.f, 268.f, 304.f }, FallR[3] = { 5200.f, 6800.f, 5600.f }, MesaTop[3] = { 500.f, 800.f, 600.f };
@@ -403,7 +405,7 @@ void AZoogiArena::BuildMeadow()
 	{
 		UMaterialInterface* HillTop = GrassTop;
 		UMaterialInterface* Red = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#A8302A")), 0.65f);
-		UMaterialInterface* RoofGrey = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#5C6470")), 0.6f);
+		UMaterialInterface* RoofGrey = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#B8402C")), 0.6f);
 		// 5-storey pagoda tower on the NW hill with two small halls (art: top-left cluster).
 		{
 			const FVector2D P(Pol(2550.f, 226.f, 0.f));
@@ -473,7 +475,7 @@ void AZoogiArena::BuildMeadow()
 
 	UStaticMesh* Oak = ZoogiUtil::LoadMesh(TEXT("/Game/Env/OakTree/SM_OakTree.SM_OakTree"));
 	UStaticMesh* Pine = ZoogiUtil::LoadMesh(TEXT("/Game/Env/PineTree/SM_PineTree.SM_PineTree"));
-	const FLinearColor GA = ZoogiUtil::Hex(TEXT("#5E9A36")), GB = ZoogiUtil::Hex(TEXT("#74A840")), RockC = ZoogiUtil::Hex(TEXT("#5E4C3D"));
+	const FLinearColor GA = ZoogiUtil::Hex(TEXT("#93A644")), GB = ZoogiUtil::Hex(TEXT("#A6B656")), RockC = ZoogiUtil::Hex(TEXT("#5E4C3D"));
 	// r11: no floating islets (the art has none).
 	(void)Oak; (void)Pine; (void)GA; (void)GB; (void)RockC;
 
