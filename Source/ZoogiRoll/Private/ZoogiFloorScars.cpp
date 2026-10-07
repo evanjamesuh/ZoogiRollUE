@@ -91,7 +91,7 @@ int32 AZoogiFloorScars::Impact(const FVector& P, float Strength, EZoogiArtifact 
 	for (FScar& S : Scars)
 	{
 		const float D = FVector2D::Distance(FVector2D(S.P), P2);
-		if (D < 150.f * S.Size && D < Best) { Best = D; Near = &S; }
+		if (D < 240.f * S.Size && D < Best) { Best = D; Near = &S; }
 	}
 	if (Near && Clock - Near->LastAt < 0.6f) return Near->Stage;
 	if (Element == EZoogiArtifact::Frost)
@@ -183,18 +183,18 @@ void AZoogiFloorScars::Apply(FScar& S)
 	switch (S.Stage)
 	{
 	case 1: // DAMAGED: hairline cracks + frost scuff
-		Layer(0, TexCrack, 2.2f, 0.6f, Warm, 0.95f, 0.9f, 0.f, 0.f);
-		Layer(2, TexFrost, 1.6f, 0.8f, FLinearColor::White, 1.f, 0.6f, 0.f, 35.f);
+		Layer(0, TexCrack, 3.4f, 0.6f, Warm, 0.85f, 1.f, 0.f, 0.f);
+		Layer(2, TexFrost, 2.4f, 0.8f, FLinearColor::White, 1.f, 0.6f, 0.f, 35.f);
 		break;
 	case 2: // CRACKED: glow-crack burst over the cracks + shards
-		Layer(0, TexCrack, 2.6f, 0.6f, Warm, 0.9f, 1.f, 0.f, 0.f);
-		Layer(1, TexGlow, 2.6f, 1.0f, FLinearColor(0.75f, 1.f, 1.f), 0.6f, 0.95f, 1.6f, 15.f);
-		Layer(2, TexShards, 1.8f, 0.8f, FLinearColor::White, 1.f, 0.8f, 0.f, 70.f);
+		Layer(0, TexCrack, 4.2f, 0.6f, Warm, 0.75f, 1.f, 0.f, 0.f);
+		Layer(1, TexGlow, 4.4f, 1.0f, FLinearColor(0.4f, 0.9f, 1.f), 0.5f, 0.95f, 0.75f, 15.f);
+		Layer(2, TexShards, 2.8f, 0.8f, FLinearColor::White, 1.f, 0.8f, 0.f, 70.f);
 		break;
 	case 3: // CRATER: the damaged.png crater (charcoal + cyan cracks), plus a long glow-crack network
-		Layer(0, TexArtCrater ? TexArtCrater.Get() : TexCrater.Get(), 3.0f, 0.7f, Warm, 1.f, 1.f, 0.15f, 0.f);
-		Layer(1, TexGlow, 3.8f, 1.1f, FLinearColor(0.75f, 1.f, 1.f), 0.6f, 1.f, 1.8f, 25.f);
-		Layer(2, TexCrater, 1.9f, 0.9f, Warm, 0.9f, 0.85f, 0.f, 50.f);
+		Layer(0, TexArtCrater ? TexArtCrater.Get() : TexCrater.Get(), 5.6f, 0.7f, Warm, 0.55f, 1.f, 0.05f, 0.f);
+		Layer(1, TexGlow, 6.0f, 1.1f, FLinearColor(0.35f, 0.88f, 1.f), 0.5f, 1.f, 0.85f, 25.f);
+		Layer(2, TexCrater, 3.2f, 0.9f, Warm, 0.45f, 0.95f, 0.f, 50.f);
 		break;
 	default:
 		break;

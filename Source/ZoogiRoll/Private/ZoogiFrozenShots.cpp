@@ -17,6 +17,7 @@
 #include "Camera/CameraComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/HUD.h"
 #include "GameFramework/WorldSettings.h"
 #include "Misc/Paths.h"
 #include "UnrealClient.h"
@@ -33,6 +34,7 @@ namespace
 	{
 		using namespace ZoogiFrozen;
 		TArray<FShotView> V;
+		V.Add({ TEXT("overview"), FVector(0.f, 0.f, 0.f), 270.f, 64.f, 6300.f, 62.f }); // = Buzzy damaged.png framing
 		V.Add({ TEXT("walls"), SPol(WallR, 281.f, 50.f), 281.f, 24.f, 950.f, 70.f });
 		V.Add({ TEXT("gate_arch"), SPol(ArchR, GateYaw, 110.f), GateYaw, 16.f, 1150.f, 70.f });
 		V.Add({ TEXT("stands"), SPol(IsletDist[2], IsletYaw[2], 80.f), IsletYaw[2], 22.f, 1600.f, 70.f });
@@ -113,7 +115,19 @@ void AZoogiGameMode::TickDamageShots(float Dt)
 		if (Now - DamageShotReal < 1.5) return;
 		W->GetWorldSettings()->SetTimeDilation(0.0001f);
 		ShotCam = W->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform::Identity);
-		if (ShotCam) ShotCam->GetCameraComponent()->bConstrainAspectRatio = false;
+		if (ShotCam)
+		{
+			UCameraComponent* C = ShotCam->GetCameraComponent();
+			C->bConstrainAspectRatio = false;
+			// Time is dilated to ~0 while capturing, and eye adaptation runs on world time: make it adapt instantly instead
+			// of staying stuck on the exposure of the previous view (the first captures came out blown out).
+			C->PostProcessSettings.bOverride_AutoExposureSpeedUp = true;
+			C->PostProcessSettings.bOverride_AutoExposureSpeedDown = true;
+			C->PostProcessSettings.AutoExposureSpeedUp = 2.0e6f;
+			C->PostProcessSettings.AutoExposureSpeedDown = 2.0e6f;
+			C->PostProcessBlendWeight = 1.f;
+		}
+		if (PC->MyHUD) PC->MyHUD->bShowHUD = false;
 		DamageShotStep = 1;
 		DamageShotReal = Now;
 		ApplyState(0);
@@ -130,6 +144,7 @@ void AZoogiGameMode::TickDamageShots(float Dt)
 		W->GetWorldSettings()->SetTimeDilation(1.f);
 		if (ShotCam) { ShotCam->Destroy(); ShotCam = nullptr; }
 		if (APawn* Pw = PC->GetPawn()) PC->SetViewTarget(Pw);
+		if (PC->MyHUD) PC->MyHUD->bShowHUD = true;
 		bDamageShots = false;
 		UE_LOG(LogZoogi, Log, TEXT("Damage shots: done, everything restored"));
 		return;
@@ -147,14 +162,14 @@ void AZoogiGameMode::TickDamageShots(float Dt)
 		PC->SetViewTarget(ShotCam);
 	}
 	const double T = Now - DamageShotReal;
-	if (T > 0.9 && !ShotsTaken.Contains(FString::Printf(TEXT("dmg_%d_%d"), S, Vi)))
+	if (T > 1.6 && !ShotsTaken.Contains(FString::Printf(TEXT("dmg_%d_%d"), S, Vi)))
 	{
 		ShotsTaken.Add(FString::Printf(TEXT("dmg_%d_%d"), S, Vi));
 		const FString Path = FPaths::Combine(ShotDir, FString::Printf(TEXT("%02d_dmg_%d_%s_%s.png"), ShotSeq++, S, *AZoogiArenaPiece::StateName((EZoogiPieceState)S).ToLower(), V.Name));
 		FScreenshotRequest::RequestScreenshot(Path, false, false);
 		UE_LOG(LogZoogi, Log, TEXT("Screenshot requested: %s"), *Path);
 	}
-	if (T > 1.5)
+	if (T > 2.2)
 	{
 		++DamageShotStep;
 		DamageShotReal = Now;

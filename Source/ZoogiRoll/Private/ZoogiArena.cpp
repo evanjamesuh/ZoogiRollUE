@@ -357,6 +357,7 @@ void AZoogiArena::SetupSky(EZoogiArena InTheme)
 	SkyLight->SetIntensity(1.f); // per-theme overrides below (Frozen)
 
 	Fog->SetVolumetricFog(false);
+	Fog->SetStartDistance(0.f);
 	Fog->SetFogCutoffDistance(0.f); // AddPanoramaSky raises it so the painted sky sphere is not fogged
 	Clouds->SetVisibility(true);
 	Atmosphere->SetVisibility(true);
@@ -371,8 +372,9 @@ void AZoogiArena::SetupSky(EZoogiArena InTheme)
 		Sun->SetRelativeRotation(FRotator(-38.f, 125.f, 0.f));
 		Sun->SetIntensity(8.f);
 		Sun->SetLightColor(FLinearColor(0.9f, 0.95f, 1.f));
-		Fog->SetFogDensity(0.005f);
-		Fog->SetFogInscatteringColor(FLinearColor(0.6f, 0.75f, 0.95f));
+		Fog->SetFogDensity(0.02f);
+		Fog->SetStartDistance(9000.f); // court stays crisp; far mountains fade into the pale haze like the art
+		Fog->SetFogInscatteringColor(FLinearColor(0.72f, 0.84f, 0.98f));
 		Clouds->SetVisibility(false);
 		SkyLight->SetIntensity(1.35f);
 		P.AutoExposureBias = -0.8f;

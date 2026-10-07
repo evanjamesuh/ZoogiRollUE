@@ -105,22 +105,35 @@ el = (0.5 - (np.arange(PH) + 0.5) / PH) * 180.0  # elevation deg, +90 top
 zen = np.array([60, 120, 200], np.float32); hor = np.array([205, 228, 245], np.float32)
 t = np.clip(el / 60.0, 0, 1)[:, None]
 pano[:] = (hor * (1 - t) + zen * t)[:, None, :]
-# hero sky (aurora, sun) rows 0..0.18H over the full width -> elevation 42..12 deg, mirrored to loop
+# Round 2 (Oct 6, 9 PM): the art keeps the aurora just above the peaks, and the game cameras only see ~6-10 deg above the
+# horizon, so the hero sky band is compressed to elevation 30..5 and the mountain band sits at 11..-5. Tiles are joined
+# with feathered cross-fades (no hard seams) and the mountain rows stop above the stand islets (no bleacher fragments).
 def loop(img):
     return np.concatenate([img, img[:, ::-1]], axis=1)
-sky = loop(hero[0:int(H * 0.18)])
 e = lambda d: int((90 - d) / 180 * PH)
-r0, r1 = e(42), e(12)
+def xfade_concat(tiles, feather):
+    out = tiles[0]
+    for t in tiles[1:]:
+        f = min(feather, out.shape[1] // 3, t.shape[1] // 3)
+        w = np.linspace(0, 1, f, dtype=np.float32)[None, :, None]
+        mid = out[:, -f:] * (1 - w) + t[:, :f] * w
+        out = np.concatenate([out[:, :-f], mid, t[:, f:]], axis=1)
+    f = min(feather, out.shape[1] // 6)
+    w = np.linspace(0, 1, f, dtype=np.float32)[None, :, None]
+    head = out[:, :f] * w + out[:, -f:] * (1 - w)
+    return np.concatenate([head, out[:, f:-f]], axis=1)
+sky = xfade_concat([hero[0:int(H * 0.17)], hero[0:int(H * 0.17), ::-1]], 160)
+r0, r1 = e(30), e(5)
 skyR = cv2.resize(sky, (PW, r1 - r0), interpolation=cv2.INTER_AREA)
 fade = np.clip((np.arange(r1 - r0) / (r1 - r0)) / 0.3, 0, 1)[:, None, None]
 pano[r0:r1] = pano[r0:r1] * (1 - fade) + skyR * fade
-# mountain range: hero side columns only (no arena), rows 0.14..0.36H -> elevation 14..-6 deg
-lm = hero[int(H * 0.14):int(H * 0.36), 0:int(W * 0.24)]
-rm = hero[int(H * 0.14):int(H * 0.36), int(W * 0.80):]
-mts = np.concatenate([lm, rm, lm[:, ::-1], rm[:, ::-1]], axis=1)
-r2, r3 = e(14), e(-6)
+lm = hero[int(H * 0.115):int(H * 0.27), 0:int(W * 0.27)]
+rm = hero[int(H * 0.115):int(H * 0.27), int(W * 0.75):]
+mts = xfade_concat([lm, rm, lm[:, ::-1], rm[:, ::-1]], 140)
+r2, r3 = e(11), e(-5)
 mR = cv2.resize(mts, (PW, r3 - r2), interpolation=cv2.INTER_AREA)
-mf = np.clip((np.arange(r3 - r2) / (r3 - r2)) / 0.22, 0, 1)[:, None, None]
+mt = np.arange(r3 - r2) / (r3 - r2)
+mf = (np.clip(mt / 0.28, 0, 1) * np.clip((1.0 - mt) / 0.35, 0, 1))[:, None, None]  # feet dissolve into the haze
 pano[r2:r3] = pano[r2:r3] * (1 - mf) + mR * mf
 # below: soft painted cloud sea (procedural fbm, art palette), mountain feet fading into it
 rng = np.random.default_rng(5)
@@ -138,7 +151,7 @@ c = np.clip((c - 0.35) / 0.4, 0, 1)
 c = cv2.GaussianBlur(c, (0, 0), 3)
 deep = np.array([120, 160, 205], np.float32); cloud = np.array([236, 244, 252], np.float32)
 low = deep * (1 - c[..., None]) + cloud * c[..., None]
-lf = np.clip(np.arange(hh) / 70.0, 0, 1)[:, None, None]
+lf = np.clip(np.arange(hh) / 110.0, 0, 1)[:, None, None]
 pano[r3:] = pano[r3 - 1:r3] * (1 - lf) + low * lf
 Image.fromarray(np.clip(pano, 0, 255).astype(np.uint8)).save(os.path.join(OUT, 'T_FrozenSky.png'))
 print('sky ok')
