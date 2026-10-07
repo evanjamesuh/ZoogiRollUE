@@ -19,6 +19,7 @@ void AZoogiArena::BuildMeadow()
 {
 	using namespace ZoogiMeadow; // function scope: unity builds also pull in ZoogiFrozen's WallR/GateYaw/...
 	const FLinearColor Green = ZoogiUtil::Hex(TEXT("#39E37A"));
+	constexpr float SealGlow = 9.0f; // r4: bold seal (T_MeadowGlow rebaked: thick core + soft halo)
 	const FLinearColor Soil = ZoogiUtil::Hex(TEXT("#9C8B73"));
 	const FLinearColor Wood = ZoogiUtil::Hex(TEXT("#8B5A2B"));
 	const FLinearColor WoodAlt = ZoogiUtil::Hex(TEXT("#A06A38"));
@@ -27,10 +28,11 @@ void AZoogiArena::BuildMeadow()
 	const FLinearColor RockA = ZoogiUtil::Hex(TEXT("#B9A889"));
 	const FLinearColor RockB = ZoogiUtil::Hex(TEXT("#8E8063"));
 
-	UMaterialInterface* FloorMat = KitFloorMaterial(TEXT("Meadow"), Green, 2.6f, 1.12f);
+	UMaterialInterface* FloorMat = KitFloorMaterial(TEXT("Meadow"), ZoogiUtil::Hex(TEXT("#12E04A")), SealGlow, 0.98f);
 	BuildIsland(ZoogiUtil::Hex(TEXT("#3F8A2C")), ZoogiUtil::Hex(TEXT("#55A336")), Soil,
 		ZoogiUtil::Hex(TEXT("#6E5B4A")), ZoogiUtil::Hex(TEXT("#4A3B30")), 0.3f, FloorMat);
 	FloorMID = Cast<UMaterialInstanceDynamic>(FloorMat);
+	if (FloorMID) FloorMID->SetScalarParameterValue(TEXT("GlowTint"), 1.0f); // r4: seal lines paint near-solid green into the base, not a faint tint
 	AddPanoramaSky(TEXT("Meadow"), 1.0f, 0.f, FLinearColor::White);
 	AddCurb(FloorR + 40.f, -2.f, 55.f, ZoogiUtil::GroundMID(this, Soil, ZoogiUtil::Hex(TEXT("#7A6B55")), 0.01f, 0.92f));
 
@@ -231,6 +233,84 @@ void AZoogiArena::BuildMeadow()
 		AddWaterfall(FVector(FMath::Cos(Rad) * 2100.f, FMath::Sin(Rad) * 2100.f, -80.f), A + 180.f, 140.f + (i % 3) * 30.f, 900.f + (i % 2) * 400.f, 40.f);
 	}
 
+	// r4: crisp layered mountains (3 ridges, near green -> far blue) with tall waterfalls, replacing the pale haze.
+	{
+		UStaticMesh* Cone = ZoogiUtil::BasicShape(TEXT("Cone"));
+		FRandomStream MR(4242);
+		struct FRidge { float R; float HMin, HMax; FLinearColor A, B; int32 N; };
+		const FRidge Ridges[3] = {
+			{ 20000.f, 1800.f, 3200.f, ZoogiUtil::Hex(TEXT("#3E7F3A")), ZoogiUtil::Hex(TEXT("#5C9A45")), 40 },
+			{ 32000.f, 4200.f, 6200.f, ZoogiUtil::Hex(TEXT("#4F8C7A")), ZoogiUtil::Hex(TEXT("#6FA48E")), 44 },
+			{ 50000.f, 7000.f, 10500.f, ZoogiUtil::Hex(TEXT("#86ABC8")), ZoogiUtil::Hex(TEXT("#AFC8DE")), 48 } };
+		UMaterialInterface* Snow = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#EEF4F8")), 0.8f);
+		for (int32 r = 0; r < 3; ++r)
+		{
+			const FRidge& Rg = Ridges[r];
+			UMaterialInterface* MA = ZoogiUtil::SurfaceMID(this, Rg.A, 0.95f);
+			UMaterialInterface* MB = ZoogiUtil::SurfaceMID(this, Rg.B, 0.95f);
+			for (int32 i = 0; i < Rg.N; ++i)
+			{
+				const float A = (i + MR.FRandRange(-0.3f, 0.3f)) * 2.f * PI / Rg.N;
+				const float D = Rg.R * MR.FRandRange(0.92f, 1.1f);
+				const float H = MR.FRandRange(Rg.HMin, Rg.HMax), W = H * MR.FRandRange(2.6f, 3.6f);
+				const FVector P(FMath::Cos(A) * D, FMath::Sin(A) * D, -2400.f + H * 0.5f);
+				UStaticMeshComponent* C = AddMesh(Cone, (i & 1) ? MA : MB, false, false);
+				C->SetRelativeLocationAndRotation(P, FRotator(0.f, MR.FRandRange(0.f, 360.f), 0.f));
+				C->SetRelativeScale3D(FVector(W / 100.f, W / 100.f * MR.FRandRange(0.8f, 1.2f), H / 100.f));
+				if (r == 2 && H > 9000.f) // snow caps on the tallest far peaks
+				{
+					UStaticMeshComponent* Cap = AddMesh(Cone, Snow, false, false);
+					Cap->SetRelativeLocation(P + FVector(0, 0, H * 0.35f));
+					Cap->SetRelativeScale3D(FVector(W * 0.3f / 100.f, W * 0.3f / 100.f, H * 0.3f / 100.f));
+				}
+			}
+		}
+		// Visible waterfalls down the near ridge, facing the arena (hero/low34 views).
+		const float FallYaw[6] = { 5.f, 28.f, 52.f, 128.f, 152.f, 200.f };
+		for (int32 i = 0; i < 6; ++i)
+		{
+			const float Rad = FMath::DegreesToRadians(FallYaw[i]);
+			const float R = 17500.f + (i % 2) * 900.f;
+			AddWaterfall(FVector(FMath::Cos(Rad) * R, FMath::Sin(Rad) * R, -700.f + (i % 3) * 250.f), FallYaw[i] + 180.f, 520.f + (i % 2) * 160.f, 2400.f, 220.f);
+		}
+	}
+
+	// r4: hand-built landmark buildings from the art. Both sit far past the knock-off rim on their own hills, where no
+	// Zoogi or power can reach, so they are solid scenery (no collision, not breakable).
+	{
+		UMaterialInterface* HillTop = GrassTop;
+		UMaterialInterface* Red = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#A8302A")), 0.65f);
+		// Tall 5-storey pagoda tower on a hill (art: back-left).
+		{
+			const float Rad = FMath::DegreesToRadians(-8.f);
+			const FVector2D P(FMath::Cos(Rad) * 4300.f, FMath::Sin(Rad) * 4300.f);
+			AddCylinder(P, 900.f, 1400.f, 120.f, HillTop, false);
+			AddUnderCone(P, 900.f, 1600.f, -1280.f, Cliff);
+			AddPagoda(FVector(P.X, P.Y, 120.f), 180.f - 8.f, 5, 150.f, Body, Panel, Roof, Trim, Stone, Bronze);
+		}
+		// Gatehouse hall (art: right): stepped plinth, red colonnade, double hip roof, glowing door.
+		{
+			const float Yaw = 48.f, Rad = FMath::DegreesToRadians(Yaw);
+			const FVector2D P(FMath::Cos(Rad) * 4150.f, FMath::Sin(Rad) * 4150.f);
+			const FRotator Rot(0.f, Yaw + 180.f, 0.f);
+			AddCylinder(P, 1000.f, 1300.f, 0.f, HillTop, false);
+			AddUnderCone(P, 1000.f, 1500.f, -1300.f, Cliff);
+			for (int32 s = 0; s < 3; ++s)
+				AddBoxR(FVector(P.X, P.Y, 20.f + s * 40.f), FVector(1100.f - s * 90.f, 760.f - s * 70.f, 40.f), Rot, Stone);
+			const float Zc = 140.f;
+			for (int32 c = 0; c < 6; ++c)
+			{
+				const FVector L = Rot.RotateVector(FVector(-360.f, -400.f + c * 160.f, 0.f));
+				AddBoxR(FVector(P.X + L.X, P.Y + L.Y, Zc + 210.f), FVector(46.f, 46.f, 420.f), Rot, Red);
+			}
+			AddBoxR(FVector(P.X, P.Y, Zc + 210.f), FVector(560.f, 900.f, 420.f), Rot, Body);
+			const FVector Door = Rot.RotateVector(FVector(-282.f, 0.f, 0.f));
+			AddBoxR(FVector(P.X + Door.X, P.Y + Door.Y, Zc + 150.f), FVector(8.f, 200.f, 300.f), Rot, Portal);
+			AddBoxR(FVector(P.X, P.Y, Zc + 440.f), FVector(880.f, 1120.f, 40.f), Rot, Trim);
+			AddPagoda(FVector(P.X, P.Y, Zc + 400.f), Yaw + 180.f, 2, 230.f, Body, Panel, Roof, Trim, Stone, Bronze);
+		}
+	}
+
 	UStaticMesh* Oak = ZoogiUtil::LoadMesh(TEXT("/Game/Env/OakTree/SM_OakTree.SM_OakTree"));
 	UStaticMesh* Pine = ZoogiUtil::LoadMesh(TEXT("/Game/Env/PineTree/SM_PineTree.SM_PineTree"));
 	const FLinearColor GA = ZoogiUtil::Hex(TEXT("#3F8A2C")), GB = ZoogiUtil::Hex(TEXT("#55A336")), RockC = ZoogiUtil::Hex(TEXT("#5E4C3D"));
@@ -261,7 +341,7 @@ void AZoogiArena::BuildMeadow()
 			UE_LOG(LogZoogi, Log, TEXT("Meadow crater slab kit: %d meshes"), Scars->SlabMeshes.Num());
 		}
 	}
-	if (Forming && FloorMID) Forming->AddParamRamp(FloorMID, TEXT("GlowStrength"), 0.f, 2.6f, 2.6f, 0.5f);
+	if (Forming && FloorMID) Forming->AddParamRamp(FloorMID, TEXT("GlowStrength"), 0.f, SealGlow, 2.6f, 0.5f);
 	// -ZoogiArenaPlayTest: orb out through each orb-exit gap (must count as ORB OUT), a control shot into the seat wall
 	// (must stay in), and normal Zoogi shots that must crack the seat wall and a ricochet wall.
 	if (AZoogiArenaPlayTest* PT = AZoogiArenaPlayTest::MaybeSpawn(this))
