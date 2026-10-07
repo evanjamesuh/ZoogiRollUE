@@ -39,6 +39,9 @@ public:
 	float GetKnockoffRadius() const { return ZoogiConst::KnockoffRadius; }
 	/** Extra orb spots off the main disc (Frozen bleacher islets, round 3c); world positions, Z = orb centre. Rebuilt per arena. */
 	TArray<FVector> ExtraOrbSpots;
+	/** Per-map starting orb ring (0 = ZoogiConst::OrbRingRadius) and its yaw offset in degrees; reset on every build. */
+	float OrbRingRadiusOverride = 0.f;
+	float OrbRingYawOffset = 0.f;
 	/** True past the knockout line (circle, or the Night Circuit rectangle). */
 	bool IsOffCourt(const FVector2D& P) const;
 	/** False if a ball of this radius would overlap a solid court piece (Night Circuit pads/posts). */

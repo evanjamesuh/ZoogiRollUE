@@ -192,6 +192,8 @@ void AZoogiArena::Clear()
 	FloorMID = nullptr;
 	FrozenMats.Reset();
 	SpawnRadiusOverride = 0.f;
+	OrbRingRadiusOverride = 0.f;
+	OrbRingYawOffset = 0.f;
 	SolidBoxes.Reset();
 	SolidPosts.Reset();
 }
@@ -447,7 +449,7 @@ void AZoogiArena::SetupSky(EZoogiArena InTheme)
 		// r3 (Buzzy Meadow): warm high sun, saturated greens, light haze so the painted hills/waterfalls read.
 		Sun->SetRelativeRotation(FRotator(-48.f, 215.f, 0.f));
 		Sun->SetIntensity(9.5f);
-		Sun->SetLightColor(FLinearColor(1.f, 0.94f, 0.82f));
+		Sun->SetLightColor(FLinearColor(1.f, 0.9f, 0.74f)); // r10: warmer golden afternoon
 		Fog->SetFogDensity(0.0012f);
 		Fog->SetStartDistance(16000.f);
 		Fog->SetFogInscatteringColor(FLinearColor(0.55f, 0.72f, 0.95f));
@@ -455,8 +457,8 @@ void AZoogiArena::SetupSky(EZoogiArena InTheme)
 		SkyLight->SetIntensity(1.25f);
 		P.AutoExposureBias = -0.3f;
 		P.BloomIntensity = 1.0f;
-		P.ColorSaturation = FVector4(1.12f, 1.12f, 1.12f, 1.f);
-		P.ColorContrast = FVector4(1.08f, 1.08f, 1.08f, 1.f);
+		P.ColorSaturation = FVector4(0.95f, 0.95f, 0.95f, 1.f); // r10: art palette is soft/muted
+		P.ColorContrast = FVector4(1.0f, 1.0f, 1.0f, 1.f);
 		break;
 	default:
 		Sun->SetRelativeRotation(FRotator(-42.f, 35.f, 0.f));

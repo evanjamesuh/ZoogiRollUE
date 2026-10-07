@@ -23,12 +23,14 @@ namespace ZoogiMeadow
 
 	// r5 ramps, measured off the Buzzy top-down (screen up = -Y = yaw 270, screen right = +X = yaw 0; 1 art px ~ 4.37 cm).
 	// Central spiral ramp: floor-level foot at yaw 125, climbs counter-clockwise (125 -> 0 -> -90) to the raised disc at yaw 270.
-	inline constexpr float SpiralRIn = 210.f, SpiralROut = 410.f;   // band kept inside the r 500 orb ring
+	inline constexpr float SpiralRIn = 300.f, SpiralROut = 600.f;   // r9: full art width (~3 m); orb ring moved out to r690
 	inline constexpr float SpiralA0 = 125.f, SpiralA1 = -90.f;       // foot -> top
 	inline constexpr float SpiralH = 140.f;
 	inline constexpr float SpiralRailH = 55.f; // r6: the art's tall outer ring wall
 	inline constexpr float HubWallA0 = 140.f, HubWallA1 = 255.f; // r6: west half of the yin-yang ring wall
-	inline constexpr float DiscYaw = 270.f, DiscR = 310.f, DiscRad = 120.f;
+	inline constexpr float DiscYaw = 270.f, DiscR = 450.f, DiscRad = 160.f;
+	// r9: Meadow starting orb ring (15 evenly spread) between the spiral and the pillars, rotated clear of the pillars.
+	inline constexpr float OrbRingR = 690.f, OrbRingYaw = 7.f;
 	// Two tall wooden quarter-pipes flanking the north (270) gap, radial, rising outward.
 	inline constexpr float PipeYaw[2] = { 250.f, 290.f };
 	inline constexpr float PipeR0 = 1300.f, PipeRq = 520.f, PipeEndDeg = 70.f, PipeWid = 280.f;
@@ -37,7 +39,7 @@ namespace ZoogiMeadow
 	inline constexpr float LipRLow = 1470.f, LipRHigh = 1290.f, LipWid = 170.f, LipH = 100.f;
 	// Wooden bench blocks (breakable) in the mid ring.
 	inline constexpr int32 NumBenches = 7;
-	inline constexpr float BenchYaw[NumBenches] = { 240.f, 209.f, 337.f, 167.f, 117.f, 65.f, 20.f };
+	inline constexpr float BenchYaw[NumBenches] = { 235.f, 211.f, 331.f, 163.f, 115.f, 67.f, 19.f }; // r9: snapped (<=6 deg) to gaps between ring orbs
 	inline constexpr float BenchR = 700.f;
 
 	// Outer wooden stands: 4 arcs hugging the floor edge (art), gaps at 0/90/180/270 between them.
