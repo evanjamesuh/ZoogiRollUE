@@ -331,6 +331,7 @@ void AZoogiArena::Build(EZoogiArena InTheme)
 		M->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 		++CamBlockers;
 	}
+	if (InTheme != EZoogiArena::Meadow && InTheme != EZoogiArena::Frozen) PlaceIncoming(); // after cam-blocker pass: imported dressing stays camera-transparent
 	UE_LOG(LogZoogi, Log, TEXT("Built arena %s with %d components (%d camera blockers)"), *ZoogiUtil::ArenaName(InTheme), Built.Num(), CamBlockers);
 	// -ZoogiArenaShots: fixed-camera A/B views of the arena (test tooling, see ZoogiArenaShowcase.h).
 	static const TCHAR* Slugs[] = { TEXT("meadow"), TEXT("frozen"), TEXT("volcanic"), TEXT("cosmic"), TEXT("arabian"), TEXT("tomb"), TEXT("neon") };
