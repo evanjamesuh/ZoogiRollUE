@@ -623,3 +623,6 @@ Awakened / crit-grade hit), and so are the collider, events, SFX, popup, feed li
   the using-namespace. Shots: box shots/arenas/meadow-buzzy/ (r2_sbs_*.jpg, r2_arena_meadow_*.jpg, r2_arenatest_*.jpg).
   Still to do on Meadow: sky panorama not imported on main (T_MeadowSky), floor glow/carving weaker than Buzzy, pillars small, scars
   still use the Frozen decal set.
+## Meadow r3 (Oct 7, 12:34 AM CT)
+- Buzzy Meadow sky (T_MeadowSky), floor glow 2.6, pillars H340 x1.3 (unbreakable, rise at start), Meadow brown/green scar set + dark crater (no cyan), terrace cut with drop channels at 0/90/180/270 (240 cm), 6-tier stands r1950, Meadow lighting/saturation.
+- Gap test 7/7 PASS. Packaged 12:34 AM CT, PACKAGE_EXIT=0, Desktop shortcut OK.
