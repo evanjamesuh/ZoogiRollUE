@@ -3,6 +3,17 @@
 Project: `C:\dev\ZoogiRollUnreal\ZoogiRoll.uproject` (C++ module `ZoogiRoll`, Chaos physics).
 The web game at `C:\dev\ZoogiRollUE` is read-only reference and is never modified.
 
+## Frozen Ring rebuilt from the Buzzy art (round 1): Tue Oct 6, 8:45 PM CT (merge 5bd6ea3, code 4386d51)
+Packaged Development Win64 at **8:40–8:43 PM CT**, giving `Packaged\Windows\ZoogiRoll.exe` (exe written 8:41 PM CT, 334 MB). The editor DLL was rebuilt at 8:38 PM CT. Branch `frozen-buzzy` was merged into `main` locally and never pushed. A packaged smoke run (`-ZoogiCombo -ZoogiArena=1`) confirmed that Frozen 2v2 forms the stage (84 pieces in 2.6 s, colliders switch on once each piece settles) and that the Recovery Gate returns players. A Meadow regression smoke run is unchanged.
+
+**What's new on FROZEN RING** (menu ARENA → Frozen Ring, Classic or 2v2 COMBO)
+* Rebuilt to match Evan's Buzzy Frozen Ring art. Textures are derived from the Buzzy images (`Scripts/arenas/gen_frozen.py` → `T_Frozen*`, `M_FrozenPiece`, `M_FrozenDecal`). The scene has a glowing icy court with cyan Resonance runes, a snowy rim with ice blocks, curved bank walls and arches, four snow-roof pavilion stands on floating islets with bridges, frozen cliffs with icicles, mountains, an aurora sky, and the hub of 4 ice-stone pillars with ember/frost/storm/titan orbs on a rune floor.
+* **Stage forming intro** (`UZoogiStageForming`, reusable): the arena assembles in about 2.6 s at match start. SKIP with click, Space, Enter or Esc. The 4 hub pillars rise out of the floor. No piece has collision until it has settled.
+* **Destruction everywhere except the pillars** (`AZoogiArenaPiece`): walls, arches, stands, bridges, rim blocks, ramp, platform, bumpers and rocks all go intact → damaged → cracked → broken. Damage comes from impacts, the power hook (Ember/Frost/Storm/Titan, extensible) and ring-out crashes. The floor gets scars (cracks → cyan craters). The 4 pillars and their orbs are unbreakable. Fairness: broken pieces never block a path or trap a Zoogi, and the floor collider stays intact.
+* 2v2 COMBO on Frozen: bank wall, ramp and hex platform, 3 ice-crystal bumpers, a damageable hex-ice section, the Recovery Gate, and Arena Orb sockets.
+* Debug flags: `-ZoogiFormShots`, `-ZoogiDamageShots`, `-ZoogiNoForm`, `-ZoogiFormSlow=N`, `-ZoogiShowcaseWait=N`.
+* Side-by-sides (Buzzy on the left, game on the right): `/workspace/zoogi-unreal/shots/arenas/frozen-buzzy/` on the agent box.
+
 ## Latest 2v2 build — Tue Oct 6, 7:02 PM CT (commit cc39942)
 Packaged Development Win64 at **7:00–7:01 PM CT** → `Packaged\Windows\ZoogiRoll.exe` (bootstrap) + `ZoogiRoll\Binaries\Win64\ZoogiRoll.exe` (349 MB). Editor DLL `Binaries\Win64\UnrealEditor-ZoogiRoll.dll` is current (6:59 PM CT). Desktop **ZoogiRoll** / **ZoogiRoll - Shortcut** already point at the packaged exe; **Open Zoogi Roll in Unreal** opens the `.uproject`. Local git only — never pushed. Packaged smoke (`-ZoogiCombo`) confirmed Mode: 2v2 COMBO + Meadow props.
 
