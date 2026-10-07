@@ -630,3 +630,9 @@ Awakened / crit-grade hit), and so are the collider, events, SFX, popup, feed li
 ## Meadow r4 (Oct 7, 1:02 AM CT)
 - Bold green floor seal (rebaked T_MeadowGlow: thick core + halo; GlowTint 1, glow 9, saturated green), layered mountain ridges (green/teal/blue, snow caps) with ridge waterfalls, fog cut back, hand-built pagoda tower + gatehouse hall on far hills (out of reach, solid scenery).
 - Gap test 7/7 PASS. Packaged 1:02 AM CT, PACKAGE_EXIT=0, Desktop shortcut OK.
+
+## Meadow r5-r7 (Oct 7, 4:31 AM CT)
+- r5: ramps mapped to the Buzzy art (spiral ramp + raised disc, 2 tall quarter-pipes by the N gap, 2 curved lips at the front stand ends; breakable, smooth tangent colliders), benches, pillars at art yaws, 4 stand arcs, shrines, tower cluster, wide gatehouse, golem; removed non-art pieces; ZoogiLaunch playtest.
+- r6: taller spiral ring wall + west hub wall, wider pipes, valley floor, waterfall mesas, softer hills.
+- r7: floor seal redrawn to the art layout.
+- Tests 12/12 PASS (4 gaps ORB OUT, control, seat-wall + bench crack, 2 pipes, 2 lips, spiral). Packaged r5 4:13, r6 4:23, r7 4:31 AM CT; PACKAGE_EXIT=0, Desktop shortcut OK.
