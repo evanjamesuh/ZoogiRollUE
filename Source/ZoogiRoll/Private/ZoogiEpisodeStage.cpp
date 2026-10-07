@@ -201,10 +201,10 @@ void AZoogiEpisodeStage::BuildMeteorParts()
 {
 	if (Rock) return;
 	UStaticMesh* RM = RockMesh();
-	Rock = NewMesh(this, Root, RM, ZoogiUtil::SurfaceMID(this, FLinearColor(0.035f, 0.03f, 0.028f), 0.95f, FLinearColor(1.f, 0.55f, 0.2f), 0.15f));
-	HeatMID = ZoogiUtil::FxMID(this, FLinearColor(1.f, 0.5f, 0.15f), 0.f);
+	Rock = NewMesh(this, Root, RM, ZoogiUtil::SurfaceMID(this, FLinearColor(0.03f, 0.026f, 0.024f), 0.95f, FLinearColor(1.f, 0.4f, 0.1f), 0.05f));
+	HeatMID = ZoogiUtil::FxMID(this, FLinearColor(1.f, 0.35f, 0.06f), 0.f);
 	RockHeat = NewMesh(this, Rock, RM, HeatMID);
-	RockHeat->SetRelativeScale3D(FVector(1.06f));
+	RockHeat->SetRelativeScale3D(FVector(1.03f));
 	for (int32 i = 0; i < 12; ++i)
 	{
 		UStaticMeshComponent* P = NewMesh(this, Root, RM, ZoogiUtil::SurfaceMID(this, FLinearColor(0.23f, 0.19f, 0.15f) * (0.8f + 0.04f * i), 0.9f));
@@ -291,7 +291,7 @@ void AZoogiEpisodeStage::BeginMeteor(const FVector& Target, const FVector& Shoot
 	}
 	if (Cam) Cam->SetActorLocationAndRotation(MCamBase, UKismetMathLibrary::FindLookAtRotation(MCamBase, MTarget + FVector(0, 0, 150.f)));
 	if (ShockMID) ShockMID->SetVectorParameterValue(TEXT("Color"), Color);
-	if (HeatMID) HeatMID->SetVectorParameterValue(TEXT("Color"), Color);
+	if (HeatMID) HeatMID->SetVectorParameterValue(TEXT("Color"), FLinearColor(1.f, 0.35f, 0.06f));
 	if (ImpactLight) ImpactLight->SetLightColor(Color);
 	UpdateMeteor(0.f);
 }
@@ -356,7 +356,7 @@ bool AZoogiEpisodeStage::UpdateMeteor(float T)
 		Rock->SetWorldLocation(P);
 		Rock->SetWorldRotation(FRotator(25.f * D, 40.f + 70.f * D, 15.f * D));
 		Rock->SetWorldScale3D(FVector(RockScale * (T > ImpactT ? FMath::Lerp(1.f, 0.6f, (T - ImpactT) / 0.05f) : 1.f)));
-		if (HeatMID) HeatMID->SetScalarParameterValue(TEXT("Strength"), 2.f + 10.f * D);
+		if (HeatMID) HeatMID->SetScalarParameterValue(TEXT("Strength"), 0.15f + 0.9f * D * D); // faint entry heat only
 		if (!bImpacted && T >= ImpactT) { bImpacted = true; bImpactNow = true; }
 	}
 	// impact light + shockwave ring along the floor

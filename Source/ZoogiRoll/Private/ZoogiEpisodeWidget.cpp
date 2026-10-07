@@ -90,12 +90,12 @@ TSharedRef<SWidget> UZoogiEpisodeWidget::RebuildWidget()
 	}
 
 	PowerTitle = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("PowerTitle"));
-	PowerTitle->SetFont(EpFont(30.f, true));
+	PowerTitle->SetFont(EpFont(24.f, true));
 	PowerTitle->SetShadowOffset(FVector2D(2.f, 2.f));
 	PowerTitle->SetShadowColorAndOpacity(FLinearColor(0.f, 0.f, 0.f, 0.7f));
 	PowerTitle->SetJustification(ETextJustify::Center);
 	PowerTitle->SetRenderOpacity(0.f);
-	Anchor(Root, PowerTitle, FAnchors(0.5f, 0.f), FVector2D(0.5f, 0.f), FMargin(0.f, 34.f, 0.f, 0.f), true);
+	Anchor(Root, PowerTitle, FAnchors(0.5f, 0.f), FVector2D(0.5f, 0.f), FMargin(0.f, 104.f, 0.f, 0.f), true); // below the HUD's round / phase bars
 
 	CalloutText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Callout"));
 	CalloutText->SetFont(EpFont(44.f, true));

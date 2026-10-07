@@ -593,15 +593,17 @@ void UZoogiEpisodeSubsystem::FinalizeAction(const TCHAR* Why)
 		if (Truth.RingMarkDelta[i] != 0) Marks += FString::Printf(TEXT("%sP%d%+d"), Marks.IsEmpty() ? TEXT("") : TEXT(","), i + 1, Truth.RingMarkDelta[i]);
 		Final += FString::Printf(TEXT("%sP%d(%.0f,%.0f%s)"), Final.IsEmpty() ? TEXT("") : TEXT(" "), i + 1, Truth.FinalBallPos[i].X, Truth.FinalBallPos[i].Y, Truth.FinalBallOut[i] ? TEXT(",out") : TEXT(""));
 	}
+	FString AirS;
+	for (const FZoogiAirSegment& S : Truth.Air) AirS += FString::Printf(TEXT("%s%s%d:%.0fcm/%.2fs"), AirS.IsEmpty() ? TEXT("") : TEXT(","), S.Body >= 100 ? TEXT("O") : TEXT("P"), S.Body >= 100 ? S.Body - 99 : S.Body + 1, S.PeakGap, S.End - S.Start);
 	FString Ring;
 	for (int32 P : Truth.RingOuts) Ring += FString::Printf(TEXT("%sP%d"), Ring.IsEmpty() ? TEXT("") : TEXT(","), P + 1);
 
 	UE_LOG(LogZoogi, Log, TEXT("EPISODE action=%d tags=%s score=%.0f tier=%d archetype=%s result_unchanged=%d mode=%s actor=P%d(%s) presented_tier=%d layout=%s callouts=%d slowmo=%d meteor=%d freezes=%d drift_cm=%.3f epilogue=\"%s\" why=%s"),
 		Truth.ActionId, *Tags, R.Score, R.Tier, ZoogiEpisode::ArchetypeName(R.Archetype), Plan.ResultUnchanged() ? 1 : 0, ZoogiEpisode::ModeName(Mode), Truth.Actor + 1, *Truth.ActorName,
 		Plan.Tier, ZoogiEpisode::LayoutName(Plan.Layout), Plan.Callouts, Plan.bSlowMo ? 1 : 0, Plan.bMeteor ? 1 : 0, Plan.Freezes, Plan.FreezeDriftCm, *Plan.Epilogue, Why);
-	UE_LOG(LogZoogi, Log, TEXT("EPISODE_TRUTH action=%d round=%d turn=%d combo=%d power=%.2f awaken=%s power_hit=%d crit=%d power_target=%d contacts=%d meaningful=%d max_rel=%.0f air=%d boundary=%d ring_outs=%s orb_outs=%d score_delta=%s ringmark_delta=%s resonance=%+d control=%+.0f triggers=0x%x pieces=%d rocks=%d follow_up=%d dur=%.2f final=%s"),
+	UE_LOG(LogZoogi, Log, TEXT("EPISODE_TRUTH action=%d round=%d turn=%d combo=%d power=%.2f awaken=%s power_hit=%d crit=%d power_target=%d contacts=%d meaningful=%d max_rel=%.0f air=%d[%s] boundary=%d ring_outs=%s orb_outs=%d score_delta=%s ringmark_delta=%s resonance=%+d control=%+.0f triggers=0x%x pieces=%d rocks=%d follow_up=%d dur=%.2f final=%s"),
 		Truth.ActionId, Truth.Round, Truth.Turn, Truth.bCombo ? 1 : 0, Truth.LaunchPower, *ZoogiArtifacts::Name(Truth.Awaken), Truth.bPowerHit ? 1 : 0, Truth.bCrit ? 1 : 0, Truth.PowerHitTarget,
-		Truth.Contacts.Num(), Meaningful, Truth.MaxRelSpeed, Truth.Air.Num(), Truth.Boundary.Num(), Ring.IsEmpty() ? TEXT("-") : *Ring, Truth.OrbOuts,
+		Truth.Contacts.Num(), Meaningful, Truth.MaxRelSpeed, Truth.Air.Num(), *AirS, Truth.Boundary.Num(), Ring.IsEmpty() ? TEXT("-") : *Ring, Truth.OrbOuts,
 		Deltas.IsEmpty() ? TEXT("-") : *Deltas, Marks.IsEmpty() ? TEXT("-") : *Marks, Truth.ResonanceDelta, Truth.ControlDelta, Truth.ComboTriggers, Truth.PiecesDamaged, Truth.RocksDamaged,
 		Truth.bFollowUp ? 1 : 0, Truth.Duration, *Final);
 	UE_LOG(LogZoogi, Log, TEXT("EPISODE_SCORE action=%d %s"), Truth.ActionId, *R.Breakdown);

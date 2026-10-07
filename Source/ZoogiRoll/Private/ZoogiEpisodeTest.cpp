@@ -6,12 +6,14 @@
 //   B: full-power Titan hit toward the edge (expected: ring-out)              -> meteor, "RING OUT"
 //   E: Titan shot that misses everything                                     -> no meteor, lower tier
 //   F: B in Competitive mode                                                 -> short meteor, same result as B
+//   S: B with a Storm Infuse instead of Titan (no archetype)                 -> tier 3/4 panels + Storm power colours
 #include "ZoogiEpisodeSubsystem.h"
 #include "ZoogiGameMode.h"
 #include "ZoogiBall.h"
 #include "ZoogiOrb.h"
 #include "ZoogiArena.h"
 #include "ZoogiRock.h"
+#include "ZoogiArenaPiece.h"
 #include "ZoogiArtifactComponent.h"
 #include "ZoogiTypes.h"
 #include "ZoogiRoll.h"
@@ -66,7 +68,7 @@ void UZoogiEpisodeSubsystem::TickTest()
 			const float Th = FMath::DegreesToRadians(15.f * k);
 			const FVector2D U(FMath::Cos(Th), FMath::Sin(Th)), V(-U.Y, U.X);
 			if (bInward) { TP = U * (0.50f * R); SP = U * (0.80f * R); AimEnd = TP - U * 0.15f * R; }
-			else { TP = V * (0.58f * R) + U * (0.30f * R); SP = TP - U * 650.f; AimEnd = TP + U * 0.4f * R; }
+			else { TP = V * (0.62f * R) + U * (0.38f * R); SP = TP - U * 650.f; AimEnd = TP + U * 0.25f * R; }
 			if (bMiss) AimEnd = SP + (TP - SP).GetSafeNormal().GetRotated(35.f) * 520.f;
 			OthersP.Reset();
 			for (int32 i = 1; i < G->Balls.Num(); ++i) if (i != TestTarget) OthersP.Add(-V * (0.55f * R) + U * (OthersP.Num() == 0 ? 420.f : -420.f));
@@ -88,6 +90,18 @@ void UZoogiEpisodeSubsystem::TickTest()
 				if (SegDist2D(RP, SP, AimEnd) < Rk->GetRadius() + 80.f) bOk = false;
 				for (const FVector2D& P : Spots) if (FVector2D::Distance(RP, P) < Rk->GetRadius() + 90.f) bOk = false;
 			}
+			// small arena pieces (crates, posts, obstacles) on the lane or a spot; big rim walls / stands are ignored
+			for (const AZoogiArenaPiece* Pc : G->Arena->GetPieces())
+			{
+				if (!Pc || !bOk || Pc->GetPieceState() == EZoogiPieceState::Broken) continue;
+				FVector C, Ext;
+				Pc->GetActorBounds(true, C, Ext);
+				const float PR = FVector2D(Ext.X, Ext.Y).Size();
+				if (PR < 1.f || PR > 450.f) continue;
+				const FVector2D PC2(C.X, C.Y);
+				if (SegDist2D(PC2, SP, AimEnd) < PR + 70.f) bOk = false;
+				for (const FVector2D& P : Spots) if (FVector2D::Distance(PC2, P) < PR + 80.f) bOk = false;
+			}
 			if (bOk) { bFound = true; BestTheta = 15.f * k; }
 		}
 		if (!bFound) UE_LOG(LogZoogi, Warning, TEXT("TITAN_TEST no fully clear lane found, using the last layout"));
@@ -98,7 +112,7 @@ void UZoogiEpisodeSubsystem::TickTest()
 		for (int32 i = 1; i < G->Balls.Num(); ++i)
 			if (i != TestTarget && G->Balls[i] && OthersP.IsValidIndex(Oi)) { G->Balls[i]->PlaceAt(FVector(OthersP[Oi++], G->Balls[i]->BallLocation().Z), 0.f); }
 		S->bCPU = false;                              // P1's inputs come from this director this turn
-		S->Artifact->Drawn = EZoogiArtifact::Titan;   // the drawn artifact this turn
+		S->Artifact->Drawn = TestVariant == TEXT("S") ? EZoogiArtifact::Storm : EZoogiArtifact::Titan; // the drawn artifact this turn
 		TestAimPoint = FVector(AimEnd, Z0);
 		TestStep = 1;
 		UE_LOG(LogZoogi, Log, TEXT("TITAN_TEST setup variant=%s mode=%s lane_theta=%.0f clear=%d shooter=P1 (%.0f,%.0f) target=P%d (%.0f,%.0f) knockoffR=%.0f decel=%.0f"),
@@ -109,7 +123,7 @@ void UZoogiEpisodeSubsystem::TickTest()
 		if (G->Stage == EZoogiStage::Awaken && G->StageTime > 0.25f)
 		{
 			const bool bOk = G->AwakenInfuse(0);
-			UE_LOG(LogZoogi, Log, TEXT("TITAN_TEST awaken infuse titan=%d"), bOk ? 1 : 0);
+			UE_LOG(LogZoogi, Log, TEXT("TITAN_TEST awaken infuse %s=%d"), TestVariant == TEXT("S") ? TEXT("storm") : TEXT("titan"), bOk ? 1 : 0);
 			TestStep = 2;
 		}
 		break;
@@ -163,6 +177,7 @@ void UZoogiEpisodeSubsystem::TestFinalize()
 	if (TestVariant == TEXT("A")) { Expect = TEXT("meteor=1 ringout=0"); bExpect = (Mode == EZoogiEpisodeMode::Off || Plan.bMeteor) && !bTargetOut; }
 	else if (TestVariant == TEXT("B") || TestVariant == TEXT("F")) { Expect = TEXT("meteor=1 ringout=1"); bExpect = (Mode == EZoogiEpisodeMode::Off || Plan.bMeteor) && bTargetOut; }
 	else if (TestVariant == TEXT("E")) { Expect = TEXT("meteor=0 power_hit=0 tier<4"); bExpect = !Plan.bMeteor && !Truth.bPowerHit && R.Tier < 4; }
+	else if (TestVariant == TEXT("S")) { Expect = TEXT("meteor=0 power_hit=1 panels"); bExpect = !Plan.bMeteor && Truth.bPowerHit && (Mode == EZoogiEpisodeMode::Off || Plan.Panels > 0); }
 	FString Final, Deltas;
 	for (int32 i = 0; i < Truth.FinalBallPos.Num(); ++i)
 	{

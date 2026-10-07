@@ -457,7 +457,12 @@ void UZoogiEpisodeSubsystem::TickMeteor(float Dt)
 	if (!bMeteor || !Stage) return;
 	MeteorT += Dt;
 	const float T = FMath::Clamp(MeteorT / FMath::Max(0.1f, MeteorDur), 0.f, 1.f);
-	if (Stage->UpdateMeteor(T))
+	const bool bImpact = Stage->UpdateMeteor(T);
+	// the world is paused, so the camera manager does not update by itself: drive it (view target + nudge modifier)
+	if (UWorld* W = GetWorld())
+		if (APlayerController* PC = W->GetFirstPlayerController())
+			if (PC->PlayerCameraManager) PC->PlayerCameraManager->UpdateCamera(Dt);
+	if (bImpact)
 	{
 		Widget->Flash(0.85f, FLinearColor(1.f, 0.93f, 0.8f));
 		Nudge(1.f);
@@ -465,7 +470,7 @@ void UZoogiEpisodeSubsystem::TickMeteor(float Dt)
 	Widget->SetDarken(0.18f * FMath::SmoothStep(0.f, 0.15f, T) * (1.f - FMath::SmoothStep(0.8f, 1.f, T)));
 	if (T > 0.22f && T < 0.5f) Shot(TEXT("meteor_lift"));
 	if (T > 0.56f && T < 0.66f) Shot(TEXT("meteor_drop"));
-	if (T > 0.68f && !bMeteorImpactShot) { bMeteorImpactShot = true; Shot(TEXT("meteor_impact")); }
+	if (T > 0.75f && !bMeteorImpactShot) { bMeteorImpactShot = true; Shot(TEXT("meteor_impact")); }
 	if (MeteorT >= MeteorDur) EndMeteor();
 }
 
