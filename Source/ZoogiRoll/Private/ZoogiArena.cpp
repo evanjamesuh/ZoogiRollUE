@@ -273,6 +273,7 @@ void AZoogiArena::ScatterInstances(UStaticMesh* Mesh, UMaterialInterface* Mat, i
 	for (int32 i = 0; i < Count; ++i)
 	{
 		const float A = Rng.FRandRange(0.f, 2.f * PI);
+		if (InTerraceGap(A)) continue;
 		const float R = FMath::Sqrt(Rng.FRandRange(RMin * RMin, RMax * RMax));
 		const float Sc = Rng.FRandRange(ScaleRange.X, ScaleRange.Y);
 		FTransform T;
@@ -288,6 +289,7 @@ void AZoogiArena::Build(EZoogiArena InTheme)
 {
 	Clear();
 	ExtraOrbSpots.Reset();
+	TerraceGapYaw.Reset(); TerraceGapHalfDeg = 0.f;
 	Theme = InTheme;
 	SetupSky(InTheme);
 	switch (InTheme)
@@ -440,6 +442,21 @@ void AZoogiArena::SetupSky(EZoogiArena InTheme)
 		Atmosphere->SetMieScatteringScale(0.f);
 		P.AutoExposureBias = 1.2f;
 		P.ColorSaturation = FVector4(1.f, 1.f, 1.1f, 1.f);
+		break;
+	case EZoogiArena::Meadow:
+		// r3 (Buzzy Meadow): warm high sun, saturated greens, light haze so the painted hills/waterfalls read.
+		Sun->SetRelativeRotation(FRotator(-48.f, 215.f, 0.f));
+		Sun->SetIntensity(9.5f);
+		Sun->SetLightColor(FLinearColor(1.f, 0.94f, 0.82f));
+		Fog->SetFogDensity(0.004f);
+		Fog->SetStartDistance(6000.f);
+		Fog->SetFogInscatteringColor(FLinearColor(0.55f, 0.72f, 0.95f));
+		Clouds->SetVisibility(false);
+		SkyLight->SetIntensity(1.25f);
+		P.AutoExposureBias = -0.3f;
+		P.BloomIntensity = 1.0f;
+		P.ColorSaturation = FVector4(1.12f, 1.12f, 1.12f, 1.f);
+		P.ColorContrast = FVector4(1.08f, 1.08f, 1.08f, 1.f);
 		break;
 	default:
 		Sun->SetRelativeRotation(FRotator(-42.f, 35.f, 0.f));

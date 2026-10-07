@@ -132,6 +132,10 @@ protected:
 	/** Terrace ring outside the knockout line: flat at Z out to FlatTo (K14: stays below -100 near the edge), rising to RimZ at ROut. */
 	void AddTerrace(float RIn, float ROut, float Z, float FlatTo, float RimZ, UMaterialInterface* Top, UMaterialInterface* Wall, UMaterialInterface* Under);
 	float TerraceHeight(float R, float AngleRad) const;
+	/** Terrace drop channels (Meadow orb-exit gaps): the terrace ring is cut open +-TerraceGapHalfDeg around each yaw. Set before AddTerrace. */
+	TArray<float> TerraceGapYaw;
+	float TerraceGapHalfDeg = 0.f;
+	bool InTerraceGap(float AngleRad) const;
 	void ScatterTerrace(UStaticMesh* Mesh, UMaterialInterface* Mat, int32 Count, float RMin, float RMax, FVector2D ScaleRange, float ZOffset, FRandomStream& Rng, bool bFlatten);
 	void AddCurb(float ROut, float TopZ, float Depth, UMaterialInterface* Mat);
 	void AddStands(float CenterDeg, float ArcDeg, float RIn, float BaseZ, int32 Tiers, float TierDepth, float TierRise, UMaterialInterface* Seat, UMaterialInterface* SeatAlt, UMaterialInterface* Riser, UMaterialInterface* Stone);

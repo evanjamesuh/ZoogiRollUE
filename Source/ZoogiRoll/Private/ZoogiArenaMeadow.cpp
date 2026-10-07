@@ -27,7 +27,7 @@ void AZoogiArena::BuildMeadow()
 	const FLinearColor RockA = ZoogiUtil::Hex(TEXT("#B9A889"));
 	const FLinearColor RockB = ZoogiUtil::Hex(TEXT("#8E8063"));
 
-	UMaterialInterface* FloorMat = KitFloorMaterial(TEXT("Meadow"), Green, 1.6f, 1.0f);
+	UMaterialInterface* FloorMat = KitFloorMaterial(TEXT("Meadow"), Green, 2.6f, 1.12f);
 	BuildIsland(ZoogiUtil::Hex(TEXT("#3F8A2C")), ZoogiUtil::Hex(TEXT("#55A336")), Soil,
 		ZoogiUtil::Hex(TEXT("#6E5B4A")), ZoogiUtil::Hex(TEXT("#4A3B30")), 0.3f, FloorMat);
 	FloorMID = Cast<UMaterialInstanceDynamic>(FloorMat);
@@ -60,33 +60,37 @@ void AZoogiArena::BuildMeadow()
 		const FVector Loc(FMath::Cos(Rad) * PillarR, FMath::Sin(Rad) * PillarR, 0.f);
 		AZoogiArenaPiece* P = SpawnPiece(Loc, Yaw, *FString::Printf(TEXT("pillar_%d"), k), TEXT("Stone"), 1000.f, true);
 		if (!P) continue;
-		P->AddBox(FVector(0, 0, 14.f), FVector(120.f, 120.f, 28.f), FRotator::ZeroRotator, StoneDark);
-		P->AddBox(FVector(0, 0, 40.f), FVector(96.f, 96.f, 24.f), FRotator::ZeroRotator, Stone);
+		const float S = PillarS;
+		P->AddBox(FVector(0, 0, 18.f), FVector(150.f * S, 150.f * S, 36.f), FRotator::ZeroRotator, StoneDark);
+		P->AddBox(FVector(0, 0, 50.f), FVector(118.f * S, 118.f * S, 30.f), FRotator::ZeroRotator, Stone);
 		FZoogiMeshBuilder Shaft;
-		Shaft.Prism(FVector2D::ZeroVector, 4, 44.f, 38.f, 50.f, PillarH - 18.f, 45.f, 0.f, false);
+		Shaft.Prism(FVector2D::ZeroVector, 4, 44.f * S, 34.f * S, 62.f, PillarH - 22.f, 45.f, 0.f, false);
 		P->AddProc(Shaft, Stone);
-		P->AddBox(FVector(0, 0, PillarH - 10.f), FVector(78.f, 78.f, 16.f), FRotator::ZeroRotator, Stone);
+		P->AddBox(FVector(0, 0, PillarH - 12.f), FVector(82.f * S, 82.f * S, 20.f), FRotator::ZeroRotator, Stone);
 		for (int32 f = 0; f < 4; ++f)
 		{
 			const FRotator Fr(0.f, f * 90.f, 0.f);
 			for (int32 s = -1; s <= 1; s += 2)
 			{
-				UStaticMeshComponent* S = P->AddBox(Fr.RotateVector(FVector(34.5f, s * 12.f, 0.f)) + FVector(0, 0, PillarH * 0.5f + 10.f), FVector(2.f, 6.f, PillarH * 0.55f), Fr, Slit, false);
-				P->MarkGlow(S);
+				UStaticMeshComponent* Sl = P->AddBox(Fr.RotateVector(FVector(30.f * S + 3.f, s * 12.f * S, 0.f)) + FVector(0, 0, PillarH * 0.52f + 20.f), FVector(3.f, 8.f, PillarH * 0.58f), Fr, Slit, false);
+				P->MarkGlow(Sl);
 			}
+			// glyph band near the base
+			UStaticMeshComponent* G = P->AddBox(Fr.RotateVector(FVector(40.f * S + 2.f, 0.f, 0.f)) + FVector(0, 0, 92.f), FVector(3.f, 54.f * S, 8.f), Fr, Slit, false);
+			P->MarkGlow(G);
 		}
-		for (int32 v = 0; v < 6; ++v)
+		for (int32 v = 0; v < 8; ++v)
 		{
-			const float T = v / 5.f;
-			const float A = FMath::DegreesToRadians(30.f + T * 250.f);
-			P->AddShape(TEXT("Sphere"), FTransform(FRotator::ZeroRotator, FVector(FMath::Cos(A) * 36.f, FMath::Sin(A) * 36.f, 60.f + T * (PillarH - 80.f)), FVector(0.28f, 0.28f, 0.22f)), Vine, false);
+			const float T = v / 7.f;
+			const float A = FMath::DegreesToRadians(30.f + T * 300.f);
+			P->AddShape(TEXT("Sphere"), FTransform(FRotator::ZeroRotator, FVector(FMath::Cos(A) * 40.f * S, FMath::Sin(A) * 40.f * S, 70.f + T * (PillarH - 100.f)), FVector(0.34f, 0.34f, 0.26f)), Vine, false);
 		}
-		P->AddShape(TEXT("Cylinder"), FTransform(FRotator::ZeroRotator, FVector(0, 0, PillarH + 12.f), FVector(0.34f, 0.34f, 0.24f)), Bronze);
-		P->AddShape(TEXT("Cone"), FTransform(FRotator(180.f, 0.f, 0.f), FVector(0, 0, PillarH + 44.f), FVector(0.98f, 0.98f, 0.42f)), Bronze);
-		UStaticMeshComponent* OrbM = P->AddShape(TEXT("Sphere"), FTransform(FRotator::ZeroRotator, FVector(0, 0, PillarH + 84.f), FVector(0.88f, 0.88f, 0.98f)), ZoogiUtil::GlowMID(this, Green, 2.4f), false);
+		P->AddShape(TEXT("Cylinder"), FTransform(FRotator::ZeroRotator, FVector(0, 0, PillarH + 14.f), FVector(0.42f * S, 0.42f * S, 0.28f)), Bronze);
+		P->AddShape(TEXT("Cone"), FTransform(FRotator(180.f, 0.f, 0.f), FVector(0, 0, PillarH + 52.f), FVector(1.2f * S, 1.2f * S, 0.5f)), Bronze);
+		UStaticMeshComponent* OrbM = P->AddShape(TEXT("Sphere"), FTransform(FRotator::ZeroRotator, FVector(0, 0, PillarH + 100.f), FVector(1.05f * S, 1.05f * S, 1.15f * S)), ZoogiUtil::GlowMID(this, Green, 2.4f), false);
 		P->MarkGlow(OrbM);
-		P->AddColliderBox(FVector(0, 0, 26.f), FVector(110.f, 110.f, 52.f), FRotator::ZeroRotator, TEXT("ZPillar"), PillarPM);
-		P->AddColliderBox(FVector(0, 0, PillarH * 0.5f), FVector(80.f, 80.f, PillarH), FRotator::ZeroRotator, TEXT("ZPillar"), PillarPM);
+		P->AddColliderBox(FVector(0, 0, 33.f), FVector(140.f * S, 140.f * S, 66.f), FRotator::ZeroRotator, TEXT("ZPillar"), PillarPM);
+		P->AddColliderBox(FVector(0, 0, PillarH * 0.5f), FVector(84.f * S, 84.f * S, PillarH), FRotator::ZeroRotator, TEXT("ZPillar"), PillarPM);
 		P->FinishBuild();
 		if (Forming) Forming->AddActor(P, EZoogiFormStyle::Rise, FVector(0, 0, -(PillarH + 120.f)), 1.30f + 0.10f * k, 1.0f, 14.f);
 		// Arena Orb apron in front of each pillar (toward centre), clear of the seat-wall gaps.
@@ -181,6 +185,9 @@ void AZoogiArena::BuildMeadow()
 		FVector4(111, 13.3, 0.8, 0.6), FVector4(291, 13.3, 0.8, 0.6) };
 	BuildRim(Rim, RockA, ZoogiUtil::Hex(TEXT("#4F7A3A")), 0.55f, true);
 
+	// r3: drop channels cut through the terrace at the 4 orb-exit gaps so an orb visibly drops off (no clipping).
+	TerraceGapYaw = { OrbExitGapYaw[0], OrbExitGapYaw[1], OrbExitGapYaw[2], OrbExitGapYaw[3] };
+	TerraceGapHalfDeg = OrbExitGapHalfDeg + 1.2f;
 	AddTerrace(1680.f, 2400.f, -160.f, 1750.f, -100.f, GrassTop, Cliff, Cliff);
 	FRandomStream Rng(77);
 	UStaticMesh* SphereMesh = ZoogiUtil::BasicShape(TEXT("Sphere"));
@@ -250,10 +257,11 @@ void AZoogiArena::BuildMeadow()
 			Scars->SlabSideMat = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#4A3A2C")), 0.95f, ZoogiUtil::Hex(TEXT("#4CD964")), 0.15f);
 			Scars->NoSlabYaw = { OrbExitGapYaw[0], OrbExitGapYaw[1], OrbExitGapYaw[2], OrbExitGapYaw[3] };
 			Scars->NoSlabHalfDeg = OrbExitGapHalfDeg;
+			Scars->SetTheme(TEXT("Meadow"), ZoogiUtil::Hex(TEXT("#4CD964"))); // r3: earthy brown/green cracks + dark crater (A&P Meadow decals)
 			UE_LOG(LogZoogi, Log, TEXT("Meadow crater slab kit: %d meshes"), Scars->SlabMeshes.Num());
 		}
 	}
-	if (Forming && FloorMID) Forming->AddParamRamp(FloorMID, TEXT("GlowStrength"), 0.f, 1.6f, 2.6f, 0.5f);
+	if (Forming && FloorMID) Forming->AddParamRamp(FloorMID, TEXT("GlowStrength"), 0.f, 2.6f, 2.6f, 0.5f);
 	// -ZoogiArenaPlayTest: orb out through each orb-exit gap (must count as ORB OUT), a control shot into the seat wall
 	// (must stay in), and normal Zoogi shots that must crack the seat wall and a ricochet wall.
 	if (AZoogiArenaPlayTest* PT = AZoogiArenaPlayTest::MaybeSpawn(this))

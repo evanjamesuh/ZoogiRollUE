@@ -30,6 +30,9 @@ public:
 	/** Forces a scar at P to a stage (tests / shots). */
 	void SetScar(const FVector& P, int32 Stage, float Size = 1.f);
 	void ResetScars();
+	/** Per-map decal set: uses T_<Prefix>Disp_S1/S2/S3/Titan/Crater when present (frost/shard layers off), FX in FxTint. Call after Init. */
+	void SetTheme(const TCHAR* Prefix, const FLinearColor& InFxTint);
+	FLinearColor FxTint = FLinearColor(0.1f, 0.76f, 0.9f);
 	int32 NumScars() const;
 
 	/**

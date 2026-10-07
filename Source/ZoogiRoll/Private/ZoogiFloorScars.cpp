@@ -232,7 +232,7 @@ int32 AZoogiFloorScars::Impact(const FVector& P, float Strength, EZoogiArtifact 
 		Near->Warm = 0.f;
 		Near->Elem = EZoogiArtifact::Frost;
 		Apply(*Near);
-		AZoogiFX::Spawn(GetWorld(), Near->P + FVector(0, 0, 10.f), FLinearColor(0.6f, 0.9f, 1.f), 140.f * Near->Size, 0.5f, true, 5.f);
+		AZoogiFX::Spawn(GetWorld(), Near->P + FVector(0, 0, 10.f), FLinearColor::LerpUsingHSV(FxTint, FLinearColor::White, 0.4f), 140.f * Near->Size, 0.5f, true, 5.f);
 		UE_LOG(LogZoogi, Log, TEXT("Floor scar refrozen by Frost -> stage %d"), Near->Stage);
 		return Near->Stage;
 	}
@@ -275,7 +275,7 @@ int32 AZoogiFloorScars::Impact(const FVector& P, float Strength, EZoogiArtifact 
 	if (Element == EZoogiArtifact::Ember) Near->Warm = 1.f;
 	if (Element != EZoogiArtifact::None) Near->Elem = Element;
 	Apply(*Near);
-	if (Near->Stage >= 3) AZoogiFX::Spawn(GetWorld(), Near->P + FVector(0, 0, 20.f), FLinearColor(0.1f, 0.76f, 0.9f), 200.f * Near->Size, 0.6f, true, 6.f);
+	if (Near->Stage >= 3) AZoogiFX::Spawn(GetWorld(), Near->P + FVector(0, 0, 20.f), FxTint, 200.f * Near->Size, 0.6f, true, 6.f);
 	UE_LOG(LogZoogi, Log, TEXT("Floor scar at (%.0f, %.0f) -> %s (strength %.1f)"), Near->P.X, Near->P.Y,
 		Near->Stage == 1 ? TEXT("DAMAGED") : (Near->Stage == 2 ? TEXT("CRACKED") : TEXT("CRATER")), Strength);
 	return Near->Stage;
@@ -299,6 +299,23 @@ void AZoogiFloorScars::SetScar(const FVector& P, int32 Stage, float Size)
 			Apply(S);
 			return;
 		}
+}
+
+void AZoogiFloorScars::SetTheme(const TCHAR* Prefix, const FLinearColor& InFxTint)
+{
+	FxTint = InFxTint;
+	auto T = [&](const TCHAR* Suffix) { return LoadTex(*FString::Printf(TEXT("T_%sDisp_%s"), Prefix, Suffix)); };
+	UTexture* S1 = T(TEXT("S1")); UTexture* S2 = T(TEXT("S2")); UTexture* S3 = T(TEXT("S3")); UTexture* Cr = T(TEXT("Crater"));
+	if (!S1 || !S2 || !S3 || !Cr)
+	{
+		UE_LOG(LogZoogi, Warning, TEXT("Floor scars: %s decal set missing, keeping Frozen set"), Prefix);
+		return;
+	}
+	TexS1 = S1; TexS2 = S2; TexS3 = S3; TexPackCrater = Cr; TexArtCrater = Cr;
+	if (UTexture* Ti = T(TEXT("Titan"))) TexTitan = Ti;
+	TexFrost = nullptr; TexShards = nullptr; TexPowFrost = nullptr; // no ice rime / ice shards on this map
+	for (UMaterialInstanceDynamic* D : PoolMIDs) if (D) D->SetVectorParameterValue(TEXT("EmissiveTint"), FLinearColor::White); // colour is baked
+	UE_LOG(LogZoogi, Log, TEXT("Floor scars: %s decal set"), Prefix);
 }
 
 void AZoogiFloorScars::Apply(FScar& S)
