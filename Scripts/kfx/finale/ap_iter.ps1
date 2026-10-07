@@ -1,5 +1,5 @@
 # KFX finale iteration for this worktree: [kfx_build.py] -> [C++ build] -> [comparison capture]. Each Unreal job waits for waitclear.ps1.
-param([switch]$Finale, [string]$Base = "0,0,12000", [switch]$KfxBuild, [switch]$Build, [switch]$Capture, [string]$Out = "$env:USERPROFILE\kfx_ap_xfer\shots", [string]$Plan = "")
+param([switch]$Finale, [string]$Base = "0,0,12000", [switch]$KfxBuild, [switch]$Build, [switch]$Capture, [switch]$HudShot, [string[]]$Arts = @("Ember","Storm","Void"), [string]$Out = "$env:USERPROFILE\kfx_ap_xfer\shots", [string]$Plan = "")
 $ErrorActionPreference = "Continue"
 $UE = "C:\Program Files\Epic Games\UE_5.6"
 $Root = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $PSScriptRoot))
@@ -41,5 +41,17 @@ if ($Capture) {
   Get-Content "$Logs\ap_capture.log" -ErrorAction SilentlyContinue | Select-String -Pattern "KFX plan|Error|Fatal" | Select-Object -Last 30 | ForEach-Object { $_.Line.Substring(0, [Math]::Min(300, $_.Line.Length)) }
   $n = (Get-ChildItem $Out -Filter *.png).Count; "SHOTS=$n"
   Compress-Archive -Force -Path "$Out\*" -DestinationPath "$Out.zip"
+}
+if ($HudShot) {
+  # In-game check with the real HUD: -ZoogiUIPolish infuses (forced artifact), locks a target and saves traj_aim with the aim path drawn.
+  foreach ($art in $Arts) {
+    "WAIT " + (Wait-Clear); "WAIT " + (Wait-NoGame)
+    $d = "$Out\hud_$art"; New-Item -ItemType Directory -Force $d | Out-Null
+    $p = Start-Process -FilePath "$UE\Engine\Binaries\Win64\UnrealEditor-Cmd.exe" -ArgumentList @("`"$Proj`"", "/Game/Maps/Meadow", "-game", "-ZoogiAuto", "-ZoogiUIPolish", "-ZoogiPolishArt=$art", "`"-ZoogiShots=$d`"", "-ResX=1280", "-ResY=720", "-RenderOffscreen", "-unattended", "-nosplash", "-nop4", "-log=ap_hud_$art.log") -PassThru
+    $t0 = Get-Date; $got = $false
+    while (((Get-Date) - $t0).TotalSeconds -lt 300 -and -not $p.HasExited) { if (Get-ChildItem $d -Recurse -Filter "*traj_aim*" -ErrorAction SilentlyContinue) { $got = $true; Start-Sleep 3; break }; Start-Sleep 2 }
+    if (-not $p.HasExited) { Stop-Process -Id $p.Id -Force }  # only the process started here
+    "HUD_$art=" + $(if ($got) { "OK" } else { "NO_SHOT" }) + " files=" + ((Get-ChildItem $d -Recurse -Filter *.png | % { $_.Name }) -join ',')
+  }
 }
 "ITER_DONE $(Get-Date -Format 'HH:mm:ss')"

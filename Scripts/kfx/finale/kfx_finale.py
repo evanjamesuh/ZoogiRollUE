@@ -191,11 +191,13 @@ R1, G1, B1 = LC(1, 0, 0, 0), LC(0, 1, 0, 0), LC(0, 0, 1, 0)
 
 def build_mis():
     # --- launch ring (Effect4 orange)
-    mi('MI_ZAFX_RingDecal', 'Decal', {'Tex': T('T_ZAFX_Ring'), 'Chan': R1, 'Tint': ORANGE, 'Glow': 2.4, 'Darken': 0.85, 'EmisOpac': 1.0,
+    mi('MI_ZAFX_RingDecal', 'Decal', {'Tex': T('T_ZAFX_Ring'), 'Chan': R1, 'Tint': ORANGE, 'Glow': 1.7, 'Darken': 0.85, 'EmisOpac': 1.0,
                                        'BaseTint': LC(0.025, 0.018, 0.012, 1), 'UseReveal': 1.0, 'RevealSharp': 25.0, 'Contrast': 1.2})
-    mi('MI_ZAFX_RingInner', 'DecalGlow', {'Tex': T('T_ZAFX_RingInner'), 'Chan': R1, 'Tint': LC(1.0, 0.42, 0.1, 1), 'Glow': 0.75})
+    mi('MI_ZAFX_RingInner', 'DecalGlow', {'Tex': T('T_ZAFX_RingInner'), 'Chan': R1, 'Tint': LC(1.0, 0.36, 0.06, 1), 'Glow': 0.8})
+    mi('MI_ZAFX_RingFloor', 'Decal', {'Tex': T('T_ZAFX_RingFloor'), 'Chan': R1, 'Tint': LC(1.0, 0.40, 0.08, 1), 'Glow': 1.0, 'Darken': 0.7, 'EmisOpac': 0.6,
+                                       'BaseTint': LC(0.035, 0.022, 0.015, 1), 'UseReveal': 0.0})
     mi('MI_ZAFX_Flame', 'Add', {'Tex': T('T_ZAFX_Noise'), 'MaskTex': T('T_ZAFX_Flame'), 'Chan': R1, 'TileU': 1.0, 'TileV': 0.6, 'PanV': 1.3,
-                                 'RandOffset': 7.31, 'Contrast': 2.4, 'Bias': 0.35, 'Tint': FLAME, 'Glow': 1.6})
+                                 'RandOffset': 7.31, 'Contrast': 2.4, 'Bias': 0.35, 'Tint': FLAME, 'Glow': 1.9})
     mi('MI_ZAFX_Ember', 'Add', {'Tex': T('T_ZAFX_Dot'), 'Chan': R1, 'Tint': LC(1.0, 0.55, 0.18, 1), 'Glow': 6.0})
     # --- shock chain (Effect25 purple)
     mi('MI_ZAFX_Bolt', 'Add', {'Tex': T('T_ZAFX_Bolt'), 'Chan': R1, 'Tint': BOLT, 'Glow': 3.2, 'CoreGlow': 2.2, 'CoreTint': LC(0.85, 0.8, 1.0, 1)})
@@ -203,14 +205,16 @@ def build_mis():
     mi('MI_ZAFX_Flash', 'Add', {'Tex': T('T_ZAFX_Glow'), 'Chan': R1, 'Tint': LC(0.75, 0.62, 1.0, 1), 'Glow': 6.0})
     mi('MI_ZAFX_Splat', 'Decal', {'Tex': T('T_ZAFX_Splat'), 'Chan': R1, 'Tint': LC(0.6, 0.35, 1.0, 1), 'Glow': 1.6, 'Darken': 1.8, 'EmisOpac': 1.0,
                                    'BaseTint': LC(0.004, 0.003, 0.006, 1), 'UseReveal': 0.0})
+    mi('MI_ZAFX_ShockGlow', 'Decal', {'Tex': T('T_ZAFX_Glow'), 'Chan': R1, 'Tint': LC(0.62, 0.26, 1.0, 1), 'Glow': 1.1, 'Darken': 0.85, 'EmisOpac': 0.0,
+                                       'BaseTint': LC(0.16, 0.05, 0.36, 1), 'UseReveal': 0.0})
     mi('MI_ZAFX_Spark', 'Add', {'Tex': T('T_ZAFX_Dot'), 'Chan': R1, 'Tint': LC(0.72, 0.52, 1.0, 1), 'Glow': 9.0})
     # --- void portal (Effect5 violet)
     mi('MI_ZAFX_PortalInner', 'Portal', {'RimTex': T('T_ZAFX_PortalRim'), 'StarTex': T('T_ZAFX_Stars'), 'NebTex': T('T_ZAFX_Stars')})
-    mi('MI_ZAFX_PortalRim', 'Add', {'Tex': T('T_ZAFX_PortalRim'), 'Chan': R1, 'Spin': 0.35, 'Tint': LC(0.62, 0.24, 1.0, 1), 'Glow': 2.0, 'Contrast': 1.3})
-    mi('MI_ZAFX_PortalGlow', 'Add', {'Tex': T('T_ZAFX_Glow'), 'Chan': R1, 'Tint': LC(0.50, 0.16, 1.0, 1), 'Glow': 0.12})
+    mi('MI_ZAFX_PortalRim', 'Add', {'Tex': T('T_ZAFX_PortalRim'), 'Chan': R1, 'Spin': 0.35, 'Tint': LC(0.55, 0.18, 1.0, 1), 'Glow': 1.35, 'Contrast': 1.3})
+    mi('MI_ZAFX_PortalGlow', 'Add', {'Tex': T('T_ZAFX_Glow'), 'Chan': R1, 'Tint': LC(0.50, 0.16, 1.0, 1), 'Glow': 0.07})
     mi('MI_ZAFX_Mote', 'Add', {'Tex': T('T_ZAFX_Dot'), 'Chan': R1, 'Tint': LC(0.8, 0.55, 1.0, 1), 'Glow': 5.0})
-    mi('MI_ZAFX_Spill', 'Decal', {'Tex': T('T_ZAFX_Glow'), 'Chan': R1, 'Tint': LC(0.62, 0.24, 1.0, 1), 'Glow': 0.3, 'Darken': 0.8, 'EmisOpac': 0.0,
-                                   'BaseTint': LC(0.24, 0.07, 0.45, 1), 'UseReveal': 0.0})
+    mi('MI_ZAFX_Spill', 'Decal', {'Tex': T('T_ZAFX_Glow'), 'Chan': R1, 'Tint': LC(0.70, 0.26, 1.0, 1), 'Glow': 1.0, 'Darken': 1.0, 'EmisOpac': 0.0,
+                                   'BaseTint': LC(0.18, 0.05, 0.40, 1), 'UseReveal': 0.0})
     mi('MI_ZAFX_Rock', 'Rock', {'Tex': T('T_ZAFX_Noise'), 'Tint': LC(0.10, 0.095, 0.11, 1), 'RimColor': LC(0.35, 0.12, 0.85, 1)})
 
 # ------------------------------------------------------------ Niagara

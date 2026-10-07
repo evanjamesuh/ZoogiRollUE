@@ -165,6 +165,7 @@ void AZoogiAwakenFX::Init()
 	{
 	case EZoogiAwakenFX::LaunchRing:
 		Decal2 = MakeDecal(TEXT("MI_ZAFX_RingInner"), 100.f, 80.f * S + 40.f);
+		Decal3 = MakeDecal(TEXT("MI_ZAFX_RingFloor"), 100.f, 80.f * S + 40.f); // glowing scorched ground inside the ring
 		Decal = MakeDecal(TEXT("MI_ZAFX_RingDecal"), 100.f, 80.f * S + 40.f);
 		Decal->SortOrder = 1;
 		Light = MakeLight(FireTint, 400.f);
@@ -179,9 +180,10 @@ void AZoogiAwakenFX::Init()
 		Quads->SetMaterial(0, MID(TEXT("MI_ZAFX_Bolt")));
 		Quads->SetMaterial(1, MID(TEXT("MI_ZAFX_Orb")));
 		Light = MakeLight(ShockTint, 1000.f * S);
-		for (int32 k = 0; k < 3; ++k) HitLights.Add(MakeLight(ShockTint, 450.f * S));
-		Bolts.SetNum(3);
-		for (int32 k = 0; k < 3; ++k) Bolts[k].NextMove = 0.f;
+		Decal2 = MakeDecal(TEXT("MI_ZAFX_ShockGlow"), 560.f * S, 300.f * S); // bright violet light pool on the ground under the chain
+		for (int32 k = 0; k < 4; ++k) HitLights.Add(MakeLight(ShockTint, 480.f * S));
+		Bolts.SetNum(4);
+		for (int32 k = 0; k < 4; ++k) Bolts[k].NextMove = 0.f;
 		if (AZoogiBall* B = Ball.Get()) B->Sphere->OnComponentHit.AddDynamic(this, &AZoogiAwakenFX::OnBallHit);
 		break;
 	case EZoogiAwakenFX::ShockHit:
@@ -201,7 +203,7 @@ void AZoogiAwakenFX::Init()
 		Card0->SetTranslucentSortPriority(1); Card1->SetTranslucentSortPriority(2);
 		Rock = MakeCard(TEXT("MI_ZAFX_Rock"), TEXT("/Game/VFX/KriptoFX/Effect5/Meshes/SM_Rock.SM_Rock"));
 		for (int32 k = 0; k < 9; ++k) Chunks.Add(MakeCard(TEXT("MI_ZAFX_Rock"), TEXT("/Game/VFX/KriptoFX/Effect5/Meshes/SM_Rock.SM_Rock")));
-		Decal2 = MakeDecal(TEXT("MI_ZAFX_Spill"), 380.f * S, 400.f * S);
+		Decal2 = MakeDecal(TEXT("MI_ZAFX_Spill"), 330.f * S, 400.f * S);
 		Decal2->SetUsingAbsoluteLocation(true);
 		Light = MakeLight(VoidTint, 800.f * S);
 		Light->SetUsingAbsoluteLocation(true);
@@ -367,6 +369,15 @@ void AZoogiAwakenFX::TickRing(float Dt, float Fade)
 		Decal2->SetRelativeScale3D(FVector(1.f, Half / 100.f, Half / 100.f));
 		if (UMaterialInstanceDynamic* M = Cast<UMaterialInstanceDynamic>(Decal2->GetDecalMaterial())) M->SetScalarParameterValue(TEXT("Fade"), I * Ignite);
 	}
+	if (Decal3)
+	{
+		Decal3->SetRelativeScale3D(FVector(1.f, Half / 100.f, Half / 100.f));
+		if (UMaterialInstanceDynamic* M = Cast<UMaterialInstanceDynamic>(Decal3->GetDecalMaterial()))
+		{
+			M->SetScalarParameterValue(TEXT("Fade"), Fade * Ignite);
+			M->SetScalarParameterValue(TEXT("Glow"), (0.6f + 0.6f * Power) * (0.9f + 0.1f * FMath::Sin(Age * 13.f)));
+		}
+	}
 	if (Light)
 	{
 		Light->SetAttenuationRadius(R * 2.3f);
@@ -386,9 +397,9 @@ void AZoogiAwakenFX::TickRing(float Dt, float Fade)
 		const float Ph = FR.FRand() * 20.f;
 		const float Fl = 0.72f + 0.28f * FMath::Sin(Age * (9.f + FR.FRand() * 6.f) + Ph);
 		const float Born = FMath::Clamp((Sweep - A01) * 6.f, 0.f, 1.f);
-		const float H = S * FR.FRandRange(30.f, 85.f) * (0.55f + 0.45f * Power) * Fl * Born;
+		const float H = S * FR.FRandRange(55.f, 140.f) * (0.55f + 0.45f * Power) * Fl * Born;
 		const FVector P = Ground + FVector(FMath::Cos(A), FMath::Sin(A), 0.f) * R * FR.FRandRange(0.985f, 1.03f) + FVector(0, 0, -2.f);
-		Billboard(P, H * 0.8f, H, FLinearColor(I, I, I, 1.f), FR.FRand(), true);
+		Billboard(P, H * 0.7f, H, FLinearColor(I, I, I, 1.f), FR.FRand(), true);
 	}
 	EndQuads(0);
 	if (EndAt >= 0.f && Fade <= 0.f) { BeginQuads(); EndQuads(0); }
@@ -420,7 +431,7 @@ void AZoogiAwakenFX::TickShock(float Dt, float Fade)
 		const bool bTooFar = FVector::Dist2D(Bo.End, Ground) > 480.f * S * 1.4f;
 		if (Age >= Bo.NextMove || bTooFar)
 		{
-			const float A = FMath::DegreesToRadians(k * 120.f + Rng.FRandRange(-40.f, 40.f) + Age * 25.f);
+			const float A = FMath::DegreesToRadians(k * 90.f + Rng.FRandRange(-30.f, 30.f) + Age * 25.f);
 			Bo.End = Ground + FVector(FMath::Cos(A), FMath::Sin(A), 0.f) * S * Rng.FRandRange(280.f, 460.f);
 			Bo.NextMove = Age + Rng.FRandRange(0.8f, 1.4f);
 			SplatAt(Bo.End, Rng.FRandRange(1.2f, 1.6f), 1.6f);
@@ -453,8 +464,8 @@ void AZoogiAwakenFX::TickShock(float Dt, float Fade)
 			Pts.Add(Src + D * T + FVector(0, 0, Arc * 4.f * T * (1.f - T)) + (Side * O1 + Up2 * O2) * 0.045f * Len * FMath::Max(Env, 0.15f) * (i == 0 || i == NP ? 0.f : 1.f));
 		}
 		const float Iv = Bo.Flick * Run;
-		Ribbon(Pts, 130.f * S, FLinearColor(0.22f * Iv, 0.22f * Iv, 0.22f * Iv, 1.f)); // soft glow sheath (the demo's bloom)
-		Ribbon(Pts, 42.f * S, FLinearColor(Iv, Iv, Iv, 1.f));
+		Ribbon(Pts, 190.f * S, FLinearColor(0.3f * Iv, 0.3f * Iv, 0.3f * Iv, 1.f)); // soft glow sheath (the demo's bloom)
+		Ribbon(Pts, 64.f * S, FLinearColor(Iv, Iv, Iv, 1.f));
 		for (int32 b = 0; b < 3; ++b)
 		{
 			const int32 i0 = R.RandRange(5, NP - 6);
@@ -464,12 +475,12 @@ void AZoogiAwakenFX::TickShock(float Dt, float Fade)
 			TArray<FVector> Br; Br.Add(Pts[i0]);
 			FVector P = Pts[i0];
 			for (int32 i = 1; i <= 7; ++i) { P += (Dir + R.GetUnitVector() * 0.55f).GetSafeNormal() * BL / 7.f; Br.Add(P); }
-			Ribbon(Br, 15.f * S, FLinearColor(Iv * 0.7f, Iv * 0.7f, Iv * 0.7f, 1.f));
+			Ribbon(Br, 24.f * S, FLinearColor(Iv * 0.7f, Iv * 0.7f, Iv * 0.7f, 1.f));
 		}
 		if (UPointLightComponent* L = HitLights.IsValidIndex(k) ? HitLights[k].Get() : nullptr)
 		{
 			L->SetWorldLocation(Bo.End + FVector(0, 0, 45.f * S));
-			L->SetIntensity(20.f * Iv);
+			L->SetIntensity(30.f * Iv);
 		}
 	}
 	EndQuads(0);
@@ -482,6 +493,7 @@ void AZoogiAwakenFX::TickShock(float Dt, float Fade)
 	}
 	EndQuads(1);
 	if (Light) { Light->SetWorldLocation(Src); Light->SetIntensity(35.f * Run * (0.85f + 0.15f * FMath::Sin(Age * 40.f))); }
+	if (Decal2) if (UMaterialInstanceDynamic* M = Cast<UMaterialInstanceDynamic>(Decal2->GetDecalMaterial())) M->SetScalarParameterValue(TEXT("Fade"), Run * FMath::Min(1.f, Age / 0.15f));
 	for (int32 i = 0; i < Splats.Num(); ++i)
 	{
 		const float A = Age - SplatBorn[i];
@@ -556,7 +568,7 @@ void AZoogiAwakenFX::TickVoid(float Dt)
 	FVector To = TargetActor.IsValid() ? TargetActor->GetActorLocation() : Ground + Param;
 	if (!TargetActor.IsValid()) To.Z = Ground.Z + 55.f * S;
 	const float FlyT = FMath::Clamp(FVector::Dist(Out, To) / 1500.f, 0.35f, 0.75f);
-	const float RockSize = 150.f * S;
+	const float RockSize = 215.f * S; // boulder fills most of the 2.35 m portal, as in the picked frame
 	float RockScale = 0.f;
 	FVector RockP = PortalC;
 	FRotator RockR(Age * 40.f, Age * 70.f, 0.f);

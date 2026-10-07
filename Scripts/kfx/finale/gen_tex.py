@@ -115,4 +115,13 @@ save('T_ZAFX_Stars', np.clip(st + blur(st, 1.2) * 0.8, 0, 1), np.clip(neb * 1.4 
 
 # 9. round spark dot
 save('T_ZAFX_Dot', np.exp(-(r / 0.35) ** 2) * (r < 1))
+# 10. ring floor (inside the launch ring): R = glowing ember veins + hot rim band, G = 1 - r, B = scorch mottle
+fn1 = tile_noise(512, 5, 6, 31); fn2 = tile_noise(512, 4, 3, 32)
+ridge = np.clip(1 - np.abs(fn1 * 2 - 1) * 6.0, 0, 1) ** 2            # thin bright cracks
+ins = np.clip((R0 - r) / 0.04, 0, 1)
+veins = ridge * (0.35 + 0.65 * fn2) * ins
+band = np.exp(-((r - R0 * 0.93) / 0.07) ** 2) * 0.55 * ins            # hot floor just inside the fire line
+heat = (0.25 + 0.35 * fn2) * np.clip(r / R0, 0, 1) ** 1.5 * ins        # warmer toward the ring
+mottle = np.clip(0.35 + 0.55 * fn2 + 0.35 * ridge, 0, 1) * ins
+save('T_ZAFX_RingFloor', np.clip(veins + band + heat, 0, 1), np.clip(1 - r, 0, 1), mottle)
 print('ok', sorted(os.listdir(OUT)))

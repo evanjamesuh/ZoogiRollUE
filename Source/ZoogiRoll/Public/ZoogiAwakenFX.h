@@ -59,6 +59,7 @@ protected:
 	UPROPERTY() TObjectPtr<UProceduralMeshComponent> Quads;      // billboards / bolts rebuilt every frame
 	UPROPERTY() TObjectPtr<UDecalComponent> Decal;
 	UPROPERTY() TObjectPtr<UDecalComponent> Decal2;
+	UPROPERTY() TObjectPtr<UDecalComponent> Decal3;
 	UPROPERTY() TObjectPtr<UPointLightComponent> Light;
 	UPROPERTY() TObjectPtr<UPointLightComponent> Light2;
 	UPROPERTY() TObjectPtr<UNiagaraComponent> Niagara;
