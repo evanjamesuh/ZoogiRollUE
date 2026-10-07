@@ -227,8 +227,10 @@ void AZoogiGameMode::SpawnOrbs()
 	// createOrbs: 15 orbs on a ring of radius 5, plus a small centre triangle for a fuller court.
 	for (int32 i = 0; i < ZoogiConst::OrbCount; ++i)
 	{
-		const float A = (float)i / ZoogiConst::OrbCount * 2.f * PI;
-		FVector L(FMath::Cos(A) * ZoogiConst::OrbRingRadius, FMath::Sin(A) * ZoogiConst::OrbRingRadius, ZoogiConst::OrbRadius + 1.f);
+		// Per-map ring (Meadow r9: wider ring clear of the full-size spiral); other maps keep the default ring.
+		const float RingR = (Arena && Arena->OrbRingRadiusOverride > 0.f) ? Arena->OrbRingRadiusOverride : ZoogiConst::OrbRingRadius;
+		const float A = (float)i / ZoogiConst::OrbCount * 2.f * PI + (Arena ? FMath::DegreesToRadians(Arena->OrbRingYawOffset) : 0.f);
+		FVector L(FMath::Cos(A) * RingR, FMath::Sin(A) * RingR, ZoogiConst::OrbRadius + 1.f);
 		if (!OrbSpot(L)) continue;
 		AZoogiOrb* O = GetWorld()->SpawnActor<AZoogiOrb>(AZoogiOrb::StaticClass(), FTransform(L));
 		if (O)

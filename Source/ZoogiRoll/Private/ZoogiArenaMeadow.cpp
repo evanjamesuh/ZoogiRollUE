@@ -21,15 +21,15 @@ void AZoogiArena::BuildMeadow()
 	const FLinearColor Green = ZoogiUtil::Hex(TEXT("#39E37A"));
 	constexpr float SealGlow = 4.5f; // r8: lower strength + deeper green so the tonemapper keeps it saturated // r4: bold seal (T_MeadowGlow rebaked: thick core + soft halo)
 	const FLinearColor Soil = ZoogiUtil::Hex(TEXT("#9C8B73"));
-	const FLinearColor Wood = ZoogiUtil::Hex(TEXT("#8B5A2B"));
-	const FLinearColor WoodAlt = ZoogiUtil::Hex(TEXT("#A06A38"));
-	const FLinearColor Riser = ZoogiUtil::Hex(TEXT("#6E4A28"));
+	const FLinearColor Wood = ZoogiUtil::Hex(TEXT("#B07A55"));
+	const FLinearColor WoodAlt = ZoogiUtil::Hex(TEXT("#C08C66"));
+	const FLinearColor Riser = ZoogiUtil::Hex(TEXT("#8A5E42"));
 	const FLinearColor SeatStone = ZoogiUtil::Hex(TEXT("#B9A889"));
 	const FLinearColor RockA = ZoogiUtil::Hex(TEXT("#B9A889"));
 	const FLinearColor RockB = ZoogiUtil::Hex(TEXT("#8E8063"));
 
-	UMaterialInterface* FloorMat = KitFloorMaterial(TEXT("Meadow"), ZoogiUtil::Hex(TEXT("#00B83A")), SealGlow, 0.98f);
-	BuildIsland(ZoogiUtil::Hex(TEXT("#3F8A2C")), ZoogiUtil::Hex(TEXT("#55A336")), Soil,
+	UMaterialInterface* FloorMat = KitFloorMaterial(TEXT("Meadow"), ZoogiUtil::Hex(TEXT("#00B83A")), SealGlow, 0.80f); // r10: warm tan floor like the art (was washed cream)
+	BuildIsland(ZoogiUtil::Hex(TEXT("#7A8A3E")), ZoogiUtil::Hex(TEXT("#8C9446")), Soil,
 		ZoogiUtil::Hex(TEXT("#6E5B4A")), ZoogiUtil::Hex(TEXT("#4A3B30")), 0.3f, FloorMat);
 	FloorMID = Cast<UMaterialInstanceDynamic>(FloorMat);
 	if (FloorMID) FloorMID->SetScalarParameterValue(TEXT("GlowTint"), 1.0f); // r4: seal lines paint near-solid green into the base, not a faint tint
@@ -45,7 +45,7 @@ void AZoogiArena::BuildMeadow()
 	UMaterialInterface* Seat = ZoogiUtil::SurfaceMID(this, Wood, 0.8f);
 	UMaterialInterface* SeatAlt = ZoogiUtil::SurfaceMID(this, WoodAlt, 0.8f);
 	UMaterialInterface* SeatRiser = ZoogiUtil::SurfaceMID(this, Riser, 0.85f);
-	UMaterialInterface* GrassTop = ZoogiUtil::GroundMID(this, ZoogiUtil::Hex(TEXT("#3F8A2C")), ZoogiUtil::Hex(TEXT("#55A336")), 0.004f, 0.92f);
+	UMaterialInterface* GrassTop = ZoogiUtil::GroundMID(this, ZoogiUtil::Hex(TEXT("#7A8A3E")), ZoogiUtil::Hex(TEXT("#8C9446")), 0.004f, 0.92f);
 	UMaterialInterface* Cliff = ZoogiUtil::GroundMID(this, ZoogiUtil::Hex(TEXT("#6E5B4A")), ZoogiUtil::Hex(TEXT("#4A3B30")), 0.01f, 0.95f);
 	UMaterialInterface* GlowTop = ZoogiUtil::GlowMID(this, Green, 1.8f);
 	UPhysicalMaterial* PillarPM = ZoogiPhysics::MakeMaterial(this, 0.25f, 0.6f, false);
@@ -53,6 +53,7 @@ void AZoogiArena::BuildMeadow()
 	UPhysicalMaterial* StonePM = ZoogiPhysics::MakeMaterial(this, 0.3f, 0.35f, false);
 
 	AddHubCore(FVector(0, 0, 290.f), 55.f, Crystal);
+	OrbRingRadiusOverride = OrbRingR; OrbRingYawOffset = OrbRingYaw;
 
 	// 4 Resonance pillars (unbreakable), rise at match start.
 	for (int32 k = 0; k < 4; ++k)
@@ -96,7 +97,7 @@ void AZoogiArena::BuildMeadow()
 		P->FinishBuild();
 		if (Forming) Forming->AddActor(P, EZoogiFormStyle::Rise, FVector(0, 0, -(PillarH + 120.f)), 1.30f + 0.10f * k, 1.0f, 14.f);
 		// Arena Orb apron in front of each pillar (toward centre), clear of the seat-wall gaps.
-		const float ApronR = PillarR - 180.f;
+		const float ApronR = PillarR + 160.f; // r9: outside the pillar (the inside is the spiral / orb ring)
 		ExtraOrbSpots.Add(FVector(FMath::Cos(Rad) * ApronR, FMath::Sin(Rad) * ApronR, ZoogiConst::OrbRadius + 1.f));
 	}
 
@@ -328,9 +329,9 @@ void AZoogiArena::BuildMeadow()
 		FRandomStream MR(4242);
 		struct FRidge { float R; float HMin, HMax; FLinearColor A, B; int32 N; };
 		const FRidge Ridges[3] = {
-			{ 20000.f, 1800.f, 3200.f, ZoogiUtil::Hex(TEXT("#3E7F3A")), ZoogiUtil::Hex(TEXT("#5C9A45")), 40 },
-			{ 32000.f, 4200.f, 6200.f, ZoogiUtil::Hex(TEXT("#4F8C7A")), ZoogiUtil::Hex(TEXT("#6FA48E")), 44 },
-			{ 50000.f, 7000.f, 10500.f, ZoogiUtil::Hex(TEXT("#86ABC8")), ZoogiUtil::Hex(TEXT("#AFC8DE")), 48 } };
+			{ 20000.f, 1800.f, 3200.f, ZoogiUtil::Hex(TEXT("#8FA872")), ZoogiUtil::Hex(TEXT("#A3B884")), 40 },
+			{ 32000.f, 4200.f, 6200.f, ZoogiUtil::Hex(TEXT("#A4BCA0")), ZoogiUtil::Hex(TEXT("#B4C8AE")), 44 },
+			{ 50000.f, 7000.f, 10500.f, ZoogiUtil::Hex(TEXT("#AFC6D8")), ZoogiUtil::Hex(TEXT("#C3D5E3")), 48 } };
 		UMaterialInterface* Snow = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#EEF4F8")), 0.8f);
 		for (int32 r = 0; r < 3; ++r)
 		{
@@ -360,7 +361,7 @@ void AZoogiArena::BuildMeadow()
 		// dark cliff face so it reads against the hills.
 		UMaterialInterface* CliffDark = ZoogiUtil::GroundMID(this, ZoogiUtil::Hex(TEXT("#6B5A4A")), ZoogiUtil::Hex(TEXT("#4A3B30")), 0.004f, 0.95f);
 		// r6: valley floor under the island (below FallOutZ, no collision) so the view reads as rolling meadow, not void.
-		AddCylinder(FVector2D::ZeroVector, 40000.f, 60.f, -1000.f, GrassTop, false)->SetCastShadow(false);
+		AddCylinder(FVector2D::ZeroVector, 40000.f, 60.f, -1000.f, ZoogiUtil::GroundMID(this, ZoogiUtil::Hex(TEXT("#9CAF6A")), ZoogiUtil::Hex(TEXT("#AEB878")), 0.0005f, 0.95f), false)->SetCastShadow(false);
 		// r6: three waterfalls spilling off grassy cliff mesas in the valley (art: NW, N, NE), facing the arena.
 		const float FallYaw[3] = { 236.f, 268.f, 304.f }, FallR[3] = { 5200.f, 6800.f, 5600.f }, MesaTop[3] = { 500.f, 800.f, 600.f };
 		for (int32 i = 0; i < 3; ++i)
@@ -437,7 +438,7 @@ void AZoogiArena::BuildMeadow()
 
 	UStaticMesh* Oak = ZoogiUtil::LoadMesh(TEXT("/Game/Env/OakTree/SM_OakTree.SM_OakTree"));
 	UStaticMesh* Pine = ZoogiUtil::LoadMesh(TEXT("/Game/Env/PineTree/SM_PineTree.SM_PineTree"));
-	const FLinearColor GA = ZoogiUtil::Hex(TEXT("#3F8A2C")), GB = ZoogiUtil::Hex(TEXT("#55A336")), RockC = ZoogiUtil::Hex(TEXT("#5E4C3D"));
+	const FLinearColor GA = ZoogiUtil::Hex(TEXT("#7A8A3E")), GB = ZoogiUtil::Hex(TEXT("#8C9446")), RockC = ZoogiUtil::Hex(TEXT("#5E4C3D"));
 	for (int32 i = 0; i < 14; ++i)
 	{
 		const float A = i * (2.f * PI / 14.f) + Rng.FRandRange(-0.15f, 0.15f);
@@ -480,8 +481,8 @@ void AZoogiArena::BuildMeadow()
 		{ FZoogiArenaCheck C; C.Name = TEXT("seatwall_control_225"); C.Kind = FZoogiArenaCheck::OrbStays; C.From = Pol(1250.f, 225.f); C.Vel = FVector2D(Pol(1500.f, 225.f)); C.Wait = 3.0f; PT->Checks.Add(C); }
 		{ FZoogiArenaCheck C; C.Name = TEXT("seatwall_crack_225"); C.Kind = FZoogiArenaCheck::ZoogiDamages; C.From = Pol(1050.f, 225.f); C.Vel = FVector2D(Pol(NormalShot, 225.f));
 		  C.PieceKind = TEXT("seatwall"); C.Near = Pol(FloorR + 18.f, 225.f); C.Radius = 350.f; C.Wait = 1.6f; PT->Checks.Add(C); }
-		{ FZoogiArenaCheck C; C.Name = TEXT("bench_crack_65"); C.Kind = FZoogiArenaCheck::ZoogiDamages; C.From = Pol(480.f, 65.f); C.Vel = FVector2D(Pol(NormalShot, 65.f));
-		  C.PieceKind = TEXT("bench"); C.Near = Pol(BenchR, 65.f); C.Radius = 150.f; C.Wait = 1.6f; PT->Checks.Add(C); }
+		{ FZoogiArenaCheck C; C.Name = TEXT("bench_crack_67"); C.Kind = FZoogiArenaCheck::ZoogiDamages; C.From = Pol(1050.f, 67.f); C.Vel = FVector2D(Pol(-NormalShot, 67.f));
+		  C.PieceKind = TEXT("bench"); C.Near = Pol(BenchR, 67.f); C.Radius = 150.f; C.Wait = 1.6f; PT->Checks.Add(C); }
 		// Ramp roll-and-launch: a normal-power Zoogi must ride each ramp and get airborne (rise >= Radius cm).
 		for (int32 k = 0; k < 2; ++k)
 		{
@@ -498,12 +499,25 @@ void AZoogiArena::BuildMeadow()
 			C.PieceKind = TEXT("woodramp"); C.Near = L0; PT->Checks.Add(C);
 		}
 		{
-			const FVector L0 = Pol(310.f, SpiralA0), L1 = Pol(310.f, SpiralA0 - 6.f);
+			const FVector L0 = Pol((SpiralRIn + SpiralROut) * 0.5f, SpiralA0), L1 = Pol((SpiralRIn + SpiralROut) * 0.5f, SpiralA0 - 6.f);
 			const FVector D = (L1 - L0).GetSafeNormal2D();
 			FZoogiArenaCheck C; C.Name = TEXT("spiral_ride"); C.Kind = FZoogiArenaCheck::ZoogiLaunch;
-			C.From = L0 - D * 150.f; C.Vel = FVector2D(D * NormalShot * 0.8f); C.Radius = 30.f; C.Wait = 2.5f;
+			C.From = L0 - D * 150.f; C.Vel = FVector2D(D * NormalShot); C.Radius = 30.f; C.Wait = 2.5f;
 			C.PieceKind = TEXT("spiralramp"); C.Near = L0; PT->Checks.Add(C);
 		}
+	}
+	{
+		// r9: orb ring clearance vs spiral band/disc, pillars, benches (edge-to-edge, cm).
+		float MinSp = 1e9f, MinPi = 1e9f, MinBe = 1e9f;
+		for (int32 i = 0; i < ZoogiConst::OrbCount; ++i)
+		{
+			const FVector O = Pol(OrbRingR, OrbRingYaw + i * 360.f / ZoogiConst::OrbCount);
+			MinSp = FMath::Min(MinSp, FMath::Min(O.Size2D() - SpiralROut, FVector::Dist2D(O, Pol(DiscR, DiscYaw)) - DiscRad) - ZoogiConst::OrbRadius);
+			for (float Y : PillarYaw) MinPi = FMath::Min(MinPi, FVector::Dist2D(O, Pol(PillarR, Y)) - 70.f * PillarS - ZoogiConst::OrbRadius);
+			for (float Y : BenchYaw) MinBe = FMath::Min(MinBe, FVector::Dist2D(O, Pol(BenchR, Y)) - 65.f - ZoogiConst::OrbRadius);
+		}
+		UE_LOG(LogZoogi, Log, TEXT("Meadow orb ring r%.0f +%.0f deg: clearance spiral/disc %.0f, pillars %.0f, benches %.0f cm %s"), OrbRingR, OrbRingYaw, MinSp, MinPi, MinBe,
+			(MinSp > 0.f && MinPi > 0.f && MinBe > 0.f) ? TEXT("CLEAR") : TEXT("OVERLAP"));
 	}
 	UE_LOG(LogZoogi, Log, TEXT("Meadow Arena built: %d pieces, %d forming, %d extra orbs, orb-exit gaps %.0f cm @ 0/90/180/270 (no Aura)"),
 		Pieces.Num(), Forming ? Forming->Num() : 0, ExtraOrbSpots.Num(), OrbExitGapWidthCm);
