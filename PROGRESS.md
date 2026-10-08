@@ -646,3 +646,11 @@ Awakened / crit-grade hit), and so are the collider, events, SFX, popup, feed li
 - Comparison shots: add -ZoogiNoHUD with -ZoogiArenaShots for viewport-only captures (no UI source changes).
 - Tests: 12/12 ARENATEST pass every round. Packaged r14 (06:42) and r17 (07:02).
 - Open: toon/outline post-process, layered valleys + rocky mountains + more waterfalls, bigger pagoda/golem detail.
+
+## Battle Episode Engine phase B (Grok Bot, 2026-10-08)
+Spec: SPEC_battle_engine_2026-10-08 / AUDIT_2026-10-08 T1-T5. Engine only (debug overlay + BATTLE log lines). New flow OFF by default: [ZoogiRoll.Battle] Enabled=False; -ZoogiBattle=On|Off; any -ZoogiBattleTest turns it on.
+
+| task | what | tests (Frozen Ring, -ZoogiArena=1, fixed step 60, seed 7) | commit |
+|---|---|---|---|
+| T1 | UZoogiBattleStateMachine (WAIT_FOR_COMMAND > ACTION_PREVIEW > [MINIGAME] > PHYSICS_RESOLVE > RESULT > EPISODE_EVENT > NEXT_TURN, validated transitions, BATTLE state lines); FAIL > SHATTER_FAILURE > NEXT_TURN (cancels follow-up offer, skips cards/scenes/holds, ends turn); MISSED... card bypass when flow on (bMissConsolationCard); human Partner Follow-Up offer timeout (FollowUpOfferTimeout=12 s) | roll, miss_no_consolation, timeout, shatter_basic (+Episode Off: same first_final) PASS; roll flow-off PASS with identical finals; miss_no_consolation flow-off keeps the old MISSED card (expected) | 51140f5 |
+| T2 | Episode Energy component (gains from gameplay truth, cap 100, actor only, CSV/ini table), combos paid from energy, Awakening = Infuse or Guard only (never energy), reaction entitlement | energy_gain, combo_spend, energy_full_no_awaken, awaken_gate PASS; 2v2 CPU match flow on/off: actions 1-4 identical (action 5 differs only because the skipped MISSED card no longer consumes the shared random stream before P1's next draw) | 51140f5 |
