@@ -150,6 +150,9 @@ void UZoogiEpisodeSubsystem::PickShots(FZoogiEpisodeCue& Cue)
 		case EZoogiEpisodeTag::Terrain: return bFrozenRing ? Add({ { TEXT("world_cracked_floor"), ShW }, { TEXT("world_environment_shift"), ShW } }, T)
 			: Add({ { TEXT("world_environment_shift"), ShW }, { TEXT("world_cracked_floor"), ShW } }, T);
 		case EZoogiEpisodeTag::PartnerFollowUp: return Add({ { TEXT("motion_partner_approach"), ShA }, { TEXT("char_rivalry_glance"), ShA } }, T);
+		case EZoogiEpisodeTag::NearMiss: return Add({ { TEXT("char_surprise"), ShP }, { TEXT("char_comedy"), ShA }, { TEXT("char_surprise"), ShA } }, T);
+		case EZoogiEpisodeTag::FunnyBounce: return Add({ { TEXT("char_comedy"), ShA }, { TEXT("motion_rebound"), ShA }, { TEXT("motion_spin"), ShA } }, T);
+		case EZoogiEpisodeTag::OrbAlmostOut: return Add({ { TEXT("world_boundary"), ShW }, { TEXT("world_arena_orb"), ShW } }, T);
 		default: return false;
 		}
 	};
@@ -173,7 +176,7 @@ void UZoogiEpisodeSubsystem::PickShots(FZoogiEpisodeCue& Cue)
 	case EZoogiEpisodeCueKind::Camera:
 	{
 		// the main-view moment: the headline tag on its real body, falling back to the shooter's launch
-		if (!TagShot(HeadlineTag())) Add({ { TEXT("motion_launch"), ShA } }, EZoogiEpisodeTag::Num);
+		if (!TagShot(Cue.Tag != EZoogiEpisodeTag::Num ? Cue.Tag : HeadlineTag())) Add({ { TEXT("motion_launch"), ShA } }, EZoogiEpisodeTag::Num);
 		break;
 	}
 	case EZoogiEpisodeCueKind::Panels:

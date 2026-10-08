@@ -56,6 +56,7 @@ void UZoogiEpisodeSubsystem::TickTest()
 		AZoogiBall* S = G->Balls[0];
 		AZoogiBall* T = G->Balls[TestTarget];
 		if (!S || !T || !S->Artifact) return;
+		if (TestVariant == TEXT("N") || TestVariant == TEXT("R") || TestVariant == TEXT("K")) { TestSetupSimple(); return; }
 		const float R = AZoogiArena::ActiveKnockoffR;
 		const float Z0 = S->BallLocation().Z, Z1 = T->BallLocation().Z;
 		// scan layout orientations until the lane and every spot are clear of orbs and rocks
@@ -120,7 +121,11 @@ void UZoogiEpisodeSubsystem::TickTest()
 		break;
 	}
 	case 1:
-		if (G->Stage == EZoogiStage::Awaken && G->StageTime > 0.25f)
+		if (G->Stage == EZoogiStage::Awaken && G->StageTime > 0.25f && TestSimple())
+		{
+			TestStep = 2;                                    // simple shots: no Infuse
+		}
+		else if (G->Stage == EZoogiStage::Awaken && G->StageTime > 0.25f)
 		{
 			const bool bOk = G->AwakenInfuse(0);
 			UE_LOG(LogZoogi, Log, TEXT("TITAN_TEST awaken infuse %s=%d"), TestVariant == TEXT("S") ? TEXT("storm") : TEXT("titan"), bOk ? 1 : 0);
@@ -142,7 +147,7 @@ void UZoogiEpisodeSubsystem::TickTest()
 				const FVector2D P = FVector2D(S->BallLocation()) + D.GetSafeNormal() * (Gap + VImp * VImp / (2.f * Decel));
 				G->SetFreeAim(FVector(P, S->BallLocation().Z));
 			}
-			else if (bMiss) G->SetFreeAim(TestAimPoint);
+			else if (bMiss || TestSimple()) G->SetFreeAim(TestAimPoint);
 			else { G->LockOn(T, false); G->AimPowerStep = 3; }
 			const bool bOk = G->CommitLock();
 			UE_LOG(LogZoogi, Log, TEXT("TITAN_TEST aim variant=%s committed=%d"), *TestVariant, bOk ? 1 : 0);
@@ -177,6 +182,9 @@ void UZoogiEpisodeSubsystem::TestFinalize()
 	if (TestVariant == TEXT("A")) { Expect = TEXT("meteor=1 ringout=0"); bExpect = (Mode == EZoogiEpisodeMode::Off || Plan.bMeteor) && !bTargetOut; }
 	else if (TestVariant == TEXT("B") || TestVariant == TEXT("F")) { Expect = TEXT("meteor=1 ringout=1"); bExpect = (Mode == EZoogiEpisodeMode::Off || Plan.bMeteor) && bTargetOut; }
 	else if (TestVariant == TEXT("E")) { Expect = TEXT("meteor=0 power_hit=0 tier<4"); bExpect = !Plan.bMeteor && !Truth.bPowerHit && R.Tier < 4; }
+	else if (TestVariant == TEXT("N")) { Expect = TEXT("NEAR_MISS tier>=1"); bExpect = R.Tags.Contains(EZoogiEpisodeTag::NearMiss) && R.Tier >= 1; }
+	else if (TestVariant == TEXT("R")) { Expect = TEXT("AIRBORNE tier>=3 air_shot camera_restored"); bExpect = R.Tags.Contains(EZoogiEpisodeTag::Airborne) && R.Tier >= 3 && (Mode == EZoogiEpisodeMode::Off || (Plan.bAirShot && Plan.bCameraRestored)); }
+	else if (TestVariant == TEXT("K")) { Expect = TEXT("BANK tier>=2"); bExpect = (R.Tags.Contains(EZoogiEpisodeTag::Bank) || R.Tags.Contains(EZoogiEpisodeTag::DoubleBank)) && R.Tier >= 2; }
 	else if (TestVariant == TEXT("S")) { Expect = TEXT("meteor=0 power_hit=1 panels"); bExpect = !Plan.bMeteor && Truth.bPowerHit && (Mode == EZoogiEpisodeMode::Off || Plan.Panels > 0); }
 	FString Final, Deltas, TitanShots;
 	for (const FZoogiEpisodeShot& Sh : Plan.Shots)
@@ -186,10 +194,132 @@ void UZoogiEpisodeSubsystem::TestFinalize()
 		Final += FString::Printf(TEXT("%sP%d(%.1f,%.1f%s)"), Final.IsEmpty() ? TEXT("") : TEXT(" "), i + 1, Truth.FinalBallPos[i].X, Truth.FinalBallPos[i].Y, Truth.FinalBallOut[i] ? TEXT(",out") : TEXT(""));
 		Deltas += FString::Printf(TEXT("%sP%d:%+d/%+d"), Deltas.IsEmpty() ? TEXT("") : TEXT(","), i + 1, Truth.ScoreDelta.IsValidIndex(i) ? Truth.ScoreDelta[i] : 0, Truth.RingMarkDelta.IsValidIndex(i) ? Truth.RingMarkDelta[i] : 0);
 	}
+	FString TagS;
+	for (EZoogiEpisodeTag Tg : R.Tags) TagS += (TagS.IsEmpty() ? TEXT("") : TEXT(",")) + FString(ZoogiEpisode::TagName(Tg));
+	UE_LOG(LogZoogi, Log, TEXT("TITAN_TEST tags=%s panels=%d air_shot=%d camera_restored=%d glow=%d"), TagS.IsEmpty() ? TEXT("-") : *TagS, Plan.Panels, Plan.bAirShot ? 1 : 0, Plan.bCameraRestored ? 1 : 0, Plan.bGlow ? 1 : 0);
 	UE_LOG(LogZoogi, Log, TEXT("TITAN_TEST variant=%s mode=%s action=%d power_hit=%d crit=%d archetype=%s tier=%d score=%.0f meteor=%d meteor_s=%.2f target=P%d target_ringout=%d game_bOut=%d score/ringmark=%s depicted=\"%s\" depicted_matches_physics=%d result_unchanged=%d drift_cm=%.4f dilation_restored=%d titan_shots=%s shots=%d expect=[%s] %s final=%s"),
 		*TestVariant, ZoogiEpisode::ModeName(Mode), Truth.ActionId, Truth.bPowerHit ? 1 : 0, Truth.bCrit ? 1 : 0, ZoogiEpisode::ArchetypeName(R.Archetype), R.Tier, R.Score,
 		Plan.bMeteor ? 1 : 0, Plan.MeteorSeconds, TestTarget + 1, bTargetOut ? 1 : 0, bGameOut ? 1 : 0, *Deltas, *Plan.Epilogue, bDepictMatch ? 1 : 0, Plan.ResultUnchanged() ? 1 : 0,
 		Plan.FreezeDriftCm, Plan.bDilationRestored ? 1 : 0, TitanShots.IsEmpty() ? TEXT("-") : *TitanShots, Plan.Shots.Num(), *Expect, (bExpect && bDepictMatch && Plan.ResultUnchanged()) ? TEXT("PASS") : TEXT("FAIL"), *Final);
 	TestQuitAt = RealClock + 2.0;
 	TestStep = 5;
+}
+
+bool UZoogiEpisodeSubsystem::TestSimple() const
+{
+	return TestVariant == TEXT("N") || TestVariant == TEXT("R") || TestVariant == TEXT("K");
+}
+
+// N: shooter rolls past a rival with a ~15 cm gap (NEAR MISS). R: full-power run up the snow-chute ramp (AIRBORNE).
+// K: shooter banks off a pillar base into the target (BANK). Only start positions + aim are set; the rest is physics.
+void UZoogiEpisodeSubsystem::TestSetupSimple()
+{
+	AZoogiGameMode* G = GM();
+	AZoogiBall* S = G->Balls[0];
+	AZoogiBall* T = G->Balls[TestTarget];
+	const float R = AZoogiArena::ActiveKnockoffR;
+	const float Rb = ZoogiConst::ZoogiRadius;
+	const float Z0 = S->BallLocation().Z, Z1 = T->BallLocation().Z;
+	auto Clear = [&](const TArray<FVector2D>& Spots, const TArray<TPair<FVector2D, FVector2D>>& Lanes, const AActor* IgnorePiece)
+	{
+		for (const FVector2D& P : Spots) if (G->Arena->IsOffCourt(P) || !G->Arena->IsSpotClear(P, 60.f)) return false;
+		for (AZoogiOrb* O : G->Orbs)
+		{
+			if (!O || O->bOut) continue;
+			const FVector2D OP(O->OrbLocation());
+			for (const auto& L : Lanes) if (SegDist2D(OP, L.Key, L.Value) < 150.f) return false;
+			for (const FVector2D& P : Spots) if (FVector2D::Distance(OP, P) < 150.f) return false;
+		}
+		for (const AZoogiRock* Rk : G->Arena->GetRocks())
+		{
+			if (!Rk || Rk->GetState() == EZoogiRockState::Shattered) continue;
+			const FVector2D RP(Rk->GetActorLocation());
+			for (const auto& L : Lanes) if (SegDist2D(RP, L.Key, L.Value) < Rk->GetRadius() + 80.f) return false;
+		}
+		for (const AZoogiArenaPiece* Pc : G->Arena->GetPieces())
+		{
+			if (!Pc || Pc == IgnorePiece || Pc->GetPieceState() == EZoogiPieceState::Broken) continue;
+			FVector C, Ext;
+			Pc->GetActorBounds(true, C, Ext);
+			const float PR = FVector2D(Ext.X, Ext.Y).Size();
+			if (PR < 1.f || PR > 450.f) continue;
+			for (const auto& L : Lanes) if (SegDist2D(FVector2D(C), L.Key, L.Value) < PR + 60.f) return false;
+		}
+		return true;
+	};
+	FVector2D SP(0, 0), TP(0, 0), Aim(0, 0);
+	TArray<FVector2D> OthersP;
+	bool bFound = false;
+	if (TestVariant == TEXT("R"))
+	{
+		for (const AZoogiArenaPiece* Pc : G->Arena->GetPieces())
+		{
+			if (!Pc || Pc->GetKind() != FName(TEXT("ramp"))) continue;
+			FVector C, Ext;
+			Pc->GetActorBounds(true, C, Ext);
+			const FVector2D F = FVector2D(Pc->GetActorForwardVector()).GetSafeNormal();
+			const float Half = FMath::Abs(FVector2D::DotProduct(FVector2D(Ext.X, Ext.Y), F)) + 20.f;
+			const FVector2D RC(Pc->GetActorLocation());
+			SP = RC - F * (Half + 380.f);
+			Aim = RC + F * 2600.f;                      // far: full power straight up the chute
+			TP = SP - FVector2D(-F.Y, F.X) * 420.f;     // target parked beside the run-up
+			OthersP = { SP + FVector2D(-F.Y, F.X) * 460.f, SP - F * 420.f };
+			bFound = true;
+			break;
+		}
+	}
+	else
+	{
+		for (int32 k = 0; k < 24 && !bFound; ++k)
+		{
+			const float Th = FMath::DegreesToRadians(15.f * k);
+			const FVector2D U(FMath::Cos(Th), FMath::Sin(Th)), V(-U.Y, U.X);
+			TArray<TPair<FVector2D, FVector2D>> Lanes;
+			const AActor* Ign = nullptr;
+			if (TestVariant == TEXT("N"))
+			{
+				TP = U * (0.15f * R) + V * (0.1f * R);
+				SP = TP - U * 600.f - V * (2.f * Rb + 15.f);
+				Aim = SP + U * 900.f;                    // rolls ~900 cm: passes the target's flank at ~260 cm/s
+				Lanes.Add({ SP, SP + U * 1000.f });
+			}
+			else
+			{
+				// K: a pillar base face; mirror bank (ball centre meets the face at Q, reflects to the target)
+				TArray<const AZoogiArenaPiece*> Pillars;
+				for (const AZoogiArenaPiece* Pc : G->Arena->GetPieces()) if (Pc && Pc->GetKind().ToString().StartsWith(TEXT("pillar"))) Pillars.Add(Pc);
+				if (Pillars.Num() == 0) break;
+				const AZoogiArenaPiece* Pc = Pillars[(k / 8) % Pillars.Num()];
+				const float Face = 61.f + Rb - 4.f;
+				const FVector2D C(Pc->GetActorLocation());
+				const FVector2D N = FVector2D(Pc->GetActorForwardVector()).GetSafeNormal().GetRotated(90.f * (k % 4));
+				const float Side = (k / 4) % 2 ? 1.f : -1.f;
+				const FVector2D Q = C + N * Face;
+				const FVector2D In = (-N).GetRotated(Side * 35.f);       // incoming direction (towards the face)
+				const FVector2D Out = In - 2.f * FVector2D::DotProduct(In, N) * N;
+				SP = Q - In * 520.f;
+				TP = Q + Out * 330.f;
+				Aim = SP + In * 1500.f;
+				Lanes.Add({ SP, Q });
+				Lanes.Add({ Q + Out * 60.f, TP });
+				Ign = Pc;
+			}
+			const FVector2D Far = (TP - SP).GetSafeNormal();
+			OthersP = { SP - FVector2D(-Far.Y, Far.X) * 520.f, TP + FVector2D(-Far.Y, Far.X) * 520.f };
+			TArray<FVector2D> Spots = { SP, TP };
+			Spots.Append(OthersP);
+			if (Clear(Spots, Lanes, Ign)) bFound = true;
+		}
+	}
+	if (!bFound) UE_LOG(LogZoogi, Warning, TEXT("TITAN_TEST %s: no clear layout, using the last one"), *TestVariant);
+	S->PlaceAt(FVector(SP, Z0), FMath::RadiansToDegrees(FMath::Atan2(Aim.Y - SP.Y, Aim.X - SP.X)));
+	T->PlaceAt(FVector(TP, Z1), 0.f);
+	int32 Oi = 0;
+	for (int32 i = 1; i < G->Balls.Num(); ++i)
+		if (i != TestTarget && G->Balls[i] && OthersP.IsValidIndex(Oi)) G->Balls[i]->PlaceAt(FVector(OthersP[Oi++], G->Balls[i]->BallLocation().Z), 0.f);
+	S->bCPU = false;
+	TestAimPoint = FVector(Aim, Z0);
+	TestStep = 1;
+	UE_LOG(LogZoogi, Log, TEXT("TITAN_TEST setup variant=%s mode=%s clear=%d shooter=P1 (%.0f,%.0f) target=P%d (%.0f,%.0f) aim=(%.0f,%.0f)"),
+		*TestVariant, ZoogiEpisode::ModeName(Mode), bFound ? 1 : 0, SP.X, SP.Y, TestTarget + 1, TP.X, TP.Y, Aim.X, Aim.Y);
 }

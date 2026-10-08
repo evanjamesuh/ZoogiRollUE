@@ -43,6 +43,9 @@ enum class EZoogiEpisodeTag : uint8
 	RingOut,
 	Terrain,
 	PartnerFollowUp,
+	NearMiss,       // tier 1 reaction: the shooter brushed past another Zoogi without touching it
+	FunnyBounce,    // tier 1 reaction: one body pinballed off 3+ surfaces in quick succession
+	OrbAlmostOut,   // tier 1 reaction: an orb skimmed the knockout line at speed and stayed in
 	Num UMETA(Hidden)
 };
 
@@ -156,6 +159,8 @@ struct FZoogiGameplayTruthRecord
 	UPROPERTY() float PowerHitTime = -1.f;
 	UPROPERTY() FVector PowerHitLocation = FVector::ZeroVector;
 	UPROPERTY() bool bGuardBreak = false;
+	UPROPERTY() TArray<int32> NearMisses;    // bodies the shooter passed within NearMissGap of without contact
+	UPROPERTY() float NearMissGap = 0.f;     // smallest such gap (cm)
 	UPROPERTY() float Duration = 0.f;
 	UPROPERTY() float MaxRelSpeed = 0.f;
 	UPROPERTY() TArray<FVector> FinalBallPos;
@@ -237,6 +242,8 @@ struct FZoogiCinematicPlan
 	UPROPERTY() float FreezeDriftCm = 0.f;   // largest position drift seen across a presentation freeze
 	UPROPERTY() float FreezeDriftVel = 0.f;
 	UPROPERTY() int32 Freezes = 0;
+	UPROPERTY() bool bAirShot = false;        // tier 3 airborne shot played (fallback hold + tracking shot)
+	UPROPERTY() bool bCameraRestored = true;  // every fallback main-view shot handed the view back to the gameplay camera
 	bool ResultUnchanged() const { return bDilationRestored && FreezeDriftCm < 0.01f && FreezeDriftVel < 0.01f; }
 };
 
@@ -306,6 +313,20 @@ struct FZoogiEpisodeTuning
 	float PBank = 9.f, PDoubleBank = 16.f, PAllyBump = 12.f, POrbRelay = 18.f, PWallRedirect = 8.f, PBoundarySave = 14.f;
 	float PAirborne = 10.f, PPowerHit = 20.f, PCrit = 8.f, PGuardBreak = 14.f, POrbOut = 12.f, PRingOut = 30.f;
 	float PTerrain = 8.f, PTerrainExtra = 4.f, PPartnerFollowUp = 10.f;
+	float PNearMiss = 8.f, PFunnyBounce = 8.f, POrbAlmostOut = 9.f;
+	float NearMissGap = 30.f;           // surface gap (cm) that counts as a near miss
+	int32 FunnyBounceSurfaces = 3;      // surface contacts by one body ...
+	float FunnyBounceWindow = 2.0f;     // ... inside this many game seconds
+	// spec tier floors: a detected trick shot is tier 2, meaningful air is tier 3, a reaction is tier 1
+	bool bTierFloors = true;
+	// tier 1-3 fallback presentation (used only while no receiver is bound)
+	float AirTriggerTime = 0.10f;       // live airborne trigger after this long in the air ...
+	float AirTriggerGap = 24.f;         // ... with at least this gap
+	float AirSlowScale = 0.35f;         // stepped slow-mo: the world advances on this fraction of frames (full-size steps)
+	float AirSlowSeconds = 0.9f;        // real seconds of stepped slow-mo
+	float AirShotSeconds = 1.6f;        // tracking shot length (real)
+	float InsertSeconds = 1.1f;         // tier 1 insert panel
+	float TrickPanelSeconds = 1.5f;     // tier 2 panel
 	float RepeatFalloff = 0.5f;         // each extra instance of the same outcome tag is worth this much of the previous
 	float SynergyPer = 6.f;             // per distinct tag category beyond the second
 	float ChainBonus = 4.f;             // per causal depth beyond 1 (capped)

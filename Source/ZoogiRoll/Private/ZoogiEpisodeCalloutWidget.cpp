@@ -4,6 +4,10 @@
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/TextBlock.h"
+#include "Components/Image.h"
+#include "Components/Overlay.h"
+#include "Components/OverlaySlot.h"
+#include "Engine/Texture.h"
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
 
@@ -84,6 +88,30 @@ TSharedRef<SWidget> UZoogiEpisodeCalloutWidget::RebuildWidget()
 	BannerSub->SetRenderOpacity(0.f);
 	Anchor(Root, BannerSub, FAnchors(0.5f, 0.74f), FVector2D(0.5f, 0.5f), FMargin(0.f, 46.f, 0.f, 0.f), true);
 
+	// fallback panels: framed live views, clear of the centre of the screen and of the HUD corners
+	const FVector2D PanelAnchor[3] = { FVector2D(0.16f, 0.47f), FVector2D(0.84f, 0.47f), FVector2D(0.15f, 0.73f) };
+	for (int32 i = 0; i < 3; ++i)
+	{
+		UBorder* Frame = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+		Frame->SetBrush(EpSolid(FLinearColor(0.96f, 0.96f, 1.f, 1.f), FLinearColor::Transparent, 0.f, 4.f));
+		Frame->SetPadding(FMargin(4.f));
+		UOverlay* Ov = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass());
+		UImage* Img = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
+		Ov->AddChildToOverlay(Img);
+		UTextBlock* Cap = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
+		Cap->SetFont(EpFont(15.f, true));
+		Cap->SetShadowOffset(FVector2D(1.5f, 1.5f));
+		Cap->SetShadowColorAndOpacity(FLinearColor(0.f, 0.f, 0.f, 0.85f));
+		if (UOverlaySlot* CS = Ov->AddChildToOverlay(Cap)) { CS->SetHorizontalAlignment(HAlign_Left); CS->SetVerticalAlignment(VAlign_Bottom); CS->SetPadding(FMargin(8.f, 0.f, 0.f, 6.f)); }
+		Frame->SetContent(Ov);
+		Frame->SetRenderOpacity(0.f);
+		Frame->SetVisibility(ESlateVisibility::Collapsed);
+		Anchor(Root, Frame, FAnchors(PanelAnchor[i].X, PanelAnchor[i].Y), FVector2D(0.5f, 0.5f), FMargin(0.f), true);
+		PanelFrames.Add(Frame);
+		PanelImages.Add(Img);
+		PanelCaps.Add(Cap);
+	}
+
 	return Super::RebuildWidget();
 }
 
@@ -110,9 +138,40 @@ void UZoogiEpisodeCalloutWidget::ShowBanner(const FString& Text, const FString& 
 	BannerLife = Seconds;
 }
 
+void UZoogiEpisodeCalloutWidget::ShowPanel(int32 PanelSlot, UTexture* Tex, float Seconds, const FString& Caption, const FLinearColor& Frame, bool bSmall)
+{
+	if (!PanelFrames.IsValidIndex(PanelSlot) || !Tex) return;
+	FSlateBrush B;
+	B.SetResourceObject(Tex);
+	B.ImageSize = bSmall ? FVector2D(288.f, 162.f) : FVector2D(400.f, 225.f);
+	B.DrawAs = ESlateBrushDrawType::Image;
+	PanelImages[PanelSlot]->SetBrush(B);
+	PanelFrames[PanelSlot]->SetBrushColor(Frame);
+	PanelCaps[PanelSlot]->SetText(FText::FromString(Caption));
+	PanelCaps[PanelSlot]->SetColorAndOpacity(FSlateColor(Frame));
+	PanelFrames[PanelSlot]->SetVisibility(ESlateVisibility::HitTestInvisible);
+	PanelAge[PanelSlot] = 0.f;
+	PanelLife[PanelSlot] = FMath::Max(0.4f, Seconds);
+}
+
 void UZoogiEpisodeCalloutWidget::TickEpisode(float Dt)
 {
 	if (!Root) return;
+	for (int32 i = 0; i < PanelFrames.Num() && i < 3; ++i)
+	{
+		PanelAge[i] += Dt;
+		const float T = PanelAge[i], L = PanelLife[i];
+		UBorder* F = PanelFrames[i];
+		if (T >= L) { if (F->GetVisibility() != ESlateVisibility::Collapsed) F->SetVisibility(ESlateVisibility::Collapsed); continue; }
+		const float In = FMath::Clamp(T / 0.22f, 0.f, 1.f), Out = FMath::Clamp((L - T) / 0.2f, 0.f, 1.f);
+		const float Side = i == 1 ? 1.f : -1.f;
+		FWidgetTransform X;
+		X.Translation = FVector2D(Side * 500.f * (1.f - EaseOutBack(In)), 0.f);
+		X.Scale = FVector2D(1.f, FMath::Lerp(0.1f, 1.f, Out));                // collapse out
+		X.Angle = Side * 10.f * (1.f - EaseOut(In));
+		F->SetRenderTransform(X);
+		F->SetRenderOpacity(FMath::Min(In * 3.f, 1.f) * Out);
+	}
 	// callout pop: scale 1.5 -> 1 with a back-ease, hold, fade
 	CalloutAge += Dt;
 	{

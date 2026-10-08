@@ -43,6 +43,14 @@ void UZoogiEpisodeSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	TestVariant = TestVariant.ToUpper();
 	if (TestVariant == TEXT("F") && !bModeExplicit) Mode = EZoogiEpisodeMode::Competitive; // F: same shot, Competitive (short)
 	FParse::Value(Cmd, TEXT("ZoogiEpisodeShots="), ShotDir);
+	int32 Seed = 0;
+	if (FParse::Value(Cmd, TEXT("ZoogiEpisodeSeed="), Seed))
+	{
+		// test-only: makes the CPU players' FMath::FRand choices repeatable so an Off run and a Balanced run can be compared
+		FMath::RandInit(Seed);
+		FMath::SRandInit(Seed);
+		UE_LOG(LogZoogi, Log, TEXT("EPISODE rng seeded with %d (test flag)"), Seed);
+	}
 	UE_LOG(LogZoogi, Log, TEXT("EPISODE engine: mode=%s%s%s"), ZoogiEpisode::ModeName(Mode), TestVariant.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" test=%s"), *TestVariant),
 		ShotDir.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(" shots=%s"), *ShotDir));
 }
@@ -210,6 +218,9 @@ void UZoogiEpisodeSubsystem::BeginAction(AZoogiBall* Ball)
 	bEpilogueShown = false;
 	bPowerSent = false;
 	bArchetypePending = false;
+	NearMin.Reset();
+	NearTouched.Reset();
+	bAirShotDone = false;
 	if (const AWorldSettings* WS = W->GetWorldSettings()) { StartCinematicDilation = WS->CinematicTimeDilation; StartGlobalDilation = WS->TimeDilation; }
 	PrevVel.Reset();
 	for (int32 i = 0; i < G->Balls.Num(); ++i) PrevVel.Add(i, BodyVelocity(i));
@@ -360,6 +371,12 @@ void UZoogiEpisodeSubsystem::TrackAction(float GameDt)
 			{
 				if (!A.bAir) { A.bAir = true; A.Start = Now; A.Peak = 0.f; }
 				A.Peak = FMath::Max(A.Peak, Gap);
+				// tier 3 airborne entry: fire while the Zoogi is still in the air (the AIRBORNE tag itself lands at touchdown)
+				if (!bAirShotDone && Now - A.Start >= Tune.AirTriggerTime && A.Peak >= Tune.AirTriggerGap && G->Arena && !G->Arena->IsOffCourt(FVector2D(L)))
+				{
+					bAirShotDone = true;
+					StartAirShot(i, A.Peak);
+				}
 			}
 			else if (A.bAir)
 			{
@@ -408,6 +425,65 @@ void UZoogiEpisodeSubsystem::TrackAction(float GameDt)
 		FZoogiBoundaryEvent E; E.Body = 100 + j; E.Time = Now; E.bCrossed = true; E.bFellOut = true; E.Location = O->OrbLocation();
 		Truth.Boundary.Add(E);
 	}
+	// orbs skimming the knockout line (ORB ALMOST OUT)
+	for (int32 j = 0; j < G->Orbs.Num() && G->Arena; ++j)
+	{
+		AZoogiOrb* O = G->Orbs[j];
+		if (!O || O->bOut || OutCounted.Contains(100 + j)) continue;
+		const FVector L = O->OrbLocation();
+		const FVector V = BodyVelocity(100 + j);
+		const float Speed2D = FVector2D(V).Size();
+		const FVector2D P(L.X, L.Y);
+		const FVector2D Rad = P.IsNearlyZero() ? FVector2D(1.f, 0.f) : P.GetSafeNormal();
+		const bool bOff = G->Arena->IsOffCourt(P);
+		const float Edge = bOff ? 0.f : G->Arena->DistanceToEdge(P, Rad);
+		const float Outward = FVector2D::DotProduct(FVector2D(V), Rad);
+		int32* Bi = OpenBoundary.Find(100 + j);
+		if (bOff || (Edge < Tune.EdgeNearDist && Outward > Tune.EdgeNearSpeed * 0.5f))
+		{
+			if (!Bi)
+			{
+				FZoogiBoundaryEvent E; E.Body = 100 + j; E.Time = Now; E.MinEdgeDist = Edge; E.Location = L;
+				Bi = &OpenBoundary.Add(100 + j, Truth.Boundary.Add(E));
+			}
+			FZoogiBoundaryEvent& E = Truth.Boundary[*Bi];
+			if (Edge <= E.MinEdgeDist) { E.MinEdgeDist = Edge; E.Location = L; }
+			E.SpeedAtEdge = FMath::Max(E.SpeedAtEdge, Speed2D);
+			E.bCrossed |= bOff;
+			E.bSettledIn = false;
+		}
+		else if (Bi && !Truth.Boundary[*Bi].bFellOut && Speed2D < 40.f && !bOff) Truth.Boundary[*Bi].bSettledIn = true;
+	}
+	// near miss: the moving shooter passes another Zoogi within NearMissGap without ever touching it
+	if (AZoogiBall* S = Cast<AZoogiBall>(BodyActor(Truth.Actor)))
+	{
+		const FVector SL = S->BallLocation();
+		const float SSpeed = FVector2D(S->GetBallVelocity()).Size();
+		const float SR = S->Sphere ? S->Sphere->GetScaledSphereRadius() : ZoogiConst::ZoogiRadius;
+		for (int32 j = 0; j < G->Balls.Num() && !S->bOut; ++j)
+		{
+			AZoogiBall* B = G->Balls[j];
+			if (j == Truth.Actor || !B || B->bOut || NearTouched.Contains(j)) continue;
+			const uint64 Key = ((uint64)FMath::Min(Truth.Actor, j) << 32) | (uint64)(uint32)FMath::Max(Truth.Actor, j);
+			if (PairLast.Contains(Key)) { NearTouched.Add(j); NearMin.Remove(j); continue; }
+			const float BR = B->Sphere ? B->Sphere->GetScaledSphereRadius() : ZoogiConst::ZoogiRadius;
+			const float Gap = FVector::Dist(SL, B->BallLocation()) - SR - BR;
+			if (Gap > 1.f && Gap < Tune.NearMissGap && SSpeed > 0.6f * Tune.MeaningfulSpeed)
+			{
+				float& M = NearMin.FindOrAdd(j, 1e6f);
+				M = FMath::Min(M, Gap);
+			}
+			else if (const float* M = NearMin.Find(j))
+			{
+				if (Gap > 3.f * Tune.NearMissGap)
+				{
+					Truth.NearMisses.AddUnique(j);
+					Truth.NearMissGap = Truth.NearMisses.Num() == 1 ? *M : FMath::Min(Truth.NearMissGap, *M);
+					NearMin.Remove(j);
+				}
+			}
+		}
+	}
 	Truth.PiecesDamaged = FMath::Max(0, PieceSteps() - StartPieceSteps);
 	Truth.RocksDamaged = FMath::Max(0, RockSteps() - StartRockSteps);
 
@@ -430,6 +506,7 @@ FZoogiEpisodeRecognitionRecord UZoogiEpisodeSubsystem::Recognize(const FZoogiGam
 	auto IsRival = [&](int32 Code) { return Code >= 0 && Code < 100 && Code != T.Actor && TeamOf(Code) != TeamOf(T.Actor); };
 
 	TMap<int32, int32> WallsSince;
+	TMap<int32, TArray<float>> SurfTimes;
 	TMap<int32, float> WallW;
 	TSet<int32> FellOut;
 	for (const FZoogiBoundaryEvent& B : T.Boundary) if (B.bFellOut) FellOut.Add(B.Body);
@@ -441,6 +518,11 @@ FZoogiEpisodeRecognitionRecord UZoogiEpisodeSubsystem::Recognize(const FZoogiGam
 			|| E.Kind == EZoogiContactKind::Piece || E.Kind == EZoogiContactKind::Rock;
 		if (bSurface)
 		{
+			TArray<float>& Times = SurfTimes.FindOrAdd(E.Body);
+			Times.Add(E.Time);
+			int32 InWin = 0;
+			for (float Tm : Times) if (E.Time - Tm <= Tune.FunnyBounceWindow) ++InWin;
+			if (InWin >= Tune.FunnyBounceSurfaces) Mark(EZoogiEpisodeTag::FunnyBounce, 1.f);
 			WallsSince.FindOrAdd(E.Body)++;
 			WallW.FindOrAdd(E.Body) = FMath::Max(WallW.FindRef(E.Body), E.Weight);
 			// a struck body (not the shooter) deflected hard by a wall
@@ -477,6 +559,10 @@ FZoogiEpisodeRecognitionRecord UZoogiEpisodeSubsystem::Recognize(const FZoogiGam
 	if (T.bPowerHit) Mark(EZoogiEpisodeTag::PowerHit, 1.f);
 	if (T.PiecesDamaged + T.RocksDamaged > 0) Mark(EZoogiEpisodeTag::Terrain, 1.f);
 	if (T.bFollowUp) Mark(EZoogiEpisodeTag::PartnerFollowUp, 1.f);
+	if (T.NearMisses.Num() > 0) Mark(EZoogiEpisodeTag::NearMiss, 1.f);
+	for (const FZoogiBoundaryEvent& B : T.Boundary)
+		if (B.Body >= 100 && !B.bFellOut && B.bSettledIn && B.MinEdgeDist < Tune.EdgeNearDist && B.SpeedAtEdge >= 0.8f * Tune.EdgeNearSpeed)
+			Mark(EZoogiEpisodeTag::OrbAlmostOut, 1.f);
 	int32 RivalOuts = 0;
 	for (int32 P : T.RingOuts) if (IsRival(P)) ++RivalOuts;
 	if (RivalOuts > 0) Mark(EZoogiEpisodeTag::RingOut, 1.f);
@@ -500,6 +586,9 @@ FZoogiEpisodeRecognitionRecord UZoogiEpisodeSubsystem::Recognize(const FZoogiGam
 		case EZoogiEpisodeTag::RingOut: return Tune.PRingOut;
 		case EZoogiEpisodeTag::Terrain: return Tune.PTerrain;
 		case EZoogiEpisodeTag::PartnerFollowUp: return Tune.PPartnerFollowUp;
+		case EZoogiEpisodeTag::NearMiss: return Tune.PNearMiss;
+		case EZoogiEpisodeTag::FunnyBounce: return Tune.PFunnyBounce;
+		case EZoogiEpisodeTag::OrbAlmostOut: return Tune.POrbAlmostOut;
 		default: return 0.f;
 		}
 	};
@@ -544,6 +633,15 @@ FZoogiEpisodeRecognitionRecord UZoogiEpisodeSubsystem::Recognize(const FZoogiGam
 		R.Archetype = EZoogiEpisodeArchetype::TitanMeteor;
 		Tier = FMath::Max(Tier, 4); // the archetype is the tier-4 power escalation for Titan
 	}
+	if (Tune.bTierFloors)
+	{
+		// spec section 3: a detected trick shot is a tier 2 moment, meaningful air is tier 3, a small reaction is tier 1
+		auto H = [&Has](EZoogiEpisodeTag Tg) { return Has[(int32)Tg]; };
+		if (H(EZoogiEpisodeTag::NearMiss) || H(EZoogiEpisodeTag::FunnyBounce) || H(EZoogiEpisodeTag::OrbAlmostOut)) Tier = FMath::Max(Tier, 1);
+		if (H(EZoogiEpisodeTag::Bank) || H(EZoogiEpisodeTag::DoubleBank) || H(EZoogiEpisodeTag::WallRedirect) || H(EZoogiEpisodeTag::AllyBump)
+			|| H(EZoogiEpisodeTag::OrbRelay) || H(EZoogiEpisodeTag::BoundarySave)) Tier = FMath::Max(Tier, 2);
+		if (H(EZoogiEpisodeTag::Airborne)) Tier = FMath::Max(Tier, 3);
+	}
 	R.Tier = Tier;
 	return R;
 }
@@ -581,6 +679,7 @@ void UZoogiEpisodeSubsystem::FinalizeAction(const TCHAR* Why)
 	}
 	const FZoogiEpisodeRecognitionRecord R = Recognize(Truth, Tune);
 	if (bFrozen) UnfreezeWorld();
+	EndAirSlow(TEXT("finalize"));
 	if (!bEpilogueShown) ShowEpilogue();
 	bArchetypePending = false;
 	// RULE ZERO: the cinematic time dilation in effect at launch must be back (receivers ease slow-mo in / out and restore)
@@ -605,10 +704,10 @@ void UZoogiEpisodeSubsystem::FinalizeAction(const TCHAR* Why)
 	FString Ring;
 	for (int32 P : Truth.RingOuts) Ring += FString::Printf(TEXT("%sP%d"), Ring.IsEmpty() ? TEXT("") : TEXT(","), P + 1);
 
-	UE_LOG(LogZoogi, Log, TEXT("EPISODE action=%d tags=%s score=%.0f tier=%d archetype=%s result_unchanged=%d mode=%s actor=P%d(%s) presented_tier=%d layout=%s panels=%d callouts=%d cues=%d/%d shots=%d slowmo_req=%d power=%d meteor=%d freezes=%d drift_cm=%.3f dilation_restored=%d(cine=%.3f global=%.3f) epilogue=\"%s\" why=%s"),
+	UE_LOG(LogZoogi, Log, TEXT("EPISODE action=%d tags=%s score=%.0f tier=%d archetype=%s result_unchanged=%d mode=%s actor=P%d(%s) presented_tier=%d layout=%s panels=%d callouts=%d cues=%d/%d shots=%d slowmo_req=%d power=%d meteor=%d freezes=%d drift_cm=%.3f dilation_restored=%d(cine=%.3f global=%.3f) camera_restored=%d air_shot=%d epilogue=\"%s\" why=%s"),
 		Truth.ActionId, *Tags, R.Score, R.Tier, ZoogiEpisode::ArchetypeName(R.Archetype), Plan.ResultUnchanged() ? 1 : 0, ZoogiEpisode::ModeName(Mode), Truth.Actor + 1, *Truth.ActorName,
 		Plan.Tier, ZoogiEpisode::LayoutName(Plan.Layout), Plan.Panels, Plan.Callouts, Plan.CuesHandled, Plan.Cues, Plan.Shots.Num(), Plan.bSlowMo ? 1 : 0, Plan.bPowerEscalation ? 1 : 0, Plan.bMeteor ? 1 : 0, Plan.Freezes, Plan.FreezeDriftCm,
-		Plan.bDilationRestored ? 1 : 0, CineNow, GlobalNow, *Plan.Epilogue, Why);
+		Plan.bDilationRestored ? 1 : 0, CineNow, GlobalNow, Plan.bCameraRestored ? 1 : 0, Plan.bAirShot ? 1 : 0, *Plan.Epilogue, Why);
 	UE_LOG(LogZoogi, Log, TEXT("EPISODE_TRUTH action=%d round=%d turn=%d combo=%d power=%.2f awaken=%s power_hit=%d crit=%d power_target=%d contacts=%d meaningful=%d max_rel=%.0f air=%d[%s] boundary=%d ring_outs=%s orb_outs=%d score_delta=%s ringmark_delta=%s resonance=%+d control=%+.0f triggers=0x%x pieces=%d rocks=%d follow_up=%d dur=%.2f final=%s"),
 		Truth.ActionId, Truth.Round, Truth.Turn, Truth.bCombo ? 1 : 0, Truth.LaunchPower, *ZoogiArtifacts::Name(Truth.Awaken), Truth.bPowerHit ? 1 : 0, Truth.bCrit ? 1 : 0, Truth.PowerHitTarget,
 		Truth.Contacts.Num(), Meaningful, Truth.MaxRelSpeed, Truth.Air.Num(), *AirS, Truth.Boundary.Num(), Ring.IsEmpty() ? TEXT("-") : *Ring, Truth.OrbOuts,

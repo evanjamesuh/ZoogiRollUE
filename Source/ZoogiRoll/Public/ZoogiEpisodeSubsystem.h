@@ -127,9 +127,32 @@ protected:
 	void NoteShots(const FZoogiEpisodeCue& Cue);
 	TArray<FName> RecentShots;          // newest last, capped (recency weighting)
 
+	// tier 1-3 fallback presentation (only while no receiver is bound): inserts / panels via the Game Camera director,
+	// contact glow, airborne tracking shot with stepped slow-mo (full-size physics steps on a fraction of frames)
+	void FallbackTier(int32 Tier);
+	bool FallbackPanel(int32 Slot, AActor* Focus, AActor* Secondary, uint8 ShotType, float Seconds, const FString& Caption, const FLinearColor& Frame, bool bSmall);
+	void FallbackGlow(int32 MaxN);
+	void StartAirShot(int32 Body, float Gap);
+	void TickAirSlow(float RealDt);
+	void EndAirSlow(const TCHAR* Why);
+	void BindDirector();
+	TMap<int32, float> NearMin;         // near-miss candidates: body -> smallest gap so far
+	TSet<int32> NearTouched;
+	bool bAirShotDone = false;
+	bool bAirSlow = false;
+	int32 AirBody = -1; int32 AirHoldToken = 0; bool bStepPaused = false;
+	float AirSlowLeft = 0.f;
+	float AirAcc = 0.f;
+	int32 AirShotId = 0;
+	TWeakObjectPtr<AActor> AirPrevView;
+	bool bDirectorBound = false;
+	TArray<FZoogiEpisodeShot> LastTierShots;
+
 	// test director (ZoogiEpisodeTest.cpp)
 	void TickTest();
 	void TestFinalize();
+	void TestSetupSimple();
+	bool TestSimple() const;
 
 	FZoogiEpisodeTuning Tune;
 	EZoogiEpisodeMode Mode = EZoogiEpisodeMode::Balanced;

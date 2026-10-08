@@ -44,6 +44,9 @@ namespace ZoogiEpisode
 		case EZoogiEpisodeTag::RingOut: return TEXT("RING_OUT");
 		case EZoogiEpisodeTag::Terrain: return TEXT("TERRAIN");
 		case EZoogiEpisodeTag::PartnerFollowUp: return TEXT("PARTNER_FOLLOW_UP");
+		case EZoogiEpisodeTag::NearMiss: return TEXT("NEAR_MISS");
+		case EZoogiEpisodeTag::FunnyBounce: return TEXT("FUNNY_BOUNCE");
+		case EZoogiEpisodeTag::OrbAlmostOut: return TEXT("ORB_ALMOST_OUT");
 		default: return TEXT("?");
 		}
 	}
@@ -65,6 +68,9 @@ namespace ZoogiEpisode
 		case EZoogiEpisodeTag::RingOut: return TEXT("RING OUT");
 		case EZoogiEpisodeTag::Terrain: return TEXT("TERRAIN");
 		case EZoogiEpisodeTag::PartnerFollowUp: return TEXT("PARTNER FOLLOW-UP");
+		case EZoogiEpisodeTag::NearMiss: return TEXT("NEAR MISS");
+		case EZoogiEpisodeTag::FunnyBounce: return TEXT("FUNNY BOUNCE");
+		case EZoogiEpisodeTag::OrbAlmostOut: return TEXT("ORB ALMOST OUT");
 		default: return TEXT("?");
 		}
 	}

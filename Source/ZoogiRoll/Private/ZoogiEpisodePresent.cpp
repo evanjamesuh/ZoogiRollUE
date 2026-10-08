@@ -6,6 +6,8 @@
 // (pause + snapshot / verify / restore of every body).
 #include "ZoogiEpisodeSubsystem.h"
 #include "ZoogiEpisodeCalloutWidget.h"
+#include "ZoogiEpisodeCameraDirector.h"
+#include "ZoogiFX.h"
 #include "ZoogiGameMode.h"
 #include "ZoogiBall.h"
 #include "ZoogiOrb.h"
@@ -45,6 +47,7 @@ namespace
 
 void UZoogiEpisodeSubsystem::EnsureFallback()
 {
+	BindDirector();
 	if (Fallback || (OnCallout.IsBound() && OnEpilogue.IsBound())) return;
 	UWorld* W = GetWorld();
 	APlayerController* PC = W ? W->GetFirstPlayerController() : nullptr;
@@ -138,11 +141,13 @@ void UZoogiEpisodeSubsystem::UpdateLive()
 	for (EZoogiEpisodeTag T : LiveRec.Tags)
 		if (!Announced.Contains(T)) { Announced.Add(T); QueueCallout(T, Tier); }
 	const int32 Cap = PresentCap();
+	const int32 Before = PresentedTier;
 	while (PresentedTier < FMath::Min(Tier, Cap))
 	{
 		++PresentedTier;
 		PresentTier(PresentedTier, LiveRec);
 	}
+	if (PresentedTier > Before) FallbackTier(PresentedTier);
 }
 
 void UZoogiEpisodeSubsystem::PresentTier(int32 Tier, const FZoogiEpisodeRecognitionRecord& R)
@@ -167,6 +172,7 @@ void UZoogiEpisodeSubsystem::PresentTier(int32 Tier, const FZoogiEpisodeRecognit
 		Shot(TEXT("tier2"));
 	}
 	SendCue(OnTier, C);
+	LastTierShots = C.Shots;
 	const bool bArchetypeOwns = bArchetypePending || bFrozen || Plan.bMeteor;
 	if (Tier == 3 && !bArchetypeOwns) RequestPanels(3);
 	if (Tier >= 4)
@@ -204,7 +210,10 @@ void UZoogiEpisodeSubsystem::QueueCallout(EZoogiEpisodeTag Tag, int32 Tier)
 		{ TEXT("ORB OUT"), TEXT("ORB AWAY"), TEXT("OFF THE EDGE") },
 		{ TEXT("RING OUT"), TEXT("OUT OF THE RING"), TEXT("RING OUT!") },
 		{ TEXT("TERRAIN"), TEXT("STAGE DAMAGE"), TEXT("ARENA CRACKED") },
-		{ TEXT("PARTNER FOLLOW-UP"), TEXT("FOLLOW-UP"), TEXT("TAG IN") } };
+		{ TEXT("PARTNER FOLLOW-UP"), TEXT("FOLLOW-UP"), TEXT("TAG IN") },
+		{ TEXT("NEAR MISS!"), TEXT("SO CLOSE!"), TEXT("WHISKER AWAY") },
+		{ TEXT("BOING!"), TEXT("PINBALL!"), TEXT("RICOCHET!") },
+		{ TEXT("ORB ALMOST OUT!"), TEXT("ON THE LINE!"), TEXT("TEETERING!") } };
 	if (Mode == EZoogiEpisodeMode::Off) return;
 	const TArray<FString>& Opts = V[(int32)Tag];
 	int32 Pick = Truth.ActionId % Opts.Num();
@@ -226,6 +235,7 @@ void UZoogiEpisodeSubsystem::QueueCallout(EZoogiEpisodeTag Tag, int32 Tier)
 	case EZoogiEpisodeTag::PowerHit: case EZoogiEpisodeTag::GuardBreak: C.Color = ZoogiEpisode::PowerColor(Truth.Awaken); break;
 	case EZoogiEpisodeTag::OrbOut: case EZoogiEpisodeTag::RingOut: C.Color = FLinearColor(1.f, 0.42f, 0.3f); break;
 	case EZoogiEpisodeTag::Terrain: C.Color = FLinearColor(0.92f, 0.72f, 0.45f); break;
+	case EZoogiEpisodeTag::NearMiss: case EZoogiEpisodeTag::FunnyBounce: case EZoogiEpisodeTag::OrbAlmostOut: C.Color = FLinearColor(0.75f, 1.f, 0.55f); break;
 	default: C.Color = FLinearColor(1.f, 0.86f, 0.36f); break;
 	}
 	C.SubText = C.Tier >= 2 ? FString::Printf(TEXT("TRICK SHOT  -  P%d %s"), Truth.Actor + 1, *Truth.ActorName.ToUpper()) : FString::Printf(TEXT("P%d %s"), Truth.Actor + 1, *Truth.ActorName.ToUpper());
@@ -450,6 +460,7 @@ void UZoogiEpisodeSubsystem::TickPresentation(float Dt)
 {
 	PumpCallouts();
 	TryStartArchetype();
+	TickAirSlow(Dt);
 	if (bFrozen)
 	{
 		// the world is paused, so the camera manager does not update by itself: drive it (view target / modifiers of
