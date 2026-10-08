@@ -61,7 +61,7 @@ namespace
 		{ TEXT("segment_retained"),      ELay::Lane,   EAw::Save,   TEXT("signature_strike"), true,  60.f, 2, true },
 		{ TEXT("unlocks"),               ELay::KO,     EAw::Save,   TEXT("signature_strike"), true,  50.f, 1, true },
 		{ TEXT("queued_effects"),        ELay::Miss,   EAw::Guard,  TEXT("signature_strike"), false, 50.f, 1, true },
-		{ TEXT("midair_collision"),      ELay::MidAir, EAw::Save,   nullptr,               false, -1.f, 1, true },
+		{ TEXT("midair_collision"),      ELay::Miss,   EAw::Save,   nullptr,               false, -1.f, 1, true },  // EARLY rail release over a parked Zoogi
 		{ TEXT("replay_order"),          ELay::None,   EAw::Save,   nullptr,               false, -1.f, 6, false },
 		{ TEXT("one_v_one"),             ELay::None,   EAw::Save,   nullptr,               false, -1.f, 6, false },
 		{ TEXT("four_player_2v2"),       ELay::None,   EAw::Save,   nullptr,               false, -1.f, 8, false },
@@ -253,11 +253,11 @@ void UZoogiBattleStateMachine::TestScriptTurn()
 		UE_LOG(LogZoogi, Log, TEXT("BATTLE_TEST orb O%d placed at (%.0f,%.0f)"), TestOrb + 1, OP.X, OP.Y);
 	}
 	// T3 aerial props (debug geometry) on the scripted lane
-	if (!bSecond && (TestCase.StartsWith(TEXT("halo_pass")) || TestCase.StartsWith(TEXT("halo_rim")) || TestCase == TEXT("sky_bumper") || TestCase.StartsWith(TEXT("rail_"))))
+	if (!bSecond && (TestCase.StartsWith(TEXT("halo_pass")) || TestCase.StartsWith(TEXT("halo_rim")) || TestCase == TEXT("sky_bumper") || TestCase.StartsWith(TEXT("rail_")) || TestCase == TEXT("midair_collision")))
 	{
 		ClearProps();
 		const FVector2D SP(S->BallLocation());
-		const FVector2D Dir = (TestCase.StartsWith(TEXT("rail_")) ? FVector2D(TestAim) - SP : FVector2D(G->Balls[TestTarget]->BallLocation()) - SP).GetSafeNormal();
+		const FVector2D Dir = ((TestCase.StartsWith(TEXT("rail_")) || TestCase == TEXT("midair_collision")) ? FVector2D(TestAim) - SP : FVector2D(G->Balls[TestTarget]->BallLocation()) - SP).GetSafeNormal();
 		const FVector2D Side(-Dir.Y, Dir.X);
 		const float Floor = S->BallLocation().Z - ZoogiConst::ZoogiRadius;
 		const FVector Fwd(Dir, 0.f);
@@ -265,6 +265,13 @@ void UZoogiBattleStateMachine::TestScriptTurn()
 		else if (TestCase == TEXT("halo_rim")) SpawnProp(EZoogiPropKind::ResonanceHalo, FVector(SP + Dir * 250.f + Side * 90.f, Floor), Fwd);
 		else if (TestCase == TEXT("sky_bumper")) SpawnProp(EZoogiPropKind::SkyBumper, FVector(SP + Dir * 250.f + Side * 60.f, S->BallLocation().Z), Fwd);
 		else SpawnProp(EZoogiPropKind::LaunchRail, FVector(SP + Dir * 170.f, Floor), Fwd);
+		if (TestCase == TEXT("midair_collision"))
+		{
+			// the target parks on the EARLY (high) launch arc: P1 meets it in the air (Zone 2)
+			AZoogiBall* T = G->Balls[TestTarget];
+			T->PlaceAt(FVector(SP + Dir * 400.f, T->BallLocation().Z), 0.f);
+			UE_LOG(LogZoogi, Log, TEXT("BATTLE_TEST midair target P%d parked at (%.0f,%.0f)"), TestTarget + 1, T->BallLocation().X, T->BallLocation().Y);
+		}
 		UE_LOG(LogZoogi, Log, TEXT("BATTLE_TEST props case=%s count=%d"), *TestCase, Props.Num());
 	}
 	TestNotes.Add(FString::Printf(TEXT("turn%d:%s"), TestScriptedTurns + 1, Combo == NAME_None ? TEXT("shot") : *Combo.ToString()));
@@ -343,10 +350,11 @@ void UZoogiBattleStateMachine::TickTest(float RealDt)
 		}
 		break;
 	case 4: // in flight: Air Reaction / Rail Release input (human P1) per case
-		if (TestCase == TEXT("rail_release") && IsRailOpen())
+		if ((TestCase == TEXT("rail_release") || TestCase == TEXT("midair_collision")) && IsRailOpen())
 		{
 			const UZoogiMiniGameRailRelease* RM = Cast<UZoogiMiniGameRailRelease>(ActiveMiniGame);
-			if (RM && RM->Elapsed >= Tune.RailEarlyWindow + Tune.RailCenterWindow * 0.5f) SubmitRailRelease(TEXT("test"));
+			const float At = TestCase == TEXT("midair_collision") ? Tune.RailEarlyWindow * 0.5f : Tune.RailEarlyWindow + Tune.RailCenterWindow * 0.5f;
+			if (RM && RM->Elapsed >= At) SubmitRailRelease(TEXT("test"));
 		}
 		if (IsAirReactionOpen() && (TestCase == TEXT("air_entitled") || TestCase == TEXT("awaken_gate")))
 		{
@@ -653,6 +661,8 @@ void UZoogiBattleStateMachine::TestCheck()
 			}
 		}
 		Need(bAirHit, TEXT("no contact while P1 airborne"));
+		Need(LastRailWindow == EZoogiRailWindow::Early, TEXT("no EARLY rail launch"));
+		D += FString::Printf(TEXT("rail=%s v=(%.0f,%.0f,%.0f)"), ZoogiBattle::RailWindowName(LastRailWindow), LastRailVelocity.X, LastRailVelocity.Y, LastRailVelocity.Z);
 	}
 	else if (Case == TEXT("one_v_one") || Case == TEXT("replay_order") || Case == TEXT("four_player_2v2"))
 	{
