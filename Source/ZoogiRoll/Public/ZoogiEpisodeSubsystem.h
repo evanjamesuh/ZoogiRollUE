@@ -106,7 +106,7 @@ protected:
 
 	// cue planning (ZoogiEpisodePresent.cpp)
 	FZoogiEpisodeCue MakeCue(EZoogiEpisodeCueKind Kind, int32 Tier) const;
-	void SendCue(const FZoogiEpisodeCueEvent& Event, const FZoogiEpisodeCue& Cue);
+	void SendCue(const FZoogiEpisodeCueEvent& Event, FZoogiEpisodeCue& Cue);
 	void EnsureFallback();
 	void UpdateLive();
 	void PresentTier(int32 Tier, const FZoogiEpisodeRecognitionRecord& R);
@@ -120,6 +120,12 @@ protected:
 	int32 PresentCap() const;
 	void FreezeWorld();
 	void UnfreezeWorld();
+
+	// shot_id selection (ZoogiEpisodeShotPick.cpp): spec section 15 library, recency-weighted
+	void PickShots(FZoogiEpisodeCue& Cue);
+	int32 SubjectBody(EZoogiShotSubject S) const;
+	void NoteShots(const FZoogiEpisodeCue& Cue);
+	TArray<FName> RecentShots;          // newest last, capped (recency weighting)
 
 	// test director (ZoogiEpisodeTest.cpp)
 	void TickTest();

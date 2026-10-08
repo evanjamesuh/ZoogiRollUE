@@ -177,6 +177,38 @@ struct FZoogiEpisodeRecognitionRecord
 	UPROPERTY() FString Headline;
 };
 
+/** Who a library shot is about. */
+UENUM()
+enum class EZoogiShotSubject : uint8
+{
+	Actor,      // the acting (launching) Zoogi
+	Target,     // the first body it hit / the power target
+	Partner,    // the target's partner (2v2) or another Zoogi watching from elsewhere in the Arena
+	Secondary,  // the deepest body in the causal chain
+	World       // arena / objective insert (no character)
+};
+
+/**
+ * One pick from the spec section 15 shot library (plus the Titan Meteor sequence, section 11.4 shots A-E).
+ * ShotId is the key into the anime clip manifest (episode-engine/anime/manifest.csv, column shot_id) and the camera
+ * shot library; Character is the roster name of the subject (lower case, "" for World shots), matching the manifest
+ * "character" column / the "_<character>" file suffix.
+ */
+USTRUCT()
+struct FZoogiEpisodeShot
+{
+	GENERATED_BODY()
+	UPROPERTY() FName ShotId;
+	UPROPERTY() FName Family;                 // character | motion | world | power | archetype | titan_meteor
+	UPROPERTY() EZoogiShotSubject Subject = EZoogiShotSubject::Actor;
+	UPROPERTY() FString Character;
+	UPROPERTY() FName AssetKey;               // Comic's existing still / clip for this shot (anime/_src/<AssetKey>/), None = not made yet
+	UPROPERTY() int32 Body = -1;              // body code (player index, 100+ = orb), -1 = world
+	UPROPERTY() float Seconds = 0.f;          // suggested hold inside the cue
+	UPROPERTY() EZoogiEpisodeTag Reason = EZoogiEpisodeTag::Num; // the real event that justifies the shot (Num = tier / power)
+	TWeakObjectPtr<AActor> SubjectActor;
+};
+
 /** Plan: what the presentation layer did / does for the action. */
 USTRUCT()
 struct FZoogiCinematicPlan
@@ -191,6 +223,7 @@ struct FZoogiCinematicPlan
 	UPROPERTY() int32 CuesHandled = 0;        // ... that had at least one receiver bound
 	UPROPERTY() int32 Callouts = 0;
 	UPROPERTY() FString LastCallout;
+	UPROPERTY() TArray<FZoogiEpisodeShot> Shots;   // every shot_id requested for the action, in order
 	UPROPERTY() bool bGlow = false;
 	UPROPERTY() bool bPowerEscalation = false;
 	UPROPERTY() FLinearColor PowerColor = FLinearColor::White;
@@ -247,6 +280,7 @@ struct FZoogiEpisodeCue
 	UPROPERTY() float SlowMoScale = 1.f;
 	UPROPERTY() float SlowMoSeconds = 0.f;
 	UPROPERTY() int32 HoldToken = 0;                               // Archetype: the world is held (paused) until released / timeout
+	UPROPERTY() TArray<FZoogiEpisodeShot> Shots;                   // shot_ids to play for this cue, in order (panel i = Shots[i])
 	TWeakObjectPtr<AActor> Actor;                                  // acting Zoogi
 	TWeakObjectPtr<AActor> Target;                                 // first body it hit / power target
 	TWeakObjectPtr<AActor> Secondary;                              // deepest chain body

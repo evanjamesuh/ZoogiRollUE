@@ -605,9 +605,9 @@ void UZoogiEpisodeSubsystem::FinalizeAction(const TCHAR* Why)
 	FString Ring;
 	for (int32 P : Truth.RingOuts) Ring += FString::Printf(TEXT("%sP%d"), Ring.IsEmpty() ? TEXT("") : TEXT(","), P + 1);
 
-	UE_LOG(LogZoogi, Log, TEXT("EPISODE action=%d tags=%s score=%.0f tier=%d archetype=%s result_unchanged=%d mode=%s actor=P%d(%s) presented_tier=%d layout=%s panels=%d callouts=%d cues=%d/%d slowmo_req=%d power=%d meteor=%d freezes=%d drift_cm=%.3f dilation_restored=%d(cine=%.3f global=%.3f) epilogue=\"%s\" why=%s"),
+	UE_LOG(LogZoogi, Log, TEXT("EPISODE action=%d tags=%s score=%.0f tier=%d archetype=%s result_unchanged=%d mode=%s actor=P%d(%s) presented_tier=%d layout=%s panels=%d callouts=%d cues=%d/%d shots=%d slowmo_req=%d power=%d meteor=%d freezes=%d drift_cm=%.3f dilation_restored=%d(cine=%.3f global=%.3f) epilogue=\"%s\" why=%s"),
 		Truth.ActionId, *Tags, R.Score, R.Tier, ZoogiEpisode::ArchetypeName(R.Archetype), Plan.ResultUnchanged() ? 1 : 0, ZoogiEpisode::ModeName(Mode), Truth.Actor + 1, *Truth.ActorName,
-		Plan.Tier, ZoogiEpisode::LayoutName(Plan.Layout), Plan.Panels, Plan.Callouts, Plan.CuesHandled, Plan.Cues, Plan.bSlowMo ? 1 : 0, Plan.bPowerEscalation ? 1 : 0, Plan.bMeteor ? 1 : 0, Plan.Freezes, Plan.FreezeDriftCm,
+		Plan.Tier, ZoogiEpisode::LayoutName(Plan.Layout), Plan.Panels, Plan.Callouts, Plan.CuesHandled, Plan.Cues, Plan.Shots.Num(), Plan.bSlowMo ? 1 : 0, Plan.bPowerEscalation ? 1 : 0, Plan.bMeteor ? 1 : 0, Plan.Freezes, Plan.FreezeDriftCm,
 		Plan.bDilationRestored ? 1 : 0, CineNow, GlobalNow, *Plan.Epilogue, Why);
 	UE_LOG(LogZoogi, Log, TEXT("EPISODE_TRUTH action=%d round=%d turn=%d combo=%d power=%.2f awaken=%s power_hit=%d crit=%d power_target=%d contacts=%d meaningful=%d max_rel=%.0f air=%d[%s] boundary=%d ring_outs=%s orb_outs=%d score_delta=%s ringmark_delta=%s resonance=%+d control=%+.0f triggers=0x%x pieces=%d rocks=%d follow_up=%d dur=%.2f final=%s"),
 		Truth.ActionId, Truth.Round, Truth.Turn, Truth.bCombo ? 1 : 0, Truth.LaunchPower, *ZoogiArtifacts::Name(Truth.Awaken), Truth.bPowerHit ? 1 : 0, Truth.bCrit ? 1 : 0, Truth.PowerHitTarget,

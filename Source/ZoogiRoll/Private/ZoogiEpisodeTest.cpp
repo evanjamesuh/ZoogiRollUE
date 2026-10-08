@@ -178,16 +178,18 @@ void UZoogiEpisodeSubsystem::TestFinalize()
 	else if (TestVariant == TEXT("B") || TestVariant == TEXT("F")) { Expect = TEXT("meteor=1 ringout=1"); bExpect = (Mode == EZoogiEpisodeMode::Off || Plan.bMeteor) && bTargetOut; }
 	else if (TestVariant == TEXT("E")) { Expect = TEXT("meteor=0 power_hit=0 tier<4"); bExpect = !Plan.bMeteor && !Truth.bPowerHit && R.Tier < 4; }
 	else if (TestVariant == TEXT("S")) { Expect = TEXT("meteor=0 power_hit=1 panels"); bExpect = !Plan.bMeteor && Truth.bPowerHit && (Mode == EZoogiEpisodeMode::Off || Plan.Panels > 0); }
-	FString Final, Deltas;
+	FString Final, Deltas, TitanShots;
+	for (const FZoogiEpisodeShot& Sh : Plan.Shots)
+		if (Sh.Family == FName(TEXT("titan_meteor"))) TitanShots += FString::Printf(TEXT("%s%s"), TitanShots.IsEmpty() ? TEXT("") : TEXT(","), *Sh.ShotId.ToString().RightChop(13));
 	for (int32 i = 0; i < Truth.FinalBallPos.Num(); ++i)
 	{
 		Final += FString::Printf(TEXT("%sP%d(%.1f,%.1f%s)"), Final.IsEmpty() ? TEXT("") : TEXT(" "), i + 1, Truth.FinalBallPos[i].X, Truth.FinalBallPos[i].Y, Truth.FinalBallOut[i] ? TEXT(",out") : TEXT(""));
 		Deltas += FString::Printf(TEXT("%sP%d:%+d/%+d"), Deltas.IsEmpty() ? TEXT("") : TEXT(","), i + 1, Truth.ScoreDelta.IsValidIndex(i) ? Truth.ScoreDelta[i] : 0, Truth.RingMarkDelta.IsValidIndex(i) ? Truth.RingMarkDelta[i] : 0);
 	}
-	UE_LOG(LogZoogi, Log, TEXT("TITAN_TEST variant=%s mode=%s action=%d power_hit=%d crit=%d archetype=%s tier=%d score=%.0f meteor=%d meteor_s=%.2f target=P%d target_ringout=%d game_bOut=%d score/ringmark=%s depicted=\"%s\" depicted_matches_physics=%d result_unchanged=%d drift_cm=%.4f dilation_restored=%d expect=[%s] %s final=%s"),
+	UE_LOG(LogZoogi, Log, TEXT("TITAN_TEST variant=%s mode=%s action=%d power_hit=%d crit=%d archetype=%s tier=%d score=%.0f meteor=%d meteor_s=%.2f target=P%d target_ringout=%d game_bOut=%d score/ringmark=%s depicted=\"%s\" depicted_matches_physics=%d result_unchanged=%d drift_cm=%.4f dilation_restored=%d titan_shots=%s shots=%d expect=[%s] %s final=%s"),
 		*TestVariant, ZoogiEpisode::ModeName(Mode), Truth.ActionId, Truth.bPowerHit ? 1 : 0, Truth.bCrit ? 1 : 0, ZoogiEpisode::ArchetypeName(R.Archetype), R.Tier, R.Score,
 		Plan.bMeteor ? 1 : 0, Plan.MeteorSeconds, TestTarget + 1, bTargetOut ? 1 : 0, bGameOut ? 1 : 0, *Deltas, *Plan.Epilogue, bDepictMatch ? 1 : 0, Plan.ResultUnchanged() ? 1 : 0,
-		Plan.FreezeDriftCm, Plan.bDilationRestored ? 1 : 0, *Expect, (bExpect && bDepictMatch && Plan.ResultUnchanged()) ? TEXT("PASS") : TEXT("FAIL"), *Final);
+		Plan.FreezeDriftCm, Plan.bDilationRestored ? 1 : 0, TitanShots.IsEmpty() ? TEXT("-") : *TitanShots, Plan.Shots.Num(), *Expect, (bExpect && bDepictMatch && Plan.ResultUnchanged()) ? TEXT("PASS") : TEXT("FAIL"), *Final);
 	TestQuitAt = RealClock + 2.0;
 	TestStep = 5;
 }

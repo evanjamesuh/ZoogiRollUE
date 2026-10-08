@@ -96,9 +96,11 @@ FZoogiEpisodeCue UZoogiEpisodeSubsystem::MakeCue(EZoogiEpisodeCueKind Kind, int3
 	return C;
 }
 
-void UZoogiEpisodeSubsystem::SendCue(const FZoogiEpisodeCueEvent& Event, const FZoogiEpisodeCue& Cue)
+void UZoogiEpisodeSubsystem::SendCue(const FZoogiEpisodeCueEvent& Event, FZoogiEpisodeCue& Cue)
 {
 	Plan.Cues++;
+	if (Cue.Shots.Num() == 0 && Mode != EZoogiEpisodeMode::Off) PickShots(Cue);
+	NoteShots(Cue);
 	const bool bBound = Event.IsBound();
 	if (bBound) { Plan.CuesHandled++; Event.Broadcast(Cue); }
 	UE_LOG(LogZoogi, Log, TEXT("EPISODE cue action=%d kind=%s tier=%d receivers=%d%s%s"), Cue.ActionId, CueKindName(Cue.Kind), Cue.Tier, bBound ? 1 : 0,
@@ -106,6 +108,14 @@ void UZoogiEpisodeSubsystem::SendCue(const FZoogiEpisodeCueEvent& Event, const F
 		Cue.Kind == EZoogiEpisodeCueKind::Panels ? *FString::Printf(TEXT(" layout=%s panels=%d seconds=%.2f"), ZoogiEpisode::LayoutName(Cue.Layout), Cue.PanelCount, Cue.Seconds)
 		: (Cue.Kind == EZoogiEpisodeCueKind::Archetype ? *FString::Printf(TEXT(" archetype=%s hold=%d seconds=%.2f"), ZoogiEpisode::ArchetypeName(Cue.Archetype), Cue.HoldToken, Cue.Seconds)
 		: (Cue.Kind == EZoogiEpisodeCueKind::Camera ? *FString::Printf(TEXT(" slowmo=%.2fx%.2fs"), Cue.SlowMoScale, Cue.SlowMoSeconds) : TEXT(""))));
+	if (Cue.Shots.Num() > 0)
+	{
+		FString S;
+		for (const FZoogiEpisodeShot& Sh : Cue.Shots)
+			S += FString::Printf(TEXT("%s%s%s%s%s"), S.IsEmpty() ? TEXT("") : TEXT(","), *Sh.ShotId.ToString(), Sh.Character.IsEmpty() ? TEXT("") : TEXT("@"), *Sh.Character,
+				Sh.AssetKey.IsNone() ? TEXT("") : *FString::Printf(TEXT("{%s}"), *Sh.AssetKey.ToString()));
+		UE_LOG(LogZoogi, Log, TEXT("EPISODE shots action=%d kind=%s tier=%d shots=%s"), Cue.ActionId, CueKindName(Cue.Kind), Cue.Tier, *S);
+	}
 }
 
 // =====================================================================================================================
@@ -225,7 +235,7 @@ void UZoogiEpisodeSubsystem::QueueCallout(EZoogiEpisodeTag Tag, int32 Tier)
 void UZoogiEpisodeSubsystem::PumpCallouts()
 {
 	if (CalloutQueue.Num() == 0 || RealClock < NextCalloutAt || bFrozen) return;
-	const FZoogiEpisodeCue C = CalloutQueue[0];
+	FZoogiEpisodeCue C = CalloutQueue[0];
 	CalloutQueue.RemoveAt(0);
 	SendCue(OnCallout, C);
 	if (!OnCallout.IsBound() && Fallback) Fallback->ShowCallout(C.Text, C.SubText, C.Color, C.Tier);
