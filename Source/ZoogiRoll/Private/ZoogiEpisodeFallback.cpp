@@ -86,19 +86,19 @@ void UZoogiEpisodeSubsystem::FallbackTier(int32 Tier)
 	if (Tier == 1 && !OnTier.IsBound())
 	{
 		FallbackPanel(2, Subject, Subject != Shooter ? Shooter : nullptr, (uint8)EZoogiShotType::CloseUp, Tune.InsertSeconds, Head, FLinearColor(0.75f, 1.f, 0.55f), true);
-		Shot(TEXT("tier1_insert"));
+		ShotLater(TEXT("tier1_insert"), 0.5f);
 	}
 	else if (Tier == 2 && !OnTier.IsBound())
 	{
 		FallbackPanel(0, Subject, Subject != Shooter ? Shooter : nullptr, (uint8)EZoogiShotType::LowAngleHero, Tune.TrickPanelSeconds, Head.IsEmpty() ? FString(TEXT("TRICK SHOT")) : Head, FLinearColor(1.f, 0.86f, 0.36f), false);
-		Shot(TEXT("tier2_trick"));
+		ShotLater(TEXT("tier2_trick"), 0.5f);
 	}
 	else if (Tier >= 3 && !OnPanels.IsBound() && !Plan.bAirShot)
 	{
 		AActor* Target = BodyActor(SubjectBody(EZoogiShotSubject::Target));
 		FallbackPanel(0, Shooter, Target, (uint8)EZoogiShotType::LowAngleHero, Tune.PanelSeconds, Head, FLinearColor(0.96f, 0.96f, 1.f), false);
 		if (Target) FallbackPanel(1, Target, Shooter, (uint8)EZoogiShotType::TopDownImpact, Tune.PanelSeconds, FString::Printf(TEXT("TIER %d"), Tier), FLinearColor(0.96f, 0.96f, 1.f), false);
-		Shot(TEXT("tier3_panels"));
+		ShotLater(TEXT("tier3_panels"), 0.5f);
 	}
 }
 
@@ -133,7 +133,7 @@ void UZoogiEpisodeSubsystem::TickAirSlow(float Dt)
 	if (!W) return;
 	if (AirHoldToken != 0)
 	{
-		if (bFrozen && HoldToken == AirHoldToken) { if (HoldLeft < Tune.AirShotSeconds * 0.55f) Shot(TEXT("tier3_air")); return; }
+		if (bFrozen && HoldToken == AirHoldToken) { if (HoldLeft < Tune.AirShotSeconds * 0.7f) Shot(TEXT("tier3_air")); return; }
 		EndAirSlow(TEXT("hold released"));
 		return;
 	}

@@ -123,7 +123,9 @@ void UZoogiEpisodeSubsystem::TickTest()
 	case 1:
 		if (G->Stage == EZoogiStage::Awaken && G->StageTime > 0.25f && TestSimple())
 		{
-			TestStep = 2;                                    // simple shots: no Infuse
+			const bool bOk = G->AwakenSave();                // simple shots: no Infuse (save the artifact)
+			UE_LOG(LogZoogi, Log, TEXT("TITAN_TEST awaken save=%d"), bOk ? 1 : 0);
+			TestStep = 2;
 		}
 		else if (G->Stage == EZoogiStage::Awaken && G->StageTime > 0.25f)
 		{
@@ -147,7 +149,8 @@ void UZoogiEpisodeSubsystem::TickTest()
 				const FVector2D P = FVector2D(S->BallLocation()) + D.GetSafeNormal() * (Gap + VImp * VImp / (2.f * Decel));
 				G->SetFreeAim(FVector(P, S->BallLocation().Z));
 			}
-			else if (bMiss || TestSimple()) G->SetFreeAim(TestAimPoint);
+			else if (TestSimple()) G->SetFreeAim(TestAimPoint);
+			else if (bMiss) G->SetFreeAim(TestAimPoint);
 			else { G->LockOn(T, false); G->AimPowerStep = 3; }
 			const bool bOk = G->CommitLock();
 			UE_LOG(LogZoogi, Log, TEXT("TITAN_TEST aim variant=%s committed=%d"), *TestVariant, bOk ? 1 : 0);
@@ -250,6 +253,21 @@ void UZoogiEpisodeSubsystem::TestSetupSimple()
 	FVector2D SP(0, 0), TP(0, 0), Aim(0, 0);
 	TArray<FVector2D> OthersP;
 	bool bFound = false;
+	if (TestVariant == TEXT("N"))
+	{
+		// N keeps the spawn layout (the shooter's lane to the centre is clear) and parks the target beside that lane,
+		// 15 cm clear of the shooter's path; aim = the centre
+		const FVector2D S0(S->BallLocation());
+		const FVector2D U = (-S0).GetSafeNormal(), V(-U.Y, U.X);
+		TP = S0 + U * 380.f + V * (2.f * Rb + 15.f);
+		Aim = S0 + U * S0.Size();
+		T->PlaceAt(FVector(TP, Z1), 0.f);
+		S->bCPU = false;
+		TestAimPoint = FVector(Aim, Z0);
+		TestStep = 1;
+		UE_LOG(LogZoogi, Log, TEXT("TITAN_TEST setup variant=N mode=%s shooter=P1 (%.0f,%.0f) target=P%d (%.0f,%.0f) aim=(%.0f,%.0f)"), ZoogiEpisode::ModeName(Mode), S0.X, S0.Y, TestTarget + 1, TP.X, TP.Y, Aim.X, Aim.Y);
+		return;
+	}
 	if (TestVariant == TEXT("R"))
 	{
 		for (const AZoogiArenaPiece* Pc : G->Arena->GetPieces())
@@ -298,8 +316,8 @@ void UZoogiEpisodeSubsystem::TestSetupSimple()
 				const FVector2D In = (-N).GetRotated(Side * 35.f);       // incoming direction (towards the face)
 				const FVector2D Out = In - 2.f * FVector2D::DotProduct(In, N) * N;
 				SP = Q - In * 520.f;
-				TP = Q + Out * 330.f;
-				Aim = SP + In * 1500.f;
+				TP = Q + Out * 250.f;
+				Aim = SP + In * 2600.f;                  // full power: the bank costs speed
 				Lanes.Add({ SP, Q });
 				Lanes.Add({ Q + Out * 60.f, TP });
 				Ign = Pc;
@@ -322,4 +340,59 @@ void UZoogiEpisodeSubsystem::TestSetupSimple()
 	TestStep = 1;
 	UE_LOG(LogZoogi, Log, TEXT("TITAN_TEST setup variant=%s mode=%s clear=%d shooter=P1 (%.0f,%.0f) target=P%d (%.0f,%.0f) aim=(%.0f,%.0f)"),
 		*TestVariant, ZoogiEpisode::ModeName(Mode), bFound ? 1 : 0, SP.X, SP.Y, TestTarget + 1, TP.X, TP.Y, Aim.X, Aim.Y);
+}
+
+// Searches the game's own aim preview (the same one the HUD draws) from the shooter's real position:
+//  K: a line whose preview banks off a surface and then contacts a Zoogi (smallest cut)
+//  N: a line with no contact whose path passes a Zoogi with an 8-28 cm gap (closest to 15)
+// The result is only an input (a free-aim point); everything after the launch is the normal simulation.
+void UZoogiEpisodeSubsystem::TestPickSimpleAim()
+{
+	AZoogiGameMode* G = GM();
+	if (!G || TestVariant == TEXT("R")) return;
+	AZoogiBall* S = G->Balls[0];
+	const FVector S0 = S->BallLocation();
+	const float Rb = ZoogiConst::ZoogiRadius;
+	float Best = 1e9f;
+	FVector BestP = TestAimPoint;
+	const float Dists[] = { 700.f, 1000.f, 1400.f, 1900.f };
+	const bool bWasAim = G->bAimActive;
+	G->bAimActive = true;                                  // the preview is only computed while aiming
+	for (float Dd : Dists)
+		for (float A = 0.f; A < 360.f; A += 0.25f)
+		{
+			const FVector P = S0 + FVector(FMath::Cos(FMath::DegreesToRadians(A)), FMath::Sin(FMath::DegreesToRadians(A)), 0.f) * Dd;
+			if (G->Arena && G->Arena->IsOffCourt(FVector2D(P))) continue;
+			G->SetFreeAim(P);
+			G->UpdatePreview();
+			const FZoogiAimPreview& Pv = G->Preview;
+			if (!Pv.bValid) continue;
+			if (TestVariant == TEXT("K"))
+			{
+				if (!Pv.bBank || !Pv.bContact || !Cast<AZoogiBall>(Pv.ContactActor.Get())) continue;
+				const float Sc = Pv.CutDeg + Dd * 0.001f;
+				if (Sc < Best) { Best = Sc; BestP = P; }
+			}
+			else
+			{
+				if (Pv.bContact || Pv.bBank || Pv.Path.Num() < 2) continue;
+				bool bOff = false;
+				for (bool b : Pv.PathOff) bOff |= b;
+				if (bOff) continue;
+				for (int32 i = 1; i < G->Balls.Num(); ++i)
+				{
+					AZoogiBall* B = G->Balls[i];
+					if (!B || B->bOut) continue;
+					float Dm = 1e9f;
+					for (int32 k = 1; k < Pv.Path.Num(); ++k) Dm = FMath::Min(Dm, SegDist2D(FVector2D(B->BallLocation()), FVector2D(Pv.Path[k - 1]), FVector2D(Pv.Path[k])));
+					const float Gap = Dm - 2.f * Rb;
+					if (Gap < 8.f || Gap > 28.f) continue;
+					const float Sc = FMath::Abs(Gap - 15.f) + Dd * 0.002f;
+					if (Sc < Best) { Best = Sc; BestP = P; TestTarget = i; }
+				}
+			}
+		}
+	G->bAimActive = bWasAim;
+	TestAimPoint = BestP;
+	UE_LOG(LogZoogi, Log, TEXT("TITAN_TEST pick variant=%s found=%d aim=(%.0f,%.0f) score=%.2f target=P%d"), *TestVariant, Best < 1e8f ? 1 : 0, BestP.X, BestP.Y, Best < 1e8f ? Best : -1.f, TestTarget + 1);
 }

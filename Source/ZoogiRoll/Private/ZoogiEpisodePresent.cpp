@@ -77,6 +77,11 @@ void UZoogiEpisodeSubsystem::Shot(const FString& Name)
 	UE_LOG(LogZoogi, Log, TEXT("EPISODE screenshot requested: %s"), *Path);
 }
 
+void UZoogiEpisodeSubsystem::ShotLater(const FString& Name, float Delay)
+{
+	if (!ShotDir.IsEmpty()) LaterShots.Add(TPair<FString, double>(Name, RealClock + Delay));
+}
+
 FZoogiEpisodeCue UZoogiEpisodeSubsystem::MakeCue(EZoogiEpisodeCueKind Kind, int32 Tier) const
 {
 	FZoogiEpisodeCue C;
@@ -459,6 +464,8 @@ void UZoogiEpisodeSubsystem::TryStartArchetype()
 void UZoogiEpisodeSubsystem::TickPresentation(float Dt)
 {
 	PumpCallouts();
+	for (int32 i = 0; i < LaterShots.Num(); ++i)
+		if (RealClock >= LaterShots[i].Value) { Shot(LaterShots[i].Key); LaterShots.RemoveAt(i); break; } // one screenshot per frame
 	TryStartArchetype();
 	TickAirSlow(Dt);
 	if (bFrozen)

@@ -117,6 +117,8 @@ protected:
 	void TryStartArchetype();
 	void TickPresentation(float RealDt);
 	void Shot(const FString& Name);
+	void ShotLater(const FString& Name, float Delay);
+	TArray<TPair<FString, double>> LaterShots;
 	int32 PresentCap() const;
 	void FreezeWorld();
 	void UnfreezeWorld();
@@ -153,6 +155,7 @@ protected:
 	void TestFinalize();
 	void TestSetupSimple();
 	bool TestSimple() const;
+	void TestPickSimpleAim();
 
 	FZoogiEpisodeTuning Tune;
 	EZoogiEpisodeMode Mode = EZoogiEpisodeMode::Balanced;
