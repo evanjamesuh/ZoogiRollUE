@@ -1,6 +1,5 @@
 #include "ZoogiEpisodeSubsystem.h"
-#include "ZoogiEpisodeWidget.h"
-#include "ZoogiEpisodeStage.h"
+#include "ZoogiEpisodeCalloutWidget.h"
 #include "ZoogiGameMode.h"
 #include "ZoogiBall.h"
 #include "ZoogiOrb.h"
@@ -12,6 +11,7 @@
 #include "ZoogiRoll.h"
 #include "Components/SphereComponent.h"
 #include "Engine/World.h"
+#include "GameFramework/WorldSettings.h"
 #include "CollisionQueryParams.h"
 #include "Misc/App.h"
 #include "Misc/CommandLine.h"
@@ -49,8 +49,8 @@ void UZoogiEpisodeSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 void UZoogiEpisodeSubsystem::Deinitialize()
 {
-	StopSlowMo();
-	if (Widget) { Widget->RemoveFromParent(); Widget = nullptr; }
+	if (bFrozen) UnfreezeWorld();
+	if (Fallback) { Fallback->RemoveFromParent(); Fallback = nullptr; }
 	Super::Deinitialize();
 }
 
@@ -90,7 +90,7 @@ void UZoogiEpisodeSubsystem::Tick(float DeltaTime)
 		if ((bSawResolve && G->Stage != EZoogiStage::Resolve) || G->Phase == EZoogiPhase::GameOver || G->Phase == EZoogiPhase::Menu)
 			FinalizeAction(G->Phase == EZoogiPhase::GameOver ? TEXT("game_over") : TEXT("resolved"));
 	}
-	if (Mode != EZoogiEpisodeMode::Off && G->Phase != EZoogiPhase::Menu) EnsurePresentation();
+	if (Mode != EZoogiEpisodeMode::Off && G->Phase != EZoogiPhase::Menu) EnsureFallback();
 	TickPresentation(RealDt);
 }
 
@@ -208,7 +208,9 @@ void UZoogiEpisodeSubsystem::BeginAction(AZoogiBall* Ball)
 	Announced.Reset();
 	CalloutQueue.Reset();
 	bEpilogueShown = false;
-	bMeteorPending = false;
+	bPowerSent = false;
+	bArchetypePending = false;
+	if (const AWorldSettings* WS = W->GetWorldSettings()) { StartCinematicDilation = WS->CinematicTimeDilation; StartGlobalDilation = WS->TimeDilation; }
 	PrevVel.Reset();
 	for (int32 i = 0; i < G->Balls.Num(); ++i) PrevVel.Add(i, BodyVelocity(i));
 	for (int32 i = 0; i < G->Orbs.Num(); ++i) PrevVel.Add(100 + i, BodyVelocity(100 + i));
@@ -306,10 +308,10 @@ void UZoogiEpisodeSubsystem::TrackAction(float GameDt)
 		const bool bRival = ShooterFirstContact >= 0 && ShooterFirstContact < 100 && !G->IsAlly(BodyActor(Truth.Actor), BodyActor(ShooterFirstContact));
 		if (Mode != EZoogiEpisodeMode::Off && Truth.Awaken == EZoogiArtifact::Titan && bRival)
 		{
-			bMeteorPending = true;
-			MeteorHitGame = W->GetTimeSeconds();
-			MeteorShooter = Cast<AZoogiBall>(BodyActor(Truth.Actor));
-			MeteorTarget = Cast<AZoogiBall>(BodyActor(ShooterFirstContact));
+			bArchetypePending = true;
+			ArchetypeHitGame = W->GetTimeSeconds();
+			ArchetypeShooter = Cast<AZoogiBall>(BodyActor(Truth.Actor));
+			ArchetypeTarget = Cast<AZoogiBall>(BodyActor(ShooterFirstContact));
 		}
 	}
 	bPrevInfusedContact = G->bInfusedContact;
@@ -578,8 +580,13 @@ void UZoogiEpisodeSubsystem::FinalizeAction(const TCHAR* Why)
 		Truth.ControlDelta = G->ArenaControl[Team] - StartControl;
 	}
 	const FZoogiEpisodeRecognitionRecord R = Recognize(Truth, Tune);
-	StopSlowMo();
+	if (bFrozen) UnfreezeWorld();
 	if (!bEpilogueShown) ShowEpilogue();
+	bArchetypePending = false;
+	// RULE ZERO: the cinematic time dilation in effect at launch must be back (receivers ease slow-mo in / out and restore)
+	float CineNow = StartCinematicDilation, GlobalNow = StartGlobalDilation;
+	if (const AWorldSettings* WS = W ? W->GetWorldSettings() : nullptr) { CineNow = WS->CinematicTimeDilation; GlobalNow = WS->TimeDilation; }
+	Plan.bDilationRestored = CineNow == StartCinematicDilation;
 
 	FString Tags;
 	for (EZoogiEpisodeTag T : R.Tags) Tags += (Tags.IsEmpty() ? TEXT("") : TEXT(",")) + FString(ZoogiEpisode::TagName(T));
@@ -598,9 +605,10 @@ void UZoogiEpisodeSubsystem::FinalizeAction(const TCHAR* Why)
 	FString Ring;
 	for (int32 P : Truth.RingOuts) Ring += FString::Printf(TEXT("%sP%d"), Ring.IsEmpty() ? TEXT("") : TEXT(","), P + 1);
 
-	UE_LOG(LogZoogi, Log, TEXT("EPISODE action=%d tags=%s score=%.0f tier=%d archetype=%s result_unchanged=%d mode=%s actor=P%d(%s) presented_tier=%d layout=%s callouts=%d slowmo=%d meteor=%d freezes=%d drift_cm=%.3f epilogue=\"%s\" why=%s"),
+	UE_LOG(LogZoogi, Log, TEXT("EPISODE action=%d tags=%s score=%.0f tier=%d archetype=%s result_unchanged=%d mode=%s actor=P%d(%s) presented_tier=%d layout=%s panels=%d callouts=%d cues=%d/%d slowmo_req=%d power=%d meteor=%d freezes=%d drift_cm=%.3f dilation_restored=%d(cine=%.3f global=%.3f) epilogue=\"%s\" why=%s"),
 		Truth.ActionId, *Tags, R.Score, R.Tier, ZoogiEpisode::ArchetypeName(R.Archetype), Plan.ResultUnchanged() ? 1 : 0, ZoogiEpisode::ModeName(Mode), Truth.Actor + 1, *Truth.ActorName,
-		Plan.Tier, ZoogiEpisode::LayoutName(Plan.Layout), Plan.Callouts, Plan.bSlowMo ? 1 : 0, Plan.bMeteor ? 1 : 0, Plan.Freezes, Plan.FreezeDriftCm, *Plan.Epilogue, Why);
+		Plan.Tier, ZoogiEpisode::LayoutName(Plan.Layout), Plan.Panels, Plan.Callouts, Plan.CuesHandled, Plan.Cues, Plan.bSlowMo ? 1 : 0, Plan.bPowerEscalation ? 1 : 0, Plan.bMeteor ? 1 : 0, Plan.Freezes, Plan.FreezeDriftCm,
+		Plan.bDilationRestored ? 1 : 0, CineNow, GlobalNow, *Plan.Epilogue, Why);
 	UE_LOG(LogZoogi, Log, TEXT("EPISODE_TRUTH action=%d round=%d turn=%d combo=%d power=%.2f awaken=%s power_hit=%d crit=%d power_target=%d contacts=%d meaningful=%d max_rel=%.0f air=%d[%s] boundary=%d ring_outs=%s orb_outs=%d score_delta=%s ringmark_delta=%s resonance=%+d control=%+.0f triggers=0x%x pieces=%d rocks=%d follow_up=%d dur=%.2f final=%s"),
 		Truth.ActionId, Truth.Round, Truth.Turn, Truth.bCombo ? 1 : 0, Truth.LaunchPower, *ZoogiArtifacts::Name(Truth.Awaken), Truth.bPowerHit ? 1 : 0, Truth.bCrit ? 1 : 0, Truth.PowerHitTarget,
 		Truth.Contacts.Num(), Meaningful, Truth.MaxRelSpeed, Truth.Air.Num(), *AirS, Truth.Boundary.Num(), Ring.IsEmpty() ? TEXT("-") : *Ring, Truth.OrbOuts,
@@ -608,5 +616,6 @@ void UZoogiEpisodeSubsystem::FinalizeAction(const TCHAR* Why)
 		Truth.bFollowUp ? 1 : 0, Truth.Duration, *Final);
 	UE_LOG(LogZoogi, Log, TEXT("EPISODE_SCORE action=%d %s"), Truth.ActionId, *R.Breakdown);
 	LiveRec = R;
+	OnActionFinalized.Broadcast(Truth, R, Plan);
 	if (Truth.ActionId == TestActionId) TestFinalize();
 }
