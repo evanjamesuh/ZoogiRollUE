@@ -15,6 +15,7 @@
 #include "Components/SphereComponent.h"
 #include "Camera/PlayerCameraManager.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/WorldSettings.h"
 #include "Kismet/GameplayStatics.h"
 #include "Engine/World.h"
 #include "Misc/App.h"
@@ -405,6 +406,11 @@ void UZoogiEpisodeSubsystem::TryStartArchetype()
 	if (!W) return;
 	UZoogiAnimeSubsystem* Anime = W->GetSubsystem<UZoogiAnimeSubsystem>();
 	if ((Anime && Anime->bFrozen) || W->IsPaused()) return; // an anime freeze-frame owns the moment: wait for it to release
+	// RULE ZERO: the game's own hit-stop / slow-mo (AZoogiPlayerController) changes global time dilation and ends on a
+	// real-time clock that keeps running while paused. Holding inside that window would shorten the dilated stretch and
+	// change physics integration, so wait until it has ended; then the dilation timeline is exactly the Off-mode one.
+	if (const AWorldSettings* WS = W->GetWorldSettings())
+		if (WS->TimeDilation != 1.f && W->GetTimeSeconds() - ArchetypeHitGame <= Tune.MeteorMaxDelay) return;
 	bArchetypePending = false;
 	if (W->GetTimeSeconds() - ArchetypeHitGame > Tune.MeteorMaxDelay || !ArchetypeTarget.IsValid())
 	{
