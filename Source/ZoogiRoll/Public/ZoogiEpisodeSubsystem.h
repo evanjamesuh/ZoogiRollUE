@@ -2,45 +2,46 @@
 
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
-#include "Camera/CameraModifier.h"
 #include "ZoogiEpisodeTypes.h"
 #include "ZoogiEpisodeSubsystem.generated.h"
 
 class AZoogiBall;
 class AZoogiOrb;
 class AZoogiGameMode;
-class AZoogiEpisodeStage;
-class UZoogiEpisodeWidget;
+class UZoogiEpisodeCalloutWidget;
 class UPrimitiveComponent;
 
-/** Camera nudge / punch for callouts (presentation only; offsets the final view, never the game camera state). */
-UCLASS()
-class ZOOGIROLL_API UZoogiEpisodeCamMod : public UCameraModifier
-{
-	GENERATED_BODY()
-public:
-	virtual bool ModifyCamera(float DeltaTime, FMinimalViewInfo& InOutPOV) override;
-	void Nudge(float Strength) { Kick = FMath::Max(Kick * 0.5f, FMath::Clamp(Strength, 0.f, 1.f)); KickAge = 0.f; Seed += 1.37f; }
-protected:
-	float Kick = 0.f;
-	float KickAge = 99.f;
-	float Seed = 0.f;
-};
+/** A presentation request (see FZoogiEpisodeCue). Receivers render it; they never touch gameplay state. */
+DECLARE_MULTICAST_DELEGATE_OneParam(FZoogiEpisodeCueEvent, const FZoogiEpisodeCue& /*Cue*/);
+/** The finished action: truth, recognition, and what presentation was requested / held for it. */
+DECLARE_MULTICAST_DELEGATE_ThreeParams(FZoogiEpisodeActionEvent, const FZoogiGameplayTruthRecord& /*Truth*/, const FZoogiEpisodeRecognitionRecord& /*Rec*/, const FZoogiCinematicPlan& /*Plan*/);
 
 /**
- * Zoogi Roll Episode Engine, phase 1 (spec v1.1). World subsystem that
+ * Zoogi Roll Episode Engine core, phase 1 (spec v1.1 priorities 1-4, 12, 13). World subsystem that
  *  1. captures the gameplay truth of every action (launch -> rest) from real game events (FZoogiGameplayTruthRecord),
- *  2. recognizes it (tags, deterministic drama score, tier 1-5, archetype; FZoogiEpisodeRecognitionRecord),
- *  3. plans and plays presentation (FZoogiCinematicPlan): callouts, glow, centre-frame panels, power escalation,
- *     Titan Meteor.
+ *  2. tags it, scores it deterministically and selects tier 1-5 + archetype (FZoogiEpisodeRecognitionRecord),
+ *  3. applies the presentation mode (Off / Competitive / Balanced / Full) and recency (no back-to-back callout variant
+ *     or panel layout), and
+ *  4. sends presentation CUES to the pieces that render them. It does not render panels, camera shots, slow-mo or
+ *     power visuals itself:
+ *       OnPanels    -> Gameplay & UI: UZoogiEpisodePanelWidget::PlayPanels(TArray<FZoogiPanelShot>, TotalSeconds)
+ *       OnCamera    -> Game Camera: UZoogiEpisodeCameraDirector (shot spec on Actor / Target, eased time dilation,
+ *                      exact restore of the gameplay camera and dilation)
+ *       OnPower     -> Animations & Powers: power visual grammar (tier 4+)
+ *       OnArchetype -> Animations & Powers: AZoogiTitanMeteorFX::Play(Start, Impact, Seconds), played inside a
+ *                      presentation HOLD owned by this subsystem (see BeginHold)
+ *       OnTier / OnCallout / OnEpilogue -> anyone (a minimal fallback text overlay shows callouts / epilogue while
+ *                      nothing is bound to those two)
+ *     Bind from anywhere: GetWorld()->GetSubsystem<UZoogiEpisodeSubsystem>()->OnPanels.AddUObject(this, &X::Handle).
+ *     A cue whose delegate has no receiver is logged ("EPISODE cue ... receivers=0") and otherwise skipped.
  *
- * RULE ZERO: presentation never changes physics, results, velocities, scoring or turn order. The only things it does
- * to the simulation are (a) CinematicTimeDilation slow-mo, restored to the exact previous value, and (b) a
- * presentation freeze (game paused; game clock stops, so turn timing is unaffected) with a before / after snapshot of
- * every ball and orb that proves nothing moved. Every action logs one EPISODE line.
+ * RULE ZERO: nothing here (or in a receiver) may change physics, results, velocities, scoring or turn order.
+ * The core enforces / proves it: the hold snapshots every ball + orb and verifies (and restores) them on release, the
+ * time dilation in effect at launch must be back at the end of the action, and every action logs one EPISODE line
+ * with result_unchanged=1|0.
  *
  * Command line: -ZoogiEpisode=Full|Balanced|Competitive|Off (default Balanced, or [ZoogiRoll.Episode] Mode),
- * -ZoogiEpisodeTest=A|B|E|F (Titan Meteor test director, classic mode, P1 turn 1), -ZoogiEpisodeShots=<dir>.
+ * -ZoogiEpisodeTest=A|B|E|F|S (Titan / power test director, classic mode, P1 turn 1), -ZoogiEpisodeShots=<dir>.
  */
 UCLASS()
 class ZOOGIROLL_API UZoogiEpisodeSubsystem : public UTickableWorldSubsystem
@@ -59,9 +60,33 @@ public:
 
 	UFUNCTION() void OnBodyHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
 
+	// ---- integration hooks (presentation receivers bind here)
+	FZoogiEpisodeCueEvent OnTier;        // every live tier step 1..5 (cue.Tier); tier 2 carries the used Surfaces (glow)
+	FZoogiEpisodeCueEvent OnCallout;     // every newly recognized tag, recency-picked text variant
+	FZoogiEpisodeCueEvent OnPanels;      // tier 3+ (not Competitive / Off): layout + count + seconds, recency-checked
+	FZoogiEpisodeCueEvent OnCamera;      // tier 3+ (not Competitive / Off): suggested shot + slow-mo (receiver restores exactly)
+	FZoogiEpisodeCueEvent OnPower;       // tier 4+: power escalation (cue.Power / PowerColor)
+	FZoogiEpisodeCueEvent OnArchetype;   // Titan Meteor: world is held for cue.Seconds (cue.HoldToken)
+	FZoogiEpisodeCueEvent OnEpilogue;    // outcome confirmed by Resolve (real result only)
+	FZoogiEpisodeActionEvent OnActionFinalized;
+
+	/**
+	 * Presentation hold: pauses the game (the game clock stops, so turn timing is unaffected) after snapshotting every
+	 * ball + orb. Released after MaxSeconds of real time or by ReleaseHold(Token), whichever comes first; on release the
+	 * bodies are verified (and restored exactly if anything moved them). While held the subsystem drives the player
+	 * camera manager each real frame, so SetViewTarget / camera modifiers keep working. Returns 0 if a hold is already
+	 * active, the mode is Off, or the world cannot be held.
+	 */
+	int32 BeginHold(float MaxSeconds, const TCHAR* Reason);
+	void ReleaseHold(int32 Token);
+	bool IsHeld() const { return bFrozen; }
+
 	EZoogiEpisodeMode GetMode() const { return Mode; }
-	bool IsFrozen() const { return bFrozen; }
 	const FZoogiGameplayTruthRecord& GetTruth() const { return Truth; }
+	const FZoogiEpisodeRecognitionRecord& GetLiveRecognition() const { return LiveRec; }
+	const FZoogiCinematicPlan& GetPlan() const { return Plan; }
+	const FZoogiEpisodeTuning& GetTuning() const { return Tune; }
+	bool IsActionActive() const { return bActive; }
 
 	/** Recognition from a (possibly partial) truth record. Deterministic, used live and at the end of the action. */
 	static FZoogiEpisodeRecognitionRecord Recognize(const FZoogiGameplayTruthRecord& T, const FZoogiEpisodeTuning& Tune);
@@ -79,28 +104,22 @@ protected:
 	int32 PieceSteps() const;
 	int32 RockSteps() const;
 
-	// presentation
-	void EnsurePresentation();
+	// cue planning (ZoogiEpisodePresent.cpp)
+	FZoogiEpisodeCue MakeCue(EZoogiEpisodeCueKind Kind, int32 Tier) const;
+	void SendCue(const FZoogiEpisodeCueEvent& Event, const FZoogiEpisodeCue& Cue);
+	void EnsureFallback();
 	void UpdateLive();
 	void PresentTier(int32 Tier, const FZoogiEpisodeRecognitionRecord& R);
 	void QueueCallout(EZoogiEpisodeTag Tag, int32 Tier);
 	void PumpCallouts();
-	void StartPanels(int32 Tier, const FZoogiEpisodeRecognitionRecord& R);
+	void RequestPanels(int32 Tier);
 	void ShowEpilogue();
-	void UpdatePanelCameras(float RealDt);
-	void StartSlowMo();
-	void StopSlowMo();
+	void TryStartArchetype();
 	void TickPresentation(float RealDt);
-	void Nudge(float Strength);
 	void Shot(const FString& Name);
 	int32 PresentCap() const;
-
-	// freeze + meteor
 	void FreezeWorld();
 	void UnfreezeWorld();
-	void TryStartMeteor();
-	void TickMeteor(float RealDt);
-	void EndMeteor();
 
 	// test director (ZoogiEpisodeTest.cpp)
 	void TickTest();
@@ -125,6 +144,7 @@ protected:
 	int32 StartResonance = 0;
 	float StartControl = 0.f;
 	int32 StartPieceSteps = 0, StartRockSteps = 0;
+	float StartCinematicDilation = 1.f, StartGlobalDilation = 1.f;
 	bool bPrevInfusedContact = false;
 	int32 ShooterFirstContact = -1;     // body code of the shooter's first zoogi / orb contact
 	TSet<int32> OutCounted;
@@ -136,48 +156,33 @@ protected:
 	TMap<int32, int32> OpenBoundary;    // body -> index in Truth.Boundary
 	TSet<UPrimitiveComponent*> Bound;
 
-	// ---- live presentation
+	// ---- live cue state + recency
 	int32 PresentedTier = 0;
 	TSet<EZoogiEpisodeTag> Announced;
-	struct FCallout { FString Main; FString Sub; FLinearColor Color; int32 Tier = 1; };
-	TArray<FCallout> CalloutQueue;
+	TArray<FZoogiEpisodeCue> CalloutQueue;
 	double RealClock = 0.0;
 	double NextCalloutAt = 0.0;
-	TMap<EZoogiEpisodeTag, int32> LastVariant;
-	FString LastCalloutText;
-	EZoogiPanelLayout LastLayout = EZoogiPanelLayout::None;
-	TArray<FString> RecentPresent;      // "layout" history (recency)
-	bool bPanels = false;
-	int32 PanelCount = 0;
-	float PanelAge = 0.f;
-	TArray<int32> PanelSubject;         // body code (or -1 = wide) per panel
-	bool bPowerShown = false;
-	float PowerLeft = 0.f;
-	bool bSlowMo = false;
-	float SlowMoLeft = 0.f;
-	float SavedCinematic = 1.f;
-	float AppliedCinematic = 1.f;
+	TMap<EZoogiEpisodeTag, int32> LastVariant;   // recency: callout variant per tag
+	FString LastCalloutText;                      // recency: never the same callout twice in a row
+	EZoogiPanelLayout LastLayout = EZoogiPanelLayout::None; // recency: never the same panel layout twice in a row
+	bool bPowerSent = false;
 	bool bEpilogueShown = false;
+	UPROPERTY() TObjectPtr<UZoogiEpisodeCalloutWidget> Fallback;
 
-	UPROPERTY() TObjectPtr<UZoogiEpisodeWidget> Widget;
-	UPROPERTY() TObjectPtr<AZoogiEpisodeStage> Stage;
-	UPROPERTY() TObjectPtr<UZoogiEpisodeCamMod> CamMod;
-
-	// ---- freeze
+	// ---- hold (presentation freeze)
 	bool bFrozen = false;
+	int32 HoldToken = 0;
+	int32 NextHoldToken = 1;
+	float HoldLeft = 0.f;
+	FString HoldReason;
 	struct FBodySnap { TWeakObjectPtr<UPrimitiveComponent> Comp; FTransform Xf; FVector Lin = FVector::ZeroVector; FVector Ang = FVector::ZeroVector; };
 	TArray<FBodySnap> Snap;
-	TWeakObjectPtr<AActor> PrevView;
 
-	// ---- meteor
-	bool bMeteorPending = false;
-	bool bMeteor = false;
-	float MeteorT = 0.f;
-	float MeteorDur = 2.6f;
-	float MeteorHitGame = 0.f;
-	bool bMeteorImpactShot = false;
-	TWeakObjectPtr<AZoogiBall> MeteorTarget;
-	TWeakObjectPtr<AZoogiBall> MeteorShooter;
+	// ---- archetype (Titan Meteor) trigger
+	bool bArchetypePending = false;
+	float ArchetypeHitGame = 0.f;
+	TWeakObjectPtr<AZoogiBall> ArchetypeTarget;
+	TWeakObjectPtr<AZoogiBall> ArchetypeShooter;
 
 	// ---- test director
 	FString TestVariant;
@@ -187,6 +192,4 @@ protected:
 	double TestQuitAt = 0.0;
 	FVector TestAimPoint = FVector::ZeroVector;
 	float TestStepAt = 0.f;
-	bool bTestMeteorShown = false;
-	FString TestDepicted;
 };

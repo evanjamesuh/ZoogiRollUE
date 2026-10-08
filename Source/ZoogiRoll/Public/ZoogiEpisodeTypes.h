@@ -4,6 +4,9 @@
 #include "ZoogiArtifacts.h"
 #include "ZoogiEpisodeTypes.generated.h"
 
+class AActor;
+class UPrimitiveComponent;
+
 /**
  * Zoogi Roll Episode Engine (spec v1.1, phase 1): data model.
  *
@@ -184,6 +187,8 @@ struct FZoogiCinematicPlan
 	UPROPERTY() EZoogiEpisodeMode Mode = EZoogiEpisodeMode::Balanced;
 	UPROPERTY() EZoogiPanelLayout Layout = EZoogiPanelLayout::None;
 	UPROPERTY() int32 Panels = 0;
+	UPROPERTY() int32 Cues = 0;               // presentation requests sent
+	UPROPERTY() int32 CuesHandled = 0;        // ... that had at least one receiver bound
 	UPROPERTY() int32 Callouts = 0;
 	UPROPERTY() FString LastCallout;
 	UPROPERTY() bool bGlow = false;
@@ -191,7 +196,7 @@ struct FZoogiCinematicPlan
 	UPROPERTY() FLinearColor PowerColor = FLinearColor::White;
 	UPROPERTY() bool bSlowMo = false;
 	UPROPERTY() float SlowMoScale = 1.f;
-	UPROPERTY() bool bMeteor = false;
+	UPROPERTY() bool bMeteor = false;         // Titan Meteor archetype played (held window)
 	UPROPERTY() float MeteorSeconds = 0.f;
 	UPROPERTY() FString Epilogue;            // shown only after physics confirmed the outcome
 	// RULE ZERO proof
@@ -200,6 +205,55 @@ struct FZoogiCinematicPlan
 	UPROPERTY() float FreezeDriftVel = 0.f;
 	UPROPERTY() int32 Freezes = 0;
 	bool ResultUnchanged() const { return bDilationRestored && FreezeDriftCm < 0.01f && FreezeDriftVel < 0.01f; }
+};
+
+/** What kind of presentation request a cue is (see UZoogiEpisodeSubsystem delegates). */
+UENUM()
+enum class EZoogiEpisodeCueKind : uint8
+{
+	Tier,       // live tier escalation (1..5) during the roll
+	Callout,    // a newly recognized tag
+	Panels,     // tier 3+: centre-frame panel compositor request (Gameplay & UI)
+	Camera,     // shot / time-scale request (Game Camera: shot library + UZoogiEpisodeCameraDirector)
+	Power,      // tier 4+: power-specific visual grammar (Animations & Powers)
+	Archetype,  // large-scale archetype (Titan Meteor) inside a presentation hold (Animations & Powers)
+	Epilogue    // outcome confirmed by Resolve (real result only)
+};
+
+/**
+ * One presentation request from the Episode core to whoever renders it. Pure description: receivers may show
+ * anything they like for it, but must not touch gameplay state (RULE ZERO). Actors are the real bodies involved.
+ */
+USTRUCT()
+struct FZoogiEpisodeCue
+{
+	GENERATED_BODY()
+	UPROPERTY() EZoogiEpisodeCueKind Kind = EZoogiEpisodeCueKind::Tier;
+	UPROPERTY() int32 ActionId = 0;
+	UPROPERTY() int32 Tier = 0;
+	UPROPERTY() EZoogiEpisodeMode Mode = EZoogiEpisodeMode::Balanced;
+	UPROPERTY() EZoogiEpisodeArchetype Archetype = EZoogiEpisodeArchetype::None;
+	UPROPERTY() EZoogiEpisodeTag Tag = EZoogiEpisodeTag::Num;     // Callout: the tag
+	UPROPERTY() TArray<EZoogiEpisodeTag> Tags;                     // all tags so far
+	UPROPERTY() FString Text;                                      // callout / epilogue line (recency-picked variant)
+	UPROPERTY() FString SubText;
+	UPROPERTY() FLinearColor Color = FLinearColor::White;
+	UPROPERTY() EZoogiArtifact Power = EZoogiArtifact::None;      // infused artifact of the acting Zoogi
+	UPROPERTY() FLinearColor PowerColor = FLinearColor::White;
+	UPROPERTY() EZoogiPanelLayout Layout = EZoogiPanelLayout::None; // Panels: suggested layout (recency-checked)
+	UPROPERTY() int32 PanelCount = 0;
+	UPROPERTY() float Seconds = 0.f;                               // suggested length (panels hold, archetype hold, banner)
+	UPROPERTY() bool bSlowMo = false;                              // Camera: suggested slow-mo entry (receiver restores exactly)
+	UPROPERTY() float SlowMoScale = 1.f;
+	UPROPERTY() float SlowMoSeconds = 0.f;
+	UPROPERTY() int32 HoldToken = 0;                               // Archetype: the world is held (paused) until released / timeout
+	TWeakObjectPtr<AActor> Actor;                                  // acting Zoogi
+	TWeakObjectPtr<AActor> Target;                                 // first body it hit / power target
+	TWeakObjectPtr<AActor> Secondary;                              // deepest chain body
+	UPROPERTY() FVector ImpactPoint = FVector::ZeroVector;
+	TArray<TWeakObjectPtr<UPrimitiveComponent>> Surfaces;          // walls / pieces the shot really used (glow targets)
+	TArray<FVector> SurfacePoints;
+	TArray<FVector> SurfaceNormals;
 };
 
 /** Every drama number in one place. Defaults here; DefaultGame.ini [ZoogiRoll.Episode] may override any of them. */
