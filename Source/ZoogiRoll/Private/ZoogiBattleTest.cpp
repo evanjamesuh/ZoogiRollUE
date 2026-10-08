@@ -388,7 +388,14 @@ void UZoogiBattleStateMachine::TestOnMatchEnd()
 {
 	// a CPU-only case whose match ended before its action count: check what was played (the game quits right after)
 	const FCase* C = FindCase(TestCase);
-	if (bTestDone || bInTestCheck || !C || C->bScriptP1 || TestStep != 5) return;
+	if (bTestDone || bInTestCheck || !C) return;
+	if (C->bScriptP1)
+	{
+		if (TestStep == 6) TestCheck(); // the scripted action is done: check now (the game quits right after)
+		else TestReport(false, FString::Printf(TEXT("match ended at step %d before the scripted check (actions %d/%d)"), TestStep, TestActions, C->Actions));
+		return;
+	}
+	if (TestStep != 5) return;
 	UE_LOG(LogZoogi, Log, TEXT("BATTLE_TEST %s: match ended after %d/%d actions, checking now"), *TestCase, TestActions, C->Actions);
 	TestCheck();
 }
