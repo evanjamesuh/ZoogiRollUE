@@ -297,6 +297,7 @@ void UZoogiBattleStateMachine::Tick(float DeltaTime)
 	StateReal += RealDt;
 	if (G->Phase != EZoogiPhase::Menu) EnsurePlayers();
 	Observe();
+	if (Props.Num() > 0 || (bFlow && Tune.bAerialProps)) TickProps();
 	if (bFlow)
 	{
 		TickMiniGame(RealDt);
@@ -485,9 +486,12 @@ void UZoogiBattleStateMachine::HandleActionStarted(const FZoogiGameplayTruthReco
 	CurrentActor = Truth.Actor;
 	bResolvedThisAction = false;
 	ActionEnergyDelta.Reset();
+	ActionZoneTags.Reset();
+	ActionPropTags.Reset();
+	if (const UWorld* W = GetWorld()) ActionStartGame = W->GetTimeSeconds();
 	if (Players.IsValidIndex(Truth.Actor)) Players[Truth.Actor].Actions++;
 	if (bFlow && G->Balls.IsValidIndex(Truth.Actor) && G->Balls[Truth.Actor] && G->Balls[Truth.Actor]->bCPU && TestCase.IsEmpty()) PickCPUCombo(Truth.Actor);
-	const bool bRoute = bFlow && Pending.Owner == Truth.Actor && Pending.ActionId < 0 && (Pending.Challenge == EZoogiChallenge::HaloBank || Pending.Challenge == EZoogiChallenge::OrbLine || Pending.Challenge == EZoogiChallenge::SkyBumper || Pending.Challenge == EZoogiChallenge::PartnerIntercept);
+	const bool bRoute = bFlow && Pending.Owner == Truth.Actor && Pending.ActionId < 0 && (Pending.Challenge == EZoogiChallenge::HaloBank || Pending.Challenge == EZoogiChallenge::OrbLine || Pending.Challenge == EZoogiChallenge::SkyBumper || Pending.Challenge == EZoogiChallenge::PartnerIntercept || Pending.Challenge == EZoogiChallenge::RailRelease);
 	if (!bRoute && (State == EZoogiBattleState::WaitForCommand || State == EZoogiBattleState::ActionPreview)) Transition(EZoogiBattleState::PhysicsResolve, TEXT("launch"));
 	if (!bFlow) return;
 	if (Pending.Owner != Truth.Actor || Pending.ActionId >= 0) return;
@@ -496,7 +500,7 @@ void UZoogiBattleStateMachine::HandleActionStarted(const FZoogiGameplayTruthReco
 	const AActor* T = (!G->bFreeAim && G->TargetLock.IsValid()) ? G->TargetLock.Get() : nullptr;
 	if (!T && G->Preview.bContact) T = G->Preview.ContactActor.Get();
 	if (Pending.DeclaredTarget < 0) Pending.DeclaredTarget = BodyCodeOf(T);
-	if (Pending.Challenge == EZoogiChallenge::HaloBank || Pending.Challenge == EZoogiChallenge::OrbLine || Pending.Challenge == EZoogiChallenge::SkyBumper || Pending.Challenge == EZoogiChallenge::PartnerIntercept)
+	if (Pending.Challenge == EZoogiChallenge::HaloBank || Pending.Challenge == EZoogiChallenge::OrbLine || Pending.Challenge == EZoogiChallenge::SkyBumper || Pending.Challenge == EZoogiChallenge::PartnerIntercept || Pending.Challenge == EZoogiChallenge::RailRelease)
 	{
 		// route mini-game: the objective is committed from the real launch (aim preview / lock), then physics decides
 		Transition(EZoogiBattleState::MiniGame, FString::Printf(TEXT("objective_commit %s"), ZoogiBattle::ChallengeName(Pending.Challenge)));
@@ -712,7 +716,7 @@ void UZoogiBattleStateMachine::GrantEnergyFromTruth(const FZoogiGameplayTruthRec
 }
 
 // =====================================================================================================================
-// debug input (F5 cycle combo, F6 confirm / cancel, F7 Brace, F8 Redirect) + overlay. Engine-only placeholders.
+// debug input (F5 cycle combo, F6 confirm / cancel, F7 Brace, F8 Redirect, F9 Rail Release) + overlay. Engine-only placeholders.
 
 void UZoogiBattleStateMachine::DebugInput()
 {
@@ -722,6 +726,7 @@ void UZoogiBattleStateMachine::DebugInput()
 	if (!G || !PC || !G->Balls.IsValidIndex(G->ActivePlayer) || !G->Balls[G->ActivePlayer]) return;
 	if (PC->WasInputKeyJustPressed(EKeys::F7)) SubmitAirChoice(EZoogiAirChoice::Brace, TEXT("key"));
 	if (PC->WasInputKeyJustPressed(EKeys::F8)) SubmitAirChoice(EZoogiAirChoice::Redirect, TEXT("key"));
+	if (PC->WasInputKeyJustPressed(EKeys::F9)) SubmitRailRelease(TEXT("key"));
 	const int32 P = G->ActivePlayer;
 	if (G->Balls[P]->bCPU || (State != EZoogiBattleState::WaitForCommand && State != EZoogiBattleState::ActionPreview)) return;
 	if (PC->WasInputKeyJustPressed(EKeys::F5) && Tune.Combos.Num() > 0)
@@ -743,7 +748,7 @@ void UZoogiBattleStateMachine::DebugOverlay()
 	if (!GEngine || !G || G->Phase == EZoogiPhase::Menu) return;
 	int32 Key = 7700;
 	const FColor Dim(200, 210, 230);
-	GEngine->AddOnScreenDebugMessage(Key++, 0.f, FColor::White, FString::Printf(TEXT("BATTLE %s   P%d   turn %d   [F5 combo  F6 select/cancel  F7 brace  F8 redirect]"),
+	GEngine->AddOnScreenDebugMessage(Key++, 0.f, FColor::White, FString::Printf(TEXT("BATTLE %s   P%d   turn %d   [F5 combo  F6 select/cancel  F7 brace  F8 redirect  F9 rail]"),
 		ZoogiBattle::StateName(State), G->ActivePlayer + 1, G->TurnCounter));
 	for (const FZoogiBattlePlayerState& P : Players)
 	{
@@ -757,6 +762,8 @@ void UZoogiBattleStateMachine::DebugOverlay()
 			*BodyLabel(Pending.DeclaredTarget), ZoogiBattle::ResultName(Pending.Result)));
 	else if (Tune.Combos.IsValidIndex(HumanCursor))
 		GEngine->AddOnScreenDebugMessage(Key++, 0.f, FColor::Cyan, FString::Printf(TEXT("combo cursor: %s (cost %.0f)  F6 to commit"), *Tune.Combos[HumanCursor].Label, Tune.Combos[HumanCursor].Cost));
+	if (IsRailOpen())
+		GEngine->AddOnScreenDebugMessage(Key++, 0.f, FColor::Green, TEXT("RAIL RELEASE: F9 to release (early = high / center = flat / late = bank)"));
 	if (IsAirReactionOpen())
 		GEngine->AddOnScreenDebugMessage(Key++, 0.f, FColor::Orange, FString::Printf(TEXT("AIR REACTION P%d: F7 BRACE / F8 REDIRECT"), AirSegment.Owner + 1));
 	if (RealClock - LastShatterReal < 2.0)

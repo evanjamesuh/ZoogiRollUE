@@ -52,6 +52,11 @@ namespace
 		{ TEXT("halo_fail"),             ELay::Lane,   EAw::Save,   TEXT("halo_bank"),     true,  50.f, 1, true },
 		{ TEXT("orbline_success"),       ELay::Lane,   EAw::Save,   TEXT("orb_line"),      true,  50.f, 1, true },
 		{ TEXT("orbline_fail"),          ELay::Lane,   EAw::Save,   TEXT("orb_line"),      true,  50.f, 1, true },
+		{ TEXT("halo_pass"),             ELay::Lane,   EAw::Save,   TEXT("halo_bank"),     true,  50.f, 1, true },  // T3 props: through a Resonance Halo
+		{ TEXT("halo_rim"),              ELay::Lane,   EAw::Save,   TEXT("halo_bank"),     true,  50.f, 1, true },  // T3 props: off the halo rim
+		{ TEXT("sky_bumper"),            ELay::Lane,   EAw::Save,   TEXT("sky_bumper"),    true,  50.f, 1, true },  // T3 props: rebound x2 from the contact normal
+		{ TEXT("rail_release"),          ELay::Miss,   EAw::Save,   TEXT("rail_release"),  false, 50.f, 1, true },  // T3 props: center window
+		{ TEXT("rail_timeout"),          ELay::Miss,   EAw::Save,   TEXT("rail_release"),  false, 50.f, 1, true },  // T3 props: no release -> shatter
 		{ TEXT("ko"),                    ELay::KO,     EAw::Save,   nullptr,               true,  -1.f, 1, true },
 		{ TEXT("segment_retained"),      ELay::Lane,   EAw::Save,   TEXT("signature_strike"), true,  60.f, 2, true },
 		{ TEXT("unlocks"),               ELay::KO,     EAw::Save,   TEXT("signature_strike"), true,  50.f, 1, true },
@@ -247,6 +252,21 @@ void UZoogiBattleStateMachine::TestScriptTurn()
 		if (TestOrb >= 0) G->Orbs[TestOrb]->Respawn(FVector(OP, ZoogiConst::OrbRadius + 1.f));
 		UE_LOG(LogZoogi, Log, TEXT("BATTLE_TEST orb O%d placed at (%.0f,%.0f)"), TestOrb + 1, OP.X, OP.Y);
 	}
+	// T3 aerial props (debug geometry) on the scripted lane
+	if (!bSecond && (TestCase.StartsWith(TEXT("halo_pass")) || TestCase.StartsWith(TEXT("halo_rim")) || TestCase == TEXT("sky_bumper") || TestCase.StartsWith(TEXT("rail_"))))
+	{
+		ClearProps();
+		const FVector2D SP(S->BallLocation());
+		const FVector2D Dir = (TestCase.StartsWith(TEXT("rail_")) ? FVector2D(TestAim) - SP : FVector2D(G->Balls[TestTarget]->BallLocation()) - SP).GetSafeNormal();
+		const FVector2D Side(-Dir.Y, Dir.X);
+		const float Floor = S->BallLocation().Z - ZoogiConst::ZoogiRadius;
+		const FVector Fwd(Dir, 0.f);
+		if (TestCase == TEXT("halo_pass")) SpawnProp(EZoogiPropKind::ResonanceHalo, FVector(SP + Dir * 250.f, Floor), Fwd);
+		else if (TestCase == TEXT("halo_rim")) SpawnProp(EZoogiPropKind::ResonanceHalo, FVector(SP + Dir * 250.f + Side * 90.f, Floor), Fwd);
+		else if (TestCase == TEXT("sky_bumper")) SpawnProp(EZoogiPropKind::SkyBumper, FVector(SP + Dir * 250.f + Side * 60.f, S->BallLocation().Z), Fwd);
+		else SpawnProp(EZoogiPropKind::LaunchRail, FVector(SP + Dir * 170.f, Floor), Fwd);
+		UE_LOG(LogZoogi, Log, TEXT("BATTLE_TEST props case=%s count=%d"), *TestCase, Props.Num());
+	}
 	TestNotes.Add(FString::Printf(TEXT("turn%d:%s"), TestScriptedTurns + 1, Combo == NAME_None ? TEXT("shot") : *Combo.ToString()));
 	TestStep = 1;
 	++TestScriptedTurns;
@@ -322,7 +342,12 @@ void UZoogiBattleStateMachine::TickTest(float RealDt)
 			TestStep = 4;
 		}
 		break;
-	case 4: // in flight: Air Reaction input (human P1) per case
+	case 4: // in flight: Air Reaction / Rail Release input (human P1) per case
+		if (TestCase == TEXT("rail_release") && IsRailOpen())
+		{
+			const UZoogiMiniGameRailRelease* RM = Cast<UZoogiMiniGameRailRelease>(ActiveMiniGame);
+			if (RM && RM->Elapsed >= Tune.RailEarlyWindow + Tune.RailCenterWindow * 0.5f) SubmitRailRelease(TEXT("test"));
+		}
 		if (IsAirReactionOpen() && (TestCase == TEXT("air_entitled") || TestCase == TEXT("awaken_gate")))
 		{
 			const UZoogiMiniGame* M = ActiveMiniGame;
@@ -361,6 +386,11 @@ void UZoogiBattleStateMachine::TestOnFinalized(const FZoogiGameplayTruthRecord& 
 
 void UZoogiBattleStateMachine::TestOnMatchEnd()
 {
+	// a CPU-only case whose match ended before its action count: check what was played (the game quits right after)
+	const FCase* C = FindCase(TestCase);
+	if (bTestDone || bInTestCheck || !C || C->bScriptP1 || TestStep != 5) return;
+	UE_LOG(LogZoogi, Log, TEXT("BATTLE_TEST %s: match ended after %d/%d actions, checking now"), *TestCase, TestActions, C->Actions);
+	TestCheck();
 }
 
 void UZoogiBattleStateMachine::TestCheck()
@@ -368,6 +398,7 @@ void UZoogiBattleStateMachine::TestCheck()
 	AZoogiGameMode* G = GM();
 	TArray<FString> Fails;
 	FString D;
+	TGuardValue<bool> InCheck(bInTestCheck, true);
 	auto Need = [&](bool b, const FString& What) { if (!b) Fails.Add(What); };
 	auto TrailHas = [&](const TCHAR* S) { for (const FString& T : StateTrail) if (T.StartsWith(S)) return true; return false; };
 	auto Last = [&]() -> const FZoogiPendingSegment* { return History.Num() ? &History.Last() : nullptr; };
@@ -435,6 +466,84 @@ void UZoogiBattleStateMachine::TestCheck()
 		Need(bLedger, TEXT("ledger has no COMPLETED event with clip"));
 		D = FString::Printf(TEXT("segment=%s clip=%s detail=\"%s\" spent=%.0f energy=%.0f"), S ? *S->SegmentId : TEXT("-"), S ? *S->ClipId.ToString() : TEXT("-"), S ? *S->Detail : TEXT("-"), Players[0].EnergySpent, GetEnergy(0));
 	}
+	else if (Case == TEXT("halo_pass") || Case == TEXT("halo_rim"))
+	{
+		const FZoogiPendingSegment* S = Last();
+		if (Case == TEXT("halo_pass"))
+		{
+			Need(HaloPasses >= 1 && HaloRims == 0, TEXT("no clean halo pass"));
+			Need(S && S->HaloEvent == TEXT("pass"), TEXT("segment did not see the pass"));
+			Need(S && S->Comic == EZoogiComicState::Completed, TEXT("halo pass bank not COMPLETED"));
+		}
+		else
+		{
+			Need(HaloRims >= 1 && HaloPasses == 0, TEXT("no rim-only hit"));
+			Need(S && S->HaloEvent == TEXT("rim"), TEXT("segment did not see the rim"));
+			Need(S && (S->Comic == EZoogiComicState::Completed || S->Comic == EZoogiComicState::Shattered), TEXT("segment unresolved"));
+		}
+		bool bZone = false;
+		if (Ledger) for (const FZoogiEpisodeLedgerEvent& E : Ledger->Events) if (E.kind == TEXT("ACTION") && E.actor_player == 0 && E.zones.Contains(TEXT("aerial"))) bZone = true;
+		Need(bZone, TEXT("ledger action lacks the aerial zone tag"));
+		D = FString::Printf(TEXT("passes=%d rims=%d segment=%s comic=%s detail=\"%s\""), HaloPasses, HaloRims, S ? *S->SegmentId : TEXT("-"), S ? ZoogiBattle::ComicName(S->Comic) : TEXT("-"), S ? *S->Detail : TEXT("-"));
+	}
+	else if (Case == TEXT("sky_bumper"))
+	{
+		const AZoogiAerialProp* Bp = Props.Num() ? Props[0].Get() : nullptr;
+		Need(Bp && Bp->Rebounds >= 1, TEXT("no bumper rebound"));
+		if (Bp && Bp->Rebounds >= 1)
+		{
+			const FVector In = Bp->LastIn, Out = Bp->LastOut, N = Bp->LastNormal;
+			const float Want = FMath::Min(In.Size() * Tune.SkyBumperRebound, Tune.SkyBumperMaxSpeed);
+			FVector Refl = In - 2.f * FVector::DotProduct(In, N) * N;
+			Refl.Z = 0.f;
+			Need(FMath::IsNearlyEqual(Out.Size(), Want, Want * 0.01f), TEXT("rebound speed != min(in x mul, cap)"));
+			Need(FVector::DotProduct(Out.GetSafeNormal(), Refl.GetSafeNormal()) > 0.999f, TEXT("rebound not the reflection about the contact normal"));
+			Need(FVector::DotProduct(Out, N) > 0.f, TEXT("rebound into the bumper"));
+			D = FString::Printf(TEXT("in=%.0f out=%.0f want=%.0f mul=%.2f n=(%.2f,%.2f) post_speed=%.0f "), In.Size(), Out.Size(), Want, Tune.SkyBumperRebound, N.X, N.Y, BumperPostSpeed);
+			Need(BumperPostSpeed > 0.8f * Want, TEXT("the simulation did not carry the rebound"));
+		}
+		const FZoogiPendingSegment* S = Last();
+		Need(S && (S->Comic == EZoogiComicState::Completed || S->Comic == EZoogiComicState::Shattered), TEXT("segment unresolved"));
+		Need(S && S->BumperAt >= 0.f, TEXT("segment did not see the bumper"));
+		D += FString::Printf(TEXT("segment=%s comic=%s detail=\"%s\""), S ? *S->SegmentId : TEXT("-"), S ? ZoogiBattle::ComicName(S->Comic) : TEXT("-"), S ? *S->Detail : TEXT("-"));
+	}
+	else if (Case == TEXT("rail_release"))
+	{
+		const FZoogiPendingSegment* S = Last();
+		Need(RailEntries == 1 && RailReleases == 1, TEXT("rail not entered / released"));
+		Need(LastRailWindow == EZoogiRailWindow::Center, TEXT("window != CENTER"));
+		const FVector V = LastRailVelocity;
+		const float Pitch = FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(V.Z / FMath::Max(1.f, V.Size()), -1.f, 1.f)));
+		const float WantSpeed = FMath::Max(LastRailEntrySpeed * Tune.RailSpeedMul, Tune.RailMinSpeed);
+		Need(FMath::IsNearlyEqual(Pitch, Tune.RailCenterPitch, 0.5f), TEXT("center pitch"));
+		Need(FMath::IsNearlyEqual(V.Size(), WantSpeed, 2.f), TEXT("release speed"));
+		Need(S && S->Comic == EZoogiComicState::Completed && S->RailWindow == EZoogiRailWindow::Center, TEXT("segment not COMPLETED with CENTER"));
+		Need(TrailHas(TEXT("PHYSICS_RESOLVE>MINIGAME")) && TrailHas(TEXT("MINIGAME>PHYSICS_RESOLVE")), TEXT("MINIGAME in PHYSICS_RESOLVE path"));
+		// the three windows map to the three launch vectors (pure, deterministic)
+		const FVector F(1, 0, 0), P(0, -500, 0); // centre on the +Y side -> late banks left (+yaw)
+		const FVector E = UZoogiMiniGameRailRelease::LaunchVelocity(Tune, EZoogiRailWindow::Early, F, P, 1000.f);
+		const FVector C = UZoogiMiniGameRailRelease::LaunchVelocity(Tune, EZoogiRailWindow::Center, F, P, 1000.f);
+		const FVector L = UZoogiMiniGameRailRelease::LaunchVelocity(Tune, EZoogiRailWindow::Late, F, P, 1000.f);
+		auto PitchOf = [](const FVector& X) { return FMath::RadiansToDegrees(FMath::Asin(X.Z / X.Size())); };
+		const float LYaw = FMath::RadiansToDegrees(FMath::Atan2(L.Y, L.X));
+		Need(FMath::IsNearlyEqual(PitchOf(E), Tune.RailHighPitch, 0.1f) && FMath::IsNearlyEqual(PitchOf(C), Tune.RailCenterPitch, 0.1f) && FMath::IsNearlyEqual(PitchOf(L), Tune.RailLatePitch, 0.1f), TEXT("window pitches"));
+		Need(FMath::IsNearlyEqual(LYaw, Tune.RailLateYaw, 0.1f), TEXT("late bank yaw toward the centre"));
+		Need(UZoogiMiniGameRailRelease::WindowAt(Tune, 0.01f) == EZoogiRailWindow::Early && UZoogiMiniGameRailRelease::WindowAt(Tune, Tune.RailEarlyWindow + 0.01f) == EZoogiRailWindow::Center
+			&& UZoogiMiniGameRailRelease::WindowAt(Tune, Tune.RailEarlyWindow + Tune.RailCenterWindow + 0.01f) == EZoogiRailWindow::Late
+			&& UZoogiMiniGameRailRelease::WindowAt(Tune, Tune.RailEarlyWindow + Tune.RailCenterWindow + Tune.RailLateWindow + 0.01f) == EZoogiRailWindow::None, TEXT("window table"));
+		D = FString::Printf(TEXT("window=%s pitch=%.1f speed=%.0f entry=%.0f early_pitch=%.1f late_yaw=%.1f late_pitch=%.1f segment=%s"), ZoogiBattle::RailWindowName(LastRailWindow), Pitch, V.Size(), LastRailEntrySpeed,
+			PitchOf(E), LYaw, PitchOf(L), S ? ZoogiBattle::ComicName(S->Comic) : TEXT("-"));
+	}
+	else if (Case == TEXT("rail_timeout"))
+	{
+		const FZoogiPendingSegment* S = Last();
+		Need(RailEntries == 1 && RailTimeouts == 1 && RailReleases == 0, TEXT("no rail timeout"));
+		Need(ShatterCount == 1 && S && S->Comic == EZoogiComicState::Shattered, TEXT("no shatter"));
+		Need(TrailHas(TEXT("MINIGAME>SHATTER_FAILURE")) && TrailHas(TEXT("SHATTER_FAILURE>PHYSICS_RESOLVE")), TEXT("shatter -> ordinary resolution"));
+		Need(bNext, TEXT("turn did not advance"));
+		Need(Players[0].SegmentsCompleted == 0, TEXT("segment awarded"));
+		D = FString::Printf(TEXT("reason=\"%s\" segment=%s"), *LastShatterReason, S ? *S->SegmentId : TEXT("-"));
+	}
 	else if (Case == TEXT("energy_full_no_awaken"))
 	{
 		Need(!IsAwakened(0), TEXT("full energy awakened P1"));
@@ -481,7 +590,7 @@ void UZoogiBattleStateMachine::TestCheck()
 		Need(bLedgerKO, TEXT("no KO in ledger"));
 		Need(bLedgerKO == bGameOut, TEXT("ledger KO != game"));
 		Need(Players[0].KOs >= 1, TEXT("attacker KO count"));
-		OnMatchEnd(TEXT("test_end"));
+		if (!bMatchEnded) OnMatchEnd(TEXT("test_end"));
 		bool bDefeat = false;
 		for (const FZoogiPlayerAssembly& A : Assembler->PlayerResults) if (A.player == TestTarget) for (const FZoogiEpisodeFragment& F : A.fragments) if (F.kind == TEXT("defeat")) bDefeat = true;
 		Need(bDefeat, TEXT("no defeat fragment for the victim"));
@@ -493,7 +602,7 @@ void UZoogiBattleStateMachine::TestCheck()
 		const bool bSecond = History.Num() >= 2 && History.Last().Comic == EZoogiComicState::Shattered;
 		Need(bFirst, TEXT("first segment not kept COMPLETED"));
 		Need(bSecond, TEXT("second segment not SHATTERED"));
-		OnMatchEnd(TEXT("test_end"));
+		if (!bMatchEnded) OnMatchEnd(TEXT("test_end"));
 		bool bIn1 = false, bIn2 = false;
 		for (const FZoogiPlaylistEntry& P : Assembler->Playlist)
 		{
@@ -540,7 +649,7 @@ void UZoogiBattleStateMachine::TestCheck()
 	}
 	else if (Case == TEXT("one_v_one") || Case == TEXT("replay_order") || Case == TEXT("four_player_2v2"))
 	{
-		OnMatchEnd(TEXT("test_end"));
+		if (!bMatchEnded) OnMatchEnd(TEXT("test_end"));
 		int32 Acts = 0, PrevSeq = -1;
 		bool bOrder = true, bActors = true;
 		for (const FZoogiEpisodeLedgerEvent& E : Ledger->Events) if (E.kind == TEXT("ACTION")) ++Acts;

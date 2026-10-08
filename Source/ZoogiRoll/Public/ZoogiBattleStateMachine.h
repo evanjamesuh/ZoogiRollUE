@@ -17,6 +17,7 @@
 #include "Subsystems/WorldSubsystem.h"
 #include "ZoogiBattleTypes.h"
 #include "ZoogiEpisodeTypes.h"
+#include "ZoogiAerialProps.h"
 #include "ZoogiBattleStateMachine.generated.h"
 
 class AZoogiGameMode;
@@ -91,6 +92,26 @@ public:
 	bool SubmitAirChoice(EZoogiAirChoice Choice, const FString& Source);
 	bool IsAirReactionOpen() const;
 
+	// ---- T3 aerial props / zones / Rail Release (ZoogiAerialPlay.cpp). Off unless bAerialProps / -ZoogiBattleProps / a test.
+	UPROPERTY() TArray<TObjectPtr<AZoogiAerialProp>> Props;
+	AZoogiAerialProp* SpawnProp(EZoogiPropKind Kind, const FVector& Location, const FVector& Forward, float Size = -1.f);
+	void ClearProps();
+	/** A prop reports an event for a Zoogi: bumper (rebound applied), rim, pass, rail_enter. */
+	void OnPropEvent(AZoogiAerialProp* Prop, AZoogiBall* Ball, FName Event, const FVector& Where, float SpeedIn, float SpeedOut);
+	UFUNCTION() void OnBallHitProp(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
+	/** Debug zone tag of a point (ref frozen_zones_aerial): Zone 1 court / Zone 2 aerial (z) / Zone 3 recovery (outer ring). */
+	EZoogiZone ZoneOf(const FVector& P) const;
+	/** Rail Release input ("release now") from the debug key / test director. */
+	bool SubmitRailRelease(const FString& Source);
+	bool IsRailOpen() const;
+	int32 HaloPasses = 0, HaloRims = 0, BumperRebounds = 0, RailEntries = 0, RailReleases = 0, RailTimeouts = 0;
+	EZoogiRailWindow LastRailWindow = EZoogiRailWindow::None;
+	FVector LastRailVelocity = FVector::ZeroVector;
+	float LastRailEntrySpeed = 0.f;
+	float BumperPostSpeed = 0.f;          // the Zoogi's 2D speed two frames after a Sky Bumper rebound (the sim carried it)
+	TWeakObjectPtr<AZoogiBall> BumperCheckBall;
+	int32 BumperCheckFrames = 0;
+
 	// ---- T4 ledger / assembler
 	UPROPERTY() TObjectPtr<UZoogiEpisodeLedger> Ledger;
 	UPROPERTY() TObjectPtr<UZoogiEpisodeAssembler> Assembler;
@@ -143,6 +164,20 @@ protected:
 	// T3 (ZoogiMiniGame.cpp)
 	void TickMiniGame(float RealDt);
 	void FinishMiniGame(EZoogiChallengeResult R, const FString& Detail);
+
+	// T3 aerial (ZoogiAerialPlay.cpp)
+	void TickProps();
+	void SpawnDefaultProps();
+	void StartRail(AZoogiAerialProp* Rail, AZoogiBall* Ball);
+	void TickRail(class UZoogiMiniGameRailRelease* M);
+	void FinishRail(class UZoogiMiniGameRailRelease* M, EZoogiChallengeResult R, const FString& Why);
+	void DrawZones() const;
+	TSet<TWeakObjectPtr<AZoogiBall>> PropBoundBalls;
+	TMap<int64, FVector> PropPrevLocal;   // (prop, ball) -> previous ball position in the trigger frame
+	bool bDefaultPropsSpawned = false;
+	double ActionStartGame = 0.0;
+	TArray<FString> ActionZoneTags;
+	TArray<FString> ActionPropTags;
 
 	// T4 (ZoogiEpisodeLedger.cpp)
 	void LedgerAction(const FZoogiGameplayTruthRecord& Truth, const FZoogiEpisodeRecognitionRecord& Rec, const FZoogiCinematicPlan& Plan);
@@ -204,6 +239,7 @@ protected:
 	int32 TestOrb = -1;
 	FString TestFinal;
 	bool bTestInjectOffer = false;
+	bool bInTestCheck = false;
 	bool TestAimLock = false;
 	FName TestCombo;
 	void TestScriptTurn();

@@ -62,6 +62,7 @@ UZoogiMiniGame* UZoogiMiniGame::Create(UObject* Outer, EZoogiChallenge K)
 	case EZoogiChallenge::HaloBank: return NewObject<UZoogiMiniGameHaloBank>(Outer);
 	case EZoogiChallenge::OrbLine: return NewObject<UZoogiMiniGameOrbLine>(Outer);
 	case EZoogiChallenge::AirReaction: return NewObject<UZoogiMiniGameAirReaction>(Outer);
+	case EZoogiChallenge::RailRelease: return NewObject<UZoogiMiniGameRailRelease>(Outer);
 	default: return nullptr;
 	}
 }
@@ -93,11 +94,13 @@ EZoogiChallengeResult UZoogiMiniGame::EvaluateRoute(const UZoogiBattleStateMachi
 	case EZoogiChallenge::HaloBank: return GetDefault<UZoogiMiniGameHaloBank>()->Evaluate(SM, Seg, T, OutDetail);
 	case EZoogiChallenge::OrbLine: return GetDefault<UZoogiMiniGameOrbLine>()->Evaluate(SM, Seg, T, OutDetail);
 	case EZoogiChallenge::AirReaction: return GetDefault<UZoogiMiniGameAirReaction>()->Evaluate(SM, Seg, T, OutDetail);
+	case EZoogiChallenge::RailRelease: return GetDefault<UZoogiMiniGameRailRelease>()->Evaluate(SM, Seg, T, OutDetail);
 	case EZoogiChallenge::SkyBumper:
 	{
 		// config stub (ref minigame_layout_frozen): reach the Zone 2 aerial layer (airborne or a bumper / ramp kick) before the first body contact
 		bool bAerial = false;
 		for (const FZoogiAirSegment& A : T.Air) if (A.Body == T.Actor) bAerial = true;
+		if (Seg.BumperAt >= 0.f) bAerial = true; // a Sky Bumper prop rebound (aerial props)
 		for (const TTuple<float, int32, EZoogiContactKind>& C : ShooterContacts(T, T.Actor))
 		{
 			if (C.Get<1>() < 0) { if (C.Get<2>() == EZoogiContactKind::Bumper || C.Get<2>() == EZoogiContactKind::Ramp) bAerial = true; continue; }
@@ -143,7 +146,8 @@ EZoogiChallengeResult UZoogiMiniGameHaloBank::Evaluate(const UZoogiBattleStateMa
 			if (IsBankSurface(C.Get<2>())) { if (Banks++ == 0) BankOn = KindName(C.Get<2>()); }
 			continue;
 		}
-		OutDetail = FString::Printf(TEXT("banks=%d first=%s first_body=%s target=%s"), Banks, *BankOn, *SM->BodyLabel(Other), *SM->BodyLabel(Seg.DeclaredTarget));
+		if (Seg.HaloAt >= 0.f && Seg.HaloAt <= C.Get<0>() + 0.02f) { Banks++; BankOn = FString::Printf(TEXT("halo_%s"), *Seg.HaloEvent); } // Resonance Halo pass / rim (aerial props)
+		OutDetail = FString::Printf(TEXT("banks=%d first=%s halo=%s first_body=%s target=%s"), Banks, *BankOn, Seg.HaloEvent.IsEmpty() ? TEXT("-") : *Seg.HaloEvent, *SM->BodyLabel(Other), *SM->BodyLabel(Seg.DeclaredTarget));
 		return (Banks >= 1 && Other == Seg.DeclaredTarget) ? EZoogiChallengeResult::Success : EZoogiChallengeResult::Failed;
 	}
 	OutDetail = FString::Printf(TEXT("banks=%d first=%s no body contact"), Banks, *BankOn);
@@ -165,6 +169,12 @@ void UZoogiMiniGame::CommitOrbLine(const UZoogiBattleStateMachine* SM, FZoogiPen
 		const float Dist = V.SizeSquared() / FMath::Max(1.f, 2.f * Decel);
 		Path = { FVector2D(T.LaunchStart), FVector2D(T.LaunchStart) + V.GetSafeNormal() * Dist };
 	}
+	// a preview path ends at the first contact (the shooter's centre one contact distance short of the body): extend it
+	if (Path.Num() >= 2 && G->Preview.bValid && G->Preview.bContact)
+	{
+		const FVector2D D = (Path.Last() - Path[Path.Num() - 2]).GetSafeNormal();
+		Path.Add(Path.Last() + D * (ZoogiConst::ZoogiRadius + ZoogiConst::OrbRadius + 10.f));
+	}
 	const float Corridor = ZoogiConst::ZoogiRadius + ZoogiConst::OrbRadius - 8.f; // centre line passes through the orb
 	TArray<TPair<float, int32>> Hits; // distance along the path -> orb
 	for (int32 i = 0; i < G->Orbs.Num(); ++i)
@@ -183,6 +193,11 @@ void UZoogiMiniGame::CommitOrbLine(const UZoogiBattleStateMachine* SM, FZoogiPen
 			Along += FVector2D::Distance(Path[k - 1], Path[k]);
 		}
 	}
+	// the aim preview's first contact, when it is an orb, is always on the route
+	if (G->Preview.bValid && G->Preview.bContact)
+		for (int32 i = 0; i < G->Orbs.Num(); ++i)
+			if (G->Orbs[i] && (const AActor*)G->Orbs[i].Get() == G->Preview.ContactActor.Get() && !Hits.ContainsByPredicate([i](const TPair<float, int32>& H) { return H.Value == 100 + i; }))
+				Hits.Add({ 0.f, 100 + i });
 	Hits.Sort([](const TPair<float, int32>& A, const TPair<float, int32>& B) { return A.Key < B.Key; });
 	for (int32 i = 0; i < Hits.Num() && i < 3; ++i) Seg.CommittedOrbs.Add(Hits[i].Value);
 	FString L;
@@ -357,6 +372,7 @@ void UZoogiBattleStateMachine::HandleAirborne(int32 Body, float Peak)
 
 void UZoogiBattleStateMachine::TickMiniGame(float RealDt)
 {
+	if (UZoogiMiniGameRailRelease* RM = Cast<UZoogiMiniGameRailRelease>(ActiveMiniGame)) { TickRail(RM); return; } // game time (ZoogiAerialPlay.cpp)
 	UZoogiMiniGameAirReaction* M = Cast<UZoogiMiniGameAirReaction>(ActiveMiniGame);
 	if (!M) return;
 	UWorld* W = GetWorld();
@@ -386,6 +402,7 @@ void UZoogiBattleStateMachine::TickMiniGame(float RealDt)
 
 void UZoogiBattleStateMachine::FinishMiniGame(EZoogiChallengeResult R, const FString& Detail)
 {
+	if (UZoogiMiniGameRailRelease* RM = Cast<UZoogiMiniGameRailRelease>(ActiveMiniGame)) { FinishRail(RM, R, Detail); return; }
 	UZoogiMiniGame* Base = ActiveMiniGame;
 	ActiveMiniGame = nullptr;
 	UZoogiMiniGameAirReaction* M = Cast<UZoogiMiniGameAirReaction>(Base);

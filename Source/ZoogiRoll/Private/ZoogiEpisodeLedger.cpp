@@ -105,6 +105,8 @@ void UZoogiBattleStateMachine::LedgerAction(const FZoogiGameplayTruthRecord& Tru
 	E.zones.Add(TEXT("court"));
 	if (Truth.Air.Num() > 0) E.zones.Add(TEXT("aerial"));
 	if (Truth.Boundary.Num() > 0) E.zones.Add(TEXT("recovery"));
+	for (const FString& Z : ActionZoneTags) E.zones.AddUnique(Z);            // T3 debug zone volumes (aerial props / layers)
+	for (const FString& P : ActionPropTags) E.tags.Add(FString::Printf(TEXT("PROP:%s"), *P)); // halo pass / rim, bumper, rail window
 	E.spotlight.Add(Truth.Actor);
 	if (Rec.Tier >= 3) for (int32 T : TL) if (T < 100 && !E.spotlight.Contains(T)) E.spotlight.Add(T);
 	E.variant = FString::Printf(TEXT("v_%s_t%d_%d"), Rec.Tags.Num() ? ZoogiEpisode::TagName(Rec.Tags[0]) : TEXT("plain"), Rec.Tier, Truth.ActionId % 3);

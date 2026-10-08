@@ -35,7 +35,8 @@ enum class EZoogiChallenge : uint8
 	OrbLine,      // touch every orb committed on the route
 	AirReaction,  // Awakened Zoogi reacts while launched and lands on the court
 	SkyBumper,    // (ref minigame_layout_frozen) touch a Zone 2 aerial bumper / disc, then a body contact (config stub)
-	PartnerIntercept // (ref minigame_layout_frozen) 2v2: the partner is the first body hit, then a rival (config stub)
+	PartnerIntercept, // (ref minigame_layout_frozen) 2v2: the partner is the first body hit, then a rival (config stub)
+	RailRelease   // (ref rail_release_timing) timing mini-game on a launch rail: early / center / late release window
 };
 
 /** Frozen Ring layers (ref frozen_zones_aerial): debug zone tags, no art. */
@@ -81,6 +82,16 @@ enum class EZoogiAirChoice : uint8
 	None,
 	Brace,     // damp the horizontal speed (stay in)
 	Redirect   // turn the horizontal velocity toward the arena centre
+};
+
+/** Rail Release windows (ref rail_release_timing). */
+UENUM()
+enum class EZoogiRailWindow : uint8
+{
+	None,
+	Early,     // high launch (pitch RailHighPitch)
+	Center,    // horizontal launch (pitch RailCenterPitch)
+	Late       // downward bank (yaw RailLateYaw toward the centre, pitch RailLatePitch)
 };
 
 struct FZoogiEnergyGainRow
@@ -132,6 +143,23 @@ struct FZoogiBattleTuning
 	float AirReactionHoldCPU = 0.6f;        // real seconds the reaction beat holds for a CPU
 	float BraceDamp = 0.45f;                // Brace: horizontal speed kept
 	float RedirectDeg = 35.f;               // Redirect: max turn toward the centre
+	// [ZoogiRoll.Aerial]  (T3 aerial props: debug geometry, real physics velocity changes, never time dilation)
+	bool bAerialProps = false;              // spawn the Frozen Ring aerial props (also -ZoogiBattleProps); OFF = existing play unchanged
+	float SkyBumperRebound = 2.f;           // Sky Bumper: out speed = in speed x this (reflection about the contact normal)
+	float SkyBumperMaxSpeed = 3200.f;       // cap on the rebound speed (cm/s)
+	float SkyBumperRadius = 70.f;
+	float HaloRadius = 120.f;               // Resonance Halo ring radius (rim spheres r=15)
+	float RailEarlyWindow = 0.25f;          // Rail Release window sizes (game s, consecutive: early, center, late; after = timeout)
+	float RailCenterWindow = 0.20f;
+	float RailLateWindow = 0.25f;
+	float RailHighPitch = 35.f;             // early: high launch
+	float RailCenterPitch = 6.f;            // center: horizontal launch
+	float RailLatePitch = -4.f;             // late: downward bank ...
+	float RailLateYaw = 30.f;               // ... turning toward the arena centre
+	float RailSpeedMul = 1.15f;             // release speed = rail entry speed x this
+	float RailMinSpeed = 700.f;
+	float ZoneAerialZ = 150.f;              // Zone 2 aerial layer: body z above this (debug tag)
+	float ZoneRecoveryFrac = 0.92f;         // Zone 3 recovery ring: radius beyond this fraction of the arena radius (debug tag)
 	// [ZoogiRoll.Unlocks]
 	float PerfWeightScore = 0.01f;          // performance = score*w + KOs*w + completed*w + tier3plus*w - shatters*w
 	float PerfWeightKO = 2.f;
@@ -195,6 +223,11 @@ struct FZoogiPendingSegment
 	UPROPERTY() TArray<int32> CommittedOrbs; // body codes (OrbLine)
 	UPROPERTY() FString Detail;              // why it succeeded / failed
 	UPROPERTY() EZoogiAirChoice AirChoice = EZoogiAirChoice::None;
+	UPROPERTY() EZoogiRailWindow RailWindow = EZoogiRailWindow::None;
+	UPROPERTY() TArray<FString> PropEvents;  // "<prop>:<event>@<t>" in order (aerial props, this action)
+	UPROPERTY() float HaloAt = -1.f;         // first Resonance Halo event (action time, s)
+	UPROPERTY() FString HaloEvent;           // pass | rim
+	UPROPERTY() float BumperAt = -1.f;       // first Sky Bumper rebound (action time, s)
 };
 
 /** One canonical ledger event (spec 6 sample contract, extended). */
@@ -255,6 +288,7 @@ namespace ZoogiBattle
 	ZOOGIROLL_API const TCHAR* ResultName(EZoogiChallengeResult R);
 	ZOOGIROLL_API const TCHAR* ComicName(EZoogiComicState S);
 	ZOOGIROLL_API const TCHAR* AirChoiceName(EZoogiAirChoice C);
+	ZOOGIROLL_API const TCHAR* RailWindowName(EZoogiRailWindow W);
 	ZOOGIROLL_API EZoogiChallenge ParseChallenge(const FString& S);
 	/** Loads a loose CSV (header row + rows) from Content/Data/<Name>; false if absent. */
 	ZOOGIROLL_API bool LoadCsv(const FString& Name, TArray<TArray<FString>>& OutRows, FString& OutPath);

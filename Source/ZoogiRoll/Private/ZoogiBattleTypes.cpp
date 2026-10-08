@@ -3,6 +3,8 @@
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "Misc/Parse.h"
+#include "Misc/CommandLine.h"
 
 namespace ZoogiBattle
 {
@@ -32,6 +34,7 @@ namespace ZoogiBattle
 		case EZoogiChallenge::AirReaction: return TEXT("AirReaction");
 		case EZoogiChallenge::SkyBumper: return TEXT("SkyBumper");
 		case EZoogiChallenge::PartnerIntercept: return TEXT("PartnerIntercept");
+		case EZoogiChallenge::RailRelease: return TEXT("RailRelease");
 		default: return TEXT("None");
 		}
 	}
@@ -57,6 +60,16 @@ namespace ZoogiBattle
 		default: return TEXT("NONE");
 		}
 	}
+	const TCHAR* RailWindowName(EZoogiRailWindow W)
+	{
+		switch (W)
+		{
+		case EZoogiRailWindow::Early: return TEXT("EARLY");
+		case EZoogiRailWindow::Center: return TEXT("CENTER");
+		case EZoogiRailWindow::Late: return TEXT("LATE");
+		default: return TEXT("NONE");
+		}
+	}
 	const TCHAR* AirChoiceName(EZoogiAirChoice C)
 	{
 		switch (C)
@@ -74,6 +87,7 @@ namespace ZoogiBattle
 		if (S.Equals(TEXT("AirReaction"), ESearchCase::IgnoreCase)) return EZoogiChallenge::AirReaction;
 		if (S.Equals(TEXT("SkyBumper"), ESearchCase::IgnoreCase)) return EZoogiChallenge::SkyBumper;
 		if (S.Equals(TEXT("PartnerIntercept"), ESearchCase::IgnoreCase)) return EZoogiChallenge::PartnerIntercept;
+		if (S.Equals(TEXT("RailRelease"), ESearchCase::IgnoreCase)) return EZoogiChallenge::RailRelease;
 		return EZoogiChallenge::None;
 	}
 	bool LoadCsv(const FString& Name, TArray<TArray<FString>>& OutRows, FString& OutPath)
@@ -129,6 +143,7 @@ void FZoogiBattleTuning::Load()
 	AddC(TEXT("orb_line"), TEXT("ORB LINE"), 15.f, EZoogiChallenge::OrbLine, 0, nullptr, TEXT("clip_{zoogi}_orb_line"), false);
 	AddC(TEXT("sky_bumper"), TEXT("SKY BUMPER"), 25.f, EZoogiChallenge::SkyBumper, 0, nullptr, TEXT("clip_{zoogi}_sky_bumper"), false);
 	AddC(TEXT("partner_intercept"), TEXT("PARTNER INTERCEPT"), 30.f, EZoogiChallenge::PartnerIntercept, 0, nullptr, TEXT("clip_{zoogi}_partner_intercept"), false);
+	AddC(TEXT("rail_release"), TEXT("RAIL RELEASE"), 20.f, EZoogiChallenge::RailRelease, 0, nullptr, TEXT("clip_{zoogi}_rail_release"), false);
 	AddC(TEXT("power_finisher"), TEXT("POWER FINISHER"), 40.f, EZoogiChallenge::Strike, 2, TEXT("POWER_HIT"), TEXT("clip_{zoogi}_power_finisher"), true);
 	GainsSource = CombosSource = TEXT("built-in");
 
@@ -175,6 +190,13 @@ void FZoogiBattleTuning::Load()
 	Str(SA, TEXT("ActivationRule"), ActivationRule); I(SA, TEXT("AwakenTurns"), AwakenTurns); I(SA, TEXT("ReactionsPerAwakening"), ReactionsPerAwakening);
 	B(SA, TEXT("bAirReactionOwnTurn"), bAirReactionOwnTurn); F(SA, TEXT("AirReactionMaxWait"), AirReactionMaxWait); F(SA, TEXT("AirReactionHoldCPU"), AirReactionHoldCPU);
 	F(SA, TEXT("BraceDamp"), BraceDamp); F(SA, TEXT("RedirectDeg"), RedirectDeg);
+	const TCHAR* SZ = TEXT("ZoogiRoll.Aerial");
+	B(SZ, TEXT("bAerialProps"), bAerialProps); F(SZ, TEXT("SkyBumperRebound"), SkyBumperRebound); F(SZ, TEXT("SkyBumperMaxSpeed"), SkyBumperMaxSpeed); F(SZ, TEXT("SkyBumperRadius"), SkyBumperRadius);
+	F(SZ, TEXT("HaloRadius"), HaloRadius); F(SZ, TEXT("RailEarlyWindow"), RailEarlyWindow); F(SZ, TEXT("RailCenterWindow"), RailCenterWindow); F(SZ, TEXT("RailLateWindow"), RailLateWindow);
+	F(SZ, TEXT("RailHighPitch"), RailHighPitch); F(SZ, TEXT("RailCenterPitch"), RailCenterPitch); F(SZ, TEXT("RailLatePitch"), RailLatePitch); F(SZ, TEXT("RailLateYaw"), RailLateYaw);
+	F(SZ, TEXT("RailSpeedMul"), RailSpeedMul); F(SZ, TEXT("RailMinSpeed"), RailMinSpeed); F(SZ, TEXT("ZoneAerialZ"), ZoneAerialZ); F(SZ, TEXT("ZoneRecoveryFrac"), ZoneRecoveryFrac);
+	if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiBattleProps"))) bAerialProps = true;
+	FParse::Value(FCommandLine::Get(), TEXT("-ZoogiSkyBumperRebound="), SkyBumperRebound);
 	const TCHAR* SU = TEXT("ZoogiRoll.Unlocks");
 	F(SU, TEXT("PerfWeightScore"), PerfWeightScore); F(SU, TEXT("PerfWeightKO"), PerfWeightKO); F(SU, TEXT("PerfWeightSegment"), PerfWeightSegment);
 	F(SU, TEXT("PerfWeightSpotlight"), PerfWeightSpotlight); F(SU, TEXT("PerfWeightShatter"), PerfWeightShatter); F(SU, TEXT("FullEpisodePerf"), FullEpisodePerf);

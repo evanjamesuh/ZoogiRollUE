@@ -9,6 +9,11 @@
 //                Brace (horizontal speed x BraceDamp) / Redirect (turn toward the centre <= RedirectDeg), applied on
 //                the resume frame. Success = the reacting Zoogi is not rung out. CPU decides deterministically; human
 //                input times out (-> shatter, then ordinary resolution).
+//   RailRelease: (T3, ref rail_release_timing) a Zoogi entering a Launch Rail rides it; the release window decides the
+//                launch vector: EARLY high launch / CENTER horizontal / LATE downward bank toward the centre. Game time,
+//                no hold, no dilation: a real velocity change in the normal simulation. Window sizes in [ZoogiRoll.Aerial].
+//   SkyBumper  : route challenge; with aerial props, a Sky Bumper rebound (reflection x SkyBumperRebound) then a body
+//                contact. HaloBank with props: a Resonance Halo pass or rim rebound counts as the bank.
 #pragma once
 
 #include "CoreMinimal.h"
@@ -18,6 +23,7 @@
 #include "ZoogiMiniGame.generated.h"
 
 class UZoogiBattleStateMachine;
+class AZoogiAerialProp;
 
 UCLASS(Abstract)
 class ZOOGIROLL_API UZoogiMiniGame : public UObject
@@ -85,4 +91,29 @@ public:
 	EZoogiAirChoice DecideCPU(const UZoogiBattleStateMachine* SM) const;
 	/** Applies the choice to the live body (call on the first unpaused frame). Returns a description. */
 	FString Apply(UZoogiBattleStateMachine* SM) const;
+};
+
+UCLASS()
+class ZOOGIROLL_API UZoogiMiniGameRailRelease : public UZoogiMiniGame
+{
+	GENERATED_BODY()
+public:
+	UZoogiMiniGameRailRelease() { Kind = EZoogiChallenge::RailRelease; }
+	int32 Body = -1;
+	TWeakObjectPtr<AZoogiAerialProp> Rail;
+	FVector RailForward = FVector::ForwardVector;
+	float Elapsed = 0.f;
+	float EntrySpeed = 0.f;
+	bool bCPU = false;
+	bool bSegment = false;              // a rail_release combo is pending for this Zoogi (timeout shatters it)
+	bool bReleaseRequested = false;
+	EZoogiRailWindow Window = EZoogiRailWindow::None;
+	static EZoogiRailWindow WindowAt(const FZoogiBattleTuning& T, float Time);
+	/** Deterministic launch velocity for a window (rail forward, the Zoogi position for the bank side, entry speed). */
+	static FVector LaunchVelocity(const FZoogiBattleTuning& T, EZoogiRailWindow W, const FVector& Forward, const FVector& Pos, float Speed);
+	virtual bool SubmitInput(UZoogiBattleStateMachine* SM, int32 Choice, const FString& Source) override;
+	/** Game-time tick (GameDt = 0 while paused). Success once released, Timeout after the late window. */
+	EZoogiChallengeResult TickGame(UZoogiBattleStateMachine* SM, float GameDt);
+	FString Apply(UZoogiBattleStateMachine* SM) const;
+	virtual EZoogiChallengeResult Evaluate(const UZoogiBattleStateMachine* SM, const FZoogiPendingSegment& Seg, const FZoogiGameplayTruthRecord& T, FString& OutDetail) const override;
 };
