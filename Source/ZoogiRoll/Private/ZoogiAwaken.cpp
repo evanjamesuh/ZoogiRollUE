@@ -13,6 +13,7 @@
 #include "ZoogiPlayerController.h"
 #include "Components/SphereComponent.h"
 #include "Engine/World.h"
+#include "ZoogiBattleStateMachine.h"
 
 namespace
 {
@@ -535,7 +536,7 @@ void AZoogiGameMode::CommitLedger(int32& ShooterScores, int32& KOs)
 		ResolveDeltas[E.Player] += B->Score - Before;
 		if (E.bKO) { B->KnockOuts++; ++KOs; }
 		if (!E.bKO && !E.bFall) B->OrbsScored++;
-		if (E.bStar)
+		if (E.bStar && UZoogiBattleStateMachine::AllowStarOrbDraw(this)) // battle flow flag [ZoogiRoll.EpisodeEnergy] bStarOrbDraws
 		{
 			if (bArtifactMode && B->Artifact) B->Artifact->BonusDraws = FMath::Min(2, B->Artifact->BonusDraws + 1);
 			else B->Charges = FMath::Min(3, B->Charges + 1);
@@ -604,7 +605,7 @@ void AZoogiGameMode::DoResolve()
 		if (IsClimaxMoment(Shooter, KOs)) BeginClimax(Shooter, ShotArtifact, KOs, ShooterScores); // once per match: hit lands after the rumble
 		else if (ShooterScores >= 2) EmitAnime(TEXT("Combo"), Shooter, ShotArtifact, Shooter, Shooter->BallLocation(), ShooterScores, false);
 		else if (KOs > 0) EmitAnime(TEXT("KO"), Shooter, ShotArtifact, Shooter, Shooter->BallLocation(), KOs, false);
-		else if (ShotArtifact != EZoogiArtifact::None && !bInfusedContact) EmitAnime(TEXT("Miss"), Shooter, ShotArtifact, Shooter, Shooter->BallLocation(), 1.f, false);
+		else if (ShotArtifact != EZoogiArtifact::None && !bInfusedContact && UZoogiBattleStateMachine::AllowMissCard(this)) EmitAnime(TEXT("Miss"), Shooter, ShotArtifact, Shooter, Shooter->BallLocation(), 1.f, false); // battle flow: no consolation card
 	}
 	UE_LOG(LogZoogi, Log, TEXT("Resolve (turn %d, P%d): %s (%d scoring, %d KO)%s"), TurnCounter, ActivePlayer + 1, *ResolveSummary, ShooterScores, KOs,
 		bLastHitCrit ? TEXT(", crit") : TEXT(""));

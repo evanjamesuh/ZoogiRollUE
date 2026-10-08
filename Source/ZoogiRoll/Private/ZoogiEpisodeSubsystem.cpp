@@ -93,6 +93,7 @@ void UZoogiEpisodeSubsystem::Tick(float DeltaTime)
 		{
 			bSawResolve = true;
 			UpdateLive();
+			OnActionResolving.Broadcast(Truth, LiveRec); // battle engine: challenge result / shatter (may end the stage)
 			ShowEpilogue(); // outcome confirmed by the game (Resolve committed scores / KOs)
 		}
 		if ((bSawResolve && G->Stage != EZoogiStage::Resolve) || G->Phase == EZoogiPhase::GameOver || G->Phase == EZoogiPhase::Menu)
@@ -221,11 +222,15 @@ void UZoogiEpisodeSubsystem::BeginAction(AZoogiBall* Ball)
 	NearMin.Reset();
 	NearTouched.Reset();
 	bAirShotDone = false;
+	bAirClaimed = false;
+	bPresentationSuppressed = false;
+	AirAnnounced.Reset();
 	if (const AWorldSettings* WS = W->GetWorldSettings()) { StartCinematicDilation = WS->CinematicTimeDilation; StartGlobalDilation = WS->TimeDilation; }
 	PrevVel.Reset();
 	for (int32 i = 0; i < G->Balls.Num(); ++i) PrevVel.Add(i, BodyVelocity(i));
 	for (int32 i = 0; i < G->Orbs.Num(); ++i) PrevVel.Add(100 + i, BodyVelocity(100 + i));
 	UE_LOG(LogZoogi, Verbose, TEXT("EPISODE begin action=%d P%d %s power=%.2f awaken=%s"), Truth.ActionId, Truth.Actor + 1, *Truth.ActorName, Truth.LaunchPower, *ZoogiArtifacts::Name(Truth.Awaken));
+	OnActionStarted.Broadcast(Truth);
 }
 
 void UZoogiEpisodeSubsystem::OnBodyHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
@@ -372,7 +377,12 @@ void UZoogiEpisodeSubsystem::TrackAction(float GameDt)
 				if (!A.bAir) { A.bAir = true; A.Start = Now; A.Peak = 0.f; }
 				A.Peak = FMath::Max(A.Peak, Gap);
 				// tier 3 airborne entry: fire while the Zoogi is still in the air (the AIRBORNE tag itself lands at touchdown)
-				if (!bAirShotDone && Now - A.Start >= Tune.AirTriggerTime && A.Peak >= Tune.AirTriggerGap && G->Arena && !G->Arena->IsOffCourt(FVector2D(L)))
+				if (!AirAnnounced.Contains(i) && Now - A.Start >= Tune.AirTriggerTime && A.Peak >= Tune.AirTriggerGap && G->Arena && !G->Arena->IsOffCourt(FVector2D(L)))
+				{
+					AirAnnounced.Add(i);
+					OnAirborneLive.Broadcast(i, A.Peak); // battle engine: Air Reaction entitlement (may claim the moment)
+				}
+				if (!bAirShotDone && !bAirClaimed && Now - A.Start >= Tune.AirTriggerTime && A.Peak >= Tune.AirTriggerGap && G->Arena && !G->Arena->IsOffCourt(FVector2D(L)))
 				{
 					bAirShotDone = true;
 					StartAirShot(i, A.Peak);

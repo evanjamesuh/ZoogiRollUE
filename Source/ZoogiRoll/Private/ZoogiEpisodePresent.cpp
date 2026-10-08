@@ -313,7 +313,7 @@ void UZoogiEpisodeSubsystem::ShowEpilogue()
 {
 	if (bEpilogueShown) return;
 	bEpilogueShown = true;
-	if (Mode == EZoogiEpisodeMode::Off) return;
+	if (Mode == EZoogiEpisodeMode::Off || bPresentationSuppressed) return;
 	if (Plan.Tier < 3 && !Plan.bMeteor) return;
 	AZoogiGameMode* G = GM();
 	FString Text, Sub;
@@ -338,9 +338,9 @@ void UZoogiEpisodeSubsystem::ShowEpilogue()
 // =====================================================================================================================
 // presentation hold: pause + snapshot; on release verify nothing moved (and restore if anything did)
 
-int32 UZoogiEpisodeSubsystem::BeginHold(float MaxSeconds, const TCHAR* Reason)
+int32 UZoogiEpisodeSubsystem::BeginHold(float MaxSeconds, const TCHAR* Reason, bool bGameplay)
 {
-	if (bFrozen || Mode == EZoogiEpisodeMode::Off) return 0;
+	if (bFrozen || (!bGameplay && (Mode == EZoogiEpisodeMode::Off || bPresentationSuppressed))) return 0;
 	FreezeWorld();
 	if (!bFrozen) return 0;
 	HoldToken = NextHoldToken++;
@@ -348,6 +348,16 @@ int32 UZoogiEpisodeSubsystem::BeginHold(float MaxSeconds, const TCHAR* Reason)
 	HoldReason = Reason ? Reason : TEXT("");
 	UE_LOG(LogZoogi, Log, TEXT("EPISODE hold begin action=%d token=%d seconds=%.2f reason=%s bodies=%d"), Truth.ActionId, HoldToken, HoldLeft, *HoldReason, Snap.Num());
 	return HoldToken;
+}
+
+void UZoogiEpisodeSubsystem::SuppressPresentation(const TCHAR* Why)
+{
+	if (bPresentationSuppressed) return;
+	bPresentationSuppressed = true;
+	bArchetypePending = false;
+	if (bFrozen) UnfreezeWorld();
+	EndAirSlow(Why ? Why : TEXT("suppressed"));
+	UE_LOG(LogZoogi, Log, TEXT("EPISODE presentation suppressed action=%d why=%s"), Truth.ActionId, Why ? Why : TEXT("-"));
 }
 
 void UZoogiEpisodeSubsystem::ReleaseHold(int32 Token)

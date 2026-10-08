@@ -22,6 +22,7 @@
 #include "CollisionQueryParams.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "ZoogiBattleStateMachine.h"
 
 namespace
 {
@@ -438,7 +439,8 @@ bool AZoogiGameMode::ComboAcceptFollowUp()
 	if (!P || P->bKnockedOut || P->bOut) { bFollowUpOffered = false; return false; }
 	bFollowUpOffered = false;
 	bFollowUpUsed = true;
-	ComboEnergy[ComboTeam] = FMath::Max(0.f, ComboEnergy[ComboTeam] - ZoogiComboTune::FollowUpCost);
+	if (!UZoogiBattleStateMachine::PayFollowUpFromEnergy(this, P->PlayerIndex, ZoogiComboTune::FollowUpCost)) // battle flow: FollowUpCostSource=EpisodeEnergy
+		ComboEnergy[ComboTeam] = FMath::Max(0.f, ComboEnergy[ComboTeam] - ZoogiComboTune::FollowUpCost);
 	FollowRelayOrb = (OfferTriggers & ZoogiComboTrigger::OrbRelay) ? RelayOrb : nullptr;
 	UE_LOG(LogZoogi, Log, TEXT("COMBO PARTNER FOLLOW-UP: P%d %s acts (setup %s, -%.0f gauge -> %.0f)"), P->PlayerIndex + 1, *P->Def.Name, *TriggerNames(OfferTriggers), ZoogiComboTune::FollowUpCost, ComboEnergy[ComboTeam]);
 	ComboCallout(FString::Printf(TEXT("PARTNER FOLLOW-UP!  %s"), *P->Def.Name.ToUpper()), TeamColor(ComboTeam));
@@ -861,7 +863,7 @@ void AZoogiGameMode::ComboResolve()
 	for (int32 t = 0; t < 2; ++t)
 	{
 		// Resonance Energy: every 3 -> +1 artifact draw for the team (Awaken integration).
-		while (ComboResonance[t] >= ZoogiComboTune::ResonanceSurge)
+		while (ComboResonance[t] >= ZoogiComboTune::ResonanceSurge && UZoogiBattleStateMachine::AllowResonanceDraws(this))
 		{
 			ComboResonance[t] -= ZoogiComboTune::ResonanceSurge;
 			for (AZoogiBall* B : Balls) if (B && B->TeamIndex == t && !B->bKnockedOut && B->Artifact) B->Artifact->BonusDraws = FMath::Min(2, B->Artifact->BonusDraws + 1);
@@ -879,7 +881,7 @@ void AZoogiGameMode::ComboResolve()
 			AddFeed(FString::Printf(TEXT("%s reached %.0f Arena Control: RESONANCE SHIFT"), *TeamName(t), ArenaControl[t]), FLinearColor(0.65f, 0.4f, 1.f));
 			ComboShot(TEXT("resonance_shift"), 1.0f);
 		}
-		if (ArenaControl[t] >= 100.f)
+		if (ArenaControl[t] >= 100.f && UZoogiBattleStateMachine::AllowArenaControlGauge(this))
 		{
 			ArenaControl[t] -= 100.f;
 			ComboAddEnergy(t, 30.f, TEXT("ARENA CONTROL"));
@@ -893,7 +895,7 @@ void AZoogiGameMode::ComboResolve()
 	{
 		AZoogiBall* P = PartnerOf(Shooter);
 		const bool bPartnerOk = P && !P->bKnockedOut && !P->bOut && P->StunTurns <= 0;
-		if (bPartnerOk && ComboEnergy[ComboTeam] >= ZoogiComboTune::FollowUpCost)
+		if (bPartnerOk && UZoogiBattleStateMachine::CanAffordFollowUp(this, P->PlayerIndex, ComboEnergy[ComboTeam], ZoogiComboTune::FollowUpCost))
 		{
 			bFollowUpOffered = true;
 			FollowUpOfferAt = Clock;
@@ -929,6 +931,7 @@ bool AZoogiGameMode::ComboHoldResolve()
 		AZoogiBall* P = PartnerOf(GetActiveBall());
 		if (ComboDemo > 0) return true; // the demo director decides
 		if (P && P->bCPU && StageTime >= 1.1f && !bBusy) ComboAcceptFollowUp();
+		else if (P && !P->bCPU && UZoogiBattleStateMachine::FollowUpOfferTimedOut(this, Clock - FollowUpOfferAt)) { ComboDeclineFollowUp(); return false; } // battle flow: human offer timeout
 		return true;
 	}
 	return false;

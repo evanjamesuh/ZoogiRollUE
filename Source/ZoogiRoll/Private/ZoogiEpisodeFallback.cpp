@@ -105,7 +105,7 @@ void UZoogiEpisodeSubsystem::FallbackTier(int32 Tier)
 void UZoogiEpisodeSubsystem::StartAirShot(int32 Body, float Gap)
 {
 	UWorld* W = GetWorld();
-	if (!W || Mode == EZoogiEpisodeMode::Off || bFrozen || bArchetypePending || Plan.bMeteor) return;
+	if (!W || Mode == EZoogiEpisodeMode::Off || bFrozen || bArchetypePending || Plan.bMeteor || bAirClaimed || bPresentationSuppressed) return;
 	AActor* A = BodyActor(Body);
 	if (!A) return;
 	if (!Announced.Contains(EZoogiEpisodeTag::Airborne)) { Announced.Add(EZoogiEpisodeTag::Airborne); QueueCallout(EZoogiEpisodeTag::Airborne, 3); }

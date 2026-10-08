@@ -14,6 +14,9 @@ class UPrimitiveComponent;
 /** A presentation request (see FZoogiEpisodeCue). Receivers render it; they never touch gameplay state. */
 DECLARE_MULTICAST_DELEGATE_OneParam(FZoogiEpisodeCueEvent, const FZoogiEpisodeCue& /*Cue*/);
 /** The finished action: truth, recognition, and what presentation was requested / held for it. */
+DECLARE_MULTICAST_DELEGATE_OneParam(FZoogiEpisodeActionStart, const FZoogiGameplayTruthRecord& /*Truth*/);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FZoogiEpisodeActionResolving, const FZoogiGameplayTruthRecord& /*Truth*/, const FZoogiEpisodeRecognitionRecord& /*Live*/);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FZoogiEpisodeAirborne, int32 /*Body*/, float /*PeakGap*/);
 DECLARE_MULTICAST_DELEGATE_ThreeParams(FZoogiEpisodeActionEvent, const FZoogiGameplayTruthRecord& /*Truth*/, const FZoogiEpisodeRecognitionRecord& /*Rec*/, const FZoogiCinematicPlan& /*Plan*/);
 
 /**
@@ -69,6 +72,15 @@ public:
 	FZoogiEpisodeCueEvent OnArchetype;   // Titan Meteor: world is held for cue.Seconds (cue.HoldToken)
 	FZoogiEpisodeCueEvent OnEpilogue;    // outcome confirmed by Resolve (real result only)
 	FZoogiEpisodeActionEvent OnActionFinalized;
+	// battle engine (UZoogiBattleStateMachine) hooks; fire in every mode, Off included
+	FZoogiEpisodeActionStart OnActionStarted;          // inside FireShot, right after the launch (aim / lock still valid)
+	FZoogiEpisodeActionResolving OnActionResolving;    // Resolve committed the result, before the epilogue
+	FZoogiEpisodeAirborne OnAirborneLive;              // once per body per action, while it is still in the air
+	/** Battle shatter: no epilogue / holds / air shot for the rest of the current action. */
+	void SuppressPresentation(const TCHAR* Why);
+	bool IsPresentationSuppressed() const { return bPresentationSuppressed; }
+	/** A gameplay reaction owns the airborne moment: the presentation air shot yields for this action. */
+	void ClaimAirborne() { bAirClaimed = true; }
 
 	/**
 	 * Presentation hold: pauses the game (the game clock stops, so turn timing is unaffected) after snapshotting every
@@ -77,7 +89,7 @@ public:
 	 * camera manager each real frame, so SetViewTarget / camera modifiers keep working. Returns 0 if a hold is already
 	 * active, the mode is Off, or the world cannot be held.
 	 */
-	int32 BeginHold(float MaxSeconds, const TCHAR* Reason);
+	int32 BeginHold(float MaxSeconds, const TCHAR* Reason, bool bGameplay = false); // bGameplay: also in Off mode (Air Reaction)
 	void ReleaseHold(int32 Token);
 	bool IsHeld() const { return bFrozen; }
 
@@ -141,6 +153,9 @@ protected:
 	TMap<int32, float> NearMin;         // near-miss candidates: body -> smallest gap so far
 	TSet<int32> NearTouched;
 	bool bAirShotDone = false;
+	bool bAirClaimed = false;
+	bool bPresentationSuppressed = false;
+	TSet<int32> AirAnnounced;
 	bool bAirSlow = false;
 	int32 AirBody = -1; int32 AirHoldToken = 0; bool bStepPaused = false;
 	float AirSlowLeft = 0.f;
