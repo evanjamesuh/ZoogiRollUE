@@ -334,6 +334,11 @@ public:
 	float ContactImpactSpeed = 0.f;
 	bool bLastHitCrit = false;
 	float CPUPlannedCut = 0.f;
+	/** Gameplay randomness (artifact draws, CPU planning) on its own host-owned stream, so cosmetic FX/SFX
+	 * that use the global FMath::Rand can never shift a draw or a CPU shot. Seed: -ZoogiMatchSeed=, else
+	 * -ZoogiEpisodeSeed=, else a fresh seed per match (logged as "GAME rng seed="). */
+	FRandomStream GameRng;
+	int32 GameSeed = 0;
 	FVector PullCenter = FVector::ZeroVector;
 	float PullLeft = 0.f, PullAccel = 0.f, PullRadius = 0.f;
 	int32 PullCredit = -1;

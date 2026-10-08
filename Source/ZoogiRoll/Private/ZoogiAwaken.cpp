@@ -120,11 +120,11 @@ void AZoogiGameMode::DoDraw()
 	if (!B || !B->Artifact) return;
 	UZoogiArtifactComponent* AC = B->Artifact;
 	if (AC->Drawn != EZoogiArtifact::None) { AddToHand(AC, AC->Drawn); AC->Drawn = EZoogiArtifact::None; }
-	AC->Drawn = ZoogiArtifacts::Random();
+	AC->Drawn = ZoogiArtifacts::Random(&GameRng);
 	FString Extra;
 	for (int32 i = 0; i < AC->BonusDraws; ++i)
 	{
-		const EZoogiArtifact X = ZoogiArtifacts::Random();
+		const EZoogiArtifact X = ZoogiArtifacts::Random(&GameRng);
 		AddToHand(AC, X);
 		Extra += FString::Printf(TEXT(" +%s"), *ZoogiArtifacts::Name(X));
 	}
@@ -230,7 +230,7 @@ void AZoogiGameMode::PlanCPUAwaken()
 	for (const AZoogiBall* O : Balls) if (O && O != B && O->Score >= B->Score) bLeader = false;
 	const TCHAR* Why = TEXT("");
 	if (bPowerTest || bRival || bAff) { Why = bPowerTest ? TEXT("test") : bAff ? TEXT("affinity") : TEXT("rival target"); AwakenInfuse(Pick); }
-	else if (AC->Guard == EZoogiArtifact::None && (Edge < 450.f || (bLeader && FMath::FRand() < 0.5f) || FMath::FRand() < 0.2f))
+	else if (AC->Guard == EZoogiArtifact::None && (Edge < 450.f || (bLeader && GameRng.FRand() < 0.5f) || GameRng.FRand() < 0.2f))
 	{
 		Why = Edge < 450.f ? TEXT("near the edge") : bLeader ? TEXT("protecting the lead") : TEXT("playing safe");
 		AwakenGuard(Pick);

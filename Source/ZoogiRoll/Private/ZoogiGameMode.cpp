@@ -74,6 +74,15 @@ void AZoogiGameMode::BeginPlay()
 	FParse::Value(Cmd, TEXT("ZoogiShots="), ShotDir);
 	if (FParse::Param(Cmd, TEXT("ZoogiKFXPreview"))) GetWorld()->SpawnActor<AZoogiKFXPreview>(); // review captures of the KriptoFX ports
 	FParse::Value(Cmd, TEXT("ZoogiQuit="), QuitAfter);
+	{
+		// Gameplay random stream (host only: the GameMode exists on the server).
+		const TCHAR* Src = TEXT("fresh");
+		if (FParse::Value(Cmd, TEXT("ZoogiMatchSeed="), GameSeed)) Src = TEXT("ZoogiMatchSeed");
+		else if (FParse::Value(Cmd, TEXT("ZoogiEpisodeSeed="), GameSeed)) Src = TEXT("ZoogiEpisodeSeed");
+		else GameSeed = (int32)(FPlatformTime::Cycles() ^ (uint32)FMath::Rand());
+		GameRng.Initialize(GameSeed);
+		UE_LOG(LogZoogi, Log, TEXT("GAME rng seed=%d source=%s"), GameSeed, Src);
+	}
 	int32 NumPlayers = 0;
 	if (FParse::Value(Cmd, TEXT("ZoogiPlayers="), NumPlayers)) MenuNumPlayers = FMath::Clamp(NumPlayers, 2, 4);
 	int32 ArenaIdx = 0;
@@ -807,7 +816,7 @@ void AZoogiGameMode::PlanCPUShot()
 	for (AZoogiOrb* O : Orbs) if (O && !O->bOut) Cands.Add({ FVector2D(O->OrbLocation()), 50.f, ZoogiConst::OrbMassRatio, ZoogiConst::OrbRadius, O });
 	// Decide on the power first: rival-hunting powers make rivals more attractive targets.
 	// More charges banked = more willing to spend one.
-	bCPUUsePower = !bArtifactMode && Me->Charges > 0 && (bPowerTest || FMath::FRand() < (Me->Charges >= 2 ? 0.8f : 0.5f));
+	bCPUUsePower = !bArtifactMode && Me->Charges > 0 && (bPowerTest || GameRng.FRand() < (Me->Charges >= 2 ? 0.8f : 0.5f));
 	const EZoogiPower MyPower = Me->Def.PowerKind;
 	const bool bHuntRivals = bCPUUsePower && (MyPower == EZoogiPower::ShadowStun || MyPower == EZoogiPower::StaticShock || MyPower == EZoogiPower::BandageBind || MyPower == EZoogiPower::RuneSeal);
 	for (AZoogiBall* Other : Balls) if (Other && Other != Me && !Other->bOut && !IsAlly(Me, Other)) Cands.Add({ FVector2D(Other->BallLocation()), bHuntRivals ? 100.f : 40.f, Other->Def.MassRatio(), ZoogiConst::ZoogiRadius, Other });
@@ -918,7 +927,7 @@ void AZoogiGameMode::PlanCPUShot()
 		// Vary among the three cheapest, but never pick a clearly worse (blocked / risky) shot for variety's sake.
 		int32 NPick = 1;
 		while (NPick < FMath::Min(3, Plans.Num()) && Plans[NPick].Cost < Plans[0].Cost + 350.f) ++NPick;
-		const FPlan& Pick = Plans[FMath::RandRange(0, NPick - 1)];
+		const FPlan& Pick = Plans[GameRng.RandRange(0, NPick - 1)];
 		BestDir = Pick.Dir;
 		BestFrac = Pick.Frac;
 		CPULock = Pick.Actor;
@@ -926,9 +935,9 @@ void AZoogiGameMode::PlanCPUShot()
 		if (bHuntRivals && !bPowerTest && !Cast<AZoogiBall>(Pick.Actor)) bCPUUsePower = false;
 		// Cut variety (Oct 4): about half of the straight shots are played slightly off-centre (6-20 deg contact cut),
 		// so CPUs aren't always head-on (and don't crit every powered hit). Aim offset a: Dist * sin(a) = (R1 + R2) * sin(cut).
-		if (bArtifactMode && Pick.bStraight && Pick.Dist > 250.f && FMath::FRand() < 0.5f)
+		if (bArtifactMode && Pick.bStraight && Pick.Dist > 250.f && GameRng.FRand() < 0.5f)
 		{
-			const float CutDeg = FMath::FRandRange(6.f, 20.f) * (FMath::RandBool() ? 1.f : -1.f);
+			const float CutDeg = GameRng.FRandRange(6.f, 20.f) * (GameRng.RandRange(0, 1) == 1 ? 1.f : -1.f);
 			const float SinA = FMath::Clamp((ZoogiConst::ZoogiRadius + Pick.Radius) * FMath::Sin(FMath::DegreesToRadians(CutDeg)) / Pick.Dist, -0.5f, 0.5f);
 			BestDir = BestDir.GetRotated(FMath::RadiansToDegrees(FMath::Asin(SinA)));
 			BestFrac = FMath::Min(0.97f, BestFrac / FMath::Sqrt(FMath::Max(0.5f, FMath::Cos(FMath::DegreesToRadians(CutDeg)))));
@@ -943,9 +952,9 @@ void AZoogiGameMode::PlanCPUShot()
 		BestFrac = FMath::Min(BestFrac, FMath::Max(0.2f, InvertLaunch(Safe)));
 	}
 	// Imperfect aim: less control = more error (ZoogiStats.control).
-	const float ErrDeg = FMath::FRandRange(-1.f, 1.f) * (100.f - Me->Def.Control) / 12.f;
+	const float ErrDeg = GameRng.FRandRange(-1.f, 1.f) * (100.f - Me->Def.Control) / 12.f;
 	BestDir = BestDir.GetRotated(ErrDeg);
-	BestFrac = FMath::Clamp(BestFrac * FMath::FRandRange(0.96f, 1.04f), 0.25f, 1.f);
+	BestFrac = FMath::Clamp(BestFrac * GameRng.FRandRange(0.96f, 1.04f), 0.25f, 1.f);
 	// -ZoogiRockTest: hard straight shot at the nearest standing rock (screenshots of cracking / shattering).
 	if (bRockTest && Arena)
 	{
