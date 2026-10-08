@@ -3,6 +3,7 @@
 #include "ZoogiGameMode.h"
 #include "ZoogiBall.h"
 #include "ZoogiOrb.h"
+#include "ZoogiArena.h"
 #include "Camera/CameraActor.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/StaticMeshComponent.h"
@@ -61,6 +62,7 @@ namespace ZoogiShotTestPrivate
 	bool GTestFinished = false;
 	int32 GShotSeq = 0;
 	FZoogiCameraSnapshot GLevelEndSnap;
+	FString GLevelEndName;
 	TArray<FString> GShotTestResults;
 
 	float ShotTestPOVDev(const FMinimalViewInfo& A, const FMinimalViewInfo& B)
@@ -114,28 +116,49 @@ void AZoogiShotTestDriver::BeginPlay()
 			static const TCHAR* N[] = { TEXT("Completed"), TEXT("Stopped"), TEXT("Replaced"), TEXT("FocusLost"), TEXT("WorldEnding") };
 			FinishLog.Add(FString::Printf(TEXT("%d:%s"), H.Id, N[FMath::Clamp((int32)R, 0, 4)]));
 		});
+		// Level-end case: verify at the exact moment the director has finished restoring (before any actor ends play,
+		// while the player controller and the gameplay camera still exist).
+		TearDownHandle = D->OnWorldTearDownRestored.AddWeakLambda(this, [this]()
+		{
+			if (GLevelEndPending) CheckLevelEnd(TEXT("checked at world tear-down right after the director restored"));
+		});
 	}
+}
+
+void AZoogiShotTestDriver::CheckLevelEnd(const TCHAR* When)
+{
+	GLevelEndPending = false;
+	GTestFinished = true;
+	UZoogiEpisodeCameraDirector* D = Dir();
+	FZoogiCameraSnapshot Snap1 = D ? D->CaptureGameplaySnapshot() : FZoogiCameraSnapshot();
+	AActor* VT = Snap1.ViewTarget.Get();
+	// The camera manager's POV cache still holds the last rendered (shot) frame until its next update, which never comes
+	// in a dying world; compare the view the restored view target produces right now instead.
+	if (IsValid(VT))
+	{
+		FMinimalViewInfo V;
+		VT->CalcCamera(0.f, V);
+		Snap1.POV.Location = V.Location;
+		Snap1.POV.Rotation = V.Rotation;
+		Snap1.POV.FOV = V.FOV;
+	}
+	FString Report;
+	bool bPass = UZoogiEpisodeCameraDirector::CompareSnapshots(GLevelEndSnap, Snap1, FZoogiCameraTolerance(), Report);
+	const bool bIdle = D && D->NumActiveShots() == 0 && !D->IsTimeScaleActive() && !D->IsMainViewTaken();
+	const bool bShotCamVT = D && D->GetShotCamera() && VT == D->GetShotCamera();
+	bPass &= bIdle && !bShotCamVT;
+	Result(bPass, FString::Printf(TEXT("[%s] camera restore on level end (MainView TopDown + RenderTarget CloseUp + time-scale ease, then OpenLevel)"), *GLevelEndName),
+		FString::Printf(TEXT("%s | %s | cinematic dilation %.6f (prior %.6f) | director idle=%d"), *Report, When, Snap1.CinematicTimeDilation, GLevelEndSnap.CinematicTimeDilation, bIdle ? 1 : 0));
 }
 
 void AZoogiShotTestDriver::EndPlay(const EEndPlayReason::Type Reason)
 {
-	if (GLevelEndPending)
+	if (GLevelEndPending) CheckLevelEnd(TEXT("checked at driver EndPlay (the tear-down hook did not fire)"));
+	if (UZoogiEpisodeCameraDirector* D = Dir())
 	{
-		// Level-end case: the director restores on world tear-down (before actors end play). Check what is left.
-		GLevelEndPending = false;
-		GTestFinished = true;
-		UZoogiEpisodeCameraDirector* D = Dir();
-		APlayerController* PC = GLevelEndSnap.PC.Get();
-		AActor* VT = PC ? PC->GetViewTarget() : nullptr;
-		AWorldSettings* WS = GetWorld() ? GetWorld()->GetWorldSettings() : nullptr;
-		const bool bVT = PC && VT == GLevelEndSnap.ViewTarget.Get();
-		const bool bTime = WS && WS->CinematicTimeDilation == GLevelEndSnap.CinematicTimeDilation && WS->TimeDilation == GLevelEndSnap.TimeDilation;
-		const bool bIdle = D && D->NumActiveShots() == 0 && !D->IsTimeScaleActive() && !D->IsMainViewTaken();
-		Result(bVT && bTime && bIdle, TEXT("[18] LevelEnd (MainView TopDown + RenderTarget CloseUp + time-scale ease, then OpenLevel)"),
-			FString::Printf(TEXT("at tear-down: viewtarget %s (expected %s), cinematic dilation %.6f (expected %.6f), time dilation %.6f, director idle=%d"),
-				*GetNameSafe(VT), *GetNameSafe(GLevelEndSnap.ViewTarget.Get()), WS ? WS->CinematicTimeDilation : -1.f, GLevelEndSnap.CinematicTimeDilation, WS ? WS->TimeDilation : -1.f, bIdle ? 1 : 0));
+		D->OnShotFinished.Remove(FinishedHandle);
+		D->OnWorldTearDownRestored.Remove(TearDownHandle);
 	}
-	if (UZoogiEpisodeCameraDirector* D = Dir()) D->OnShotFinished.Remove(FinishedHandle);
 	if (Overlay.IsValid() && GEngine && GetWorld() && GetWorld()->GetGameViewport()) GetWorld()->GetGameViewport()->RemoveViewportWidgetContent(Overlay.ToSharedRef());
 	Overlay.Reset();
 	Super::EndPlay(Reason);
@@ -145,7 +168,7 @@ void AZoogiShotTestDriver::BuildCases()
 {
 	Cases.Reset();
 	int32 N = 0;
-	for (EZoogiShotType T : { EZoogiShotType::CloseUp, EZoogiShotType::LowAngleHero, EZoogiShotType::TopDownImpact, EZoogiShotType::Tracking, EZoogiShotType::PartnerTwoShot })
+	for (EZoogiShotType T : ZoogiShot::AllTypes())
 	{
 		for (EZoogiShotOutput O : { EZoogiShotOutput::RenderTarget, EZoogiShotOutput::MainView })
 		{
@@ -165,6 +188,8 @@ void AZoogiShotTestDriver::BuildCases()
 	Add(ZoogiShotTest::ECaseKind::TimeScaleRefused, TEXT("TimeScale_PolicyDisabled"), EZoogiShotType::CloseUp, EZoogiShotOutput::MainView);
 	Add(ZoogiShotTest::ECaseKind::TimeScale, TEXT("TimeScale_Ease_with_LowAngle_MainView"), EZoogiShotType::LowAngleHero, EZoogiShotOutput::MainView);
 	Add(ZoogiShotTest::ECaseKind::TimeScaleCancel, TEXT("TimeScale_Cancel"), EZoogiShotType::CloseUp, EZoogiShotOutput::MainView);
+	Add(ZoogiShotTest::ECaseKind::AirborneSlowMoCancel, TEXT("Airborne_SlowMo_Cancel_MainView"), EZoogiShotType::Airborne, EZoogiShotOutput::MainView);
+	Add(ZoogiShotTest::ECaseKind::AirborneSlowMoRefused, TEXT("Airborne_SlowMo_PolicyDisabled_RenderTarget"), EZoogiShotType::Airborne, EZoogiShotOutput::RenderTarget);
 	Add(ZoogiShotTest::ECaseKind::LevelEnd, TEXT("LevelEnd"), EZoogiShotType::TopDownImpact, EZoogiShotOutput::MainView);
 }
 
@@ -307,6 +332,92 @@ AStaticMeshActor* AZoogiShotTestDriver::SpawnProp(const FVector& At, float Scale
 	return A;
 }
 
+void AZoogiShotTestDriver::StartArc(const FVector& From)
+{
+	if (!ArcProp) return;
+	// Across the player's view so the flight reads side-on in the gameplay framing too.
+	const FVector Side = FRotator(0.f, Snap0.POV.Rotation.Yaw + 90.f, 0.f).Vector();
+	ArcStart = From - Side * 260.f + FVector(0.f, 0.f, 10.f);
+	ArcVel = Side * 430.f + FVector(0.f, 0.f, 820.f);
+	ArcTime = 0.f;
+	MaxArcHeight = 0.f;
+	ArcProp->SetActorLocation(ArcStart);
+	ArcProp->SetActorHiddenInGame(false);
+}
+
+FZoogiShotHandle AZoogiShotTestDriver::PlayCaseShot(EZoogiShotType Type, EZoogiShotOutput Output, FString& OutSetup)
+{
+	UZoogiEpisodeCameraDirector* D = Dir();
+	AZoogiGameMode* G = GM();
+	AActor* F = Focus();
+	const FZoogiShotSpec* Lib = D->GetShotLibrary()->FindByType(Type);
+	const FZoogiShotSpec Spec = Lib ? *Lib : UZoogiShotLibrary::MakeDefault(Type);
+	AActor* UseF = F;
+	AActor* UseS = nullptr;
+	FZoogiShotPlayParams P;
+	switch (Type)
+	{
+	case EZoogiShotType::Tracking:
+		if (TrackProp)
+		{
+			TrackCenter = F ? F->GetActorLocation() : FVector::ZeroVector;
+			TrackProp->SetActorHiddenInGame(false);
+			UseF = TrackProp;
+			OutSetup = TEXT("focus = test prop circling P1");
+		}
+		break;
+	case EZoogiShotType::Airborne:
+		if (ArcProp)
+		{
+			StartArc(F ? F->GetActorLocation() : FVector::ZeroVector);
+			UseF = ArcProp;
+			OutSetup = TEXT("focus = kinematic test prop on a ballistic arc (game time, so slow-mo slows it)");
+		}
+		break;
+	case EZoogiShotType::PartnerTwoShot:
+	case EZoogiShotType::TrickAllyBump:
+		UseS = SecondaryFor(F);
+		OutSetup = FString::Printf(TEXT("secondary = %s"), *GetNameSafe(UseS));
+		break;
+	case EZoogiShotType::TrickOrbRelay:
+	{
+		float BestD = TNumericLimits<float>::Max();
+		if (G && F)
+		{
+			for (AZoogiOrb* O : G->Orbs)
+			{
+				if (!O || O->bOut) continue;
+				const float Dd = FVector::Dist(O->OrbLocation(), F->GetActorLocation());
+				if (Dd < BestD) { BestD = Dd; UseS = O; }
+			}
+		}
+		if (!UseS) UseS = SecondaryFor(F);
+		OutSetup = FString::Printf(TEXT("secondary (relay target) = %s"), *GetNameSafe(UseS));
+		break;
+	}
+	case EZoogiShotType::TrickBank:
+	case EZoogiShotType::TrickWallRedirect:
+		if (F)
+		{
+			// A point on the rim off to one side of P1, standing in for the bank / wall contact point.
+			const FVector FL = F->GetActorLocation();
+			FVector2D U(FL.X, FL.Y);
+			if (U.Size() < 1.f) U = FVector2D(FRotator(0.f, Snap0.POV.Rotation.Yaw, 0.f).Vector());
+			U.Normalize();
+			const FVector2D R = U.GetRotated(Type == EZoogiShotType::TrickBank ? 35.f : -50.f) * (AZoogiArena::ActiveKnockoffR * 0.92f);
+			P.bHasEventLocation = true;
+			P.EventLocation = FVector(R.X, R.Y, FL.Z);
+			OutSetup = FString::Printf(TEXT("event point (rim) = %s"), *P.EventLocation.ToString());
+		}
+		break;
+	case EZoogiShotType::TrickBoundarySave:
+		OutSetup = TEXT("event point = arena centre (default)");
+		break;
+	default: break;
+	}
+	return D->PlayShot(Spec, UseF, UseS, Output, P);
+}
+
 bool AZoogiShotTestDriver::TrackSettle(float RealDt)
 {
 	APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
@@ -355,19 +466,22 @@ void AZoogiShotTestDriver::StartCase()
 	switch (C.Kind)
 	{
 	case ZoogiShotTest::ECaseKind::Shot:
+	case ZoogiShotTest::ECaseKind::AirborneSlowMoCancel:
+	case ZoogiShotTest::ECaseKind::AirborneSlowMoRefused:
 	{
-		AActor* UseF = F;
-		AActor* UseS = nullptr;
-		if (C.Type == EZoogiShotType::Tracking && TrackProp)
+		// Airborne: slow-mo entry allowed while nothing simulated is awake (the match holds still on P1's input);
+		// the refused case checks that the shot still plays, at normal speed, under the default Disabled policy.
+		if (C.Type == EZoogiShotType::Airborne)
 		{
-			TrackCenter = F ? F->GetActorLocation() : FVector::ZeroVector;
-			TrackProp->SetActorHiddenInGame(false);
-			UseF = TrackProp;
+			D->SetTimeScalePolicy(C.Kind == ZoogiShotTest::ECaseKind::AirborneSlowMoRefused ? EZoogiTimeScalePolicy::Disabled : EZoogiTimeScalePolicy::OnlyWhenPhysicsAtRest);
 		}
-		if (C.Type == EZoogiShotType::PartnerTwoShot) UseS = S;
-		const FZoogiShotHandle H = D->PlayShot(Spec, UseF, UseS, C.Output);
+		FString Setup;
+		const FZoogiShotHandle H = PlayCaseShot(C.Type, C.Output, Setup);
 		Handles.Add(H);
-		if (C.Output == EZoogiShotOutput::RenderTarget) Panel(H, ZoogiShot::TypeName(C.Type));
+		if (!Setup.IsEmpty()) UE_LOG(LogZoogi, Log, TEXT("ZOOGI SHOTTEST   %s"), *Setup);
+		const int32 Tier = ZoogiShot::Tier(C.Type);
+		if (C.Output == EZoogiShotOutput::RenderTarget)
+			Panel(H, Tier > 0 ? FString::Printf(TEXT("%s (tier %d)"), ZoogiShot::TypeName(C.Type), Tier) : FString(ZoogiShot::TypeName(C.Type)));
 		break;
 	}
 	case ZoogiShotTest::ECaseKind::Cancel:
@@ -425,7 +539,9 @@ void AZoogiShotTestDriver::StartCase()
 		bTimeScaleStarted = D->EaseTimeScale(TSpec);
 		break;
 	}
+	default: break;
 	}
+	if (C.Kind == ZoogiShotTest::ECaseKind::AirborneSlowMoCancel) CaseMid = 0.6f; // screenshot mid slow-mo, before the cancel
 }
 
 void AZoogiShotTestDriver::RunCase(float RealDt)
@@ -441,8 +557,18 @@ void AZoogiShotTestDriver::RunCase(float RealDt)
 		TrackAngle += RealDt * 1.3f;
 		TrackProp->SetActorLocation(TrackCenter + FVector(FMath::Cos(TrackAngle) * 380.f, FMath::Sin(TrackAngle) * 380.f, 20.f));
 	}
+	// Airborne prop: ballistic arc in game time (dilated, frozen while paused), looping.
+	if (ArcProp && !ArcProp->IsHidden())
+	{
+		ArcTime += GetWorld()->GetDeltaSeconds();
+		const float Flight = 2.f * ArcVel.Z / 980.f;
+		if (ArcTime > Flight) ArcTime -= Flight;
+		const FVector Pos = ArcStart + ArcVel * ArcTime + FVector(0.f, 0.f, -490.f * ArcTime * ArcTime);
+		MaxArcHeight = FMath::Max(MaxArcHeight, Pos.Z - ArcStart.Z);
+		ArcProp->SetActorLocation(Pos);
+	}
 	// RenderTarget output must leave the main view completely alone, every frame.
-	if (C.Kind == ZoogiShotTest::ECaseKind::Shot && C.Output == EZoogiShotOutput::RenderTarget)
+	if ((C.Kind == ZoogiShotTest::ECaseKind::Shot || C.Kind == ZoogiShotTest::ECaseKind::AirborneSlowMoRefused) && C.Output == EZoogiShotOutput::RenderTarget)
 	{
 		APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
 		if (PC && PC->PlayerCameraManager)
@@ -451,7 +577,7 @@ void AZoogiShotTestDriver::RunCase(float RealDt)
 			if (PC->GetViewTarget() != Snap0.ViewTarget.Get()) MaxMainDev = 1e6f;
 		}
 	}
-	const float Dur = Cases[CaseIdx].Kind == ZoogiShotTest::ECaseKind::Shot ? CaseMid / 0.55f : 2.f;
+	const float Dur = Cases[CaseIdx].Kind == ZoogiShotTest::ECaseKind::Shot ? CaseMid / 0.55f : 3.f;
 	switch (C.Kind)
 	{
 	case ZoogiShotTest::ECaseKind::Cancel:
@@ -492,11 +618,21 @@ void AZoogiShotTestDriver::RunCase(float RealDt)
 				WS->TimeDilation, WS->CinematicTimeDilation, WS->GetEffectiveTimeDilation(), GetWorld()->GetDeltaSeconds(), GetWorld()->DeltaRealTimeSeconds);
 		}
 		break;
+	case ZoogiShotTest::ECaseKind::AirborneSlowMoCancel:
+		if (!bActionDone && StepTime >= 0.75f)
+		{
+			bActionDone = true;
+			UE_LOG(LogZoogi, Log, TEXT("ZOOGI SHOTTEST airborne cancel (immediate) at %.2f s mid slow-mo: effective dilation %.3f, owned by the shot=%d"),
+				StepTime, GetWorld()->GetWorldSettings()->GetEffectiveTimeDilation(), (Handles.Num() && D->IsTimeScaleOwnedBy(Handles[0])) ? 1 : 0);
+			if (Handles.Num()) D->StopShot(Handles[0], true);
+		}
+		break;
 	case ZoogiShotTest::ECaseKind::LevelEnd:
 		if (!bActionDone && StepTime >= 0.9f)
 		{
 			bActionDone = true;
 			GLevelEndSnap = Snap0;
+			GLevelEndName = C.Name;
 			GLevelEndPending = true;
 			const FString Map = GetWorld()->GetOutermost()->GetName();
 			UE_LOG(LogZoogi, Log, TEXT("ZOOGI SHOTTEST level end mid-shot: %d shot(s) active, main view taken=%d, time-scale active=%d, effective dilation %.3f; opening %s"),
@@ -511,7 +647,8 @@ void AZoogiShotTestDriver::RunCase(float RealDt)
 	{
 		bMidDone = true;
 		Shot(C.Name + TEXT("_shot"));
-		if (C.Kind == ZoogiShotTest::ECaseKind::Shot && C.Output == EZoogiShotOutput::RenderTarget && Handles.Num()) ExportRT(D->GetShotRenderTarget(Handles[0]), C.Name + TEXT("_rendertarget"));
+		if ((C.Kind == ZoogiShotTest::ECaseKind::Shot || C.Kind == ZoogiShotTest::ECaseKind::AirborneSlowMoRefused) && C.Output == EZoogiShotOutput::RenderTarget && Handles.Num())
+			ExportRT(D->GetShotRenderTarget(Handles[0]), C.Name + TEXT("_rendertarget"));
 		if (C.Kind == ZoogiShotTest::ECaseKind::Overlap && Handles.Num() >= 3) ExportRT(D->GetShotRenderTarget(Handles[2]), C.Name + TEXT("_rendertarget"));
 	}
 	const bool bIdle = D->NumActiveShots() == 0 && !D->IsTimeScaleActive();
@@ -539,7 +676,7 @@ void AZoogiShotTestDriver::Verify()
 	APlayerController* PC = Snap1.PC.Get();
 	if (PC && D->GetShotCamera() && PC->GetViewTarget() == D->GetShotCamera()) { bPass = false; Extra.Add(TEXT("shot camera still the view target")); }
 	if (D->IsMainViewTaken() || D->NumActiveCaptures() > 0) { bPass = false; Extra.Add(TEXT("director not idle")); }
-	if (C.Kind == ZoogiShotTest::ECaseKind::Shot && C.Output == EZoogiShotOutput::RenderTarget)
+	if ((C.Kind == ZoogiShotTest::ECaseKind::Shot || C.Kind == ZoogiShotTest::ECaseKind::AirborneSlowMoRefused) && C.Output == EZoogiShotOutput::RenderTarget)
 	{
 		const bool bUntouched = MaxMainDev <= 0.01f;
 		bPass &= bUntouched;
@@ -555,6 +692,19 @@ void AZoogiShotTestDriver::Verify()
 		if (!bTimeScaleStarted) Extra.Add(TEXT("ease REFUSED by the physics-at-rest gate (see CAMDIR line)"));
 		else Extra.Add(FString::Printf(TEXT("ease ran: min effective dilation %.3f, cinematic dilation back to %.6f (prior %.6f)"), MinEffDilation, Snap1.CinematicTimeDilation, Snap0.CinematicTimeDilation));
 		bPass &= bTimeScaleStarted && MinEffDilation < 0.5f;
+	}
+	if ((C.Kind == ZoogiShotTest::ECaseKind::Shot && C.Type == EZoogiShotType::Airborne) || C.Kind == ZoogiShotTest::ECaseKind::AirborneSlowMoCancel)
+	{
+		const bool bSlowed = MinEffDilation < (C.Kind == ZoogiShotTest::ECaseKind::Shot ? 0.5f : 0.9f);
+		bPass &= bSlowed && !D->IsTimeScaleActive();
+		Extra.Add(FString::Printf(TEXT("slow-mo entry %s: min effective dilation %.3f, cinematic dilation back to %.6f (prior %.6f), arc peak %.0f cm"),
+			bSlowed ? TEXT("ran") : TEXT("DID NOT RUN"), MinEffDilation, Snap1.CinematicTimeDilation, Snap0.CinematicTimeDilation, MaxArcHeight));
+	}
+	if (C.Kind == ZoogiShotTest::ECaseKind::AirborneSlowMoRefused)
+	{
+		const bool bNormal = MinEffDilation > 0.999f;
+		bPass &= bNormal;
+		Extra.Add(bNormal ? TEXT("slow-mo refused under the Disabled policy, shot played at normal speed") : TEXT("time dilation CHANGED under the Disabled policy"));
 	}
 	if (FinishLog.Num()) Extra.Add(TEXT("ends ") + FString::Join(FinishLog, TEXT(",")));
 	if (AZoogiGameMode* G = GM()) Extra.Add(FString::Printf(TEXT("stage %d phase %d"), (int32)G->Stage, (int32)G->Phase));
@@ -607,6 +757,8 @@ void AZoogiShotTestDriver::Tick(float DeltaSeconds)
 				UE_LOG(LogZoogi, Log, TEXT("ZOOGI SHOTTEST live match holding on P1's input (stage %d), gameplay camera settled; awake body: '%s'"), (int32)G->Stage, *D->FindAwakePhysicsBody());
 				TrackProp = SpawnProp(FVector::ZeroVector, 0.55f);
 				if (TrackProp) TrackProp->SetActorHiddenInGame(true);
+				ArcProp = SpawnProp(FVector::ZeroVector, 0.6f);
+				if (ArcProp) ArcProp->SetActorHiddenInGame(true);
 				Shot(TEXT("00_gameplay_before"));
 				CaseIdx = 0;
 				Step = ZoogiShotTest::EStep::WaitSettle;
@@ -638,6 +790,7 @@ void AZoogiShotTestDriver::Tick(float DeltaSeconds)
 		{
 			HidePanel();
 			if (TrackProp) TrackProp->SetActorHiddenInGame(true);
+			if (ArcProp) ArcProp->SetActorHiddenInGame(true);
 			if (TempProp) { TempProp->Destroy(); TempProp = nullptr; }
 			WaitFrames = 1;
 		}

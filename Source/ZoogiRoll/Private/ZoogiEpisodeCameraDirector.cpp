@@ -8,6 +8,7 @@
 #include "Camera/PlayerCameraManager.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Components/PrimitiveComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
@@ -103,6 +104,7 @@ void UZoogiEpisodeCameraDirector::HandleWorldBeginTearDown(UWorld* InWorld)
 	}
 	while (Shots.Num() > 0) FinishShot(Shots.Num() - 1, EZoogiShotEndReason::WorldEnding);
 	if (TS.bActive) RestoreTimeScaleExact(TEXT("world ending"));
+	OnWorldTearDownRestored.Broadcast();
 	if (ShotCam) { ShotCam->Destroy(); ShotCam = nullptr; }
 	if (CaptureRig) { CaptureRig->Destroy(); CaptureRig = nullptr; }
 	FreeCaptures.Reset();
@@ -138,6 +140,9 @@ FZoogiShotHandle UZoogiEpisodeCameraDirector::PlayShot(const FZoogiShotSpec& Spe
 	S.Secondary = Secondary;
 	S.Duration = FMath::Max(0.1f, Params.DurationOverride > 0.f ? Params.DurationOverride : Spec.Duration);
 	S.LastFocus = CamDirSubjectCenter(Focus);
+	S.bEventFromCaller = Params.bHasEventLocation;
+	// Default event point: the arena centre (floor centre at the origin) at the focus' height.
+	S.EventLoc = Params.bHasEventLocation ? Params.EventLocation : FVector(0.f, 0.f, S.LastFocus.Z);
 	H.Id = S.Id;
 
 	if (Output == EZoogiShotOutput::RenderTarget)
@@ -208,6 +213,7 @@ void UZoogiEpisodeCameraDirector::StopShot(FZoogiShotHandle Shot, bool bImmediat
 		FinishShot(Idx, EZoogiShotEndReason::Stopped);
 		return;
 	}
+	if (TS.bActive && TimeScaleOwnerShotId == S.Id) StopTimeScale(false); // eases out with the shot; FinishShot snaps any rest
 	if (!S.bStopping)
 	{
 		// Ease out from whatever weight the shot has right now.
@@ -270,6 +276,11 @@ void UZoogiEpisodeCameraDirector::FinishShot(int32 Index, EZoogiShotEndReason Re
 	{
 		MainViewShotId = 0;
 		RestoreMainView(Reason);
+	}
+	if (TS.bActive && TimeScaleOwnerShotId == S.Id)
+	{
+		// The shot's slow-mo is timed to be over before the shot ends; any early end puts the prior value back now.
+		RestoreTimeScaleExact(TEXT("owning shot ended"));
 	}
 	static const TCHAR* ReasonNames[] = { TEXT("completed"), TEXT("stopped"), TEXT("replaced"), TEXT("focus lost"), TEXT("world ending") };
 	UE_LOG(LogZoogi, Log, TEXT("CAMDIR shot %d %s (%s) ended: %s after %.2f s"), S.Id, *S.Spec.Name.ToString(), ZoogiShot::OutputName(S.Output), ReasonNames[FMath::Clamp((int32)Reason, 0, 4)], S.Age);
@@ -473,25 +484,46 @@ bool UZoogiEpisodeCameraDirector::EvaluateShotView(FZoogiActiveShot& S, float Dt
 			{
 				const FVector V0 = F->GetVelocity();
 				if (FVector2D(V0.X, V0.Y).Size() > 30.f) S.BaseYaw = FMath::RadiansToDegrees(FMath::Atan2(V0.Y, V0.X));
+				else S.bVelSnapPending = true; // kinematically moved actors report no velocity: take the first observed motion
 			}
 			break;
 		case EZoogiShotHeading::World: S.BaseYaw = 0.f; break;
+		case EZoogiShotHeading::FocusFacing:
+		{
+			S.BaseYaw = GameplayYaw; // camera on the gameplay camera's side (the face is assumed to look at the player)
+			FVector Face = F->GetActorForwardVector();
+			if (const AZoogiBall* B = Cast<AZoogiBall>(F)) { if (B->Visual) Face = B->Visual->GetForwardVector(); }
+			if (FMath::Abs(Face.Z) < 0.85f && FVector2D(Face.X, Face.Y).Size() > 0.2f)
+			{
+				// Camera = pivot - Dir * dist, so a heading opposite to the face puts the camera in front of it.
+				S.BaseYaw = FMath::RadiansToDegrees(FMath::Atan2(Face.Y, Face.X)) + 180.f;
+			}
+			break;
+		}
+		case EZoogiShotHeading::FocusToEvent:
+			S.BaseYaw = FVector::Dist2D(FC, S.EventLoc) > 1.f ? FMath::RadiansToDegrees(FMath::Atan2(S.EventLoc.Y - FC.Y, S.EventLoc.X - FC.X)) : GameplayYaw;
+			break;
 		case EZoogiShotHeading::GameplayCamera:
 		default: S.BaseYaw = GameplayYaw; break;
 		}
 		S.VelYaw = S.BaseYaw;
-		S.Pivot = (bSec && Spec.SecondaryBias > 0.f ? FMath::Lerp(FC, SC, Spec.SecondaryBias) : FC) + Spec.PivotOffset;
+		S.Pivot = FMath::Lerp(bSec && Spec.SecondaryBias > 0.f ? FMath::Lerp(FC, SC, Spec.SecondaryBias) : FC, S.EventLoc, Spec.EventBias) + Spec.PivotOffset;
 		S.bInit = true;
 	}
-	if (Spec.Heading == EZoogiShotHeading::FocusVelocity && bMoving)
+	if (S.bVelSnapPending && (bMoving || S.Age > 0.3f))
+	{
+		S.bVelSnapPending = false;
+		if (bMoving) S.VelYaw = VelYawNow;
+	}
+	else if (Spec.Heading == EZoogiShotHeading::FocusVelocity && bMoving)
 	{
 		S.VelYaw = FRotator::NormalizeAxis(S.VelYaw + FRotator::NormalizeAxis(VelYawNow - S.VelYaw) * (1.f - FMath::Exp(-3.f * Dt)));
 	}
 	S.LastFocus = FC;
 
 	const float T = S.Age / FMath::Max(S.Duration, 0.01f);
-	const float M = CurveOrEase(Spec.MotionCurve, Spec.Ease, T);
-	const FVector WantPivot = (bSec && Spec.SecondaryBias > 0.f ? FMath::Lerp(FC, SC, Spec.SecondaryBias) : FC) + Spec.PivotOffset;
+	const float M = CurveOrEase(Spec.MotionCurve, Spec.MoveEase, T);
+	const FVector WantPivot = FMath::Lerp(bSec && Spec.SecondaryBias > 0.f ? FMath::Lerp(FC, SC, Spec.SecondaryBias) : FC, S.EventLoc, Spec.EventBias) + Spec.PivotOffset;
 	S.Pivot = (Spec.TrackingLag > 0.f && Dt > 0.f) ? CamDirDampV(S.Pivot, WantPivot, Spec.TrackingLag, Dt) : WantPivot;
 
 	const float Heading = Spec.Heading == EZoogiShotHeading::FocusVelocity ? S.VelYaw : S.BaseYaw;
@@ -499,6 +531,7 @@ bool UZoogiEpisodeCameraDirector::EvaluateShotView(FZoogiActiveShot& S, float Dt
 	const float Pitch = FMath::Lerp(Spec.Pitch, Spec.PitchEnd, M);
 	float Dist = FMath::Lerp(Spec.Distance, Spec.DistanceEnd, M);
 	if (Spec.bFrameBoth && bSec) Dist = FMath::Max(Dist, FVector::Dist(FC, SC) * 0.55f + Spec.SubjectRadius * 2.f);
+	if (Spec.bFrameEvent) Dist = FMath::Max(Dist, FVector::Dist(FC, S.EventLoc) * 0.55f + Spec.SubjectRadius * 2.f);
 	const float Pr = FMath::DegreesToRadians(Pitch);
 	const FVector Dir = FRotator(0.f, Yaw, 0.f).Vector();
 	FVector Loc = S.Pivot - Dir * Dist * FMath::Cos(Pr) + FVector(0, 0, Dist * FMath::Sin(Pr));
@@ -529,11 +562,16 @@ bool UZoogiEpisodeCameraDirector::EvaluateShotView(FZoogiActiveShot& S, float Dt
 	FRotator Rot = (Look - Loc).Rotation();
 	Rot.Roll = Spec.Roll;
 	float Fov = FMath::Lerp(Spec.FOV, Spec.FOVEnd, M);
-	if (Spec.bFrameBoth && bSec)
+	const bool bFrameSec = Spec.bFrameBoth && bSec;
+	if (bFrameSec || Spec.bFrameEvent)
 	{
 		const float Aspect = 16.f / 9.f;
 		float NeedHalf = 0.f;
-		for (const FVector& P : { FC, SC })
+		TArray<FVector, TInlineAllocator<3>> Pts;
+		Pts.Add(FC);
+		if (bFrameSec) Pts.Add(SC);
+		if (Spec.bFrameEvent) Pts.Add(S.EventLoc);
+		for (const FVector& P : Pts)
 		{
 			const FVector L = Rot.UnrotateVector(P - Loc);
 			if (L.X < 10.f) continue;
@@ -543,6 +581,16 @@ bool UZoogiEpisodeCameraDirector::EvaluateShotView(FZoogiActiveShot& S, float Dt
 		}
 		Fov = FMath::Clamp(FMath::Max(Fov, FMath::RadiansToDegrees(2.f * NeedHalf) * Spec.FramePadding), 5.f, Spec.MaxFOV);
 	}
+	// Deterministic motion character (no randomness: the same shot always plays the same).
+	const float Tm = S.Age;
+	if (Spec.RollWobbleDeg != 0.f) Rot.Roll += Spec.RollWobbleDeg * FMath::Sin(UE_TWO_PI * Spec.RollWobbleHz * Tm);
+	if (Spec.ShakeDeg != 0.f)
+	{
+		const float A = Spec.ShakeDeg * (Spec.ShakeDecay > 0.f ? FMath::Exp(-Spec.ShakeDecay * Tm) : 1.f);
+		const float SW = UE_TWO_PI * Spec.ShakeHz;
+		Rot.Pitch += A * (0.7f * FMath::Sin(SW * Tm + 0.3f) + 0.3f * FMath::Sin(1.73f * SW * Tm + 1.1f));
+		Rot.Yaw += A * (0.7f * FMath::Sin(1.21f * SW * Tm + 2.0f) + 0.3f * FMath::Sin(2.37f * SW * Tm + 0.5f));
+	}
 	OutView = FMinimalViewInfo();
 	OutView.Location = Loc;
 	OutView.Rotation = Rot;
@@ -550,6 +598,24 @@ bool UZoogiEpisodeCameraDirector::EvaluateShotView(FZoogiActiveShot& S, float Dt
 	OutView.AspectRatio = 16.f / 9.f;
 	OutView.bConstrainAspectRatio = false;
 	return true;
+}
+
+void UZoogiEpisodeCameraDirector::TryStartShotSlowMo(FZoogiActiveShot& S)
+{
+	S.bSlowMoTried = true;
+	// Fit the whole ramp inside the shot (real time) so the prior value is back before the shot's own end.
+	const float Avail = S.Duration - S.Age - 0.1f;
+	if (Avail < 0.2f) return;
+	FZoogiTimeScaleSpec T;
+	T.Target = S.Spec.SlowMoTarget;
+	T.EaseIn = FMath::Min(S.Spec.SlowMoEaseIn, Avail * 0.3f);
+	T.EaseOut = FMath::Min(S.Spec.SlowMoEaseOut, Avail * 0.4f);
+	T.Hold = FMath::Clamp(S.Spec.SlowMoHold, 0.f, Avail - T.EaseIn - T.EaseOut);
+	T.Ease = EZoogiShotEase::SmoothStep;
+	PendingTimeScaleOwner = S.Id;
+	S.bSlowMoRunning = EaseTimeScale(T);
+	PendingTimeScaleOwner = 0;
+	UE_LOG(LogZoogi, Log, TEXT("CAMDIR shot %d %s slow-mo entry %s"), S.Id, *S.Spec.Name.ToString(), S.bSlowMoRunning ? TEXT("running") : TEXT("refused by the time-scale policy, playing at normal speed"));
 }
 
 void UZoogiEpisodeCameraDirector::TickShot(FZoogiActiveShot& S, float Dt, bool& bOutFinished, EZoogiShotEndReason& OutReason)
@@ -565,6 +631,7 @@ void UZoogiEpisodeCameraDirector::TickShot(FZoogiActiveShot& S, float Dt, bool& 
 	}
 	S.LastShotView = ShotView;
 	const float FocusDist = FVector::Dist(ShotView.Location, S.LastFocus);
+	if (S.Spec.bSlowMoEntry && !S.bSlowMoTried && !S.bStopping && S.Age >= S.Spec.SlowMoDelay) TryStartShotSlowMo(S);
 
 	if (S.Output == EZoogiShotOutput::RenderTarget)
 	{
@@ -698,6 +765,7 @@ bool UZoogiEpisodeCameraDirector::EaseTimeScale(const FZoogiTimeScaleSpec& Spec)
 		}
 	}
 	if (!TS.bActive) TS.Prior = WS->CinematicTimeDilation; // exact original, kept across overlapping eases
+	TimeScaleOwnerShotId = PendingTimeScaleOwner; // a direct caller takes the ease over from any shot
 	TS.bActive = true;
 	TS.Spec = Spec;
 	TS.From = WS->CinematicTimeDilation;
@@ -737,6 +805,7 @@ void UZoogiEpisodeCameraDirector::RestoreTimeScaleExact(const TCHAR* Why)
 		WS->CinematicTimeDilation = TS.Prior;
 	}
 	UE_LOG(LogZoogi, Log, TEXT("CAMDIR time-scale restored to %.6f (%s)"), TS.Prior, Why);
+	TimeScaleOwnerShotId = 0;
 	TS.bActive = false;
 	TS.bOut = false;
 }

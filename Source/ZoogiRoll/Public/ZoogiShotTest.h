@@ -1,6 +1,7 @@
 // -ZoogiShotTest: live-match verification of the Episode camera director (ZoogiEpisodeCameraDirector.h).
-// Starts a match (P1 human, so the match holds still on P1's input), then cycles every shot family in both outputs,
-// interruption cases (cancel, eased stop, overlap, focus destroyed), the opt-in time-scale ease and a level end.
+// Starts a match (P1 human, so the match holds still on P1's input), then cycles every shot family in both outputs
+// (base five, Tier 1 reaction close-ups, Tier 2 trick shots, Tier 3 airborne with slow-mo entry), interruption cases
+// (cancel, eased stop, overlap, focus destroyed, airborne cancelled mid slow-mo), the opt-in time-scale ease and a level end.
 // After each case the gameplay camera is compared to the pre-shot snapshot and a "ZOOGI SHOTTEST PASS|FAIL" line is
 // logged. Screenshots (with a debug panel showing the live render target, drawn only in this mode) go to
 // %USERPROFILE%\Pictures\ZoogiShotTest (override with -ZoogiShotTestDir=<dir>).
@@ -22,7 +23,7 @@ class UTextureRenderTarget2D;
 
 namespace ZoogiShotTest
 {
-	enum class ECaseKind : uint8 { Shot, Cancel, StopEased, Overlap, FocusDestroyed, TimeScaleRefused, TimeScale, TimeScaleCancel, LevelEnd };
+	enum class ECaseKind : uint8 { Shot, Cancel, StopEased, Overlap, FocusDestroyed, TimeScaleRefused, TimeScale, TimeScaleCancel, AirborneSlowMoCancel, AirborneSlowMoRefused, LevelEnd };
 	enum class EStep : uint8 { StartMatch, WaitLive, WaitSettle, Run, WaitEnd, Verify, Restored, Done, Summary };
 	struct FCase
 	{
@@ -64,6 +65,10 @@ private:
 	AActor* Focus() const;
 	AActor* SecondaryFor(AActor* F) const;
 	AStaticMeshActor* SpawnProp(const FVector& At, float Scale);
+	/** Plays one library shot the way the case's family needs it (props, secondary, event point). */
+	FZoogiShotHandle PlayCaseShot(EZoogiShotType Type, EZoogiShotOutput Output, FString& OutSetup);
+	void StartArc(const FVector& From);
+	void CheckLevelEnd(const TCHAR* When);
 
 	TArray<ZoogiShotTest::FCase> Cases;
 	int32 CaseIdx = -1;
@@ -93,6 +98,13 @@ private:
 	UPROPERTY() TArray<TObjectPtr<UTextureRenderTarget2D>> KeepTargets;
 	FVector TrackCenter = FVector::ZeroVector;
 	float TrackAngle = 0.f;
+	/** Airborne prop: a kinematic (no physics, no collision) sphere flown on a ballistic arc in dilated game time. */
+	UPROPERTY() TObjectPtr<AStaticMeshActor> ArcProp = nullptr;
+	FVector ArcStart = FVector::ZeroVector;
+	FVector ArcVel = FVector::ZeroVector;
+	float ArcTime = 0.f;
+	float MaxArcHeight = 0.f;
+	FDelegateHandle TearDownHandle;
 
 	TSharedPtr<SWidget> Overlay;
 	TSharedPtr<SBox> PanelBox;

@@ -61,6 +61,9 @@ struct ZOOGIROLL_API FZoogiShotPlayParams
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shot") float DurationOverride = -1.f;
 	/** Index of the local player whose view a MainView shot takes. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shot") int32 PlayerIndex = 0;
+	/** Trick shots: the event point (bank / wall contact). Without it, event-based shots use the arena centre at the focus' height. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shot") bool bHasEventLocation = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shot") FVector EventLocation = FVector::ZeroVector;
 };
 
 USTRUCT(BlueprintType)
@@ -155,10 +158,17 @@ struct FZoogiActiveShot
 	bool bInit = false;
 	float BaseYaw = 0.f;
 	float VelYaw = 0.f;
+	bool bVelSnapPending = false;
 	FVector Pivot = FVector::ZeroVector;
 	FVector LastFocus = FVector::ZeroVector;
 	FVector LastSecondary = FVector::ZeroVector;
 	bool bHasSecondary = false;
+	/** Event point (trick shots); always set (default = arena centre at the focus' start height). */
+	FVector EventLoc = FVector::ZeroVector;
+	bool bEventFromCaller = false;
+	/** Slow-mo entry attempted (once per shot) / accepted. */
+	bool bSlowMoTried = false;
+	bool bSlowMoRunning = false;
 	/** MainView ease-in source: the live gameplay view, or the previous shot's last view when this one replaced it. */
 	bool bBlendFromFrozen = false;
 	FMinimalViewInfo BlendFrom;
@@ -212,6 +222,9 @@ public:
 	ACameraActor* GetShotCamera() const { return ShotCam; }
 
 	FOnZoogiShotFinished OnShotFinished;
+	/** Broadcast on world tear-down right after every shot / ease has been ended and the camera + time scale restored
+	 *  (before any actor ends play), so a caller can verify the restoration at that exact moment. */
+	FSimpleMulticastDelegate OnWorldTearDownRestored;
 
 	// ------------------------------------------------------------------ time scale (opt-in)
 	void SetTimeScalePolicy(EZoogiTimeScalePolicy InPolicy) { Policy = InPolicy; }
@@ -224,6 +237,8 @@ public:
 	/** bImmediate puts the prior value back this frame; otherwise eases out from the current value. */
 	void StopTimeScale(bool bImmediate = true);
 	bool IsTimeScaleActive() const { return TS.bActive; }
+	/** True while the running time-scale ease was started by this shot's slow-mo entry. */
+	bool IsTimeScaleOwnedBy(FZoogiShotHandle Shot) const { return TS.bActive && Shot.IsValid() && TimeScaleOwnerShotId == Shot.Id; }
 	/** Name of an awake simulated body, or empty if all are asleep. */
 	FString FindAwakePhysicsBody() const;
 
@@ -249,6 +264,7 @@ private:
 	void SetCinematicDilation(float Value);
 	void RestoreTimeScaleExact(const TCHAR* Why);
 	float CurveOrEase(UCurveFloat* Curve, EZoogiShotEase Ease, float T) const;
+	void TryStartShotSlowMo(FZoogiActiveShot& S);
 
 	UPROPERTY() TObjectPtr<UZoogiShotLibrary> Library = nullptr;
 	UPROPERTY() TArray<FZoogiActiveShot> Shots;
@@ -264,6 +280,9 @@ private:
 	FZoogiCameraSnapshot MainViewSnapshot;
 	FDelegateHandle TearDownHandle;
 	bool bTornDown = false;
+	/** Shot whose slow-mo entry owns the running time-scale ease (0 = a direct EaseTimeScale caller owns it). */
+	int32 TimeScaleOwnerShotId = 0;
+	int32 PendingTimeScaleOwner = 0;
 
 	EZoogiTimeScalePolicy Policy = EZoogiTimeScalePolicy::Disabled;
 	struct FTimeScaleState
