@@ -1,6 +1,7 @@
 # Frozen Ring polish (Oct 8): imports SourceArt/Arenas/FrozenPolish/T_*.png into /Game/Env/Arenas.
 #   T_FrozenBrightSky  equirect sky panorama (M_ArenaSky via AddPanoramaSky("FrozenBright"))
 #   T_FrozenSealHalo   RGBA glowing rune-seal overlay for the court (M_FrozenDecal FlatQuad, UV = WorldXY / 3100 + 0.5)
+#   T_FrozenStreakTile grayscale painterly vertical striations: M_FrozenPiece "Detail" for the glacier cliffs / underside
 # Headless, run against the checkout this file lives in:
 #   UnrealEditor-Cmd.exe <worktree>\ZoogiRoll.uproject -run=pythonscript -script=<this file> -unattended -nosplash -NullRHI
 import unreal, os, glob
@@ -22,7 +23,10 @@ for p in sorted(glob.glob(os.path.join(SRC, "T_*.png"))):
     t.set_editor_property("lod_group", unreal.TextureGroup.TEXTUREGROUP_WORLD)
     t.set_editor_property("never_stream", True)
     t.set_editor_property("srgb", True)
-    if name.endswith("Sky"):
+    if name.endswith("Tile"):
+        t.set_editor_property("compression_settings", TCS.TC_GRAYSCALE); t.set_editor_property("srgb", False)
+        t.set_editor_property("address_x", TA.TA_WRAP); t.set_editor_property("address_y", TA.TA_WRAP)
+    elif name.endswith("Sky"):
         t.set_editor_property("compression_settings", TCS.TC_BC7)
         t.set_editor_property("mip_gen_settings", unreal.TextureMipGenSettings.TMGS_NO_MIPMAPS)
         t.set_editor_property("address_x", TA.TA_WRAP); t.set_editor_property("address_y", TA.TA_CLAMP)

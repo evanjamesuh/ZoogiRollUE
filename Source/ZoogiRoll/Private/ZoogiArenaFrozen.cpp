@@ -140,13 +140,17 @@ void AZoogiArena::BuildFrozen()
 	UMaterialInterface* Wood = MakeFrozenMat(TEXT("Wood"), ZoogiUtil::Hex(TEXT("#CACFDC")), TEXT("T_FrozenStoneTile"), 60.f, 0.6f, 0.75f, 0.3f, FLinearColor::Black, 0.f);
 	UMaterialInterface* WoodDark = MakeFrozenMat(TEXT("WoodDark"), ZoogiUtil::Hex(TEXT("#8E95A8")), TEXT("T_FrozenStoneTile"), 60.f, 0.6f, 0.8f, 0.3f, FLinearColor::Black, 0.f);
 	// Round 3: paler icy cliffs / underside (the art's white-cyan ice, not dark saturated blue).
-	UMaterialInterface* Cliff = MakeFrozenMat(TEXT("Cliff"), ZoogiUtil::Hex(TEXT("#D3ECFA")), TEXT("T_FrozenIceTile"), 420.f, 0.55f, 0.4f, 0.5f, ZoogiUtil::Hex(TEXT("#8FD0F2")), 0.10f);
-	UMaterialInterface* IceUnder = MakeFrozenMat(TEXT("IceUnder"), ZoogiUtil::Hex(TEXT("#C6E6F8")), TEXT("T_FrozenIceTile"), 300.f, 0.45f, 0.3f, 0.6f, ZoogiUtil::Hex(TEXT("#9FDCFF")), 0.12f);
+	// Polish r3: icy blue glacier underside / cliffs with painterly vertical striations (T_FrozenStreakTile), shadows lifted
+	// into blue by emissive so the hero view no longer reads as grey-blue rock. Fallback detail: the r1 ice tile.
+	const bool bStreak = FTex(TEXT("T_FrozenStreakTile")) != nullptr;
+	const TCHAR* StreakTex = bStreak ? TEXT("T_FrozenStreakTile") : TEXT("T_FrozenIceTile");
+	UMaterialInterface* Cliff = MakeFrozenMat(TEXT("Cliff"), ZoogiUtil::Hex(TEXT("#C2E5FB")), StreakTex, 650.f, 0.5f, 0.35f, 0.55f, ZoogiUtil::Hex(TEXT("#7FCBFA")), 0.22f);
+	UMaterialInterface* IceUnder = MakeFrozenMat(TEXT("IceUnder"), ZoogiUtil::Hex(TEXT("#A3D4F6")), StreakTex, 520.f, 0.5f, 0.3f, 0.6f, ZoogiUtil::Hex(TEXT("#64BCF6")), 0.24f);
 	// Mountain rock: blue-grey anime cliff faces under the snow (slope-split by BuildFrozenPeaks).
 	// Polish r1 (Oct 8): icy blue glacier faces like frozen_zones_aerial (was blue-grey rock).
-	UMaterialInterface* Peak = MakeFrozenMat(TEXT("Peak"), ZoogiUtil::Hex(TEXT("#9CCBF0")), TEXT("T_FrozenIceTile"), 2400.f, 0.3f, 0.55f, 0.45f, ZoogiUtil::Hex(TEXT("#6FB8F0")), 0.16f);
-	UMaterialInterface* Glacier = MakeFrozenMat(TEXT("Glacier"), ZoogiUtil::Hex(TEXT("#E2F3FD")), TEXT("T_FrozenIceTile"), 1600.f, 0.3f, 0.4f, 0.55f, ZoogiUtil::Hex(TEXT("#A8DCFF")), 0.22f);
-	UMaterialInterface* GlacierDeep = MakeFrozenMat(TEXT("GlacierDeep"), ZoogiUtil::Hex(TEXT("#9CC8EE")), TEXT("T_FrozenIceTile"), 1600.f, 0.3f, 0.35f, 0.55f, ZoogiUtil::Hex(TEXT("#6FB4EE")), 0.14f); // r2: paler (r1 read as dark blue stripes)
+	UMaterialInterface* Peak = MakeFrozenMat(TEXT("Peak"), ZoogiUtil::Hex(TEXT("#9CCBF0")), StreakTex, 2400.f, 0.45f, 0.55f, 0.45f, ZoogiUtil::Hex(TEXT("#6FB8F0")), 0.16f);
+	UMaterialInterface* Glacier = MakeFrozenMat(TEXT("Glacier"), ZoogiUtil::Hex(TEXT("#E2F3FD")), StreakTex, 2200.f, 0.5f, 0.4f, 0.55f, ZoogiUtil::Hex(TEXT("#A8DCFF")), 0.22f);
+	UMaterialInterface* GlacierDeep = MakeFrozenMat(TEXT("GlacierDeep"), ZoogiUtil::Hex(TEXT("#A6CFF0")), StreakTex, 2200.f, 0.5f, 0.35f, 0.55f, ZoogiUtil::Hex(TEXT("#6FB4EE")), 0.14f); // r2: paler (r1 read as dark blue stripes)
 	UMaterialInterface* Rune = ZoogiUtil::GlowMID(this, Cyan, 3.f);
 	UMaterialInterface* RuneSoft = ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#69E1F9")), 1.6f);
 	FrozenMats.Add(TEXT("Rune"), Rune);
@@ -169,7 +173,7 @@ void AZoogiArena::BuildFrozen()
 		FloorMID->SetScalarParameterValue(TEXT("Pulse"), 0.12f);
 	}
 	BuildIsland(ZoogiUtil::Hex(TEXT("#CFEFFF")), ZoogiUtil::Hex(TEXT("#9ED8F5")), ZoogiUtil::Hex(TEXT("#F4FBFF")),
-		ZoogiUtil::Hex(TEXT("#C4E2F5")), ZoogiUtil::Hex(TEXT("#E6F4FC")), 0.03f, FloorMat);
+		ZoogiUtil::Hex(TEXT("#7FC0EE")), ZoogiUtil::Hex(TEXT("#BFE4FB")), 0.03f, FloorMat); // polish r3: glacier-blue under-cones (were grey-blue)
 	// Polish r1: bright blue painterly sky with soft cumulus + aurora / rainbow flares (T_FrozenBrightSky); r1 sky fallback.
 	if (!AddPanoramaSky(TEXT("FrozenBright"), 1.0f, 0.f, FLinearColor::White)) AddPanoramaSky(TEXT("Frozen"), 1.0f, 0.f, FLinearColor::White);
 
@@ -450,7 +454,7 @@ void AZoogiArena::BuildFrozen()
 				const FVector Out = (Cen - Ctr).GetSafeNormal2D() + FVector(0, 0, 0.2f);
 				if (FVector::DotProduct(Nn, Out) < 0.f) Nn = -Nn;
 				const bool bSnow = Nn.Z > 0.55f;
-				(bSnow ? Cap : ((j % 2) ? Deep : Lit)).FlatTri(P0, P1, P2, Out);
+				(bSnow ? Cap : ((j % 3) == 1 ? Deep : Lit)).FlatTri(P0, P1, P2, Out); // r3: fewer deep columns (r2 read as stripes)
 			};
 			for (int32 j = 0; j < NS; ++j)
 			{
@@ -473,7 +477,7 @@ void AZoogiArena::BuildFrozen()
 			const float Back = FMath::Clamp((DFront - 40.f) / 120.f, 0.f, 1.f);     // 1 = straight behind the arena (art top)
 			// r2: further out and lower so the sky shows above the peaks (r1 walled the whole view).
 			const float R = PRng.FRandRange(6400.f, 8800.f) + (1.f - Back) * 1800.f;
-			const float Top = FMath::Lerp(-400.f, 3200.f, Back) + PRng.FRandRange(-600.f, 900.f);
+			const float Top = FMath::Lerp(-1400.f, 3200.f, FMath::Pow(Back, 1.4f)) + PRng.FRandRange(-600.f, 900.f); // r3: lower flanks, sky shows in the corners
 			const float H = Top + 6500.f;
 			const FVector2D C0(Pol(R, A));
 			Spire(C0, H * PRng.FRandRange(0.16f, 0.22f), H, -6500.f);
@@ -541,6 +545,29 @@ void AZoogiArena::BuildFrozen()
 					FVector(FMath::Cos(A1) * Rr.Y, FMath::Sin(A1) * Rr.Y, 1.1f), FVector(FMath::Cos(A0) * Rr.Y, FMath::Sin(A0) * Rr.Y, 1.1f), FVector::UpVector);
 		}
 		if (UProceduralMeshComponent* Bc = AddFrozenProc(Basin, ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#7FEAFF")), 3.0f), nullptr, false)) Bc->ComponentTags.Add(TEXT("NoCamBlock"));
+	}
+	// ---- Polish r3: ring of 8 small glowing crystal posts on the seal's outer ring (r 1000, between the spawn pads and clear of
+	// the ramp / platform / combo section). Breakable pieces with NO collider (play-floor collision unchanged); low (30 cm,
+	// under a Zoogi's 50 cm radius) so a ball rolling over one hides it. They rise with the obelisks during the forming.
+	{
+		UMaterialInterface* PostGlow = ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#69E1F9")), 1.8f);
+		for (int32 k = 0; k < 8; ++k)
+		{
+			const float Yaw = 22.5f + 45.f * k;
+			AZoogiArenaPiece* P = SpawnPiece(Pol(1000.f, Yaw), Yaw, TEXT("seal_crystal"), TEXT("Ice"), 40.f);
+			if (!P) continue;
+			FZoogiMeshBuilder Cr, Base;
+			Cr.Prism(FVector2D::ZeroVector, 6, 9.f, 7.f, 0.f, 20.f, Yaw, 10.f, false);
+			Cr.Prism(FVector2D(9.f, 5.f), 5, 5.f, 4.f, 0.f, 11.f, Yaw + 20.f, 6.f, false);
+			Cr.Prism(FVector2D(-7.f, -7.f), 5, 5.f, 4.f, 0.f, 9.f, Yaw + 40.f, 5.f, false);
+			Base.Prism(FVector2D::ZeroVector, 8, 20.f, 17.f, 0.f, 2.f, Yaw, 0.f, false);
+			UProceduralMeshComponent* Cm = P->AddProc(Cr, PostGlow, false);
+			P->MarkGlow(Cm);
+			P->AddProc(Base, IceDeep, false);
+			P->RubbleKeepZ = 3.f;
+			P->FinishBuild();
+			if (Forming) Forming->AddActor(P, EZoogiFormStyle::Rise, FVector(0, 0, -40.f), 0.75f + 0.05f * k, 0.6f, 3.f);
+		}
 	}
 
 	// ---- Resonance Hub: 4 indestructible pillars with Awaken Orbs (rise from below the floor) ----
