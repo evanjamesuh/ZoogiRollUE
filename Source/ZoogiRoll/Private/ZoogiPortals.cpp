@@ -20,6 +20,9 @@
 #include "Misc/Paths.h"
 #include "HAL/PlatformTime.h"
 #include "UnrealClient.h"
+#include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
+#include "GameFramework/PlayerController.h"
 
 namespace
 {
@@ -291,7 +294,7 @@ void UZoogiPortalSubsystem::Build(AZoogiArena* Arena)
 		if (!Pc || Pc->GetKind() != FName(TEXT("arch")) || Portals.Num() >= UE_ARRAY_COUNT(Prev)) continue;
 		const FTransform T = Pc->GetActorTransform();
 		const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(T.GetLocation().Y, T.GetLocation().X));
-		// "the arcs ruins in front of the bridges": only arches standing on a bridge yaw (140 / 186 / 354 after the frozen
+		// "the arcs ruins in front of the bridges": only arches standing on a bridge yaw (Oct 9 symmetric layout: all 6, 0 / 45 / 135 / 180 / 225 / 315; before: 140 / 186 / 354 after the frozen
 		// bridge alignment). The snow-chute ramp arch (230) and the SE Recovery Gate (gate_arch, 45) are not portals.
 		if (!NearIsletYaw(Yaw, 3.f)) continue;
 		FPortal P;
@@ -324,11 +327,48 @@ const FZoogiPortalFire* UZoogiPortalSubsystem::FirstFire(const FString& Who, dou
 	return nullptr;
 }
 
+void UZoogiPortalSubsystem::TickTopShot(UWorld* W)
+{
+	APlayerController* PC = W ? W->GetFirstPlayerController() : nullptr;
+	if (!PC || W->GetTimeSeconds() < 10.0) return; // after the first aim (the map props spawn then)
+	const double Now = FPlatformTime::Seconds();
+	if (TopStage == 0)
+	{
+		FActorSpawnParameters SP;
+		SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		// straight down, far side (yaw 270) at the top of the frame like the match camera
+		ACameraActor* Cam = W->SpawnActor<ACameraActor>(FVector(0.f, 0.f, 9500.f), FRotator(-90.f, 270.f, 0.f), SP);
+		if (!Cam) { TopStage = 3; return; }
+		Cam->GetCameraComponent()->SetFieldOfView(70.f);
+		Cam->GetCameraComponent()->bConstrainAspectRatio = false;
+		TopPrevView = PC->GetViewTarget();
+		PC->SetViewTarget(Cam);
+		TopCam = Cam; TopStage = 1; TopAt = Now + 0.8;
+	}
+	else if (TopStage == 1)
+	{
+		if (TopCam.IsValid() && PC->GetViewTarget() != TopCam.Get()) PC->SetViewTarget(TopCam.Get()); // keep it while the frame settles
+		if (Now < TopAt) return;
+		FScreenshotRequest::RequestScreenshot(TopShot, false, false);
+		UE_LOG(LogZoogi, Log, TEXT("PORTAL top-down screenshot requested: %s (portals=%d)"), *TopShot, Portals.Num());
+		TopStage = 2; TopAt = Now + 1.0;
+	}
+	else if (TopStage == 2)
+	{
+		if (TopCam.IsValid() && PC->GetViewTarget() != TopCam.Get()) PC->SetViewTarget(TopCam.Get());
+		if (Now < TopAt) return;
+		if (TopPrevView.IsValid()) PC->SetViewTarget(TopPrevView.Get());
+		if (TopCam.IsValid()) TopCam->Destroy();
+		TopStage = 3;
+	}
+}
+
 void UZoogiPortalSubsystem::Tick(float DeltaTime)
 {
 	UWorld* W = GetWorld();
 	AZoogiGameMode* G = W ? W->GetAuthGameMode<AZoogiGameMode>() : nullptr;
-	if (!bLoaded) FParse::Value(FCommandLine::Get(), TEXT("ZoogiPortalShots="), ShotDir);
+	if (!bLoaded) { FParse::Value(FCommandLine::Get(), TEXT("ZoogiPortalShots="), ShotDir); FParse::Value(FCommandLine::Get(), TEXT("ZoogiTopShot="), TopShot); }
+	if (!TopShot.IsEmpty() && TopStage < 3 && Portals.Num() > 0) TickTopShot(W);
 	for (int32 i = ShotsLater.Num() - 1; i >= 0; --i)
 		if (FPlatformTime::Seconds() >= ShotsLater[i].Value)
 		{

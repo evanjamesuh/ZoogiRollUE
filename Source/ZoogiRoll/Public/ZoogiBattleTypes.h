@@ -293,6 +293,10 @@ struct FZoogiEpisodeFragment
 
 namespace ZoogiBattle
 {
+	// Frozen map layout placement (symmetric 6-bridge layout, Oct 9): the rail set is turned by MapRailYawShift from its
+	// original yaw-35 spot; the floor Sky Bumper sits on the camera-side axis. Tests rotate their start spots to match.
+	constexpr float MapRailYawShift = -12.5f;
+	constexpr float MapFloorBumperYaw = 90.f;
 	ZOOGIROLL_API const TCHAR* StateName(EZoogiBattleState S);
 	ZOOGIROLL_API const TCHAR* ChallengeName(EZoogiChallenge C);
 	ZOOGIROLL_API const TCHAR* ResultName(EZoogiChallengeResult R);

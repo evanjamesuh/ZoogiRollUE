@@ -338,15 +338,20 @@ void UZoogiBattleStateMachine::SpawnMapLayout()
 	using namespace ZoogiFrozen;
 	// Launch Rail (Zone 2 entry): along the E edge, released toward the W wall. EARLY = high arc through the hanging halo,
 	// CENTER = flat shot across the court, LATE = bank toward the NW snow chute (+ the chute bumper).
-	const FVector S = FzPol(1200.f, 35.f, 0.f);
-	const FVector Wt = FzPol(WallR, 184.f, 0.f);
+	// Symmetric 6-bridge layout (Oct 9): the whole rail set (entry, release line, approach track, hanging halo) turns by
+	// MapRailYawShift to r1200 yaw 22.5, midway between the 0 / 45 bridges (yaw 35 sat 10 deg off the 45 bridge lane).
+	// A pure rotation keeps the release line clear of the standing halos (yaw 0 / 180) and the measured rail envelope.
+	constexpr float RailRot = ZoogiBattle::MapRailYawShift;
+	const FVector S = FzPol(1200.f, 35.f + RailRot, 0.f);
+	const FVector Wt = FzPol(WallR, 184.f + RailRot, 0.f);
 	const FVector F = FVector(Wt.X - S.X, Wt.Y - S.Y, 0.f).GetSafeNormal();
 	if (AZoogiAerialProp* Rail = SpawnProp(EZoogiPropKind::LaunchRail, S, F, 60.f, false, TEXT("map_rail")))
 	{
 		Rail->RailMinSpeed = Tune.MapRailMinSpeed;
 		// curved approach track hugging the edge (visual): cubic from (r1360, yaw 12) heading CCW into the rail entry
-		const FVector P0 = FzPol(1360.f, 12.f, 0.f);
-		const FVector T0(-FMath::Sin(FMath::DegreesToRadians(12.f)), FMath::Cos(FMath::DegreesToRadians(12.f)), 0.f);
+		// (track start kept at yaw 8, off the 0 bridge lane)
+		const FVector P0 = FzPol(1360.f, 8.f, 0.f);
+		const FVector T0(-FMath::Sin(FMath::DegreesToRadians(8.f)), FMath::Cos(FMath::DegreesToRadians(8.f)), 0.f);
 		const FVector P3 = S - F * (Rail->Size + 12.f);
 		const FVector P1 = P0 + T0 * 300.f, P2 = P3 - F * 300.f;
 		for (int32 i = 0; i < 24; ++i)
@@ -365,14 +370,17 @@ void UZoogiBattleStateMachine::SpawnMapLayout()
 	// Zone 1 standing halos facing the W / E pads (radial pass axis) between the centre triangle and the orb ring
 	SpawnProp(EZoogiPropKind::ResonanceHalo, FzPol(340.f, 180.f, 0.f), FVector(-1.f, 0.f, 0.f), 150.f, false, TEXT("halo_w"));
 	SpawnProp(EZoogiPropKind::ResonanceHalo, FzPol(340.f, 0.f, 0.f), FVector(1.f, 0.f, 0.f), 150.f, false, TEXT("halo_e"));
-	// Sky Bumpers: a floor node between the pillar ring and the pads (SW), and the chute bumper past the NW ramp lip
-	SpawnProp(EZoogiPropKind::SkyBumper, FzPol(830.f, 135.f, ZoogiConst::ZoogiRadius), FVector(1.f, 0.f, 0.f), Tune.SkyBumperRadius, false, TEXT("floor_bumper"));
-	SpawnProp(EZoogiPropKind::SkyBumper, FzPol(1480.f, RampYaw, 110.f), FVector(1.f, 0.f, 0.f), Tune.SkyBumperRadius, false, TEXT("chute"));
-	// Zone 3 recovery gates on the front bridges (red: yaw 140 islet, blue: yaw 36 islet), across the deck midpoint
+	// Sky Bumpers. Symmetric 6-bridge layout (Oct 9): no bumper on a bridge lane / in front of an arch any more.
+	// Floor node on the camera-side axis (yaw 90, r830; was yaw 135 = on the 135 bridge radial); the hanging bumper moved
+	// off the snow-chute ramp lane (ramp + 225 bridge now share a centreline) to the open far side (yaw 255, r1300).
+	SpawnProp(EZoogiPropKind::SkyBumper, FzPol(830.f, ZoogiBattle::MapFloorBumperYaw, ZoogiConst::ZoogiRadius), FVector(1.f, 0.f, 0.f), Tune.SkyBumperRadius, false, TEXT("floor_bumper"));
+	SpawnProp(EZoogiPropKind::SkyBumper, FzPol(1300.f, 255.f, 110.f), FVector(1.f, 0.f, 0.f), Tune.SkyBumperRadius, false, TEXT("chute"));
+	// Zone 3 recovery gates across the deck midpoint of two mirrored camera-side bridges (red: 135 W, blue: 45 E;
+	// mirror images about the camera axis yaw 90). Trigger planes only: they never block the bridge.
 	const float RA = A->GetKnockoffRadius() - 15.f;
-	for (int32 k = 0; k < 4; ++k)
+	for (int32 k = 0; k < (int32)UE_ARRAY_COUNT(IsletYaw); ++k)
 	{
-		const bool bRed = FMath::IsNearlyEqual(IsletYaw[k], 140.f), bBlue = FMath::IsNearlyEqual(IsletYaw[k], 36.f);
+		const bool bRed = FMath::IsNearlyEqual(IsletYaw[k], 135.f), bBlue = FMath::IsNearlyEqual(IsletYaw[k], 45.f);
 		if (!bRed && !bBlue) continue;
 		const float RB = IsletDist[k] - IsletR + 25.f;
 		const FVector L = FzPol((RA + RB) * 0.5f, IsletYaw[k], IsletTopZ * 0.5f);

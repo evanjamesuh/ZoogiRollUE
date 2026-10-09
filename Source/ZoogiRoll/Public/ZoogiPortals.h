@@ -1,6 +1,6 @@
 // Oct 8 (Evan 11:48 PM): Boost Portals on Frozen Ring. "think of the arcs ruins in front of the bridges as portals that accelerate
 // an entering orb or zoogi and when it does it it has a flash electric effect like a power surge".
-// Every bridge ruin arch (arena pieces of kind "arch" on a bridge yaw: 140 / 186 / 354; not the snow-chute ramp arch 230 or
+// Every bridge ruin arch (arena pieces of kind "arch" on a bridge yaw: 0 / 45 / 135 / 180 / 225 / 315 in the symmetric layout; not the snow-chute ramp arch 230 or
 // the SE Recovery Gate) gets a trigger filling its opening. A Zoogi or orb crossing the opening plane gets BoostAdd of planar speed along its current planar direction
 // (capped at MaxSpeed, vertical velocity kept, never flips motion), at most once per Cooldown seconds per object. Applied by
 // game logic (this tickable world subsystem, fixed rules, no randomness), only while the shot is rolling, not in 2v2 combo.
@@ -110,4 +110,10 @@ protected:
 	FString ShotDir;
 	TArray<TPair<FString, double>> ShotsLater;
 	int32 ShotCount = 0;
+	// -ZoogiTopShot=<file.png>: one straight-down engine-viewport capture of the whole Frozen layout (camera only, no physics)
+	FString TopShot;
+	int32 TopStage = 0;
+	double TopAt = 0.0;
+	TWeakObjectPtr<AActor> TopCam, TopPrevView;
+	void TickTopShot(UWorld* W);
 };

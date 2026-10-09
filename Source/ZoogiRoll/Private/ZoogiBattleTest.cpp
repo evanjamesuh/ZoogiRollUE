@@ -843,9 +843,11 @@ bool UZoogiBattleStateMachine::TestMapSetup()
 	// candidate start spots (first feasible wins): P1's own pad first
 	auto Pol = [](float R, float Yaw) { const float A = FMath::DegreesToRadians(Yaw); return FVector2D(FMath::Cos(A) * R, FMath::Sin(A) * R); };
 	TArray<FVector2D> Spots = { FVector2D(P1->BallLocation()) };
-	if (Kind == EZoogiPropKind::LaunchRail) Spots.Append({ Pol(980.f, 0.f), Pol(900.f, 70.f), Pol(760.f, 20.f), Pol(1000.f, 100.f) });
+	// spots follow the props (symmetric 6-bridge layout: rail turned by MapRailYawShift, floor bumper 135 -> MapFloorBumperYaw)
+	const float RR = ZoogiBattle::MapRailYawShift, BR = ZoogiBattle::MapFloorBumperYaw - 135.f;
+	if (Kind == EZoogiPropKind::LaunchRail) Spots.Append({ Pol(980.f, 0.f + RR), Pol(900.f, 70.f + RR), Pol(760.f, 20.f + RR), Pol(1000.f, 100.f + RR), Pol(980.f, 0.f) });
 	else if (Kind == EZoogiPropKind::ResonanceHalo) Spots.Append({ FVector2D(175.f, 0.f), FVector2D(-175.f, 0.f), FVector2D(185.f, 4.f), FVector2D(-185.f, -4.f) });
-	else Spots.Append({ Pol(980.f, 90.f), Pol(980.f, 180.f), Pol(850.f, 100.f), Pol(850.f, 165.f), Pol(420.f, 135.f), Pol(1050.f, 120.f) });
+	else Spots.Append({ Pol(980.f, 90.f + BR), Pol(980.f, 180.f + BR), Pol(850.f, 100.f + BR), Pol(850.f, 165.f + BR), Pol(420.f, 135.f + BR), Pol(1050.f, 120.f + BR) });
 	const float Z = P1->BallLocation().Z;
 	for (const FVector2D& Sp : Spots)
 	{

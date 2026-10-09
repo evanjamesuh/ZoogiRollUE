@@ -52,7 +52,7 @@ namespace ZoogiFrozen
 	constexpr float BumpY[3] = { 350.f, 1200.f, -450.f };
 	// Recovery gate and its return pad (ZoogiComboArena). Symmetric layout: no dedicated gate arch any more; 45 is now the
 	// 45-bridge arch. The aerial worker relocates the Recovery Gate (see frozen-polish READY.txt).
-	constexpr float GateYaw = 45.f;
+	constexpr float GateYaw = 90.f; // Oct 9 (aerial worker): off the 6 bridge lanes, on the camera-side axis (return pad r1230 yaw 90; clear of every bridge)
 	constexpr float GateReturnR = 1230.f;
 	// Ice boulders (AZoogiRock, 4-stage): yaw, distance (web units), radius, height (web units).
 	constexpr float RockYaw[3] = { 22.5f, 75.f, 250.f }; // symmetric layout: the 5 boulder moved off the 0 bridge lane
