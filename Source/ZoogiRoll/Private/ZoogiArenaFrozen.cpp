@@ -426,6 +426,9 @@ void AZoogiArena::BuildFrozen()
 	// no collision, no shadows (they must never darken the court), outside every gameplay / aerial-prop zone (R >= 5600).
 	{
 		FZoogiMeshBuilder Lit, Deep, Cap;
+		// r4: behind the arena the pack mountain meshes take over; those spires are still generated (same PRng stream) but dropped.
+		const bool bPackMtns = LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Env/Arenas/FrozenMountains/SM_FrozenMtn_02.SM_FrozenMtn_02"), nullptr, LOAD_NoWarn | LOAD_Quiet) != nullptr;
+		bool bDropSpire = false;
 		auto Spire = [&](const FVector2D& Cc, float Rb, float H, float Z0)
 		{
 			const int32 NR = 10, NS = 14;
@@ -454,6 +457,7 @@ void AZoogiArena::BuildFrozen()
 				const FVector Out = (Cen - Ctr).GetSafeNormal2D() + FVector(0, 0, 0.2f);
 				if (FVector::DotProduct(Nn, Out) < 0.f) Nn = -Nn;
 				const bool bSnow = Nn.Z > 0.55f;
+				if (bDropSpire) return;
 				(bSnow ? Cap : ((j % 3) == 1 ? Deep : Lit)).FlatTri(P0, P1, P2, Out); // r3: fewer deep columns (r2 read as stripes)
 			};
 			for (int32 j = 0; j < NS; ++j)
@@ -480,6 +484,7 @@ void AZoogiArena::BuildFrozen()
 			const float Top = FMath::Lerp(-1400.f, 3200.f, FMath::Pow(Back, 1.4f)) + PRng.FRandRange(-600.f, 900.f); // r3: lower flanks, sky shows in the corners
 			const float H = Top + 6500.f;
 			const FVector2D C0(Pol(R, A));
+			bDropSpire = bPackMtns && Back > 0.45f;
 			Spire(C0, H * PRng.FRandRange(0.16f, 0.22f), H, -6500.f);
 			if (PRng.FRand() < 0.7f) // shoulder spire
 				Spire(C0 + FVector2D(Pol(H * 0.18f, A + (PRng.FRand() < 0.5f ? 90.f : -90.f))), H * 0.13f, H * PRng.FRandRange(0.6f, 0.82f), -6500.f);
@@ -487,6 +492,67 @@ void AZoogiArena::BuildFrozen()
 		AddFrozenProc(Lit, Glacier, nullptr, false);
 		AddFrozenProc(Deep, GlacierDeep, nullptr, false);
 		AddFrozenProc(Cap, Snow, nullptr, false);
+	}
+
+	// ---- Polish r4: real mountain meshes behind the spire ring (free "Iceland_Environment" pack, derived copies in
+	// /Game/Env/Arenas/FrozenMountains on M_FrozenMountain: icy blue + painterly vertical striations, snow on up-facing slopes,
+	// deep blue toward the base). Visual only: no collision, no shadows, never inside a gameplay / aerial-prop zone (R >= 9000).
+	// Each mesh is normalised from its own bounds (height / base width / bottom centre), so pack pivots and sizes do not matter.
+	{
+		TArray<UStaticMesh*> Mtns;
+		for (int32 k = 2; k <= 9; ++k)
+		{
+			const FString Pth = FString::Printf(TEXT("/Game/Env/Arenas/FrozenMountains/SM_FrozenMtn_%02d.SM_FrozenMtn_%02d"), k, k);
+			if (UStaticMesh* M = LoadObject<UStaticMesh>(nullptr, *Pth, nullptr, LOAD_NoWarn | LOAD_Quiet)) Mtns.Add(M);
+		}
+		UMaterialInterface* MtnBase = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Env/Arenas/M_FrozenMountain.M_FrozenMountain"), nullptr, LOAD_NoWarn | LOAD_Quiet);
+		UE_LOG(LogZoogi, Log, TEXT("Frozen mountains: %d pack meshes, material=%s"), Mtns.Num(), MtnBase ? TEXT("ok") : TEXT("missing"));
+		if (Mtns.Num() > 0 && MtnBase)
+		{
+			UMaterialInstanceDynamic* MtnMat = UMaterialInstanceDynamic::Create(MtnBase, this);
+			MtnMat->SetVectorParameterValue(TEXT("Color"), ZoogiUtil::Hex(TEXT("#B4DDFA")));
+			MtnMat->SetVectorParameterValue(TEXT("DeepColor"), ZoogiUtil::Hex(TEXT("#5E9FE0")));
+			MtnMat->SetVectorParameterValue(TEXT("SnowColor"), ZoogiUtil::Hex(TEXT("#F4FAFF")));
+			if (UTexture* T = FTex(TEXT("T_FrozenStreakTile"))) MtnMat->SetTextureParameterValue(TEXT("Detail"), T);
+			MtnMat->SetScalarParameterValue(TEXT("DetailScale"), 2600.f);
+			MtnMat->SetScalarParameterValue(TEXT("DetailStrength"), 0.45f);
+			MtnMat->SetScalarParameterValue(TEXT("SnowSlope"), 0.6f);
+			MtnMat->SetScalarParameterValue(TEXT("SnowZ"), -1500.f);
+			MtnMat->SetScalarParameterValue(TEXT("SnowZFade"), 3500.f);
+			MtnMat->SetScalarParameterValue(TEXT("DeepZ"), -6500.f);
+			MtnMat->SetScalarParameterValue(TEXT("DeepZFade"), 6000.f);
+			MtnMat->SetVectorParameterValue(TEXT("EmissiveColor"), ZoogiUtil::Hex(TEXT("#7CC6F6")));
+			MtnMat->SetScalarParameterValue(TEXT("EmissiveStrength"), 0.18f);
+			FRandomStream MRng(4242);
+			const int32 NM = 16;
+			for (int32 i = 0; i < NM; ++i)
+			{
+				const float A = i * (360.f / NM) + MRng.FRandRange(-6.f, 6.f);
+				const float DFront = FMath::Abs(FMath::FindDeltaAngleDegrees(A, 90.f));
+				if (DFront < 30.f) continue;                                           // camera side stays open
+				const float Back = FMath::Clamp((DFront - 30.f) / 130.f, 0.f, 1.f);
+				UStaticMesh* M = Mtns[(i * 3 + MRng.RandRange(0, 1)) % Mtns.Num()];
+				const FBox B = M->GetBoundingBox();
+				const FVector Sz = B.GetSize();
+				if (Sz.Z < 1.f) continue;
+				const float Z0 = -7000.f;
+				const float Top = FMath::Lerp(600.f, 5600.f, FMath::Pow(Back, 1.2f)) + MRng.FRandRange(-500.f, 900.f);
+				const float Hm = Top - Z0;
+				const float Wm = Hm * MRng.FRandRange(1.1f, 1.6f);
+				const float Sz3 = Hm / (float)Sz.Z;
+				const float Sxy = Wm / FMath::Max3((float)Sz.X, (float)Sz.Y, 1.f);
+				// behind the arena (where the spires are dropped) they come in close; on the flanks they sit behind the spires
+				const float R = (Back > 0.4f ? MRng.FRandRange(7600.f, 9000.f) : MRng.FRandRange(10500.f, 12500.f)) + Wm * 0.2f;
+				const FRotator Rot(0.f, MRng.FRandRange(0.f, 360.f), 0.f);
+				const FVector Scale(Sxy, Sxy, Sz3);
+				const FVector Pivot = Rot.RotateVector(FVector(B.GetCenter().X, B.GetCenter().Y, B.Min.Z) * Scale);
+				if (UStaticMeshComponent* C = AddMesh(M, MtnMat, false, false))
+				{
+					C->SetRelativeTransform(FTransform(Rot, FVector(Pol(R, A)) + FVector(0.f, 0.f, Z0) - Pivot, Scale));
+					C->SetCanEverAffectNavigation(false);
+				}
+			}
+		}
 	}
 
 	// ---- Round 3: cloud sea (soft anime cloud puffs drifting below the island and around the peaks) ----
@@ -687,26 +753,29 @@ void AZoogiArena::BuildFrozen()
 	BuildWall(WallNA0, WallNA1, true);
 	BuildWall(WallWA0, WallWA1, false);
 	BuildWall(WallEA0, WallEA1, false);
+	// Bridge alignment (Evan 10:49 PM): W / E arcs and the fill arcs leave every bridge a clear gap of +/- BridgeWallGapDeg.
 	// Polish r2 (Evan 9:16 PM): wall the rest of the ring edge with the same breakable ice walls (same style / height /
 	// HP / collider / forming). Left open: the 4 bridges (36 / 140 / 186 / 354), the Recovery Gate (45) + Launch Rail entry
 	// (r1200 yaw 35), the arches (140 / 230 / 310) and the snow-chute ramp (231.5). Arcs: ZoogiFrozen::WallFillArcs.
 	for (const FVector2D& Arc : WallFillArcs) BuildWall(Arc.X, Arc.Y, false);
 
 	// ---- rim arches (SE = Recovery Gate with a portal sheet) ----
-	for (int32 k = 0; k < 4; ++k)
+	for (int32 k = 0; k < (int32)UE_ARRAY_COUNT(ArchYaw); ++k)
 	{
 		const float Yaw = ArchYaw[k];
+		// Bridge arches (Evan 10:49 PM): centred on the bridge yaw / centreline and wider so the deck + rails pass cleanly.
+		const float HW = NearIsletYaw(Yaw, 1.f) ? BridgeArchHalfW : ArchHalfW;
 		AZoogiArenaPiece* P = SpawnPiece(Pol(ArchR, Yaw), Yaw, k == 0 ? TEXT("gate_arch") : TEXT("arch"), TEXT("Stone"), 160.f);
 		if (!P) continue;
 		// Local: X = outward, Y = along the rim.
 		for (int32 s = -1; s <= 1; s += 2)
 		{
-			P->AddBox(FVector(0, s * ArchHalfW, 16.f), FVector(64.f, 64.f, 32.f), FRotator::ZeroRotator, StoneDark);
-			P->AddBox(FVector(0, s * ArchHalfW, 32.f + (ArchH - 120.f) * 0.5f), FVector(46.f, 46.f, ArchH - 120.f), FRotator::ZeroRotator, Stone);
-			P->AddBox(FVector(0, s * ArchHalfW, ArchH - 116.f), FVector(54.f, 54.f, 10.f), FRotator::ZeroRotator, Snow, false);
+			P->AddBox(FVector(0, s * HW, 16.f), FVector(64.f, 64.f, 32.f), FRotator::ZeroRotator, StoneDark);
+			P->AddBox(FVector(0, s * HW, 32.f + (ArchH - 120.f) * 0.5f), FVector(46.f, 46.f, ArchH - 120.f), FRotator::ZeroRotator, Stone);
+			P->AddBox(FVector(0, s * HW, ArchH - 116.f), FVector(54.f, 54.f, 10.f), FRotator::ZeroRotator, Snow, false);
 		}
 		// Semicircular top from 7 voussoirs.
-		const float Rr = ArchHalfW, Zs = ArchH - 120.f;
+		const float Rr = HW, Zs = ArchH - 120.f;
 		for (int32 v = 0; v < 7; ++v)
 		{
 			const float T0 = PI * v / 7.f, T1 = PI * (v + 1) / 7.f, Tm = (T0 + T1) * 0.5f;
@@ -719,11 +788,11 @@ void AZoogiArena::BuildFrozen()
 		P->MarkGlow(Key);
 		if (k == 0)
 		{
-			UStaticMeshComponent* Portal = P->AddBox(FVector(0.f, 0.f, (Zs + Rr) * 0.5f - 10.f), FVector(3.f, ArchHalfW * 2.f - 40.f, Zs + Rr * 0.7f), FRotator::ZeroRotator, ZoogiUtil::FxMID(this, ZoogiUtil::Hex(TEXT("#69E1F9")), 0.6f), false);
+			UStaticMeshComponent* Portal = P->AddBox(FVector(0.f, 0.f, (Zs + Rr) * 0.5f - 10.f), FVector(3.f, HW * 2.f - 40.f, Zs + Rr * 0.7f), FRotator::ZeroRotator, ZoogiUtil::FxMID(this, ZoogiUtil::Hex(TEXT("#69E1F9")), 0.6f), false);
 			P->MarkGlow(Portal);
 		}
 		for (int32 s = -1; s <= 1; s += 2)
-			P->AddColliderCyl(FVector2D(0.f, s * ArchHalfW), ArchPostR, 0.f, ArchH - 110.f, TEXT("ZArch"), StonePM);
+			P->AddColliderCyl(FVector2D(0.f, s * HW), ArchPostR, 0.f, ArchH - 110.f, TEXT("ZArch"), StonePM);
 		P->RubbleKeepZ = 40.f;
 		P->FinishBuild();
 		if (Forming) Forming->AddActor(P, EZoogiFormStyle::Drop, FVector(0, 0, 900.f), 0.3f + 0.2f * k, 0.95f);

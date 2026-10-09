@@ -21,16 +21,23 @@ namespace ZoogiFrozen
 	constexpr float WallThick = 34.f;
 	constexpr float WallH = 95.f;
 	constexpr float WallNA0 = 262.f, WallNA1 = 300.f;
-	constexpr float WallWA0 = 166.f, WallWA1 = 194.f;
-	constexpr float WallEA0 = 330.f, WallEA1 = 352.f;
+	// Bridge alignment (Evan Oct 8 10:49 PM): every bridge gets a clear opening in the ring wall centred on its yaw,
+	// +/- BridgeWallGapDeg (rails + Zoogi margin). W was 166-194 (closed the yaw-186 bridge), E was 330-352 (pinched 354).
+	constexpr float BridgeWallGapDeg = 6.5f;
+	constexpr float WallWA0 = 166.f, WallWA1 = 179.5f;
+	constexpr float WallEA0 = 330.f, WallEA1 = 347.5f;
 	// Polish r2 (Evan Oct 8 9:16 PM): extra breakable ice-wall arcs (same WallR / style) so the whole ring edge is walled,
 	// leaving open the bridges (36 / 140 / 186 / 354), Recovery Gate 45 + Launch Rail entry (r1200 yaw 35), arches 140 / 230 / 310
 	// and the snow-chute ramp (231.5). Each pair = yaw from / to (deg).
-	inline const FVector2D WallFillArcs[6] = { FVector2D(3.f, 25.f), FVector2D(54.f, 131.f), FVector2D(149.f, 166.f), FVector2D(194.f, 221.f), FVector2D(240.f, 262.f), FVector2D(318.f, 330.f) };
+	inline const FVector2D WallFillArcs[6] = { FVector2D(0.5f, 29.5f), FVector2D(54.f, 133.5f), FVector2D(146.5f, 166.f), FVector2D(192.5f, 221.f), FVector2D(240.f, 262.f), FVector2D(300.f, 330.f) }; // bridge-aligned gaps 354/36/140/186 +/-6.5; gate 45 and ramp arch 230 open; 300-330 closed (the 310 arch moved to the 354 bridge)
 	// Rim arches (the SE one is the Recovery Gate).
 	constexpr float ArchR = 1590.f;
-	constexpr float ArchYaw[4] = { 45.f, 140.f, 230.f, 310.f };
+	// [0] Recovery Gate (gameplay, fixed), [2] snow-chute ramp arch. Bridge alignment (Evan 10:49 PM): every bridge runs
+	// straight through an arch on its own yaw: 140 (kept), 354 (was 310, moved), 186 (new). The 36 bridge has none: the
+	// Recovery Gate (45) and the Launch Rail entry (r1200 yaw 35) beside it stay where they are.
+	constexpr float ArchYaw[5] = { 45.f, 140.f, 230.f, 354.f, 186.f };
 	constexpr float ArchHalfW = 135.f;
+	constexpr float BridgeArchHalfW = 150.f;     // bridge arches: post collider inner face 126 cm clears the deck rails (107)
 	constexpr float ArchPostR = 24.f;
 	constexpr float ArchH = 270.f;
 	// Snow chute launch ramp (NW, rises outward toward the arch): centre, yaw of the rise, length, width, lip height.
