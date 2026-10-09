@@ -16,7 +16,7 @@ class ACameraActor;
  *  3 bridge   medium roll from the court out over a bridge -> the Zoogi ends on the islet (not out)
  *  4 lip      medium roll across an islet into its snow lip -> stays on the islet
  *  5 ringout  full-power roll across an islet -> hops the lip and falls (ring out still possible)
- *  6-9 bridge_<yaw> (Oct 8, Evan 10:50 PM) normal shot from r1150 straight along each bridge centreline (186 / 354 / 140 / 36):
+ *  6-11 bridge_<yaw> (Oct 8, Evan 10:50 PM) normal shot from r1150 straight along each bridge centreline (IsletYaw: 180 / 0 / 135 / 45 / 225 / 315):
  *     through the bridge arch / wall gap -> passes within ZoogiRadius + OrbRadius + 10 of the islet orb spot, ends on the islet
  */
 UCLASS()
