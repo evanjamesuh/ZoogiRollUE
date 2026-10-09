@@ -20,6 +20,11 @@
 #include "Misc/Paths.h"
 #include "HAL/PlatformTime.h"
 #include "UnrealClient.h"
+#include "ZoogiAerialFX.h"
+#include "ZoogiAerialProps.h"
+#include "ZoogiBattleStateMachine.h"
+#include "ZoogiMiniGame.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/PlayerController.h"
@@ -375,11 +380,129 @@ void UZoogiPortalSubsystem::TickTopShot(UWorld* W)
 	}
 }
 
+void UZoogiPortalSubsystem::TickAirReticle(AZoogiGameMode* G)
+{
+	UZoogiBattleStateMachine* SM = G ? UZoogiBattleStateMachine::Get(G) : nullptr;
+	AZoogiBall* Body = nullptr;
+	if (SM && SM->IsAirReactionOpen())
+		if (const UZoogiMiniGame* M = SM->ActiveMiniGame)
+			if (G->Balls.IsValidIndex(M->Owner)) Body = G->Balls[M->Owner];
+	if (Body && !Body->bOut)
+	{
+		if (!Reticle.IsValid() || !Reticle->IsFollowing(Body))
+		{
+			if (Reticle.IsValid()) Reticle->Release();
+			FActorSpawnParameters P;
+			P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			AZoogiAirReticle* R = GetWorld()->SpawnActor<AZoogiAirReticle>(AZoogiAirReticle::StaticClass(), Body->BallLocation(), FRotator::ZeroRotator, P);
+			if (R) R->Follow(Body, ZoogiConst::ZoogiRadius);
+			Reticle = R;
+		}
+	}
+	else if (Reticle.IsValid()) { Reticle->Release(); Reticle = nullptr; }
+}
+
+void UZoogiPortalSubsystem::TickPropShots(UWorld* W, AZoogiGameMode* G)
+{
+	UZoogiBattleStateMachine* SM = G ? UZoogiBattleStateMachine::Get(G) : nullptr;
+	APlayerController* PC = W ? W->GetFirstPlayerController() : nullptr;
+	if (!SM || !PC) return;
+	const uint64 Now = GFrameCounter;
+	const float GameT = W->GetTimeSeconds();
+	const FVector Up = FVector::UpVector;
+	auto Path = [&](const TCHAR* Name) { return FPaths::Combine(PropShotDir, FString::Printf(TEXT("%s.png"), Name)); };
+	if (ViewStage == 0 && ViewQ.Num() == 0)
+	{
+		for (AZoogiAerialProp* Pr : SM->Props)
+		{
+			if (!Pr || Pr->Kind != EZoogiPropKind::SkyBumper) continue;
+			int32& Seen = SeenRebounds.FindOrAdd(Pr);
+			if (Pr->Rebounds <= Seen) continue;
+			Seen = Pr->Rebounds;
+			if (PropShotCount >= 3) continue;
+			const FVector C = Pr->GetActorLocation();
+			const FVector N = Pr->LastNormal.IsNearlyZero() ? Up : Pr->LastNormal;
+			FVector Side = FVector::CrossProduct(Up, N).GetSafeNormal();
+			if (Side.IsNearlyZero()) Side = FVector::RightVector;
+			const FVector Look = C + N * Pr->Size * 0.7f;
+			ViewQ.Add({ Path(*FString::Printf(TEXT("bumper_hit_%d"), ++PropShotCount)), Look + (N * 0.6f + Side * 0.7f + Up * 0.3f).GetSafeNormal() * (Pr->Size * 5.f + 300.f), Look, 62.f, 3, 20 });
+			break;
+		}
+		if (ViewQ.Num() == 0 && !bAirShot && Reticle.IsValid())
+		{
+			bAirShot = true;
+			const FVector C = Reticle->GetActorLocation();
+			FVector Cam = C + FVector(0, 600, 300);
+			if (APlayerCameraManager* PCM = PC->PlayerCameraManager) Cam = PCM->GetCameraLocation();
+			FVector D = (Cam - C).GetSafeNormal2D();
+			if (D.IsNearlyZero()) D = FVector(0, 1, 0);
+			ViewQ.Add({ Path(TEXT("air_reticle")), C + D * 420.f + Up * 150.f, C, 55.f, 8, 12 });
+		}
+		if (ViewQ.Num() == 0 && GameT > 12.f && (!bHaloShot || !bIdleShot))
+		{
+			for (AZoogiAerialProp* Pr : SM->Props)
+			{
+				if (!Pr) continue;
+				const FVector C = Pr->GetActorLocation();
+				const FVector F = Pr->Forward;
+				const FVector Sd = FVector::CrossProduct(Up, F).GetSafeNormal();
+				if (!bHaloShot && Pr->Kind == EZoogiPropKind::ResonanceHalo && (Pr->bAerialRing || Pr->Tag == TEXT("halo_w")))
+				{
+					bHaloShot = true;
+					const FVector Mid = Pr->bAerialRing ? C + Up * 40.f : C + Up * Pr->Size;
+					FVector In = FVector(-Mid.X, -Mid.Y, 0.f).GetSafeNormal();
+					if (FMath::Abs(FVector::DotProduct(In, F)) < 0.3f) In = F; // look through the opening
+					else if (FVector::DotProduct(In, F) < 0.f) In = -F;
+					ViewQ.Add({ Path(*FString::Printf(TEXT("halo_%s"), *Pr->Tag.ToString())), Mid + In * (Pr->Size * 5.f) + Sd * (Pr->Size * 1.3f) + Up * 70.f, Mid, 55.f, 6, 10 });
+				}
+				else if (!bIdleShot && Pr->Kind == EZoogiPropKind::SkyBumper && Pr->Tag == TEXT("chute"))
+				{
+					bIdleShot = true;
+					const FVector In = FVector(-C.X, -C.Y, 0.f).GetSafeNormal();
+					ViewQ.Add({ Path(TEXT("bumper_chute_idle")), C + In * (Pr->Size * 6.f + 200.f) + FVector::CrossProduct(Up, In) * 160.f + Up * 60.f, C + Up * 40.f, 60.f, 6, 10 });
+				}
+			}
+			bHaloShot = true; bIdleShot = true; // once per run, even if the layout has none
+		}
+	}
+	if (ViewQ.Num() == 0) return;
+	const FViewShot& V = ViewQ[0];
+	if (ViewStage == 0)
+	{
+		FActorSpawnParameters SP;
+		SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		ACameraActor* Cam = W->SpawnActor<ACameraActor>(V.Loc, (V.Look - V.Loc).Rotation(), SP);
+		if (!Cam) { ViewQ.RemoveAt(0); return; }
+		Cam->GetCameraComponent()->SetFieldOfView(V.Fov);
+		Cam->GetCameraComponent()->bConstrainAspectRatio = false;
+		if (!ViewPrev.IsValid()) ViewPrev = PC->GetViewTarget();
+		PC->SetViewTarget(Cam);
+		ViewCam = Cam; ViewStage = 1; ViewAt = Now + V.Delay;
+		return;
+	}
+	if (ViewCam.IsValid() && PC->GetViewTarget() != ViewCam.Get()) PC->SetViewTarget(ViewCam.Get());
+	if (Now < ViewAt) return;
+	if (ViewStage == 1)
+	{
+		FScreenshotRequest::RequestScreenshot(V.Path, false, false); // engine viewport only, no UI
+		UE_LOG(LogZoogi, Log, TEXT("PROPSHOT requested: %s"), *V.Path);
+		ViewStage = 2; ViewAt = Now + V.Hold;
+		return;
+	}
+	if (ViewCam.IsValid()) ViewCam->Destroy();
+	ViewQ.RemoveAt(0);
+	ViewStage = 0;
+	if (ViewQ.Num() == 0 && ViewPrev.IsValid()) { PC->SetViewTarget(ViewPrev.Get()); ViewPrev = nullptr; }
+}
+
 void UZoogiPortalSubsystem::Tick(float DeltaTime)
 {
 	UWorld* W = GetWorld();
 	AZoogiGameMode* G = W ? W->GetAuthGameMode<AZoogiGameMode>() : nullptr;
-	if (!bLoaded) { FParse::Value(FCommandLine::Get(), TEXT("ZoogiPortalShots="), ShotDir); FParse::Value(FCommandLine::Get(), TEXT("ZoogiTopShot="), TopShot); FParse::Value(FCommandLine::Get(), TEXT("ZoogiCentreShot="), CentreShot); }
+	if (!bLoaded) { FParse::Value(FCommandLine::Get(), TEXT("ZoogiPortalShots="), ShotDir); FParse::Value(FCommandLine::Get(), TEXT("ZoogiTopShot="), TopShot); FParse::Value(FCommandLine::Get(), TEXT("ZoogiCentreShot="), CentreShot); FParse::Value(FCommandLine::Get(), TEXT("ZoogiPropShots="), PropShotDir); }
+	TickAirReticle(G);
+	if (!PropShotDir.IsEmpty()) TickPropShots(W, G);
+	if (W && W->IsPaused()) return; // paused (hold): cosmetic reticle / captures only
 	if ((!TopShot.IsEmpty() || !CentreShot.IsEmpty()) && TopStage < 3 && Portals.Num() > 0) TickTopShot(W);
 	for (int32 i = ShotsLater.Num() - 1; i >= 0; --i)
 		if (FPlatformTime::Seconds() >= ShotsLater[i].Value)

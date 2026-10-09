@@ -1,4 +1,5 @@
 #include "ZoogiAerialProps.h"
+#include "ZoogiAerialFX.h"
 #include "ZoogiBattleStateMachine.h"
 #include "ZoogiBall.h"
 #include "ZoogiArena.h"
@@ -136,6 +137,8 @@ void AZoogiAerialProp::OnSolidHit(UPrimitiveComponent* HitComp, AActor* OtherAct
 		const FVector Out = R.GetSafeNormal() * Speed;
 		B->Sphere->SetPhysicsLinearVelocity(Out);
 		LastIn = VIn; LastOut = Out; LastNormal = N; ++Rebounds;
+		// Oct 9: cosmetic star-burst + ice shards at the contact (visual only, own random stream)
+		AZoogiImpactFlash::Spawn(GetWorld(), C + N * Size, N, PropId * 131 + Rebounds, FMath::Clamp(Size / 70.f, 0.8f, 1.4f));
 		UE_LOG(LogZoogi, Log, TEXT("BATTLE skybumper %s P%d in=(%.0f,%.0f,%.0f)|%.0f| n=(%.2f,%.2f,%.2f) out=(%.0f,%.0f,%.0f)|%.0f| mul=%.2f"), *Label(), B->PlayerIndex + 1,
 			VIn.X, VIn.Y, VIn.Z, VIn.Size(), N.X, N.Y, N.Z, Out.X, Out.Y, Out.Z, Out.Size(), ReboundMul);
 		if (SM) SM->OnPropEvent(this, B, TEXT("bumper"), B->BallLocation(), VIn.Size(), Out.Size());
@@ -315,63 +318,192 @@ void AZoogiAerialProp::BuildVisuals(AZoogiArena* Arena)
 		Tube(SDark, Top + Side * 40.f, D + Side * 40.f - FVector(0, 0, 18.f), 2.5f);
 		Tube(SDark, Top - Side * 40.f, D - Side * 40.f - FVector(0, 0, 18.f), 2.5f);
 	};
+	// Oct 9 (Evan, refs resonance_halo_detail / sky_bumper_detail / frozen_zones_aerial): ref-style dressing. Visual only
+	// (every mesh NoCollision, RULE ZERO): the solids / triggers built in Build() are unchanged.
+	auto HexIce = [&](FZoogiMeshBuilder& M, const FVector& P, float S, int32 Seed)
+	{
+		FRandomStream R(PropId * 977 + Seed);
+		M.Chunk(P, FVector(S, S * 0.8f, S * 0.6f), R, 0.35f, R.FRandRange(0.f, 360.f));
+	};
+	auto Icicle = [&](FZoogiMeshBuilder& M, const FVector& P, float Len, float W)
+	{
+		// hanging spike (world down), 5-sided cone
+		M.Prism(FVector2D(P.X, P.Y), 5, W, 0.5f, P.Z - Len, P.Z, 0.f, 0.f, false);
+	};
+	auto Chain = [&](FZoogiMeshBuilder& M, const FVector& A, const FVector& B, float LinkR)
+	{
+		// alternating links along A -> B
+		const FVector D = B - A;
+		const float L = D.Size();
+		if (L < 1.f) return;
+		const FVector Dir = D / L;
+		FVector S1 = FVector::CrossProduct(Dir, FVector::ForwardVector);
+		if (S1.SizeSquared() < 0.01f) S1 = FVector::CrossProduct(Dir, FVector::RightVector);
+		S1.Normalize();
+		const FVector S2 = FVector::CrossProduct(Dir, S1).GetSafeNormal();
+		const float Step = LinkR * 2.6f;
+		int32 i = 0;
+		for (float T = LinkR; T < L - LinkR * 0.5f; T += Step, ++i)
+			Torus(M, A + Dir * T, Dir, (i % 2) ? S1 : S2, LinkR, LinkR * 0.28f, 0.f, 360.f, 10, 4);
+	};
+	auto Coil = [&](FZoogiMeshBuilder& M, const FVector& A, const FVector& B, float CoilR, float WireR, int32 Turns)
+	{
+		const FVector D = B - A;
+		const FVector Dir = D.GetSafeNormal();
+		FVector S1 = FVector::CrossProduct(Dir, FVector::UpVector);
+		if (S1.SizeSquared() < 0.01f) S1 = FVector::CrossProduct(Dir, FVector::ForwardVector);
+		S1.Normalize();
+		const FVector S2 = FVector::CrossProduct(Dir, S1).GetSafeNormal();
+		const int32 N = Turns * 10;
+		FVector Prev = A + S1 * CoilR;
+		for (int32 k = 1; k <= N; ++k)
+		{
+			const float T = (float)k / N, Ang = T * Turns * 2.f * PI;
+			const FVector P = A + D * T + (S1 * FMath::Cos(Ang) + S2 * FMath::Sin(Ang)) * CoilR;
+			Tube(M, Prev, P, WireR, 5);
+			Prev = P;
+		}
+	};
+	auto StoneBlocks = [&](FZoogiMeshBuilder& M, const FVector& C, const FVector& Ax, const FVector& Ay, const FVector& N, float R, float Half, float A0, float A1, int32 Count)
+	{
+		// carved stone ring as separate blocks with thin gaps (the art's ancient frame)
+		const float Span = (A1 - A0) / Count;
+		for (int32 k = 0; k < Count; ++k)
+		{
+			const float A = FMath::DegreesToRadians(A0 + Span * (k + 0.5f));
+			const FVector Rad = Ax * FMath::Cos(A) + Ay * FMath::Sin(A);
+			const FVector Tan = -Ax * FMath::Sin(A) + Ay * FMath::Cos(A);
+			const FVector P = C + Rad * R;
+			const float Arc = FMath::DegreesToRadians(Span) * R * 0.5f - 2.5f;
+			const FRotator Rot = FRotationMatrix::MakeFromXY(Tan, Rad).Rotator();
+			M.Box(P, FVector(FMath::Max(Arc, 4.f), Half, Half * 1.05f), Rot);
+		}
+	};
 	if (Kind == EZoogiPropKind::ResonanceHalo)
 	{
-		// stone ring + inner cyan glow line (the rim spheres sit on the ring's centre line)
+		// carved stone blocks around a bright cyan inner rim, stone hubs on the sides, support posts / hanging stack
 		const FVector C = bAerialRing ? FVector::ZeroVector : FVector(0, 0, Size);
 		const float A0 = bAerialRing ? 0.f : -50.f, A1 = bAerialRing ? 360.f : 230.f;
-		Torus(SStone, C, Side, Up, Size, 17.f, A0, A1, 56, 10);
-		Torus(SGlow, C + Forward * 9.f, Side, Up, Size - 15.f, 3.5f, A0, A1, 56, 6);
-		Torus(SGlow, C - Forward * 9.f, Side, Up, Size - 15.f, 3.5f, A0, A1, 56, 6);
+		Torus(SStone, C, Side, Up, Size, 15.f, A0, A1, 56, 10);
+		StoneBlocks(SDark, C, Side, Up, Forward, Size + 6.f, 13.f, A0, A1, bAerialRing ? 18 : 14);
+		UMaterialInterface* RimHot = ZoogiUtil::GlowMID(this, FLinearColor(0.35f, 0.95f, 1.f), 6.f);
+		FZoogiMeshBuilder SRim;
+		Torus(SRim, C + Forward * 10.f, Side, Up, Size - 17.f, 4.5f, A0, A1, 64, 6);
+		Torus(SRim, C - Forward * 10.f, Side, Up, Size - 17.f, 4.5f, A0, A1, 64, 6);
+		Torus(SGlow, C + Forward * 17.f, Side, Up, Size + 4.f, 2.5f, A0, A1, 64, 5);
+		Torus(SGlow, C - Forward * 17.f, Side, Up, Size + 4.f, 2.5f, A0, A1, 64, 5);
+		NewVisual(RimHot, SRim);
+		// side hubs (3 / 9 o'clock): stone drums with a glowing rune cap
+		for (int32 s = -1; s <= 1; s += 2)
+		{
+			const FVector H = C + Side * s * (Size + 20.f);
+			SDark.Box(H, FVector(26.f, 14.f, 26.f), Forward.Rotation());
+			Torus(SGlow, H + Side * s * 15.f, Forward, Up, 11.f, 2.5f, 0.f, 360.f, 20, 5);
+		}
 		if (!bAerialRing)
 		{
-			// two stone feet down to the floor at the open ends
+			// support posts with plinths at the open ends
 			for (float A : { -50.f, 230.f })
 			{
 				const float R = FMath::DegreesToRadians(A);
 				const FVector P = C + Side * FMath::Cos(R) * Size + Up * FMath::Sin(R) * Size;
 				SDark.Box(FVector(P.X, P.Y, P.Z * 0.5f), FVector(22.f, 22.f, P.Z * 0.5f + 2.f), Forward.Rotation());
+				SStone.Box(FVector(P.X, P.Y, 6.f), FVector(32.f, 32.f, 7.f), Forward.Rotation());
+				Torus(SGlow, FVector(P.X, P.Y, 14.f), FVector::ForwardVector, FVector::RightVector, 26.f, 2.f, 0.f, 360.f, 20, 4);
+				HexIce(SStone, FVector(P.X, P.Y, 4.f) + Forward * 30.f, 12.f, (int32)A);
 			}
 		}
-		else Hang(FVector(0, 0, Size + 15.f), Size + 330.f);
+		else
+		{
+			// hanging stack: a horizontal glowing ring (stone hub) above the halo, cables down to the halo's hubs
+			const float TopZ = Size + 150.f;
+			Torus(SStone, FVector(0, 0, TopZ), FVector::ForwardVector, FVector::RightVector, Size * 0.75f, 10.f, 0.f, 360.f, 48, 8);
+			FZoogiMeshBuilder SStack;
+			Torus(SStack, FVector(0, 0, TopZ - 8.f), FVector::ForwardVector, FVector::RightVector, Size * 0.75f - 12.f, 3.5f, 0.f, 360.f, 48, 6);
+			Torus(SStack, FVector(0, 0, TopZ + 70.f), FVector::ForwardVector, FVector::RightVector, Size * 0.5f, 3.f, 0.f, 360.f, 40, 6);
+			NewVisual(RimHot, SStack);
+			SDark.Box(FVector(0, 0, TopZ + 70.f), FVector(16.f, 16.f, 10.f));
+			for (int32 s = -1; s <= 1; s += 2)
+			{
+				Tube(SDark, C + Side * s * (Size + 20.f) + FVector(0, 0, 26.f), FVector(0, 0, TopZ) + Side * s * Size * 0.75f, 2.5f);
+				Tube(SDark, FVector(0, 0, TopZ) + Side * s * Size * 0.75f, FVector(0, 0, TopZ + 70.f) + Side * s * Size * 0.5f, 2.f);
+			}
+			Hang(FVector(0, 0, TopZ + 80.f), Size + 330.f);
+		}
 	}
 	else if (Kind == EZoogiPropKind::SkyBumper)
 	{
-		// elastic forcefield cap (soft glow sphere) + orange spring rings + stone frame
-		UMaterialInterface* Cap = ZoogiUtil::GlowMID(this, FLinearColor(0.55f, 0.9f, 1.f), 0.9f);
+		// spring-loaded resonance node (cyan core, orange coil springs) in an ancient icy stone frame
+		UMaterialInterface* Cap = ZoogiUtil::FxMID(this, FLinearColor(0.3f, 0.75f, 1.f), 0.55f); // see-through forcefield cap
 		UMaterialInterface* Spring = ZoogiUtil::GlowMID(this, Orange, 2.6f);
-		FZoogiMeshBuilder SCap, SSpring;
+		UMaterialInterface* Core = ZoogiUtil::GlowMID(this, FLinearColor(0.45f, 0.95f, 1.f), 7.f);
+		UMaterialInterface* Ice = Mat(Arena, this, TEXT("Ice"), FLinearColor(0.75f, 0.9f, 1.f));
+		FZoogiMeshBuilder SCap, SSpring, SCore, SIce;
 		Sphere(SCap, FVector::ZeroVector, Size * 0.9f, 20);
+		Sphere(SCore, FVector::ZeroVector, Size * 0.55f, 16);
+		Torus(SSpring, FVector::ZeroVector, FVector::ForwardVector, FVector::UpVector, Size * 0.62f, 2.5f, 0.f, 360.f, 32, 5); // orange node bands
+		Torus(SSpring, FVector::ZeroVector, FVector::RightVector, FVector::UpVector, Size * 0.62f, 2.5f, 0.f, 360.f, 32, 5);
 		Torus(SSpring, FVector(0, 0, 8.f), FVector::ForwardVector, FVector::RightVector, Size + 3.f, 5.f, 0.f, 360.f, 40, 6);
 		Torus(SSpring, FVector(0, 0, -14.f), FVector::ForwardVector, FVector::RightVector, Size - 2.f, 4.f, 0.f, 360.f, 40, 6);
 		const bool bFloor = Base.Z < 150.f && Tag != TEXT("chute");
 		if (bFloor)
 		{
-			// stone base ring on the floor + four short posts holding the node
+			// stone base ring on the floor + four short posts; horizontal coil springs from the posts to the node
 			const float Zf = -Base.Z;
 			Torus(SDark, FVector(0, 0, Zf + 10.f), FVector::ForwardVector, FVector::RightVector, Size + 22.f, 12.f, 0.f, 360.f, 40, 8);
+			StoneBlocks(SStone, FVector(0, 0, Zf + 12.f), FVector::ForwardVector, FVector::RightVector, FVector::UpVector, Size + 34.f, 9.f, 0.f, 360.f, 12);
 			for (int32 k = 0; k < 4; ++k)
 			{
 				const float A = FMath::DegreesToRadians(45.f + 90.f * k);
-				const FVector P(FMath::Cos(A) * (Size + 22.f), FMath::Sin(A) * (Size + 22.f), 0.f);
+				const FVector Dir(FMath::Cos(A), FMath::Sin(A), 0.f);
+				const FVector P = Dir * (Size + 22.f);
 				Tube(SStone, P + FVector(0, 0, Zf), P + FVector(0, 0, 18.f), 8.f);
+				Coil(SSpring, P + FVector(0, 0, 4.f), Dir * (Size * 0.92f) + FVector(0, 0, 4.f), 6.f, 1.6f, 4);
+				HexIce(SIce, P + FVector(0, 0, Zf + 18.f) + Dir * 14.f, 9.f, k);
 			}
 		}
 		else
 		{
-			// hanging node: vertical stone frame facing the court + cables to an anchor disc
+			// vertical ancient stone frame facing the court, radial coil springs to the node, icy chunks + icicles, chains up
 			const FVector In = FVector(-Base.X, -Base.Y, 0.f).GetSafeNormal();
 			const FVector FS = FVector::CrossProduct(Up, In).GetSafeNormal();
-			Torus(SStone, FVector::ZeroVector, FS, Up, Size + 32.f, 14.f, 0.f, 360.f, 48, 8);
-			for (int32 k = 0; k < 4; ++k)
+			const float FR = Size + 46.f;
+			Torus(SDark, FVector::ZeroVector, FS, Up, FR, 12.f, 0.f, 360.f, 48, 8);
+			StoneBlocks(SStone, FVector::ZeroVector, FS, Up, In, FR + 4.f, 17.f, 0.f, 360.f, 12);
+			Torus(SGlow, In * 16.f, FS, Up, FR - 14.f, 3.f, 0.f, 360.f, 56, 5);
+			Torus(SSpring, In * 20.f, FS, Up, FR - 22.f, 2.5f, 0.f, 360.f, 56, 5);
+			for (int32 k = 0; k < 6; ++k)
 			{
-				const float A = FMath::DegreesToRadians(45.f + 90.f * k);
-				Tube(SSpring, (FS * FMath::Cos(A) + Up * FMath::Sin(A)) * (Size * 0.85f), (FS * FMath::Cos(A) + Up * FMath::Sin(A)) * (Size + 22.f), 6.f);
+				const float A = FMath::DegreesToRadians(30.f + 60.f * k);
+				const FVector Rd = FS * FMath::Cos(A) + Up * FMath::Sin(A);
+				Coil(SSpring, Rd * (FR - 12.f), Rd * (Size * 0.92f), 7.f, 1.8f, 5);
 			}
-			Hang(FVector(0, 0, Size + 44.f), Size + 380.f);
+			// ice on the upper blocks + icicles under them
+			FRandomStream R(PropId * 31 + 7);
+			for (int32 k = 0; k < 7; ++k)
+			{
+				const float A = FMath::DegreesToRadians(R.FRandRange(20.f, 160.f));
+				const FVector P = (FS * FMath::Cos(A) + Up * FMath::Sin(A)) * (FR + 18.f);
+				HexIce(SIce, P + Up * 8.f, R.FRandRange(8.f, 14.f), k);
+			}
+			for (int32 k = 0; k < 9; ++k)
+			{
+				const float A = FMath::DegreesToRadians(R.FRandRange(-20.f, 200.f));
+				const FVector P = (FS * FMath::Cos(A) + Up * FMath::Sin(A)) * (FR - 6.f);
+				if (P.Z < -Size * 0.4f) continue;
+				Icicle(SIce, P - Up * 14.f, R.FRandRange(18.f, 42.f), R.FRandRange(3.5f, 6.f));
+			}
+			// hanging chains to an anchor disc
+			const float DiscZ = Size + 380.f;
+			Disc(SStone, FVector(0, 0, DiscZ), 95.f, 18.f);
+			Torus(SGlow, FVector(0, 0, DiscZ - 9.f), FVector::ForwardVector, FVector::RightVector, 95.f, 4.f, 0.f, 360.f, 40, 6);
+			for (int32 s = -1; s <= 1; s += 2)
+				Chain(SDark, FS * s * FR * 0.55f + Up * FR * 0.85f, FVector(0, 0, DiscZ - 18.f) + FS * s * 55.f, 7.f);
 		}
 		NewVisual(Cap, SCap);
+		NewVisual(Core, SCore);
 		NewVisual(Spring, SSpring);
+		NewVisual(Ice, SIce);
 	}
 	else if (Kind == EZoogiPropKind::LaunchRail)
 	{

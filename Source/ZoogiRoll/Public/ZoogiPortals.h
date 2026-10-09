@@ -82,6 +82,8 @@ public:
 	virtual bool ShouldCreateSubsystem(UObject* Outer) const override;
 	virtual void Tick(float DeltaTime) override;
 	virtual TStatId GetStatId() const override;
+	/** Oct 9: ticks while a presentation hold pauses the game (Air Reaction reticle / captures only; portal logic skips). */
+	virtual bool IsTickableWhenPaused() const override { return true; }
 
 	static bool Enabled();
 	float BoostAdd = 450.f, MaxSpeed = 2600.f, MinSpeed = 60.f, Cooldown = 0.75f;
@@ -117,4 +119,18 @@ protected:
 	double TopAt = 0.0;
 	TWeakObjectPtr<AActor> TopCam, TopPrevView;
 	void TickTopShot(UWorld* W);
+	// Oct 9: Air Reaction targeting reticle (cosmetic, follows the offered Zoogi) + -ZoogiPropShots=<dir> close-ups
+	// (Sky Bumper impact, halo, air reticle): camera-only engine-viewport captures, never the desktop.
+	TWeakObjectPtr<class AZoogiAirReticle> Reticle;
+	void TickAirReticle(class AZoogiGameMode* G);
+	FString PropShotDir;
+	struct FViewShot { FString Path; FVector Loc; FVector Look; float Fov; int32 Delay; int32 Hold; }; // Delay / Hold in frames (also runs while a hold pauses the game)
+	TArray<FViewShot> ViewQ;
+	int32 ViewStage = 0;
+	uint64 ViewAt = 0;
+	TWeakObjectPtr<AActor> ViewCam, ViewPrev;
+	TMap<TWeakObjectPtr<AActor>, int32> SeenRebounds;
+	int32 PropShotCount = 0;
+	bool bHaloShot = false, bAirShot = false, bIdleShot = false;
+	void TickPropShots(UWorld* W, class AZoogiGameMode* G);
 };
