@@ -687,26 +687,29 @@ void AZoogiArena::BuildFrozen()
 	BuildWall(WallNA0, WallNA1, true);
 	BuildWall(WallWA0, WallWA1, false);
 	BuildWall(WallEA0, WallEA1, false);
+	// Bridge alignment (Evan 10:49 PM): W / E arcs and the fill arcs leave every bridge a clear gap of +/- BridgeWallGapDeg.
 	// Polish r2 (Evan 9:16 PM): wall the rest of the ring edge with the same breakable ice walls (same style / height /
 	// HP / collider / forming). Left open: the 4 bridges (36 / 140 / 186 / 354), the Recovery Gate (45) + Launch Rail entry
 	// (r1200 yaw 35), the arches (140 / 230 / 310) and the snow-chute ramp (231.5). Arcs: ZoogiFrozen::WallFillArcs.
 	for (const FVector2D& Arc : WallFillArcs) BuildWall(Arc.X, Arc.Y, false);
 
 	// ---- rim arches (SE = Recovery Gate with a portal sheet) ----
-	for (int32 k = 0; k < 4; ++k)
+	for (int32 k = 0; k < (int32)UE_ARRAY_COUNT(ArchYaw); ++k)
 	{
 		const float Yaw = ArchYaw[k];
+		// Bridge arches (Evan 10:49 PM): centred on the bridge yaw / centreline and wider so the deck + rails pass cleanly.
+		const float HW = NearIsletYaw(Yaw, 1.f) ? BridgeArchHalfW : ArchHalfW;
 		AZoogiArenaPiece* P = SpawnPiece(Pol(ArchR, Yaw), Yaw, k == 0 ? TEXT("gate_arch") : TEXT("arch"), TEXT("Stone"), 160.f);
 		if (!P) continue;
 		// Local: X = outward, Y = along the rim.
 		for (int32 s = -1; s <= 1; s += 2)
 		{
-			P->AddBox(FVector(0, s * ArchHalfW, 16.f), FVector(64.f, 64.f, 32.f), FRotator::ZeroRotator, StoneDark);
-			P->AddBox(FVector(0, s * ArchHalfW, 32.f + (ArchH - 120.f) * 0.5f), FVector(46.f, 46.f, ArchH - 120.f), FRotator::ZeroRotator, Stone);
-			P->AddBox(FVector(0, s * ArchHalfW, ArchH - 116.f), FVector(54.f, 54.f, 10.f), FRotator::ZeroRotator, Snow, false);
+			P->AddBox(FVector(0, s * HW, 16.f), FVector(64.f, 64.f, 32.f), FRotator::ZeroRotator, StoneDark);
+			P->AddBox(FVector(0, s * HW, 32.f + (ArchH - 120.f) * 0.5f), FVector(46.f, 46.f, ArchH - 120.f), FRotator::ZeroRotator, Stone);
+			P->AddBox(FVector(0, s * HW, ArchH - 116.f), FVector(54.f, 54.f, 10.f), FRotator::ZeroRotator, Snow, false);
 		}
 		// Semicircular top from 7 voussoirs.
-		const float Rr = ArchHalfW, Zs = ArchH - 120.f;
+		const float Rr = HW, Zs = ArchH - 120.f;
 		for (int32 v = 0; v < 7; ++v)
 		{
 			const float T0 = PI * v / 7.f, T1 = PI * (v + 1) / 7.f, Tm = (T0 + T1) * 0.5f;
@@ -719,11 +722,11 @@ void AZoogiArena::BuildFrozen()
 		P->MarkGlow(Key);
 		if (k == 0)
 		{
-			UStaticMeshComponent* Portal = P->AddBox(FVector(0.f, 0.f, (Zs + Rr) * 0.5f - 10.f), FVector(3.f, ArchHalfW * 2.f - 40.f, Zs + Rr * 0.7f), FRotator::ZeroRotator, ZoogiUtil::FxMID(this, ZoogiUtil::Hex(TEXT("#69E1F9")), 0.6f), false);
+			UStaticMeshComponent* Portal = P->AddBox(FVector(0.f, 0.f, (Zs + Rr) * 0.5f - 10.f), FVector(3.f, HW * 2.f - 40.f, Zs + Rr * 0.7f), FRotator::ZeroRotator, ZoogiUtil::FxMID(this, ZoogiUtil::Hex(TEXT("#69E1F9")), 0.6f), false);
 			P->MarkGlow(Portal);
 		}
 		for (int32 s = -1; s <= 1; s += 2)
-			P->AddColliderCyl(FVector2D(0.f, s * ArchHalfW), ArchPostR, 0.f, ArchH - 110.f, TEXT("ZArch"), StonePM);
+			P->AddColliderCyl(FVector2D(0.f, s * HW), ArchPostR, 0.f, ArchH - 110.f, TEXT("ZArch"), StonePM);
 		P->RubbleKeepZ = 40.f;
 		P->FinishBuild();
 		if (Forming) Forming->AddActor(P, EZoogiFormStyle::Drop, FVector(0, 0, 900.f), 0.3f + 0.2f * k, 0.95f);

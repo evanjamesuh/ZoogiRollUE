@@ -16,6 +16,8 @@ class ACameraActor;
  *  3 bridge   medium roll from the court out over a bridge -> the Zoogi ends on the islet (not out)
  *  4 lip      medium roll across an islet into its snow lip -> stays on the islet
  *  5 ringout  full-power roll across an islet -> hops the lip and falls (ring out still possible)
+ *  6-9 bridge_<yaw> (Oct 8, Evan 10:50 PM) normal shot from r1150 straight along each bridge centreline (186 / 354 / 140 / 36):
+ *     through the bridge arch / wall gap -> passes within ZoogiRadius + OrbRadius + 10 of the islet orb spot, ends on the islet
  */
 UCLASS()
 class ZOOGIROLL_API AZoogiFrozenPlayTest : public AActor
@@ -36,6 +38,8 @@ private:
 	UPROPERTY() TObjectPtr<ACameraActor> Cam;
 	TArray<FString> Results;
 	int32 Before = 0;
+	float BridgeMin = 0.f, BridgeMaxR = -1.f; // closest approach to the islet orb spot, reach time (-1 = not yet)
+	FVector BridgeAt = FVector::ZeroVector;
 	int32 CountDamaged(FName Kind, const FVector& Near, float Radius) const;
 	void View(const FVector& Look, float Yaw, float Pitch, float Dist);
 	void Shot(const TCHAR* Name);
