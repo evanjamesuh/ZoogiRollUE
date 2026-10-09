@@ -1,5 +1,6 @@
 # Frozen polish r4: backdrop mountains from the free "Iceland_Environment" mountain pack (Fab/Marketplace, saved with UE 5.3;
 # copied verbatim from the Epic launcher vault cache into Content/Iceland_Environment, gitignored, never cooked).
+# r5: the material is rebuilt in place and existing derived meshes are kept; adds a camera-distance sky haze.
 # Headless: fzjob.ps1 -Job import -Script Scripts\arenas\frozen_polish\make_frozen_mountains.py
 #  * builds M_FrozenMountain: lit opaque (no toon), Nanite-ready. Icy blue cliff colour x triplanar painterly vertical
 #    striations (T_FrozenStreakTile), deep-blue toward the base, white snow on up-facing slopes above SnowZ, soft emissive fill.
@@ -51,10 +52,13 @@ class G:
 
 
 # ---------------------------------------------------------------- M_FrozenMountain
+# r5: rebuilt in place (graph cleared, same asset) so the derived meshes keep their slot references untouched.
 path = DIR + "/M_FrozenMountain"
 if EAL.does_asset_exist(path):
-    EAL.delete_asset(path)
-m = AT.create_asset("M_FrozenMountain", DIR, unreal.Material, unreal.MaterialFactoryNew())
+    m = unreal.load_asset(path)
+    MEL.delete_all_material_expressions(m)
+else:
+    m = AT.create_asset("M_FrozenMountain", DIR, unreal.Material, unreal.MaterialFactoryNew())
 try:
     m.set_editor_property("used_with_nanite", True)
 except Exception as ex:
@@ -62,6 +66,7 @@ except Exception as ex:
 g = G(m)
 wp = g.e(unreal.MaterialExpressionWorldPosition, -1500, -400)
 nrm = g.e(unreal.MaterialExpressionVertexNormalWS, -1500, -320)
+cam = g.e(unreal.MaterialExpressionCameraPositionWS, -1500, -480)
 det = g.texobj("Detail", unreal.load_asset(DIR + "/T_FrozenStreakTile") or unreal.load_asset(DIR + "/T_FrozenIceTile"), -1500, -200)
 ice = g.vec("Color", (0.62, 0.84, 0.98, 1), -1500, -40)
 deep = g.vec("DeepColor", (0.30, 0.58, 0.88, 1), -1500, 120)
@@ -75,11 +80,21 @@ dz = g.scalar("DeepZ", -4000.0, -1500, 840)
 dzf = g.scalar("DeepZFade", 5000.0, -1500, 920)
 ecol = g.vec("EmissiveColor", (0.45, 0.78, 1.0, 1), -1500, 1000)
 estr = g.scalar("EmissiveStrength", 0.15, -1500, 1160)
+# r5: painterly aerial perspective - blend toward a bright sky-haze colour with camera distance (base colour + glow).
+hcol = g.vec("HazeColor", (0.80, 0.90, 1.0, 1), -1500, 1240)
+hs = g.scalar("HazeStart", 6000.0, -1500, 1400)
+he = g.scalar("HazeEnd", 30000.0, -1500, 1480)
+hm = g.scalar("HazeMax", 0.6, -1500, 1560)
+hg = g.scalar("HazeGlow", 0.6, -1500, 1640)
 snowa = g.custom("""
 float slope = saturate((normalize(N).z - SnowSlope) * 5.0);
 float h = saturate((WP.z - SnowZ) / max(SnowZFade, 1.0));
 return slope * h;
 """, [("WP", wp), ("N", nrm), ("SnowSlope", s0), ("SnowZ", sz), ("SnowZFade", szf)], F1, -900, 500, "SnowMask")
+haze = g.custom("""
+float d = length(WP - Cam);
+return saturate((d - HazeStart) / max(HazeEnd - HazeStart, 1.0)) * HazeMax;
+""", [("WP", wp), ("Cam", cam), ("HazeStart", hs), ("HazeEnd", he), ("HazeMax", hm)], F1, -900, 900, "HazeMask")
 bc = g.custom("""
 float3 nw = abs(normalize(N)); nw = pow(nw, 3.0); nw /= (nw.x + nw.y + nw.z + 1e-4);
 float3 p = WP / DetailScale;
@@ -87,11 +102,13 @@ float d = Texture2DSample(Det, DetSampler, p.yz).r * nw.x + Texture2DSample(Det,
 float lo = saturate((WP.z - DeepZ) / max(DeepZFade, 1.0));
 float3 c = lerp(DeepColor.rgb, Color.rgb, lo);
 c *= lerp(1.0, d * 2.0, DetailStrength);
-return lerp(c, SnowColor.rgb * lerp(0.92, 1.04, d), S);
+c = lerp(c, SnowColor.rgb * lerp(0.92, 1.04, d), S);
+return lerp(c, HazeColor.rgb, H);
 """, [("WP", wp), ("N", nrm), ("Det", det), ("Color", ice), ("DeepColor", deep), ("SnowColor", snow), ("DetailScale", dsc),
-      ("DetailStrength", dst), ("DeepZ", dz), ("DeepZFade", dzf), ("S", snowa)], F3, -600, -100, "MountainBase")
+      ("DetailStrength", dst), ("DeepZ", dz), ("DeepZFade", dzf), ("S", snowa), ("HazeColor", hcol), ("H", haze)], F3, -600, -100, "MountainBase")
 MEL.connect_material_property(bc, "", unreal.MaterialProperty.MP_BASE_COLOR)
-em = g.custom("return EmissiveColor.rgb * EmissiveStrength * (1.0 - 0.5 * S);", [("EmissiveColor", ecol), ("EmissiveStrength", estr), ("S", snowa)], F3, -600, 400, "MountainEmissive")
+em = g.custom("return EmissiveColor.rgb * EmissiveStrength * (1.0 - 0.5 * S) + HazeColor.rgb * H * HazeGlow;",
+              [("EmissiveColor", ecol), ("EmissiveStrength", estr), ("S", snowa), ("HazeColor", hcol), ("H", haze), ("HazeGlow", hg)], F3, -600, 400, "MountainEmissive")
 MEL.connect_material_property(em, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
 MEL.connect_material_property(g.scalar("Roughness", 0.55, -600, 800), "", unreal.MaterialProperty.MP_ROUGHNESS)
 MEL.connect_material_property(g.scalar("Specular", 0.4, -600, 900), "", unreal.MaterialProperty.MP_SPECULAR)
@@ -106,7 +123,8 @@ for n in NAMES:
     dn = n.replace("SM_Mountain_", "SM_FrozenMtn_")
     p = DST + "/" + dn
     if EAL.does_asset_exist(p):
-        EAL.delete_asset(p)
+        log("%s exists, kept" % dn)  # r5: never re-duplicate (keeps the committed meshes byte-stable)
+        continue
     mesh = EAL.duplicate_asset(SRC + n, p)
     if not mesh:
         unreal.log_error("FZM duplicate failed %s" % n); continue

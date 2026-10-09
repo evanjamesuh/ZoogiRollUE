@@ -343,6 +343,9 @@ void AZoogiArena::BuildFrozen()
 		// Round 3: jagged anime snow peaks (ridged faceted cones, slope-split snow / blue-grey rock), a far horizon range and a
 		// nearer range rising out of the valley around the island (the art's mountain ring under / behind the arena).
 		FZoogiMeshBuilder Rock, Caps;
+		// r5: camera-side near / middle clusters are replaced by pack mountain meshes (still generated so the Rng stream is unchanged).
+		const bool bPackFront = LoadObject<UStaticMesh>(nullptr, TEXT("/Game/Env/Arenas/FrozenMountains/SM_FrozenMtn_02.SM_FrozenMtn_02"), nullptr, LOAD_NoWarn | LOAD_Quiet) != nullptr;
+		bool bDropMtn = false;
 		auto Mountain = [&](const FVector2D& Cc, float Rb, float H, float Z0)
 		{
 			const int32 NR = 9, NS = 17; // round 3c: finer, more jagged ridges (no pyramid look)
@@ -371,6 +374,7 @@ void AZoogiArena::BuildFrozen()
 				if (FVector::DotProduct(Nn, Out) < 0.f) Nn = -Nn;
 				const float Rel = (Cen.Z - Z0) / H;
 				const bool bSnow = Nn.Z > 0.62f || (Rel > 0.55f && Nn.Z > 0.32f) || (Rel > 0.82f);
+				if (bDropMtn) return;
 				(bSnow ? Caps : Rock).FlatTri(P0, P1, P2, Out);
 			};
 			for (int32 j = 0; j < NS; ++j)
@@ -409,14 +413,17 @@ void AZoogiArena::BuildFrozen()
 		{
 			const float A = i * 360.f / 26 + Rng.FRandRange(-5.f, 5.f);
 			const bool bFront = FMath::Abs(FMath::FindDeltaAngleDegrees(A, 90.f)) < 45.f;
+			bDropMtn = bPackFront && FMath::Abs(FMath::FindDeltaAngleDegrees(A, 90.f)) < 60.f;
 			Cluster(Rng.FRandRange(14000.f, 19000.f), A, Rng.FRandRange(4200.f, 6800.f) * (bFront ? 0.55f : 1.f), -5600.f);
 		}
 		for (int32 i = 0; i < 20; ++i)
 		{
 			const float A = i * 18.f + Rng.FRandRange(-5.f, 5.f);
 			const bool bFront = FMath::Abs(FMath::FindDeltaAngleDegrees(A, 90.f)) < 40.f;
+			bDropMtn = bPackFront && FMath::Abs(FMath::FindDeltaAngleDegrees(A, 90.f)) < 60.f;
 			Cluster(Rng.FRandRange(6800.f, 11000.f), A, Rng.FRandRange(3200.f, 5200.f) * (bFront ? 0.6f : 1.f), -5600.f);
 		}
+		bDropMtn = false;
 		AddFrozenProc(Rock, Peak, nullptr, false);
 		AddFrozenProc(Caps, Snow, nullptr, false);
 	}
@@ -484,7 +491,7 @@ void AZoogiArena::BuildFrozen()
 			const float Top = FMath::Lerp(-1400.f, 3200.f, FMath::Pow(Back, 1.4f)) + PRng.FRandRange(-600.f, 900.f); // r3: lower flanks, sky shows in the corners
 			const float H = Top + 6500.f;
 			const FVector2D C0(Pol(R, A));
-			bDropSpire = bPackMtns && Back > 0.45f;
+			bDropSpire = bPackMtns; // r5: the camera-side corner spires are pack mountains too
 			Spire(C0, H * PRng.FRandRange(0.16f, 0.22f), H, -6500.f);
 			if (PRng.FRand() < 0.7f) // shoulder spire
 				Spire(C0 + FVector2D(Pol(H * 0.18f, A + (PRng.FRand() < 0.5f ? 90.f : -90.f))), H * 0.13f, H * PRng.FRandRange(0.6f, 0.82f), -6500.f);
@@ -510,21 +517,27 @@ void AZoogiArena::BuildFrozen()
 		if (Mtns.Num() > 0 && MtnBase)
 		{
 			UMaterialInstanceDynamic* MtnMat = UMaterialInstanceDynamic::Create(MtnBase, this);
-			MtnMat->SetVectorParameterValue(TEXT("Color"), ZoogiUtil::Hex(TEXT("#B4DDFA")));
-			MtnMat->SetVectorParameterValue(TEXT("DeepColor"), ZoogiUtil::Hex(TEXT("#5E9FE0")));
-			MtnMat->SetVectorParameterValue(TEXT("SnowColor"), ZoogiUtil::Hex(TEXT("#F4FAFF")));
+			// r5: paler icy blue, more snow on up-facing slopes, softer striations, bright sky haze with distance.
+			MtnMat->SetVectorParameterValue(TEXT("Color"), ZoogiUtil::Hex(TEXT("#D2ECFD")));
+			MtnMat->SetVectorParameterValue(TEXT("DeepColor"), ZoogiUtil::Hex(TEXT("#93C6EE")));
+			MtnMat->SetVectorParameterValue(TEXT("SnowColor"), ZoogiUtil::Hex(TEXT("#F7FBFF")));
+			MtnMat->SetVectorParameterValue(TEXT("HazeColor"), ZoogiUtil::Hex(TEXT("#D6EBFC")));
+			MtnMat->SetScalarParameterValue(TEXT("HazeStart"), 4000.f);
+			MtnMat->SetScalarParameterValue(TEXT("HazeEnd"), 26000.f);
+			MtnMat->SetScalarParameterValue(TEXT("HazeMax"), 0.7f);
+			MtnMat->SetScalarParameterValue(TEXT("HazeGlow"), 0.55f);
 			if (UTexture* T = FTex(TEXT("T_FrozenStreakTile"))) MtnMat->SetTextureParameterValue(TEXT("Detail"), T);
 			MtnMat->SetScalarParameterValue(TEXT("DetailScale"), 2600.f);
-			MtnMat->SetScalarParameterValue(TEXT("DetailStrength"), 0.45f);
-			MtnMat->SetScalarParameterValue(TEXT("SnowSlope"), 0.6f);
-			MtnMat->SetScalarParameterValue(TEXT("SnowZ"), -1500.f);
+			MtnMat->SetScalarParameterValue(TEXT("DetailStrength"), 0.24f);
+			MtnMat->SetScalarParameterValue(TEXT("SnowSlope"), 0.42f);
+			MtnMat->SetScalarParameterValue(TEXT("SnowZ"), -4500.f);
 			MtnMat->SetScalarParameterValue(TEXT("SnowZFade"), 3500.f);
-			MtnMat->SetScalarParameterValue(TEXT("DeepZ"), -6500.f);
-			MtnMat->SetScalarParameterValue(TEXT("DeepZFade"), 6000.f);
-			MtnMat->SetVectorParameterValue(TEXT("EmissiveColor"), ZoogiUtil::Hex(TEXT("#7CC6F6")));
-			MtnMat->SetScalarParameterValue(TEXT("EmissiveStrength"), 0.18f);
+			MtnMat->SetScalarParameterValue(TEXT("DeepZ"), -7000.f);
+			MtnMat->SetScalarParameterValue(TEXT("DeepZFade"), 5000.f);
+			MtnMat->SetVectorParameterValue(TEXT("EmissiveColor"), ZoogiUtil::Hex(TEXT("#9ED6FA")));
+			MtnMat->SetScalarParameterValue(TEXT("EmissiveStrength"), 0.26f);
 			FRandomStream MRng(4242);
-			const int32 NM = 16;
+			const int32 NM = 22; // r5: denser ring (the flank spires are gone)
 			for (int32 i = 0; i < NM; ++i)
 			{
 				const float A = i * (360.f / NM) + MRng.FRandRange(-6.f, 6.f);
@@ -536,16 +549,41 @@ void AZoogiArena::BuildFrozen()
 				const FVector Sz = B.GetSize();
 				if (Sz.Z < 1.f) continue;
 				const float Z0 = -7000.f;
-				const float Top = FMath::Lerp(600.f, 5600.f, FMath::Pow(Back, 1.2f)) + MRng.FRandRange(-500.f, 900.f);
+				const bool bFar = Back > 0.4f && (i % 2) == 1;                         // r5b: alternate far layer behind the arena (hazes out, less wall-like)
+				const float Top = FMath::Lerp(-800.f, 4800.f, FMath::Pow(Back, 1.2f)) + MRng.FRandRange(-500.f, 900.f) + (bFar ? 2600.f : 0.f); // r5: low on the camera-side corners
 				const float Hm = Top - Z0;
 				const float Wm = Hm * MRng.FRandRange(1.1f, 1.6f);
 				const float Sz3 = Hm / (float)Sz.Z;
 				const float Sxy = Wm / FMath::Max3((float)Sz.X, (float)Sz.Y, 1.f);
 				// behind the arena (where the spires are dropped) they come in close; on the flanks they sit behind the spires
-				const float R = (Back > 0.4f ? MRng.FRandRange(7600.f, 9000.f) : MRng.FRandRange(10500.f, 12500.f)) + Wm * 0.2f;
+				// r5: the flanks come in to the old spire radius (6400-10600) now that the hand-built spires are gone
+				const float R = (bFar ? MRng.FRandRange(13000.f, 15500.f) : Back > 0.4f ? MRng.FRandRange(7600.f, 9000.f) : MRng.FRandRange(7000.f, 9000.f)) + Wm * 0.2f;
 				const FRotator Rot(0.f, MRng.FRandRange(0.f, 360.f), 0.f);
 				const FVector Scale(Sxy, Sxy, Sz3);
 				const FVector Pivot = Rot.RotateVector(FVector(B.GetCenter().X, B.GetCenter().Y, B.Min.Z) * Scale);
+				if (UStaticMeshComponent* C = AddMesh(M, MtnMat, false, false))
+				{
+					C->SetRelativeTransform(FTransform(Rot, FVector(Pol(R, A)) + FVector(0.f, 0.f, Z0) - Pivot, Scale));
+					C->SetCanEverAffectNavigation(false);
+				}
+			}
+			// r5: camera-side ranges (yaw 90 +/-60) are pack mountains too, low and far (peaks below the court) so the views stay open.
+			for (int32 i = 0; i < 9; ++i)
+			{
+				const float A = 90.f + (i - 4) * 13.f + MRng.FRandRange(-4.f, 4.f);
+				const float Edge = FMath::Abs(FMath::FindDeltaAngleDegrees(A, 90.f)) / 60.f; // 0 = straight under the camera
+				UStaticMesh* M = Mtns[(i * 5 + 1) % Mtns.Num()];
+				const FBox B = M->GetBoundingBox();
+				const FVector Sz = B.GetSize();
+				if (Sz.Z < 1.f) continue;
+				const float Z0 = -7000.f;
+				const float Top = FMath::Lerp(-3200.f, -1200.f, Edge) + MRng.FRandRange(-400.f, 500.f);
+				const float Hm = Top - Z0;
+				const float Wm = Hm * MRng.FRandRange(1.4f, 1.9f);
+				const FVector Scale(Wm / FMath::Max3((float)Sz.X, (float)Sz.Y, 1.f), Wm / FMath::Max3((float)Sz.X, (float)Sz.Y, 1.f), Hm / (float)Sz.Z);
+				const FRotator Rot(0.f, MRng.FRandRange(0.f, 360.f), 0.f);
+				const FVector Pivot = Rot.RotateVector(FVector(B.GetCenter().X, B.GetCenter().Y, B.Min.Z) * Scale);
+				const float R = MRng.FRandRange(11000.f, 16000.f) + Wm * 0.2f;
 				if (UStaticMeshComponent* C = AddMesh(M, MtnMat, false, false))
 				{
 					C->SetRelativeTransform(FTransform(Rot, FVector(Pol(R, A)) + FVector(0.f, 0.f, Z0) - Pivot, Scale));
