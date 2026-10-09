@@ -491,7 +491,8 @@ void UZoogiBattleStateMachine::TestCheck()
 	else if (Case == TEXT("shatter_basic") || Case == TEXT("halo_fail") || Case == TEXT("orbline_fail") || Case == TEXT("queued_effects"))
 	{
 		const FZoogiPendingSegment* S = Last();
-		Need(ShatterCount == 1 && S && S->Comic == EZoogiComicState::Shattered, TEXT("no shatter"));
+		// queued_effects: the missed P1 can catch air off the Frozen stands (2333215 layout) and add an Air Reaction shatter; the Strike shatter is what matters
+		Need((Case == TEXT("queued_effects") ? ShatterCount >= 1 : ShatterCount == 1) && S && S->Comic == EZoogiComicState::Shattered, TEXT("no shatter"));
 		Need(TrailHas(TEXT("PHYSICS_RESOLVE>SHATTER_FAILURE")) && TrailHas(TEXT("SHATTER_FAILURE>NEXT_TURN")), TEXT("FAIL->SHATTER->NEXT path"));
 		Need(bNext, TEXT("next player not waiting"));
 		Need(Players[0].SegmentsCompleted == 0, TEXT("segment awarded"));

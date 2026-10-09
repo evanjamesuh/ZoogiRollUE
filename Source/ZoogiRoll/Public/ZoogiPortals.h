@@ -1,7 +1,7 @@
 // Oct 8 (Evan 11:48 PM): Boost Portals on Frozen Ring. "think of the arcs ruins in front of the bridges as portals that accelerate
 // an entering orb or zoogi and when it does it it has a flash electric effect like a power surge".
-// Every rim ruin arch (arena pieces of kind "arch"; the SE "gate_arch" stays the Recovery Gate) gets a trigger filling its
-// opening. A Zoogi or orb crossing the opening plane gets BoostAdd of planar speed along its current planar direction
+// Every bridge ruin arch (arena pieces of kind "arch" on a bridge yaw: 140 / 186 / 354; not the snow-chute ramp arch 230 or
+// the SE Recovery Gate) gets a trigger filling its opening. A Zoogi or orb crossing the opening plane gets BoostAdd of planar speed along its current planar direction
 // (capped at MaxSpeed, vertical velocity kept, never flips motion), at most once per Cooldown seconds per object. Applied by
 // game logic (this tickable world subsystem, fixed rules, no randomness), only while the shot is rolling, not in 2v2 combo.
 // Look: an electric power-surge flash across the opening (jagged cyan / white lightning streaks + light pulse + Zap SFX)
@@ -43,6 +43,7 @@ public:
 	void Setup(float InHalfW, float InTop);
 	void Surge(const FVector& Dir);
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Segs;
+	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Glows;   // wide soft cyan halo along each bolt
 	UPROPERTY() TObjectPtr<UStaticMeshComponent> Sheet;
 	UPROPERTY() TObjectPtr<UPointLightComponent> Light;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> MatHot;

@@ -86,14 +86,18 @@ void AZoogiPortalFX::Setup(float InHalfW, float InTop)
 	HalfW = InHalfW;
 	Top = InTop;
 	UStaticMesh* Cube = ZoogiUtil::BasicShape(TEXT("Cube"));
-	MatHot = ZoogiUtil::FxMID(this, PortalHot, 14.f);
-	MatCyan = ZoogiUtil::FxMID(this, PortalCyan, 9.f);
+	MatHot = ZoogiUtil::FxMID(this, PortalHot, 24.f);
+	MatCyan = ZoogiUtil::FxMID(this, PortalCyan, 16.f);
 	MatSheet = ZoogiUtil::FxMID(this, PortalCyan, 0.18f);
+	UMaterialInstanceDynamic* MatGlow = ZoogiUtil::FxMID(this, PortalCyan, 2.2f);
 	for (int32 i = 0; i < 44; ++i)
 	{
 		UStaticMeshComponent* C = NewSeg(this, RootComponent, Cube);
 		C->SetMaterial(0, (i % 3 == 0) ? MatHot : MatCyan);
 		Segs.Add(C);
+		UStaticMeshComponent* Gl = NewSeg(this, RootComponent, Cube);
+		Gl->SetMaterial(0, MatGlow);
+		Glows.Add(Gl);
 	}
 	// faint idle sheet in the opening so the portal reads as one (no collision)
 	Sheet = NewSeg(this, RootComponent, Cube);
@@ -124,19 +128,19 @@ void AZoogiPortalFX::Rebolt()
 	auto Emit = [&](const FVector& A, const FVector& B, int32 N, float Amp, float Thick)
 	{
 		Bolt(P, X.TransformPosition(A), X.TransformPosition(B), N, Amp, X.GetUnitAxis(EAxis::X), R);
-		for (int32 i = 0; i + 1 < P.Num() && S < Segs.Num(); ++i) PlaceSeg(Segs[S++], P[i], P[i + 1], Thick);
+		for (int32 i = 0; i + 1 < P.Num() && S < Segs.Num(); ++i) { PlaceSeg(Glows[S], P[i], P[i + 1], Thick * 3.2f); PlaceSeg(Segs[S++], P[i], P[i + 1], Thick); }
 	};
 	for (int32 b = 0; b < 4; ++b)
 	{
 		const float Za = R.FRandRange(0.12f, 0.92f) * Top, Zb = R.FRandRange(0.12f, 0.92f) * Top;
-		Emit(FVector(0.f, -HalfW, Za), FVector(0.f, HalfW, Zb), 7, 38.f, b == 0 ? 7.f : 4.f);
+		Emit(FVector(0.f, -HalfW, Za), FVector(0.f, HalfW, Zb), 7, 38.f, b == 0 ? 14.f : 9.f);
 	}
 	for (int32 b = 0; b < 2; ++b)
 	{
 		const float Ya = R.FRandRange(-0.7f, 0.7f) * HalfW;
-		Emit(FVector(0.f, Ya, 6.f), FVector(0.f, R.FRandRange(-0.7f, 0.7f) * HalfW, Top), 7, 30.f, 3.f);
+		Emit(FVector(0.f, Ya, 6.f), FVector(0.f, R.FRandRange(-0.7f, 0.7f) * HalfW, Top), 7, 30.f, 7.f);
 	}
-	for (; S < Segs.Num(); ++S) Segs[S]->SetVisibility(false);
+	for (; S < Segs.Num(); ++S) { Segs[S]->SetVisibility(false); Glows[S]->SetVisibility(false); }
 }
 
 void AZoogiPortalFX::Tick(float Dt)
@@ -151,6 +155,7 @@ void AZoogiPortalFX::Tick(float Dt)
 	if (SurgeT <= 0.f)
 	{
 		for (UStaticMeshComponent* C : Segs) C->SetVisibility(false);
+		for (UStaticMeshComponent* C : Glows) C->SetVisibility(false);
 		Light->SetIntensity(0.f);
 		if (MatSheet) MatSheet->SetScalarParameterValue(TEXT("Strength"), 0.18f);
 		return;
@@ -178,8 +183,8 @@ void AZoogiPortalTrail::Follow(AActor* InTarget, float InRadius, int32 Seed)
 	Radius = InRadius;
 	Serial = Seed;
 	UStaticMesh* Cube = ZoogiUtil::BasicShape(TEXT("Cube"));
-	UMaterialInstanceDynamic* Hot = ZoogiUtil::FxMID(this, PortalHot, 12.f);
-	UMaterialInstanceDynamic* Cy = ZoogiUtil::FxMID(this, PortalCyan, 8.f);
+	UMaterialInstanceDynamic* Hot = ZoogiUtil::FxMID(this, PortalHot, 20.f);
+	UMaterialInstanceDynamic* Cy = ZoogiUtil::FxMID(this, PortalCyan, 14.f);
 	for (int32 i = 0; i < 18; ++i)
 	{
 		UStaticMeshComponent* C = NewSeg(this, RootComponent, Cube);
@@ -220,7 +225,7 @@ void AZoogiPortalTrail::Tick(float Dt)
 		const FVector A = C + (Side * R.FRandRange(-0.8f, 0.8f) + FVector::UpVector * R.FRandRange(-0.4f, 0.8f)) * Radius;
 		const FVector B = A + Back * (Radius * 3.4f * K + 40.f) + FVector::UpVector * R.FRandRange(-20.f, 20.f);
 		Bolt(P, A, B, 6, Radius * 0.35f, FVector::UpVector, R);
-		for (int32 i = 0; i + 1 < P.Num() && S < Segs.Num(); ++i) PlaceSeg(Segs[S++], P[i], P[i + 1], (b == 0 ? 5.f : 3.f) * (0.4f + 0.6f * K));
+		for (int32 i = 0; i + 1 < P.Num() && S < Segs.Num(); ++i) PlaceSeg(Segs[S++], P[i], P[i + 1], (b == 0 ? 11.f : 7.f) * (0.4f + 0.6f * K));
 	}
 	for (; S < Segs.Num(); ++S) Segs[S]->SetVisibility(false);
 }
@@ -284,14 +289,17 @@ void UZoogiPortalSubsystem::Build(AZoogiArena* Arena)
 	for (AZoogiArenaPiece* Pc : Arena->GetPieces())
 	{
 		if (!Pc || Pc->GetKind() != FName(TEXT("arch")) || Portals.Num() >= UE_ARRAY_COUNT(Prev)) continue;
+		const FTransform T = Pc->GetActorTransform();
+		const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(T.GetLocation().Y, T.GetLocation().X));
+		// "the arcs ruins in front of the bridges": only arches standing on a bridge yaw (140 / 186 / 354 after the frozen
+		// bridge alignment). The snow-chute ramp arch (230) and the SE Recovery Gate (gate_arch, 45) are not portals.
+		if (!NearIsletYaw(Yaw, 3.f)) continue;
 		FPortal P;
 		P.Arch = Pc;
-		const FTransform T = Pc->GetActorTransform();
 		const float S = T.GetScale3D().Z;
 		P.X = FTransform(T.GetRotation(), T.GetLocation());
-		P.HalfW = (ArchHalfW - ArchPostR) * T.GetScale3D().Y;
-		P.Top = (ArchH - 120.f + ArchHalfW) * S;
-		const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(T.GetLocation().Y, T.GetLocation().X));
+		P.HalfW = (BridgeArchHalfW - ArchPostR) * T.GetScale3D().Y; // clear opening between the post colliders (252 cm)
+		P.Top = (ArchH + 10.f) * S;                                   // up to the crown (~z280)
 		P.Name = FString::Printf(TEXT("arch_%03.0f"), FRotator::ClampAxis(Yaw));
 		FActorSpawnParameters SP;
 		SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
