@@ -15,6 +15,7 @@
 #include "ZoogiArena.h"
 #include "ZoogiRock.h"
 #include "ZoogiArenaPiece.h"
+#include "ZoogiPortals.h"
 #include "ZoogiArtifactComponent.h"
 #include "ZoogiTypes.h"
 #include "ZoogiRoll.h"
@@ -72,6 +73,9 @@ namespace
 		{ TEXT("map_bumper"),            ELay::None,   EAw::Save,   TEXT("sky_bumper"),    false, 50.f, 1, false },
 		// Oct 8 (Evan 9:26 PM): every placed prop within the measured launch envelope (ReachPeaks); live peaks logged per type
 		{ TEXT("map_reach"),             ELay::None,   EAw::Save,   nullptr,               false, -1.f, 6, false },
+		// Oct 8 (Evan 11:48 PM): Boost Portals in the Frozen ruin arches (scripted P1 shot / orb through the arch at yaw 140)
+		{ TEXT("portal_zoogi"),          ELay::Lane,   EAw::Save,   nullptr,               false, -1.f, 1, true },
+		{ TEXT("portal_orb"),            ELay::Lane,   EAw::Save,   nullptr,               false, -1.f, 1, true },
 	};
 	const FCase* FindCase(const FString& N)
 	{
@@ -258,6 +262,39 @@ void UZoogiBattleStateMachine::TestScriptTurn()
 		for (int32 i = 0; i < G->Orbs.Num(); ++i) if (G->Orbs[i] && !G->Orbs[i]->bOut) { TestOrb = i; break; }
 		if (TestOrb >= 0) G->Orbs[TestOrb]->Respawn(FVector(OP, ZoogiConst::OrbRadius + 1.f));
 		UE_LOG(LogZoogi, Log, TEXT("BATTLE_TEST orb O%d placed at (%.0f,%.0f)"), TestOrb + 1, OP.X, OP.Y);
+	}
+	// Oct 8: Boost Portal cases: P1 (and an orb) lined up radially through the ruin arch nearest yaw 140 (the bridge mouth)
+	if (TestCase.StartsWith(TEXT("portal_")))
+	{
+		UZoogiPortalSubsystem* PS = GetWorld() ? GetWorld()->GetSubsystem<UZoogiPortalSubsystem>() : nullptr;
+		const UZoogiPortalSubsystem::FPortal* Best = nullptr;
+		if (PS) for (const UZoogiPortalSubsystem::FPortal& P : PS->Portals)
+		{
+			const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(P.X.GetLocation().Y, P.X.GetLocation().X));
+			if (!Best || FMath::Abs(FMath::FindDeltaAngleDegrees(Yaw, 140.f)) < FMath::Abs(FMath::FindDeltaAngleDegrees(FMath::RadiansToDegrees(FMath::Atan2(Best->X.GetLocation().Y, Best->X.GetLocation().X)), 140.f))) Best = &P;
+		}
+		if (Best)
+		{
+			const FVector2D AL(Best->X.GetLocation());
+			FVector2D U(Best->X.GetUnitAxis(EAxis::X));
+			if (FVector2D::DotProduct(U, AL) < 0.f) U = -U; // outward
+			const bool bOrb = TestCase == TEXT("portal_orb");
+			const FVector2D SP = AL - U * (bOrb ? 600.f : 430.f);
+			const float Z0 = S->BallLocation().Z;
+			S->PlaceAt(FVector(SP, Z0), FMath::RadiansToDegrees(FMath::Atan2(U.Y, U.X)));
+			TestAim = FVector(AL + U * 700.f, Z0);
+			const float BaseYaw = FMath::RadiansToDegrees(FMath::Atan2(U.Y, U.X));
+			int32 k = 0;
+			for (int32 i = 1; i < G->Balls.Num(); ++i)
+				if (AZoogiBall* B = G->Balls[i]) B->PlaceAt(FVector(FVector2D(FMath::Cos(FMath::DegreesToRadians(BaseYaw + 90.f + 90.f * k)), FMath::Sin(FMath::DegreesToRadians(BaseYaw + 90.f + 90.f * k))) * 300.f, B->BallLocation().Z), 0.f), ++k;
+			if (bOrb && G->Orbs.Num() > 0)
+			{
+				for (int32 i = 0; i < G->Orbs.Num(); ++i) if (G->Orbs[i] && !G->Orbs[i]->bOut) { TestOrb = i; break; }
+				if (TestOrb >= 0) G->Orbs[TestOrb]->Respawn(FVector(AL - U * 330.f, ZoogiConst::OrbRadius + 1.f));
+			}
+			UE_LOG(LogZoogi, Log, TEXT("BATTLE_TEST portal setup %s arch=%s P1 at (%.0f,%.0f) aim (%.0f,%.0f) orb=O%d"), *TestCase, *Best->Name, SP.X, SP.Y, TestAim.X, TestAim.Y, TestOrb + 1);
+		}
+		else UE_LOG(LogZoogi, Warning, TEXT("BATTLE_TEST %s: no portal"), *TestCase);
 	}
 	// T3 aerial props (debug geometry) on the scripted lane
 	if (!bSecond && (TestCase.StartsWith(TEXT("halo_pass")) || TestCase.StartsWith(TEXT("halo_rim")) || TestCase == TEXT("sky_bumper") || TestCase.StartsWith(TEXT("rail_")) || TestCase == TEXT("midair_collision")))
@@ -714,6 +751,27 @@ void UZoogiBattleStateMachine::TestCheck()
 				}
 		}
 		D = FString::Printf(TEXT("order=%s ledger_actions=%d playlist=%d"), *Order, Acts, Assembler->Playlist.Num());
+	}
+	else if (Case.StartsWith(TEXT("portal_")))
+	{
+		// Boost Portal: speed increases on entry, one fire per pass, direction preserved (planar), vertical speed kept
+		const UZoogiPortalSubsystem* PS = GetWorld() ? GetWorld()->GetSubsystem<UZoogiPortalSubsystem>() : nullptr;
+		const FString Who = Case == TEXT("portal_orb") ? FString::Printf(TEXT("O%d"), TestOrb + 1) : FString(TEXT("P1"));
+		Need(PS && PS->Portals.Num() > 0, TEXT("no portals built"));
+		const FZoogiPortalFire* F = PS ? PS->FirstFire(Who, ActionStartGame) : nullptr;
+		const int32 N = PS ? PS->FireCount(Who, ActionStartGame) : 0;
+		Need(F != nullptr, FString::Printf(TEXT("%s never fired a portal"), *Who));
+		Need(N == 1, FString::Printf(TEXT("%s fired %d times (want 1)"), *Who, N));
+		if (F)
+		{
+			const FVector2D I(F->VIn.X, F->VIn.Y), O(F->VOut.X, F->VOut.Y);
+			const float Want = FMath::Min(I.Size() + PS->BoostAdd, PS->MaxSpeed);
+			Need(O.Size() > I.Size() + 1.f, TEXT("speed did not increase"));
+			Need(FMath::IsNearlyEqual(O.Size(), Want, 1.f), TEXT("boost != min(in + BoostAdd, MaxSpeed)"));
+			Need(FVector2D::DotProduct(I.GetSafeNormal(), O.GetSafeNormal()) > 0.9999f, TEXT("direction changed"));
+			Need(FMath::IsNearlyEqual(F->VIn.Z, F->VOut.Z, 0.5f), TEXT("vertical speed changed"));
+		}
+		D = FString::Printf(TEXT("who=%s fires=%d portals=%d in=%.0f out=%.0f"), *Who, N, PS ? PS->Portals.Num() : 0, F ? FVector2D(F->VIn).Size() : 0.f, F ? FVector2D(F->VOut).Size() : 0.f);
 	}
 	else if (Case.StartsWith(TEXT("map_")))
 	{
