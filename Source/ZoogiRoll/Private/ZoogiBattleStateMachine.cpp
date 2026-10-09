@@ -301,6 +301,8 @@ void UZoogiBattleStateMachine::Tick(float DeltaTime)
 	StateReal += RealDt;
 	if (G->Phase != EZoogiPhase::Menu) EnsurePlayers();
 	Observe();
+	TickPeaks(); // Oct 8: peak-height log per action (observation only)
+	if (G->Phase == EZoogiPhase::GameOver && PeakTracks.Num() > 0) FlushPeaks(TEXT("match_end"));
 	if (Props.Num() > 0 || (bFlow && Tune.bAerialProps)) TickProps();
 	if (bFlow)
 	{

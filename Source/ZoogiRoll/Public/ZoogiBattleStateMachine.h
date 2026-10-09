@@ -33,6 +33,18 @@ class AHUD;
 class UCanvas;
 
 /** Oct 8: a CPU turn's prop plan (Frozen map layout): what the CPU aimed at and which combo / rail window goes with it. */
+/** Oct 8 (Evan 9:26 PM): per-Zoogi peak height during one action (ZoogiAerialReach.cpp). Logging / tests only. */
+struct FZoogiPeakTrack
+{
+	float PeakZ = -1.f;          // ball centre z (floor = 0, a resting Zoogi = ZoogiRadius)
+	FString Cause = TEXT("floor");
+	FString PeakCause = TEXT("floor");
+	FVector PeakAt = FVector::ZeroVector;
+	bool bAirSinceCause = false; // left the floor since the cause was set (landing again resets it to floor)
+	bool bWentOut = false;       // rang out during the action: its flight is a ring-out ricochet, not a usable launch
+	float LastZ = -1.f;
+};
+
 struct FZoogiCPUPropPlan
 {
 	int32 Player = -1;
@@ -244,6 +256,28 @@ protected:
 	bool TestMapSetup();
 	int32 TestForceProp = -1;                                   // map_* cases: CPU prop plans only of this EZoogiPropKind
 	EZoogiRailWindow TestForceWindow = EZoogiRailWindow::None;  // map_rail: the CPU's release window
+
+public:
+	// ---- Oct 8 (Evan 9:26 PM): aerial reachability (ZoogiAerialReach.cpp). The peak heights Zoogis reach in play (per launch
+	// type: rail_early / rail_center / rail_late / ramp / bumper / floor) are logged per action ("BATTLE peak") and the measured
+	// envelope ([ZoogiRoll.Aerial] ReachPeaks) caps the Zone 2 prop / decor heights. Observation only: never touches physics.
+	void NotePeakCause(int32 Body, const TCHAR* Cause);
+	/** Envelope peak (ball centre z) of a launch type from ReachPeaks; -1 if unknown. */
+	float ReachEnvelope(const FString& Cause) const;
+	float ReachEnvelopeMax() const;
+	/** Lowest ball-centre z at which a Zoogi can use the prop (halo trigger bottom, bumper contact, gate / rail deck). */
+	float PropReqZ(const AZoogiAerialProp* P) const;
+	/** The launch type with the lowest envelope peak that still reaches ReqZ ("" if none). */
+	FString BestLaunchFor(float ReqZ, float& OutPeak) const;
+	/** Logs "BATTLE reach" per placed prop; returns the number of props no launch type reaches. */
+	int32 LogReach(FString* OutDetail = nullptr) const;
+	TMap<FString, float> RunPeaks;          // this run: max peak per launch type
+	TMap<FString, int32> RunPeakCounts;
+protected:
+	void TickPeaks();
+	void FlushPeaks(const TCHAR* Why);
+	TMap<int32, FZoogiPeakTrack> PeakTracks;
+	int32 PeakActionId = -1;
 
 	FZoogiBattleTuning Tune;
 	bool bFlow = false;

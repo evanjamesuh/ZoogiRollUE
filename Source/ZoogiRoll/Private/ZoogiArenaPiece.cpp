@@ -38,8 +38,8 @@ void AZoogiArenaPiece::Setup(FName InKind, FName InSurface, float InMaxHP, bool 
 {
 	Kind = InKind;
 	Surface = InSurface;
-	MaxHP = HP = FMath::Max(1.f, InMaxHP);
 	bIndestructible = bInIndestructible;
+	MaxHP = HP = FMath::Max(1.f, InMaxHP * (bIndestructible ? 1.f : ZoogiUtil::BreakToughness())); // Oct 8: [ZoogiRoll.Arena] BreakToughness
 	Seed = (int32)(GetActorLocation().X * 3.f + GetActorLocation().Y * 7.f) ^ GetTypeHash(Kind);
 }
 

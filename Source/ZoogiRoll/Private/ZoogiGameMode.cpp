@@ -275,6 +275,7 @@ void AZoogiGameMode::SpawnOrbs()
 				O->InitOrb(OrbPM, Decel);
 				Orbs.Add(O);
 			}
+	for (AZoogiOrb* O : Orbs) ZoogiUtil::ApplyOrbStyle(O); // Oct 8: [ZoogiRoll.Characters] OrbStyle
 }
 
 void AZoogiGameMode::StartMatch()

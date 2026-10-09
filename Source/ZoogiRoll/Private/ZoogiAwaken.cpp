@@ -163,7 +163,7 @@ bool AZoogiGameMode::AwakenInfuse(int32 Pick)
 	AddFeed(FString::Printf(TEXT("P%d %s  infused %s%s"), B->PlayerIndex + 1, *B->Def.Name, *ZoogiArtifacts::Name(A), bAff ? TEXT("  (affinity!)") : TEXT("")), C);
 	AZoogiFX::Spawn(GetWorld(), B->BallLocation(), C, 200.f, 0.6f, false, 10.f, B);
 	AZoogiFX::Spawn(GetWorld(), B->BallLocation() - FVector(0, 0, ZoogiConst::ZoogiRadius - 3.f), C, 260.f, 0.7f, true, 8.f);
-	AZoogiFX::Niagara(GetWorld(), *ZoogiArtifacts::Get(A).AuraNiagara.ToString(), B->BallLocation(), FRotator::ZeroRotator, 0.9f);
+	if (ZoogiUtil::ShowZoogiSparkles()) AZoogiFX::Niagara(GetWorld(), *ZoogiArtifacts::Get(A).AuraNiagara.ToString(), B->BallLocation(), FRotator::ZeroRotator, 0.9f); // Oct 8: ZoogiSparkles
 	AZoogiAwakenFX::OnInfuse(GetWorld(), B, A); // launch-power fire ring (+ Shock chain lightning / Void portal for those artifacts)
 	UE_LOG(LogZoogi, Log, TEXT("Awaken: P%d %s INFUSES %s%s"), B->PlayerIndex + 1, *B->Def.Name, *ZoogiArtifacts::Name(A), bAff ? TEXT(" (affinity)") : TEXT(""));
 	EmitAnime(TEXT("Infuse"), B, A, B, B->BallLocation(), 1.f, false);
@@ -488,7 +488,7 @@ void AZoogiGameMode::TickArtifacts(float Dt)
 		AC->GuardFlash();
 		++TurnGuardBlocks;
 		AZoogiFX::Spawn(GetWorld(), V->BallLocation(), R.RimColor, 120.f, 0.35f, false, 12.f, V);
-		AZoogiFX::Niagara(GetWorld(), *R.AuraNiagara.ToString(), V->BallLocation(), FRotator::ZeroRotator, 0.8f);
+		if (ZoogiUtil::ShowZoogiSparkles()) AZoogiFX::Niagara(GetWorld(), *R.AuraNiagara.ToString(), V->BallLocation(), FRotator::ZeroRotator, 0.8f); // Oct 8: ZoogiSparkles
 		AddPopup(FString::Printf(TEXT("GUARD  -%d%%"), FMath::RoundToInt((1.f - R.GuardKnockbackMul) * 100.f)), V->BallLocation() + FVector(0, 0, 150.f), R.CoreColor);
 		AddFeed(FString::Printf(TEXT("P%d %s  blocked with %s"), V->PlayerIndex + 1, *V->Def.Name, *ZoogiArtifacts::Name(G)), R.CoreColor);
 		ZoogiUtil::PlaySfx(this, TEXT("HitClick"), 0.9f, 0.6f);

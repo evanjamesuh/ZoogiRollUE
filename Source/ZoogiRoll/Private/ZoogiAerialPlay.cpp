@@ -178,6 +178,7 @@ void UZoogiBattleStateMachine::FinishRail(UZoogiMiniGameRailRelease* M, EZoogiCh
 		Applied = M->Apply(this);
 		++RailReleases;
 		LastRailWindow = M->Window;
+		NotePeakCause(M->Body, *(FString(TEXT("rail_")) + FString(ZoogiBattle::RailWindowName(M->Window)).ToLower()));
 		ActionPropTags.Add(FString::Printf(TEXT("%s:release_%s"), M->Rail.IsValid() ? *M->Rail->Label() : TEXT("rail"), ZoogiBattle::RailWindowName(M->Window)));
 		AerialShot(TEXT("rail_release"), 0.3f);
 		if (M->bSegment && Pending.Owner == M->Body) { Pending.RailWindow = M->Window; Pending.Detail = Applied; }
@@ -355,8 +356,12 @@ void UZoogiBattleStateMachine::SpawnMapLayout()
 		}
 		Rail->BuildVisuals(A);
 	}
-	// Zone 2 hanging Resonance Halo on the EARLY arc (apex ~z250 at 580 along the rail for MapRailMinSpeed 1100)
-	SpawnProp(EZoogiPropKind::ResonanceHalo, S + F * 580.f + FVector(0, 0, 250.f), F, 110.f, true, TEXT("aerial_halo"));
+	// Zone 2 hanging Resonance Halo on the EARLY arc (apex ~z250 at 580 along the rail for MapRailMinSpeed 1100).
+	// Oct 8 (Evan 9:26 PM): never above the measured rail_early envelope (ReachPeaks) minus ReachMargin.
+	float HaloZ = Tune.AerialHaloZ;
+	const float EnvEarly = ReachEnvelope(TEXT("rail_early"));
+	if (EnvEarly > 0.f) HaloZ = FMath::Min(HaloZ, EnvEarly - Tune.ReachMargin);
+	SpawnProp(EZoogiPropKind::ResonanceHalo, S + F * Tune.AerialHaloAlong + FVector(0, 0, HaloZ), F, 110.f, true, TEXT("aerial_halo"));
 	// Zone 1 standing halos facing the W / E pads (radial pass axis) between the centre triangle and the orb ring
 	SpawnProp(EZoogiPropKind::ResonanceHalo, FzPol(340.f, 180.f, 0.f), FVector(-1.f, 0.f, 0.f), 150.f, false, TEXT("halo_w"));
 	SpawnProp(EZoogiPropKind::ResonanceHalo, FzPol(340.f, 0.f, 0.f), FVector(1.f, 0.f, 0.f), 150.f, false, TEXT("halo_e"));
@@ -381,11 +386,12 @@ void UZoogiBattleStateMachine::SpawnMapLayout()
 		Decor = W->SpawnActor<AZoogiAerialDecor>(AZoogiAerialDecor::StaticClass(), FVector::ZeroVector, FRotator::ZeroRotator, P);
 		TArray<AZoogiAerialProp*> Raw;
 		for (AZoogiAerialProp* Pr : Props) Raw.Add(Pr);
-		if (Decor) Decor->Build(A, Raw);
+		if (Decor) { Decor->MaxZ = Tune.ReachPeaks.IsEmpty() ? -1.f : ReachEnvelopeMax(); Decor->Build(A, Raw); }
 	}
 	FString List;
 	for (const AZoogiAerialProp* Pr : Props) if (Pr) List += FString::Printf(TEXT("%s%s[%s]"), List.IsEmpty() ? TEXT("") : TEXT(" "), *Pr->Label(), *Pr->Tag.ToString());
 	UE_LOG(LogZoogi, Log, TEXT("BATTLE props map layout Frozen spawned=%d decor=%d rail_min_speed=%.0f cpu_chance=%.2f: %s"), Props.Num(), Decor ? 1 : 0, Tune.MapRailMinSpeed, Tune.CPUPropChance, *List);
+	LogReach(); // Oct 8: every placed prop vs the measured launch envelope
 	// the first CPU turn was planned at turn start, before the layout existed: plan it again with the props
 	if (TestCase.IsEmpty()) G->ReplanCPUShot();
 }
@@ -450,8 +456,8 @@ void UZoogiBattleStateMachine::OnPropEvent(AZoogiAerialProp* Prop, AZoogiBall* B
 	if (Prop->Kind != EZoogiPropKind::LaunchRail) ActionZoneTags.AddUnique(TEXT("aerial")); // halos / bumpers are Zone 2 props
 	ActionPropTags.Add(FString::Printf(TEXT("%s:%s:P%d"), *Prop->Label(), *Event.ToString(), Body + 1));
 	if (Event == TEXT("pass")) ++HaloPasses;
-	else if (Event == TEXT("rim")) ++HaloRims;
-	else if (Event == TEXT("bumper")) { ++BumperRebounds; BumperCheckBall = Ball; BumperCheckFrames = 2; }
+	else if (Event == TEXT("rim")) { ++HaloRims; NotePeakCause(Body, TEXT("halo_rim")); }
+	else if (Event == TEXT("bumper")) { ++BumperRebounds; BumperCheckBall = Ball; BumperCheckFrames = 2; NotePeakCause(Body, TEXT("bumper")); }
 	if (Pending.Owner == Body && Pending.ActionId == CurrentActionId && CurrentActionId >= 0)
 	{
 		Pending.PropEvents.Add(FString::Printf(TEXT("%s:%s@%.2f"), *Prop->Label(), *Event.ToString(), T));

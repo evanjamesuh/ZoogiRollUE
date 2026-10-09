@@ -197,11 +197,14 @@ void FZoogiBattleTuning::Load()
 	F(SZ, TEXT("RailHighPitch"), RailHighPitch); F(SZ, TEXT("RailCenterPitch"), RailCenterPitch); F(SZ, TEXT("RailLatePitch"), RailLatePitch); F(SZ, TEXT("RailLateYaw"), RailLateYaw);
 	F(SZ, TEXT("RailSpeedMul"), RailSpeedMul); F(SZ, TEXT("RailMinSpeed"), RailMinSpeed); F(SZ, TEXT("ZoneAerialZ"), ZoneAerialZ); F(SZ, TEXT("ZoneRecoveryFrac"), ZoneRecoveryFrac);
 	Str(SZ, TEXT("AerialArenas"), AerialArenas); F(SZ, TEXT("MapRailMinSpeed"), MapRailMinSpeed); F(SZ, TEXT("CPUPropChance"), CPUPropChance); F(SZ, TEXT("CPUPropAimErrDiv"), CPUPropAimErrDiv);
+	Str(SZ, TEXT("ReachPeaks"), ReachPeaks); F(SZ, TEXT("ReachMargin"), ReachMargin); F(SZ, TEXT("AerialHaloAlong"), AerialHaloAlong); F(SZ, TEXT("AerialHaloZ"), AerialHaloZ);
 	B(SB, TEXT("bBattleHUD"), bBattleHUD);
 	if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiBattleProps"))) { bAerialProps = true; AerialArenas = TEXT("All"); }
 	if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiBattleNoProps"))) bAerialProps = false;
 	if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiBattleDebug"))) bDebugOverlay = true;
 	FParse::Value(FCommandLine::Get(), TEXT("-ZoogiCPUPropChance="), CPUPropChance);
+	FParse::Value(FCommandLine::Get(), TEXT("-ZoogiReachPeaks="), ReachPeaks); // measurement runs: -ZoogiReachPeaks=none (no cap)
+	if (ReachPeaks.Equals(TEXT("none"), ESearchCase::IgnoreCase)) ReachPeaks.Empty();
 	FParse::Value(FCommandLine::Get(), TEXT("-ZoogiSkyBumperRebound="), SkyBumperRebound);
 	const TCHAR* SU = TEXT("ZoogiRoll.Unlocks");
 	F(SU, TEXT("PerfWeightScore"), PerfWeightScore); F(SU, TEXT("PerfWeightKO"), PerfWeightKO); F(SU, TEXT("PerfWeightSegment"), PerfWeightSegment);

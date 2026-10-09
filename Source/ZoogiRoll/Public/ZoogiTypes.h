@@ -5,6 +5,7 @@
 
 class UMaterialInstanceDynamic;
 class UStaticMesh;
+class AZoogiOrb;
 
 /** Arenas from the web game. Only some are built so far; see AZoogiArena. */
 UENUM(BlueprintType)
@@ -123,6 +124,17 @@ namespace ZoogiUtil
 	/** Project toggle for the bible characters' visual-only flipper nubs: Config/DefaultGame.ini
 	 *  [ZoogiRoll.Characters] ShowFlipperNubs=True|False; -ZoogiNoNubs / -ZoogiNubs override it on the command line. */
 	ZOOGIROLL_API bool ShowFlipperNubs();
+	/** Oct 8 (Evan 9:16 PM): round sparkles on/around the Zoogis (fast-roll Niagara spark bursts, Awakened aura bursts + the round artifact
+	 *  orbiter motes/rings). [ZoogiRoll.Characters] ZoogiSparkles=True|False; -ZoogiSparkles / -ZoogiNoSparkles override. Visual only. */
+	ZOOGIROLL_API bool ShowZoogiSparkles();
+	/** Oct 8 (Evan 9:16 PM): breakable arena pieces / rocks toughness. [ZoogiRoll.Arena] BreakToughness (1.0 = old tuning,
+	 *  clamped 0.5..3): AZoogiArenaPiece max HP and AZoogiRock crack / shatter speeds scale by it; indestructible pillars ignore it.
+	 *  -ZoogiBreakToughness=<x> overrides for one run. */
+	ZOOGIROLL_API float BreakToughness();
+	/** Oct 8 (Evan 9:16 PM): [ZoogiRoll.Characters] OrbStyle=Original re-applies the original orb look (SM_Orb core in deep
+	 *  blue #0341CA x6 inside a light-blue #87CEEB x3 glow sphere; gold star orbs) after InitOrb / MakeStar. Any other value
+	 *  (or -ZoogiOrbStyle=Current) leaves AZoogiOrb's own look. Visual only (no collision / mass change). */
+	ZOOGIROLL_API void ApplyOrbStyle(AZoogiOrb* Orb);
 
 	/** Plays /Game/Audio/S_<Name> as a 2D sound (no-op if missing or with -NoSound). */
 	/** 2D SFX from /Game/Audio/S_<Name>. StartTime skips into the sound (e.g. so a wind-up ends exactly on the launch).

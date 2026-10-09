@@ -535,7 +535,7 @@ void AZoogiBall::Tick(float DeltaSeconds)
 		}
 	}
 	// Niagara sparkle trail: every Zoogi moving fast during a shot sheds a little burst of sparks in its player colour.
-	if (!bOut)
+	if (!bOut && ZoogiUtil::ShowZoogiSparkles()) // Oct 8: [ZoogiRoll.Characters] ZoogiSparkles
 	{
 		const float Spd = PlanarSpeed();
 		SparkClock += DeltaSeconds;

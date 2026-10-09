@@ -179,6 +179,7 @@ void AZoogiGameMode::ComboSpawnOrbs()
 				Orbs.Add(O);
 				ComboOrbHome.Add(L);
 			}
+	for (AZoogiOrb* O : Orbs) ZoogiUtil::ApplyOrbStyle(O); // Oct 8: [ZoogiRoll.Characters] OrbStyle
 }
 
 void AZoogiGameMode::ComboStartMatch()

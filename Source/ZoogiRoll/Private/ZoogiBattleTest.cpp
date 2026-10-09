@@ -70,6 +70,8 @@ namespace
 		{ TEXT("map_rail"),              ELay::None,   EAw::Save,   TEXT("rail_release"),  false, 50.f, 1, false },
 		{ TEXT("map_halo"),              ELay::None,   EAw::Save,   TEXT("halo_bank"),     false, 50.f, 1, false },
 		{ TEXT("map_bumper"),            ELay::None,   EAw::Save,   TEXT("sky_bumper"),    false, 50.f, 1, false },
+		// Oct 8 (Evan 9:26 PM): every placed prop within the measured launch envelope (ReachPeaks); live peaks logged per type
+		{ TEXT("map_reach"),             ELay::None,   EAw::Save,   nullptr,               false, -1.f, 6, false },
 	};
 	const FCase* FindCase(const FString& N)
 	{
@@ -737,11 +739,22 @@ void UZoogiBattleStateMachine::TestCheck()
 			Need(BumperRebounds >= 1, TEXT("no bumper rebound"));
 			Need(S && S->ComboId == FName(TEXT("sky_bumper")) && S->BumperAt >= 0.f && S->Comic == EZoogiComicState::Completed, TEXT("sky_bumper not COMPLETED"));
 		}
+		FString Reach;
+		if (Case == TEXT("map_reach"))
+		{
+			Need(!Tune.ReachPeaks.IsEmpty(), TEXT("no measured envelope ([ZoogiRoll.Aerial] ReachPeaks)"));
+			FString RD;
+			const int32 Bad = LogReach(&RD);
+			Need(Bad == 0, FString::Printf(TEXT("%d prop(s) above every launch envelope"), Bad));
+			FString Live;
+			for (const TPair<FString, float>& P : RunPeaks) Live += FString::Printf(TEXT("%s%s=%.0f(x%d)"), Live.IsEmpty() ? TEXT("") : TEXT(","), *P.Key, P.Value, RunPeakCounts.FindRef(P.Key));
+			Reach = FString::Printf(TEXT(" reach=\"%s\" envelope=\"%s\" live_peaks=\"%s\""), *RD, *Tune.ReachPeaks, Live.IsEmpty() ? TEXT("-") : *Live);
+		}
 		FString Kinds;
 		for (const TPair<FString, int32>& K : CPUPlanKinds) Kinds += FString::Printf(TEXT("%s%s=%d"), Kinds.IsEmpty() ? TEXT("") : TEXT(","), *K.Key, K.Value);
 		D = FString::Printf(TEXT("props=%d plans=%d/%d kinds=%s passes=%d rims=%d bumpers=%d rail=%d/%d window=%s gates=%d segment=%s comic=%s detail=\"%s\" plan=\"%s\""),
 			Props.Num(), CPUPropPlans, CPUPropRolls, Kinds.IsEmpty() ? TEXT("-") : *Kinds, HaloPasses, HaloRims, BumperRebounds, RailEntries, RailReleases, ZoogiBattle::RailWindowName(LastRailWindow),
-			GatePasses, S ? *S->SegmentId : TEXT("-"), S ? ZoogiBattle::ComicName(S->Comic) : TEXT("-"), S ? *S->Detail : TEXT("-"), *CPUPlan.Desc);
+			GatePasses, S ? *S->SegmentId : TEXT("-"), S ? ZoogiBattle::ComicName(S->Comic) : TEXT("-"), S ? *S->Detail : TEXT("-"), *CPUPlan.Desc) + Reach;
 	}
 	FString F = FString::Join(Fails, TEXT("; "));
 	TestReport(Fails.Num() == 0, D + (F.IsEmpty() ? FString() : FString::Printf(TEXT(" FAILS: %s"), *F)));
@@ -751,7 +764,7 @@ bool UZoogiBattleStateMachine::TestMapSetup()
 {
 	AZoogiGameMode* G = GM();
 	if (!G || !bMapLayout || Props.Num() == 0) return false; // the layout spawns at the first aim (TickProps)
-	if (TestCase == TEXT("map_props"))
+	if (TestCase == TEXT("map_props") || TestCase == TEXT("map_reach"))
 	{
 		Tune.CPUPropChance = 1.f;
 		UE_LOG(LogZoogi, Log, TEXT("BATTLE_TEST map_props: layout up (%d props), CPU prop chance forced to 1"), Props.Num());

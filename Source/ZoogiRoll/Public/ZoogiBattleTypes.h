@@ -165,6 +165,11 @@ struct FZoogiBattleTuning
 	float MapRailMinSpeed = 1100.f;         // the Frozen map Launch Rail's minimum release speed (the early arc reaches the hanging halo)
 	float CPUPropChance = 0.35f;            // chance a CPU turn plays a prop shot (rail / halo pass / bumper bank) when one is feasible
 	float CPUPropAimErrDiv = 40.f;          // prop shots: aim error = +-(100 - control) / this degrees (normal shots use / 12)
+	// Oct 8 (Evan 9:26 PM): reachability envelope = peak ball-centre z measured per launch type in play ("BATTLE peak" lines)
+	FString ReachPeaks;                     // "rail_early=..,rail_center=..,ramp=..,bumper=..,floor=.." (empty = no cap)
+	float ReachMargin = 20.f;               // Zone 2 props sit this far below the envelope peak of their launch type
+	float AerialHaloAlong = 580.f;          // hanging halo: distance along the map rail from its release end
+	float AerialHaloZ = 250.f;              // hanging halo centre z (capped at the rail_early envelope - ReachMargin)
 	// [ZoogiRoll.Unlocks]
 	float PerfWeightScore = 0.01f;          // performance = score*w + KOs*w + completed*w + tier3plus*w - shatters*w
 	float PerfWeightKO = 2.f;

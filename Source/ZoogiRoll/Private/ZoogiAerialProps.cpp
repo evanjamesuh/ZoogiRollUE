@@ -470,12 +470,14 @@ void AZoogiAerialDecor::Build(AZoogiArena* Arena, const TArray<AZoogiAerialProp*
 		Sphere(bC ? SNodeC : SNodeO, FVector(FMath::Cos(A) * R, FMath::Sin(A) * R, bC ? -90.f : -115.f), 24.f, 12);
 	}
 	// ---- Zone 2: the aerial structure behind the arena (art top): floating discs, hanging rings, a big halo, cables
+	// Oct 8 (Evan 9:26 PM): heights inside the measured reachable envelope (the art top was z 1250; K maps it onto MaxZ)
+	const float K = MaxZ > 0.f ? FMath::Min(1.f, MaxZ / 1250.f) : 1.f;
 	auto Pol = [](float R, float Yaw, float Zz) { const float A = FMath::DegreesToRadians(Yaw); return FVector(FMath::Cos(A) * R, FMath::Sin(A) * R, Zz); };
 	struct FDiscDef { float R, Yaw, Zz, Rad; };
 	const FDiscDef Discs[] = { { 1850.f, 252.f, 620.f, 130.f }, { 2050.f, 272.f, 780.f, 110.f }, { 1800.f, 292.f, 690.f, 120.f }, { 2250.f, 262.f, 960.f, 90.f }, { 2150.f, 300.f, 1020.f, 100.f }, { 1950.f, 236.f, 900.f, 85.f } };
 	for (const FDiscDef& D : Discs)
 	{
-		const FVector C = Pol(D.R, D.Yaw, D.Zz);
+		const FVector C = Pol(D.R, D.Yaw, FMath::Max(40.f, D.Zz * K));
 		Disc(SStone, C, D.Rad, 22.f);
 		Disc(SIce, C + FVector(0, 0, 3.f), D.Rad * 0.82f, 2.f);
 		Torus(SGlow, C - FVector(0, 0, 11.f), X, Y, D.Rad, 4.5f, 0.f, 360.f, 40, 6);
@@ -486,7 +488,7 @@ void AZoogiAerialDecor::Build(AZoogiArena* Arena, const TArray<AZoogiAerialProp*
 	const FRingDef Rings[] = { { 1900.f, 262.f, 900.f, 170.f }, { 1980.f, 284.f, 560.f, 120.f } };
 	for (const FRingDef& Rg : Rings)
 	{
-		const FVector C = Pol(Rg.R, Rg.Yaw, Rg.Zz);
+		const FVector C = Pol(Rg.R, Rg.Yaw, FMath::Max(Rg.Rad + 30.f, Rg.Zz * K));
 		const FVector In = FVector(-C.X, -C.Y, 0.f).GetSafeNormal();
 		const FVector S = FVector::CrossProduct(Z, In).GetSafeNormal();
 		Torus(SStone, C, S, Z, Rg.Rad, 16.f, 0.f, 360.f, 56, 10);
@@ -494,7 +496,7 @@ void AZoogiAerialDecor::Build(AZoogiArena* Arena, const TArray<AZoogiAerialProp*
 		Tube(SDark, C + Z * (Rg.Rad + 14.f), FVector(C.X, C.Y, 2600.f), 3.f, 6);
 	}
 	{
-		const FVector C = Pol(2000.f, 270.f, 1250.f);
+		const FVector C = Pol(2000.f, 270.f, FMath::Max(60.f, 1250.f * K));
 		Torus(SStone, C, X, Y, 340.f, 20.f, 0.f, 360.f, 72, 10);
 		Torus(SGlow, C - FVector(0, 0, 18.f), X, Y, 340.f, 5.f, 0.f, 360.f, 72, 6);
 		for (int32 k = 0; k < 3; ++k)
@@ -511,7 +513,7 @@ void AZoogiAerialDecor::Build(AZoogiArena* Arena, const TArray<AZoogiAerialProp*
 		{
 			const float T = (float)i / 16.f;
 			const float Yaw = FMath::Lerp(244.f, 300.f, T);
-			Pts.Add(Pol(FMath::Lerp(1880.f, 1760.f, T), Yaw, FMath::Lerp(830.f, 600.f, T) + 60.f * FMath::Sin(T * PI)));
+			Pts.Add(Pol(FMath::Lerp(1880.f, 1760.f, T), Yaw, FMath::Max(40.f, (FMath::Lerp(830.f, 600.f, T) + 60.f * FMath::Sin(T * PI)) * K)));
 		}
 		for (int32 i = 0; i + 1 < Pts.Num(); ++i)
 		{
@@ -532,5 +534,5 @@ void AZoogiAerialDecor::Build(AZoogiArena* Arena, const TArray<AZoogiAerialProp*
 	Add(ZoogiUtil::GlowMID(this, Orange, 2.2f), SOrange);
 	Add(ZoogiUtil::GlowMID(this, Cyan, 3.f), SNodeC);
 	Add(ZoogiUtil::GlowMID(this, Orange, 3.f), SNodeO);
-	UE_LOG(LogZoogi, Log, TEXT("BATTLE aerial decor built: meshes=%d (visual only, no collision) props=%d"), Meshes.Num(), Props.Num());
+	UE_LOG(LogZoogi, Log, TEXT("BATTLE aerial decor built: meshes=%d (visual only, no collision) props=%d max_z=%.0f k=%.2f"), Meshes.Num(), Props.Num(), MaxZ, K);
 }

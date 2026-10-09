@@ -92,6 +92,9 @@ public:
 	AZoogiAerialDecor();
 	void Build(AZoogiArena* Arena, const TArray<AZoogiAerialProp*>& Props);
 	UPROPERTY() TArray<TObjectPtr<UProceduralMeshComponent>> Meshes;
+	/** Oct 8 (Evan 9:26 PM): top of the reachable envelope (ball-centre z); the Zone 2 discs / rings / big halo are scaled down
+	 *  into it (<= 0: the art heights). */
+	float MaxZ = -1.f;
 protected:
 	void Add(UMaterialInterface* M, const FZoogiMeshBuilder& B);
 };
