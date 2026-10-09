@@ -64,6 +64,7 @@ void AZoogiArenaShowcase::MaybeStart(UWorld* World, const FString& ArenaSlug)
 	if (ArenaSlug.Contains(TEXT("ice")) || ArenaSlug.Contains(TEXT("frozen")))
 	{
 		// Buzzy Frozen Ring compositions (screen up = -Y, the art orientation): top-down, 3/4, hero, hub, plus a damaged top.
+		S->Poses.Insert(FPose{ TEXT("ref_aerial"),  FVector(0, -400, 700),  270.f, 30.f, 7600.f, 55.f }, 0); // polish r1: frozen_zones_aerial framing
 		S->Poses.Insert(FPose{ TEXT("buzzy_hub"),   FVector(0, -40, 110),   270.f, 22.f, 1900.f, 75.f }, 0);
 		S->Poses.Insert(FPose{ TEXT("buzzy_hero"),  FVector(0, -250, -250), 270.f, 16.f, 5300.f, 70.f }, 0);
 		S->Poses.Insert(FPose{ TEXT("buzzy_34"),    FVector(0, 0, 0),       270.f, 50.f, 6000.f, 62.f }, 0);

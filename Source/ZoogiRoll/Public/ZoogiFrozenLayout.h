@@ -23,6 +23,10 @@ namespace ZoogiFrozen
 	constexpr float WallNA0 = 262.f, WallNA1 = 300.f;
 	constexpr float WallWA0 = 166.f, WallWA1 = 194.f;
 	constexpr float WallEA0 = 330.f, WallEA1 = 352.f;
+	// Polish r2 (Evan Oct 8 9:16 PM): extra breakable ice-wall arcs (same WallR / style) so the whole ring edge is walled,
+	// leaving open the bridges (36 / 140 / 186 / 354), Recovery Gate 45 + Launch Rail entry (r1200 yaw 35), arches 140 / 230 / 310
+	// and the snow-chute ramp (231.5). Each pair = yaw from / to (deg).
+	inline const FVector2D WallFillArcs[6] = { FVector2D(3.f, 25.f), FVector2D(54.f, 131.f), FVector2D(149.f, 166.f), FVector2D(194.f, 221.f), FVector2D(240.f, 262.f), FVector2D(318.f, 330.f) };
 	// Rim arches (the SE one is the Recovery Gate).
 	constexpr float ArchR = 1590.f;
 	constexpr float ArchYaw[4] = { 45.f, 140.f, 230.f, 310.f };

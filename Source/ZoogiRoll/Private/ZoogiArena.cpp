@@ -396,14 +396,16 @@ void AZoogiArena::SetupSky(EZoogiArena InTheme)
 		Sun->SetRelativeRotation(FRotator(-38.f, 125.f, 0.f));
 		Sun->SetIntensity(8.f);
 		Sun->SetLightColor(FLinearColor(0.9f, 0.95f, 1.f));
-		Fog->SetFogDensity(0.02f);
-		Fog->SetStartDistance(9000.f); // court stays crisp; far mountains fade into the pale haze like the art
-		Fog->SetFogInscatteringColor(FLinearColor(0.72f, 0.84f, 0.98f));
+		// Polish r1 (Oct 8, frozen_zones_aerial): brighter painterly grade - thinner bluer haze so the icy cliffs read blue
+		// instead of milky white, a touch more saturation / blue, slightly higher exposure.
+		Fog->SetFogDensity(0.008f);
+		Fog->SetStartDistance(12000.f); // court + near cliffs stay crisp; far ranges fade into the blue haze like the art
+		Fog->SetFogInscatteringColor(FLinearColor(0.55f, 0.76f, 1.0f));
 		Clouds->SetVisibility(false);
-		SkyLight->SetIntensity(1.35f);
-		P.AutoExposureBias = -0.8f;
-		P.BloomIntensity = 1.1f;
-		P.ColorSaturation = FVector4(0.95f, 1.f, 1.1f, 1.f);
+		SkyLight->SetIntensity(1.4f);
+		P.AutoExposureBias = -0.7f;
+		P.BloomIntensity = 1.15f;
+		P.ColorSaturation = FVector4(1.02f, 1.08f, 1.2f, 1.f);
 		break;
 	case EZoogiArena::Volcanic:
 		Sun->SetRelativeRotation(FRotator(-12.f, 20.f, 0.f));
