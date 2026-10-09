@@ -364,6 +364,9 @@ public:
 	TArray<AActor*> TargetCandidates() const;
 	void LockOn(AActor* Target, bool bSoft);
 	void ClearLock();
+	/** Battle map props (Oct 8): re-plan the active CPU's shot before its Battle step (the map layout / a test placement
+	 *  arrived after the turn-start plan). No-op for humans or once the CPU is in its Battle step. */
+	void ReplanCPUShot();
 	void CycleLock(bool bSoft);
 	/** Space / click on the locked target during Main: start the Battle stage. */
 	bool CommitLock();

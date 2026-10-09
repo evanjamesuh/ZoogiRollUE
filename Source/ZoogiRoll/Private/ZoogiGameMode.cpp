@@ -1,4 +1,5 @@
 #include "ZoogiGameMode.h"
+#include "ZoogiBattleStateMachine.h"
 #include "ZoogiEpisodeSubsystem.h"
 #include "ZoogiKFXPreview.h"
 #include "ZoogiRoll.h"
@@ -804,6 +805,14 @@ static float InvertLaunch(float Speed)
 	return 0.5f * (Lo + Hi);
 }
 
+void AZoogiGameMode::ReplanCPUShot()
+{
+	AZoogiBall* Me = GetActiveBall();
+	if (!Me || !Me->bCPU || Phase != EZoogiPhase::Aiming || Stage == EZoogiStage::Battle || bComboMode) return;
+	ClearLock();
+	PlanCPUShot();
+}
+
 void AZoogiGameMode::PlanCPUShot()
 {
 	AZoogiBall* Me = GetActiveBall();
@@ -955,6 +964,10 @@ void AZoogiGameMode::PlanCPUShot()
 	const float ErrDeg = GameRng.FRandRange(-1.f, 1.f) * (100.f - Me->Def.Control) / 12.f;
 	BestDir = BestDir.GetRotated(ErrDeg);
 	BestFrac = FMath::Clamp(BestFrac * GameRng.FRandRange(0.96f, 1.04f), 0.25f, 1.f);
+	// Oct 8: Frozen aerial layer: with the battle map props up, a CPU sometimes plays a prop route (rail / halo / bumper) instead.
+	// No-op (and no GameRng draw) without the map layout, so every existing mode and test plans exactly as before.
+	if (UZoogiBattleStateMachine* BSM = GetWorld()->GetSubsystem<UZoogiBattleStateMachine>())
+		if (BSM->PlanCPUProp(ActivePlayer, BestDir, BestFrac, CPULock)) { bCPUUsePower = false; CPUPlannedCut = 0.f; } // a clean prop route, no power
 	// -ZoogiRockTest: hard straight shot at the nearest standing rock (screenshots of cracking / shattering).
 	if (bRockTest && Arena)
 	{

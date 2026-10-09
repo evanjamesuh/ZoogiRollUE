@@ -347,6 +347,12 @@ void UZoogiBattleStateMachine::HandleAirborne(int32 Body, float Peak)
 	++AirOffersSeen;
 	UE_LOG(LogZoogi, Log, TEXT("BATTLE awakening P%d react=air allowed=%d why=%s peak=%.0f action=%d"), Body + 1, bAllowed ? 1 : 0, *Why, Peak, CurrentActionId);
 	if (!bAllowed) return;
+	if (G->Balls[Body] && G->Balls[Body]->bCPU && CPUPlan.IsFor(Body, G->TurnCounter) && CPUPlan.Kind == EZoogiPropKind::LaunchRail && LastRailWindow == EZoogiRailWindow::Early)
+	{
+		// Oct 8: a CPU threading the hanging halo off an EARLY rail release keeps its arc (no reaction this flight)
+		UE_LOG(LogZoogi, Log, TEXT("BATTLE awakening P%d react=air declined (cpu rail EARLY route)"), Body + 1);
+		return;
+	}
 	++AirOffersAllowed;
 	AirOfferedTo.Add(Body);
 	if (UZoogiEpisodeSubsystem* Ep = Episode()) Ep->ClaimAirborne();

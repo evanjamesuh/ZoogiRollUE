@@ -132,6 +132,7 @@ void FZoogiBattleTuning::Load()
 	Gains.Add(TEXT("GuardBlock"), 5.f);   // to a guarded Zoogi that absorbs a hit
 	Gains.Add(TEXT("OrbLineOrb"), 2.f);   // per committed orb touched in an Orb Line
 	Gains.Add(TEXT("Reaction"), 4.f);     // a successful Air Reaction
+	Gains.Add(TEXT("RecoveryGate"), 3.f); // a Zoogi rolls through a Zone 3 red / blue recovery gate (Frozen map layout)
 	Combos.Reset();
 	auto AddC = [this](const TCHAR* Id, const TCHAR* Label, float Cost, EZoogiChallenge Ch, int32 MinTier, const TCHAR* Tag, const TCHAR* Clip, bool bCPU)
 	{
@@ -139,11 +140,11 @@ void FZoogiBattleTuning::Load()
 		Combos.Add(R);
 	};
 	AddC(TEXT("signature_strike"), TEXT("SIGNATURE STRIKE"), 20.f, EZoogiChallenge::Strike, 0, nullptr, TEXT("clip_{zoogi}_signature_strike"), true);
-	AddC(TEXT("halo_bank"), TEXT("HALO BANK"), 25.f, EZoogiChallenge::HaloBank, 0, nullptr, TEXT("clip_{zoogi}_halo_bank"), false);
+	AddC(TEXT("halo_bank"), TEXT("HALO BANK"), 25.f, EZoogiChallenge::HaloBank, 0, nullptr, TEXT("clip_{zoogi}_halo_bank"), true);   // CPU: only with a halo-pass prop plan
 	AddC(TEXT("orb_line"), TEXT("ORB LINE"), 15.f, EZoogiChallenge::OrbLine, 0, nullptr, TEXT("clip_{zoogi}_orb_line"), false);
-	AddC(TEXT("sky_bumper"), TEXT("SKY BUMPER"), 25.f, EZoogiChallenge::SkyBumper, 0, nullptr, TEXT("clip_{zoogi}_sky_bumper"), false);
+	AddC(TEXT("sky_bumper"), TEXT("SKY BUMPER"), 25.f, EZoogiChallenge::SkyBumper, 0, nullptr, TEXT("clip_{zoogi}_sky_bumper"), true); // CPU: only with a bumper-bank prop plan
 	AddC(TEXT("partner_intercept"), TEXT("PARTNER INTERCEPT"), 30.f, EZoogiChallenge::PartnerIntercept, 0, nullptr, TEXT("clip_{zoogi}_partner_intercept"), false);
-	AddC(TEXT("rail_release"), TEXT("RAIL RELEASE"), 20.f, EZoogiChallenge::RailRelease, 0, nullptr, TEXT("clip_{zoogi}_rail_release"), false);
+	AddC(TEXT("rail_release"), TEXT("RAIL RELEASE"), 20.f, EZoogiChallenge::RailRelease, 0, nullptr, TEXT("clip_{zoogi}_rail_release"), true); // CPU: only with a rail prop plan
 	AddC(TEXT("power_finisher"), TEXT("POWER FINISHER"), 40.f, EZoogiChallenge::Strike, 2, TEXT("POWER_HIT"), TEXT("clip_{zoogi}_power_finisher"), true);
 	GainsSource = CombosSource = TEXT("built-in");
 
@@ -195,7 +196,12 @@ void FZoogiBattleTuning::Load()
 	F(SZ, TEXT("HaloRadius"), HaloRadius); F(SZ, TEXT("RailEarlyWindow"), RailEarlyWindow); F(SZ, TEXT("RailCenterWindow"), RailCenterWindow); F(SZ, TEXT("RailLateWindow"), RailLateWindow);
 	F(SZ, TEXT("RailHighPitch"), RailHighPitch); F(SZ, TEXT("RailCenterPitch"), RailCenterPitch); F(SZ, TEXT("RailLatePitch"), RailLatePitch); F(SZ, TEXT("RailLateYaw"), RailLateYaw);
 	F(SZ, TEXT("RailSpeedMul"), RailSpeedMul); F(SZ, TEXT("RailMinSpeed"), RailMinSpeed); F(SZ, TEXT("ZoneAerialZ"), ZoneAerialZ); F(SZ, TEXT("ZoneRecoveryFrac"), ZoneRecoveryFrac);
-	if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiBattleProps"))) bAerialProps = true;
+	Str(SZ, TEXT("AerialArenas"), AerialArenas); F(SZ, TEXT("MapRailMinSpeed"), MapRailMinSpeed); F(SZ, TEXT("CPUPropChance"), CPUPropChance); F(SZ, TEXT("CPUPropAimErrDiv"), CPUPropAimErrDiv);
+	B(SB, TEXT("bBattleHUD"), bBattleHUD);
+	if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiBattleProps"))) { bAerialProps = true; AerialArenas = TEXT("All"); }
+	if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiBattleNoProps"))) bAerialProps = false;
+	if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiBattleDebug"))) bDebugOverlay = true;
+	FParse::Value(FCommandLine::Get(), TEXT("-ZoogiCPUPropChance="), CPUPropChance);
 	FParse::Value(FCommandLine::Get(), TEXT("-ZoogiSkyBumperRebound="), SkyBumperRebound);
 	const TCHAR* SU = TEXT("ZoogiRoll.Unlocks");
 	F(SU, TEXT("PerfWeightScore"), PerfWeightScore); F(SU, TEXT("PerfWeightKO"), PerfWeightKO); F(SU, TEXT("PerfWeightSegment"), PerfWeightSegment);

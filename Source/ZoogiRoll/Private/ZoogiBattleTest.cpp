@@ -65,6 +65,11 @@ namespace
 		{ TEXT("replay_order"),          ELay::None,   EAw::Save,   nullptr,               false, -1.f, 6, false },
 		{ TEXT("one_v_one"),             ELay::None,   EAw::Save,   nullptr,               false, -1.f, 6, false },
 		{ TEXT("four_player_2v2"),       ELay::None,   EAw::Save,   nullptr,               false, -1.f, 8, false },
+		// Oct 8: Frozen map layout in a normal match (CPU-driven, props placed by the map, not by the test)
+		{ TEXT("map_props"),             ELay::None,   EAw::Save,   nullptr,               false, -1.f, 6, false },
+		{ TEXT("map_rail"),              ELay::None,   EAw::Save,   TEXT("rail_release"),  false, 50.f, 1, false },
+		{ TEXT("map_halo"),              ELay::None,   EAw::Save,   TEXT("halo_bank"),     false, 50.f, 1, false },
+		{ TEXT("map_bumper"),            ELay::None,   EAw::Save,   TEXT("sky_bumper"),    false, 50.f, 1, false },
 	};
 	const FCase* FindCase(const FString& N)
 	{
@@ -305,7 +310,11 @@ void UZoogiBattleStateMachine::TickTest(float RealDt)
 	{
 		if (TestDeadline == 0.0) TestDeadline = RealClock + 240.0;
 		if (G->Phase != EZoogiPhase::Aiming || G->Stage != EZoogiStage::Draw || G->Balls.Num() < 2 || !G->Arena) return;
-		if (!C->bScriptP1) { TestStep = 5; TestDeadline = RealClock + 60.0 * C->Actions; return; }
+		if (!C->bScriptP1)
+		{
+			if (TestCase.StartsWith(TEXT("map_")) && !TestMapSetup()) return;
+			TestStep = 5; TestDeadline = RealClock + 60.0 * C->Actions; return;
+		}
 		if (G->ActivePlayer != 0) return;
 		TestScriptTurn();
 		return;
@@ -704,6 +713,89 @@ void UZoogiBattleStateMachine::TestCheck()
 		}
 		D = FString::Printf(TEXT("order=%s ledger_actions=%d playlist=%d"), *Order, Acts, Assembler->Playlist.Num());
 	}
+	else if (Case.StartsWith(TEXT("map_")))
+	{
+		const int32 Events = HaloPasses + HaloRims + BumperRebounds + RailEntries + GatePasses;
+		const FZoogiPendingSegment* S = Last();
+		Need(bMapLayout && Props.Num() == 8 && Decor != nullptr, TEXT("Frozen map layout not up (8 props + decor)"));
+		Need(CPUPropPlans >= 1, TEXT("no CPU prop plan"));
+		Need(Events >= 1, TEXT("no prop event"));
+		if (Case == TEXT("map_rail"))
+		{
+			Need(RailEntries >= 1 && RailReleases >= 1, TEXT("map rail not entered / released"));
+			Need(LastRailWindow == EZoogiRailWindow::Early, TEXT("CPU window != EARLY"));
+			Need(HaloPasses >= 1, TEXT("EARLY arc did not thread the hanging halo"));
+			Need(S && S->Comic == EZoogiComicState::Completed && S->RailWindow == EZoogiRailWindow::Early, TEXT("rail segment not COMPLETED (EARLY)"));
+		}
+		else if (Case == TEXT("map_halo"))
+		{
+			Need(HaloPasses >= 1, TEXT("no floor halo pass"));
+			Need(S && S->ComboId == FName(TEXT("halo_bank")) && S->Comic == EZoogiComicState::Completed, TEXT("halo_bank not COMPLETED"));
+		}
+		else if (Case == TEXT("map_bumper"))
+		{
+			Need(BumperRebounds >= 1, TEXT("no bumper rebound"));
+			Need(S && S->ComboId == FName(TEXT("sky_bumper")) && S->BumperAt >= 0.f && S->Comic == EZoogiComicState::Completed, TEXT("sky_bumper not COMPLETED"));
+		}
+		FString Kinds;
+		for (const TPair<FString, int32>& K : CPUPlanKinds) Kinds += FString::Printf(TEXT("%s%s=%d"), Kinds.IsEmpty() ? TEXT("") : TEXT(","), *K.Key, K.Value);
+		D = FString::Printf(TEXT("props=%d plans=%d/%d kinds=%s passes=%d rims=%d bumpers=%d rail=%d/%d window=%s gates=%d segment=%s comic=%s detail=\"%s\" plan=\"%s\""),
+			Props.Num(), CPUPropPlans, CPUPropRolls, Kinds.IsEmpty() ? TEXT("-") : *Kinds, HaloPasses, HaloRims, BumperRebounds, RailEntries, RailReleases, ZoogiBattle::RailWindowName(LastRailWindow),
+			GatePasses, S ? *S->SegmentId : TEXT("-"), S ? ZoogiBattle::ComicName(S->Comic) : TEXT("-"), S ? *S->Detail : TEXT("-"), *CPUPlan.Desc);
+	}
 	FString F = FString::Join(Fails, TEXT("; "));
 	TestReport(Fails.Num() == 0, D + (F.IsEmpty() ? FString() : FString::Printf(TEXT(" FAILS: %s"), *F)));
+}
+
+bool UZoogiBattleStateMachine::TestMapSetup()
+{
+	AZoogiGameMode* G = GM();
+	if (!G || !bMapLayout || Props.Num() == 0) return false; // the layout spawns at the first aim (TickProps)
+	if (TestCase == TEXT("map_props"))
+	{
+		Tune.CPUPropChance = 1.f;
+		UE_LOG(LogZoogi, Log, TEXT("BATTLE_TEST map_props: layout up (%d props), CPU prop chance forced to 1"), Props.Num());
+		return true;
+	}
+	if (G->ActivePlayer != 0 || !G->Balls.IsValidIndex(0) || !G->Balls[0]) return false;
+	const FCase* C = FindCase(TestCase);
+	EZoogiPropKind Kind = EZoogiPropKind::LaunchRail;
+	if (TestCase == TEXT("map_halo")) Kind = EZoogiPropKind::ResonanceHalo;
+	else if (TestCase == TEXT("map_bumper")) Kind = EZoogiPropKind::SkyBumper;
+	AZoogiBall* P1 = G->Balls[0];
+	P1->bCPU = true;
+	if (C && C->Energy >= 0.f) if (UZoogiEpisodeEnergyComponent* EC = Energy(0)) EC->SetValue(C->Energy, TEXT("test_setup"));
+	Tune.CPUPropChance = 1.f;
+	TestForceProp = (int32)Kind;
+	TestForceWindow = Kind == EZoogiPropKind::LaunchRail ? EZoogiRailWindow::Early : EZoogiRailWindow::None;
+	// candidate start spots (first feasible wins): P1's own pad first
+	auto Pol = [](float R, float Yaw) { const float A = FMath::DegreesToRadians(Yaw); return FVector2D(FMath::Cos(A) * R, FMath::Sin(A) * R); };
+	TArray<FVector2D> Spots = { FVector2D(P1->BallLocation()) };
+	if (Kind == EZoogiPropKind::LaunchRail) Spots.Append({ Pol(980.f, 0.f), Pol(900.f, 70.f), Pol(760.f, 20.f), Pol(1000.f, 100.f) });
+	else if (Kind == EZoogiPropKind::ResonanceHalo) Spots.Append({ FVector2D(175.f, 0.f), FVector2D(-175.f, 0.f), FVector2D(185.f, 4.f), FVector2D(-185.f, -4.f) });
+	else Spots.Append({ Pol(980.f, 90.f), Pol(980.f, 180.f), Pol(850.f, 100.f), Pol(850.f, 165.f), Pol(420.f, 135.f), Pol(1050.f, 120.f) });
+	const float Z = P1->BallLocation().Z;
+	for (const FVector2D& Sp : Spots)
+	{
+		bool bFree = true;
+		for (const AZoogiOrb* O : G->Orbs) if (O && !O->bOut && FVector2D::Distance(FVector2D(O->OrbLocation()), Sp) < 105.f) bFree = false;
+		for (const AZoogiBall* B : G->Balls) if (B && B != P1 && !B->bOut && FVector2D::Distance(FVector2D(B->BallLocation()), Sp) < 115.f) bFree = false;
+		for (const AZoogiAerialProp* Pr : Props)
+		{
+			if (!Pr || Pr->Kind == EZoogiPropKind::Gate || Pr->bAerialRing || Pr->Kind == EZoogiPropKind::LaunchRail) continue;
+			const float Keep = Pr->Kind == EZoogiPropKind::ResonanceHalo ? 120.f : Pr->Size + 70.f; // halo: the ring plane is thin
+			if (FVector2D::Distance(FVector2D(Pr->GetActorLocation()), Sp) < Keep) bFree = false;
+		}
+		if (!bFree) continue;
+		if (FVector2D::Distance(FVector2D(P1->BallLocation()), Sp) > 1.f) P1->PlaceAt(FVector(Sp, Z), 0.f);
+		FVector2D Dir; float Frac = 0.f; AActor* T = nullptr; AZoogiAerialProp* Pr = nullptr; FString Desc;
+		if (ComputePropPlan(0, Kind, Dir, Frac, T, Pr, Desc))
+		{
+			G->ReplanCPUShot(); // P1's turn-start plan predates the placement
+			UE_LOG(LogZoogi, Log, TEXT("BATTLE_TEST %s: P1 (CPU) at (%.0f,%.0f), forced %s plan: %s frac=%.2f"), *TestCase, Sp.X, Sp.Y, *Pr->Label(), *Desc, Frac);
+			return true;
+		}
+	}
+	TestReport(false, FString::Printf(TEXT("no feasible start spot for the %s route"), *TestCase));
+	return false;
 }

@@ -108,6 +108,7 @@ public:
 	bool bSegment = false;              // a rail_release combo is pending for this Zoogi (timeout shatters it)
 	bool bReleaseRequested = false;
 	EZoogiRailWindow Window = EZoogiRailWindow::None;
+	EZoogiRailWindow CPUWindow = EZoogiRailWindow::Center; // the window a CPU releases in (center unless a map prop plan chose one)
 	static EZoogiRailWindow WindowAt(const FZoogiBattleTuning& T, float Time);
 	/** Deterministic launch velocity for a window (rail forward, the Zoogi position for the bank side, entry speed). */
 	static FVector LaunchVelocity(const FZoogiBattleTuning& T, EZoogiRailWindow W, const FVector& Forward, const FVector& Pos, float Speed);

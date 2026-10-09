@@ -125,7 +125,8 @@ struct FZoogiBattleTuning
 	float ShatterRefundFrac = 0.f;          // fraction of the combo cost refunded on a shatter
 	bool bSpendOnSelect = true;             // combo cost is paid when committed (else only on success)
 	bool bCPUCombos = true;                 // CPU players pick affordable combos
-	bool bDebugOverlay = true;              // on-screen debug lines (energy, awakening, challenge, SHATTER)
+	bool bDebugOverlay = false;             // raw on-screen debug lines + zone/prop debug draw (Oct 8: off; -ZoogiBattleDebug turns it on)
+	bool bBattleHUD = true;                 // the in-game Episode Energy panel / mini-game prompts / SHATTERED flash (flow on)
 	// [ZoogiRoll.EpisodeEnergy]
 	float EnergyCap = 100.f;
 	float StrongHitSpeed = 900.f;           // relative normal speed for a "strong" hit (cm/s)
@@ -160,6 +161,10 @@ struct FZoogiBattleTuning
 	float RailMinSpeed = 700.f;
 	float ZoneAerialZ = 150.f;              // Zone 2 aerial layer: body z above this (debug tag)
 	float ZoneRecoveryFrac = 0.92f;         // Zone 3 recovery ring: radius beyond this fraction of the arena radius (debug tag)
+	FString AerialArenas = TEXT("Frozen");  // arenas that get props in normal play (Frozen = the map layout; others = the debug layout; All)
+	float MapRailMinSpeed = 1100.f;         // the Frozen map Launch Rail's minimum release speed (the early arc reaches the hanging halo)
+	float CPUPropChance = 0.35f;            // chance a CPU turn plays a prop shot (rail / halo pass / bumper bank) when one is feasible
+	float CPUPropAimErrDiv = 40.f;          // prop shots: aim error = +-(100 - control) / this degrees (normal shots use / 12)
 	// [ZoogiRoll.Unlocks]
 	float PerfWeightScore = 0.01f;          // performance = score*w + KOs*w + completed*w + tier3plus*w - shatters*w
 	float PerfWeightKO = 2.f;

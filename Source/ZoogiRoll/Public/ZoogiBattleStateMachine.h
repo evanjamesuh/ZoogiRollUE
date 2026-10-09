@@ -28,6 +28,23 @@ class UZoogiReactionComponent;
 class UZoogiMiniGame;
 class UZoogiEpisodeLedger;
 class UZoogiEpisodeAssembler;
+class AZoogiAerialDecor;
+class AHUD;
+class UCanvas;
+
+/** Oct 8: a CPU turn's prop plan (Frozen map layout): what the CPU aimed at and which combo / rail window goes with it. */
+struct FZoogiCPUPropPlan
+{
+	int32 Player = -1;
+	int32 Turn = -1;
+	EZoogiPropKind Kind = EZoogiPropKind::SkyBumper;
+	FName Combo;
+	TWeakObjectPtr<AZoogiAerialProp> Prop;
+	TWeakObjectPtr<AActor> Target;
+	EZoogiRailWindow RailWindow = EZoogiRailWindow::Center;
+	FString Desc;
+	bool IsFor(int32 InPlayer, int32 InTurn) const { return Player == InPlayer && Turn == InTurn && Player >= 0; }
+};
 
 UCLASS()
 class ZOOGIROLL_API UZoogiBattleStateMachine : public UTickableWorldSubsystem
@@ -94,7 +111,7 @@ public:
 
 	// ---- T3 aerial props / zones / Rail Release (ZoogiAerialPlay.cpp). Off unless bAerialProps / -ZoogiBattleProps / a test.
 	UPROPERTY() TArray<TObjectPtr<AZoogiAerialProp>> Props;
-	AZoogiAerialProp* SpawnProp(EZoogiPropKind Kind, const FVector& Location, const FVector& Forward, float Size = -1.f);
+	AZoogiAerialProp* SpawnProp(EZoogiPropKind Kind, const FVector& Location, const FVector& Forward, float Size = -1.f, bool bAerialRing = false, FName Tag = NAME_None);
 	void ClearProps();
 	/** A prop reports an event for a Zoogi: bumper (rebound applied), rim, pass, rail_enter. */
 	void OnPropEvent(AZoogiAerialProp* Prop, AZoogiBall* Ball, FName Event, const FVector& Where, float SpeedIn, float SpeedOut);
@@ -111,6 +128,20 @@ public:
 	float BumperPostSpeed = 0.f;          // the Zoogi's 2D speed two frames after a Sky Bumper rebound (the sim carried it)
 	TWeakObjectPtr<AZoogiBall> BumperCheckBall;
 	int32 BumperCheckFrames = 0;
+
+	// ---- Oct 8: Frozen map layout in normal play, CPU prop plans, in-game battle HUD (ZoogiAerialPlay.cpp / ZoogiBattleHUD.cpp)
+	/** Map-layout props wanted now: flow on, bAerialProps, the arena in AerialArenas, not 2v2 combo; tests only map_* cases. */
+	bool WantsMapProps() const;
+	bool HasMapLayout() const { return bMapLayout; }
+	/** GameMode PlanCPUShot hook (after the aim error): may replace the shot with a rail / halo-pass / bumper-bank plan. Uses
+	 *  the GameMode's GameRng only when map props exist (other arenas: no draw, behaviour identical). */
+	bool PlanCPUProp(int32 Player, FVector2D& Dir, float& Frac, TWeakObjectPtr<AActor>& Lock);
+	/** Plans one prop shot for Player (Kind) without the chance roll (tests / CPU). False if not feasible. */
+	bool ComputePropPlan(int32 Player, EZoogiPropKind Kind, FVector2D& OutDir, float& OutFrac, AActor*& OutTarget, AZoogiAerialProp*& OutProp, FString& OutDesc) const;
+	FZoogiCPUPropPlan CPUPlan;
+	int32 CPUPropPlans = 0, CPUPropRolls = 0, GatePasses = 0;
+	TMap<FString, int32> CPUPlanKinds;
+	UPROPERTY() TObjectPtr<AZoogiAerialDecor> Decor;
 
 	// ---- T4 ledger / assembler
 	UPROPERTY() TObjectPtr<UZoogiEpisodeLedger> Ledger;
@@ -172,12 +203,31 @@ protected:
 	void TickRail(class UZoogiMiniGameRailRelease* M);
 	void FinishRail(class UZoogiMiniGameRailRelease* M, EZoogiChallengeResult R, const FString& Why);
 	void DrawZones() const;
+	void SpawnMapLayout();
+	void ClearMapLayout(const TCHAR* Why);
+	/** Engine-viewport screenshot (+HUD) of an aerial moment (-ZoogiAerialShots=<dir> only; max 2 per name). */
+	void AerialShot(const FString& Name, float Delay = 0.f);
+	void TickAerialShots();
+	FString AerialShotDir;
+	TArray<TPair<FString, double>> AerialLater;
+	TMap<FString, int32> AerialShotCounts;
+	uint8 MapTheme = 0;                    // EZoogiArena of the arena the map layout was built for
+	bool bMapLayout = false;
+	TWeakObjectPtr<class AZoogiArena> MapArena;
 	TSet<TWeakObjectPtr<AZoogiBall>> PropBoundBalls;
 	TMap<int64, FVector> PropPrevLocal;   // (prop, ball) -> previous ball position in the trigger frame
 	bool bDefaultPropsSpawned = false;
 	double ActionStartGame = 0.0;
 	TArray<FString> ActionZoneTags;
 	TArray<FString> ActionPropTags;
+
+	// Oct 8 in-game battle HUD (ZoogiBattleHUD.cpp): drawn through AHUD::OnHUDPostRender (ZoogiHUD untouched)
+	void OnHUDPostRender(AHUD* HUD, UCanvas* Canvas);
+	FDelegateHandle hHUD;
+	int32 HudSeenHistory = 0, HudSeenRail = 0;
+	double HudFlashUntil = 0.0, HudRailUntil = 0.0;
+	FString HudFlashText, HudRailText;
+	FLinearColor HudFlashColor = FLinearColor::White;
 
 	// T4 (ZoogiEpisodeLedger.cpp)
 	void LedgerAction(const FZoogiGameplayTruthRecord& Truth, const FZoogiEpisodeRecognitionRecord& Rec, const FZoogiCinematicPlan& Plan);
@@ -190,6 +240,10 @@ protected:
 	void TestOnMatchEnd();
 	void TestReport(bool bPass, const FString& Detail);
 	bool TestLayout(int32 Shooter, int32 Target, int32 Variant);
+	/** map_* cases: waits for the Frozen map layout (and P1's first turn), places P1 where the forced prop route is feasible. */
+	bool TestMapSetup();
+	int32 TestForceProp = -1;                                   // map_* cases: CPU prop plans only of this EZoogiPropKind
+	EZoogiRailWindow TestForceWindow = EZoogiRailWindow::None;  // map_rail: the CPU's release window
 
 	FZoogiBattleTuning Tune;
 	bool bFlow = false;

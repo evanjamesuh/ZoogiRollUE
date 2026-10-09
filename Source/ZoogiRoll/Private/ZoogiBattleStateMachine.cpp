@@ -13,6 +13,7 @@
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
+#include "GameFramework/HUD.h"
 #include "InputCoreTypes.h"
 #include "Misc/App.h"
 #include "Misc/CommandLine.h"
@@ -43,6 +44,8 @@ void UZoogiBattleStateMachine::Initialize(FSubsystemCollectionBase& Collection)
 	if (FParse::Value(Cmd, TEXT("ZoogiBattleFollowUpCost="), V)) Tune.FollowUpCostSource = V;
 	if (FParse::Value(Cmd, TEXT("ZoogiBattleAwaken="), V)) Tune.ActivationRule = V;
 	if (FParse::Param(Cmd, TEXT("ZoogiBattleNoOverlay"))) Tune.bDebugOverlay = false;
+	FParse::Value(Cmd, TEXT("ZoogiAerialShots="), AerialShotDir); // aerial layer / HUD prompt captures (engine viewport)
+	hHUD = AHUD::OnHUDPostRender.AddUObject(this, &UZoogiBattleStateMachine::OnHUDPostRender); // battle HUD (energy / prompts)
 	if (Ep)
 	{
 		hStart = Ep->OnActionStarted.AddUObject(this, &UZoogiBattleStateMachine::HandleActionStarted);
@@ -67,6 +70,7 @@ void UZoogiBattleStateMachine::Deinitialize()
 		Ep->OnActionFinalized.Remove(hFinal);
 		Ep->OnAirborneLive.Remove(hAir);
 	}
+	AHUD::OnHUDPostRender.Remove(hHUD);
 	Super::Deinitialize();
 }
 
@@ -304,6 +308,7 @@ void UZoogiBattleStateMachine::Tick(float DeltaTime)
 		DebugInput();
 		if (Tune.bDebugOverlay) DebugOverlay();
 	}
+	if (AerialLater.Num() > 0) TickAerialShots();
 	if (!TestCase.IsEmpty()) TickTest(RealDt);
 }
 
@@ -464,6 +469,20 @@ void UZoogiBattleStateMachine::PickCPUCombo(int32 Player)
 	AZoogiGameMode* G = GM();
 	if (!G || !Tune.bCPUCombos || Pending.Owner >= 0) return;
 	const AActor* Target = G->TargetLock.IsValid() ? G->TargetLock.Get() : (G->Preview.bContact ? G->Preview.ContactActor.Get() : nullptr);
+	if (CPUPlan.IsFor(Player, G->TurnCounter))
+	{
+		// Oct 8: the CPU is playing a map prop route (PlanCPUProp): commit the matching route combo when affordable
+		const FZoogiEpisodeComboRow* Row = Tune.Combos.FindByPredicate([this](const FZoogiEpisodeComboRow& C) { return C.Id == CPUPlan.Combo; });
+		if (Row && Row->bCPU && CanAffordCombo(Player, *Row))
+		{
+			SelectCombo(Player, Row->Id, TEXT("cpu_prop"));
+			if (Pending.Owner == Player && CPUPlan.Target.IsValid()) Pending.DeclaredTarget = BodyCodeOf(CPUPlan.Target.Get());
+			UE_LOG(LogZoogi, Log, TEXT("BATTLE cpu prop combo P%d %s target=%s (%s)"), Player + 1, *Row->Id.ToString(), *BodyLabel(Pending.DeclaredTarget), *CPUPlan.Desc);
+			return;
+		}
+		UE_LOG(LogZoogi, Log, TEXT("BATTLE cpu prop route P%d without combo (%s not affordable)"), Player + 1, *CPUPlan.Combo.ToString());
+		return; // the prop route itself still plays (rail mini-game / halo / bumper events), no other combo this turn
+	}
 	const FZoogiEpisodeComboRow* Best = nullptr;
 	for (const FZoogiEpisodeComboRow& C : Tune.Combos)
 	{
@@ -490,7 +509,7 @@ void UZoogiBattleStateMachine::HandleActionStarted(const FZoogiGameplayTruthReco
 	ActionPropTags.Reset();
 	if (const UWorld* W = GetWorld()) ActionStartGame = W->GetTimeSeconds();
 	if (Players.IsValidIndex(Truth.Actor)) Players[Truth.Actor].Actions++;
-	if (bFlow && G->Balls.IsValidIndex(Truth.Actor) && G->Balls[Truth.Actor] && G->Balls[Truth.Actor]->bCPU && TestCase.IsEmpty()) PickCPUCombo(Truth.Actor);
+	if (bFlow && G->Balls.IsValidIndex(Truth.Actor) && G->Balls[Truth.Actor] && G->Balls[Truth.Actor]->bCPU && (TestCase.IsEmpty() || TestCase.StartsWith(TEXT("map_")))) PickCPUCombo(Truth.Actor);
 	const bool bRoute = bFlow && Pending.Owner == Truth.Actor && Pending.ActionId < 0 && (Pending.Challenge == EZoogiChallenge::HaloBank || Pending.Challenge == EZoogiChallenge::OrbLine || Pending.Challenge == EZoogiChallenge::SkyBumper || Pending.Challenge == EZoogiChallenge::PartnerIntercept || Pending.Challenge == EZoogiChallenge::RailRelease);
 	if (!bRoute && (State == EZoogiBattleState::WaitForCommand || State == EZoogiBattleState::ActionPreview)) Transition(EZoogiBattleState::PhysicsResolve, TEXT("launch"));
 	if (!bFlow) return;
@@ -621,6 +640,7 @@ void UZoogiBattleStateMachine::RecordShatter(FZoogiPendingSegment Seg, const FSt
 	LastShatterAction = CurrentActionId;
 	LastShatterReason = Why;
 	LastShatterReal = RealClock;
+	AerialShot(TEXT("shatter"), 0.25f);
 	const int32 Owner = Seg.Owner >= 0 ? Seg.Owner : (G ? G->ActivePlayer : 0);
 	if (Players.IsValidIndex(Owner)) Players[Owner].SegmentsShattered++;
 	if (Seg.bPaid && Tune.ShatterRefundFrac > 0.f) if (UZoogiEpisodeEnergyComponent* E = Energy(Owner)) E->Refund(Seg.Cost * Tune.ShatterRefundFrac, TEXT("shatter_refund"));
