@@ -755,8 +755,8 @@ void AZoogiArena::BuildFrozen()
 	BuildWall(WallEA0, WallEA1, false);
 	// Bridge alignment (Evan 10:49 PM): W / E arcs and the fill arcs leave every bridge a clear gap of +/- BridgeWallGapDeg.
 	// Polish r2 (Evan 9:16 PM): wall the rest of the ring edge with the same breakable ice walls (same style / height /
-	// HP / collider / forming). Left open: the 4 bridges (36 / 140 / 186 / 354), the Recovery Gate (45) + Launch Rail entry
-	// (r1200 yaw 35), the arches (140 / 230 / 310) and the snow-chute ramp (231.5). Arcs: ZoogiFrozen::WallFillArcs.
+	// HP / collider / forming). Symmetric layout (Oct 9 12:30 AM): only the 4 bridge gaps (45 / 135 / 225 / 315 +/- 6.5)
+	// stay open. Arcs: ZoogiFrozen::WallFillArcs.
 	for (const FVector2D& Arc : WallFillArcs) BuildWall(Arc.X, Arc.Y, false);
 
 	// ---- rim arches (SE = Recovery Gate with a portal sheet) ----
@@ -765,7 +765,7 @@ void AZoogiArena::BuildFrozen()
 		const float Yaw = ArchYaw[k];
 		// Bridge arches (Evan 10:49 PM): centred on the bridge yaw / centreline and wider so the deck + rails pass cleanly.
 		const float HW = NearIsletYaw(Yaw, 1.f) ? BridgeArchHalfW : ArchHalfW;
-		AZoogiArenaPiece* P = SpawnPiece(Pol(ArchR, Yaw), Yaw, k == 0 ? TEXT("gate_arch") : TEXT("arch"), TEXT("Stone"), 160.f);
+		AZoogiArenaPiece* P = SpawnPiece(Pol(ArchR, Yaw), Yaw, TEXT("arch"), TEXT("Stone"), 160.f); // symmetric: 4 identical bridge arches (no gate portal sheet)
 		if (!P) continue;
 		// Local: X = outward, Y = along the rim.
 		for (int32 s = -1; s <= 1; s += 2)
@@ -786,11 +786,6 @@ void AZoogiArena::BuildFrozen()
 		}
 		UStaticMeshComponent* Key = P->AddBox(FVector(-25.f, 0.f, Zs + Rr - 6.f), FVector(4.f, 22.f, 26.f), FRotator::ZeroRotator, Rune, false);
 		P->MarkGlow(Key);
-		if (k == 0)
-		{
-			UStaticMeshComponent* Portal = P->AddBox(FVector(0.f, 0.f, (Zs + Rr) * 0.5f - 10.f), FVector(3.f, HW * 2.f - 40.f, Zs + Rr * 0.7f), FRotator::ZeroRotator, ZoogiUtil::FxMID(this, ZoogiUtil::Hex(TEXT("#69E1F9")), 0.6f), false);
-			P->MarkGlow(Portal);
-		}
 		for (int32 s = -1; s <= 1; s += 2)
 			P->AddColliderCyl(FVector2D(0.f, s * HW), ArchPostR, 0.f, ArchH - 110.f, TEXT("ZArch"), StonePM);
 		P->RubbleKeepZ = 40.f;
@@ -942,7 +937,7 @@ void AZoogiArena::BuildFrozen()
 	UMaterialInterface* StandWall = MakeFrozenMat(TEXT("StandWall"), ZoogiUtil::Hex(TEXT("#C3CCDA")), TEXT("T_FrozenStoneTile"), 110.f, 0.55f, 0.65f, 0.4f, FLinearColor::Black, 0.f);
 	UMaterialInterface* Window = ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#5D6F8C")), 0.3f, FLinearColor::Black, 0.f, 0.6f);
 	const float Rb = IsletR * IsletStretch; // tangential semi-axis
-	for (int32 k = 0; k < 4; ++k)
+	for (int32 k = 0; k < (int32)UE_ARRAY_COUNT(IsletYaw); ++k) // symmetric layout: 6 identical islets
 	{
 		const float Yaw = IsletYaw[k];
 		const FVector C = Pol(IsletDist[k], Yaw, IsletTopZ);
@@ -971,8 +966,9 @@ void AZoogiArena::BuildFrozen()
 			AddFrozenProc(Under, Cliff, Pv, true);
 			AddFrozenProc(Ic, IcePane, Pv, false);
 			// One small snow pine beside the bleachers (outside the side wall, never in front of the seats).
-			if (UStaticMeshComponent* Tr = AddTree(SnowPine, ToWorld(60.f, (k % 2 ? 1.f : -1.f) * (StandHalfW + 75.f), 0.f), Rng.FRandRange(300.f, 380.f), Rng.FRandRange(0.f, 360.f)))
-				Tr->AttachToComponent(Pv, FAttachmentTransformRules::KeepWorldTransform);
+			for (int32 sd = -1; sd <= 1; sd += 2) // symmetric layout: mirrored pine pair on every islet
+				if (UStaticMeshComponent* Tr = AddTree(SnowPine, ToWorld(60.f, sd * (StandHalfW + 75.f), 0.f), Rng.FRandRange(300.f, 380.f), Rng.FRandRange(0.f, 360.f)))
+					Tr->AttachToComponent(Pv, FAttachmentTransformRules::KeepWorldTransform);
 			// Polish r1: snowy pine pair on the islet flanks, outside the bleacher side walls (the art's frosted pines).
 			for (int32 t = 0; t < 2; ++t)
 				if (UStaticMeshComponent* Tr = AddTree(SnowPine, ToWorld(-IsletR * 0.35f + PRng.FRandRange(-20.f, 20.f), (t ? 1.f : -1.f) * Rb * 0.78f, 0.f), PRng.FRandRange(320.f, 440.f), PRng.FRandRange(0.f, 360.f)))
@@ -1072,7 +1068,7 @@ void AZoogiArena::BuildFrozen()
 				}
 			}
 			// Lamp post at the front corner of the outer sections (the art's street lamp).
-			if (sec != 1 && ((k + sec) % 2 == 0))
+			if (sec != 1) // symmetric layout: a lamp on both outer sections of every stand
 			{
 				const float Ph = HalfAng(0, StandFocus + StandDepth);
 				const FVector Lp = Arc(StandFocus - 30.f, (sec == 0 ? -1.f : 1.f) * Ph * 1.02f);
@@ -1158,7 +1154,9 @@ void AZoogiArena::BuildFrozen()
 		}
 		{
 			const int32 Before = Built.Num();
-			AddWaterfall(Pol(IsletDist[k] - 60.f, Yaw + 28.f, IsletTopZ - 10.f), Yaw + 28.f, 170.f, 2600.f, 50.f);
+			// Symmetric layout: on the side away from the camera axis, half way to the next islet (mirrored east / west).
+			const float FallA = Yaw + (FMath::Cos(FMath::DegreesToRadians(Yaw)) > 0.f ? -22.5f : 22.5f);
+			AddWaterfall(Pol(IsletDist[k] - 60.f, FallA, IsletTopZ - 10.f), FallA, 170.f, 2600.f, 50.f);
 			for (int32 b = Before; b < Built.Num(); ++b) if (USceneComponent* Wc = Cast<USceneComponent>(Built[b])) Wc->AttachToComponent(Pv, FAttachmentTransformRules::KeepWorldTransform);
 		}
 	}
@@ -1191,8 +1189,8 @@ void AZoogiArena::BuildFrozen()
 	// Round 3: stronger falls (wider, much longer, two more) with mist clouds where they drop into the cloud sea.
 	{
 		// Polish r1: 6 falls (front-centre + back-right added), longer drop into the cloud sea.
-		const float Falls[6] = { FallYaw[0], FallYaw[1], 205.f, 292.f, 96.f, 328.f };
-		const float Wid[6] = { 230.f, 200.f, 160.f, 170.f, 260.f, 150.f };
+		const float Falls[6] = { FallYaw[0], FallYaw[1], 90.f, 270.f, 258.75f, 281.25f }; // symmetric layout: front trio + back trio, never under a bridge
+		const float Wid[6] = { 200.f, 200.f, 260.f, 170.f, 150.f, 150.f }; // mirrored pairs
 		UTexture* Cloud = FTex(TEXT("T_FrozenCloud"));
 		for (int32 f = 0; f < 6; ++f)
 		{

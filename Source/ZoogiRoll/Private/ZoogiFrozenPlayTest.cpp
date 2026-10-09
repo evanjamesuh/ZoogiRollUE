@@ -66,7 +66,7 @@ void AZoogiFrozenPlayTest::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	using namespace ZoogiFrozen;
 	UWorld* W = GetWorld();
-	if (!W || !Arena.IsValid() || Step > 9) return;
+	if (!W || !Arena.IsValid() || Step > 11) return;
 	const double Now = W->GetTimeSeconds();
 	if (Step == 0)
 	{
@@ -177,7 +177,7 @@ void AZoogiFrozenPlayTest::Tick(float DeltaSeconds)
 		}
 		break;
 	}
-	case 6: case 7: case 8: case 9: // bridge_k (Evan 10:50 PM): straight down each bridge centreline -> through its arch -> the islet orb
+	case 6: case 7: case 8: case 9: case 10: case 11: // bridge_k (Evan 10:50 PM; 6 bridges since the Oct 9 symmetric layout): straight down each bridge centreline -> through its arch -> the islet orb
 	{
 		const int32 k = Step - 6;
 		const float Yaw = IsletYaw[k];
@@ -215,7 +215,7 @@ void AZoogiFrozenPlayTest::Tick(float DeltaSeconds)
 			Next(FString::Printf(TEXT("bridge_%d: %.0f cm/s roll along the bridge centreline from r1150 -> %s the islet orb spot (%.0f, %.0f) (closest %.0f cm%s) %s"),
 				FMath::RoundToInt(Yaw), BridgeShot, bOk ? TEXT("reached") : TEXT("did NOT reach"), Spot.X, Spot.Y, BridgeMin,
 				bOk ? *FString::Printf(TEXT(", at t=%.2f s, Z %.0f"), BridgeMaxR, BridgeAt.Z) : TEXT(""), bOk ? TEXT("PASS") : TEXT("FAIL")));
-			if (Step > 9)
+			if (Step > 11)
 			{
 				UE_LOG(LogZoogi, Log, TEXT("PLAYTEST SUMMARY: %s"), *FString::Join(Results, TEXT(" | ")));
 				if (APlayerController* PC = W->GetFirstPlayerController()) if (APawn* Pw = PC->GetPawn()) PC->SetViewTarget(Pw);
