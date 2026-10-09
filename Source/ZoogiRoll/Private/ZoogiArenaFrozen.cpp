@@ -1018,18 +1018,72 @@ void AZoogiArena::BuildFrozen()
 		};
 		USceneComponent* Pv = NewPivot(C);
 		{
-			FZoogiMeshBuilder Top, Under, Ic;
+			FZoogiMeshBuilder Top, Ic;
 			Top.Prism(FVector2D::ZeroVector, 18, IsletR, IsletR - 12.f, -80.f, 0.f, Yaw, 10.f, false);
-			Under.Prism(FVector2D::ZeroVector, 11, IsletR - 30.f, 0.f, -80.f, -80.f - IsletR * 1.35f, Yaw + 7.f, 0.f, false);
+			// Polish r7: jagged snowy rock underside (frozen_zones_aerial) instead of the smooth 11-sided cone: an irregular ridged
+			// inverted cone (snow on the rim band + up-facing facets, pale stone ridges, blue ice valleys) with hanging rock spurs.
+			// Visual only (the walkable islet floor is the invisible cylinder below); own random stream so nothing else moves.
+			FZoogiMeshBuilder USnow, URock, UIce;
+			{
+				FRandomStream URng(7100 + k);
+				const int32 UNS = 18, UNL = 6;
+				const float UDepth = IsletR * 1.35f;
+				TArray<FVector> UPt; UPt.SetNum(UNS * UNL);
+				for (int32 l = 0; l < UNL; ++l)
+				{
+					const float UT = (float)l / UNL;
+					for (int32 j = 0; j < UNS; ++j)
+					{
+						const bool bURidge = (j % 3) == 0;
+						const float UA = 2.f * PI * (j + URng.FRandRange(-0.25f, 0.25f)) / UNS + FMath::DegreesToRadians(Yaw);
+						const float URr = l == 0 ? (IsletR - 24.f) * URng.FRandRange(0.97f, 1.02f)
+							: (IsletR - 24.f) * FMath::Pow(1.f - UT, 0.8f) * (bURidge ? URng.FRandRange(1.0f, 1.08f) : URng.FRandRange(0.76f, 0.9f));
+						const float UZ = l == 0 ? -80.f - URng.FRandRange(0.f, 20.f) : -80.f - UDepth * UT * URng.FRandRange(0.9f, 1.1f);
+						UPt[l * UNS + j] = FVector(FMath::Cos(UA) * URr, FMath::Sin(UA) * URr, UZ);
+					}
+				}
+				const FVector UApex(URng.FRandRange(-60.f, 60.f), URng.FRandRange(-60.f, 60.f), -80.f - UDepth * URng.FRandRange(1.05f, 1.2f));
+				auto UFace = [&](const FVector& P0, const FVector& P1, const FVector& P2, int32 l, int32 j)
+				{
+					const FVector UCen = (P0 + P1 + P2) / 3.f;
+					const FVector UOut = FVector(UCen.X, UCen.Y, 0.f).GetSafeNormal() + FVector(0.f, 0.f, -0.25f);
+					FVector UNn = FVector::CrossProduct(P1 - P0, P2 - P0).GetSafeNormal();
+					if (FVector::DotProduct(UNn, UOut) < 0.f) UNn = -UNn;
+					if (l <= 1 || UNn.Z > 0.15f) USnow.FlatTri(P0, P1, P2, UOut);
+					else if ((j % 3) == 0 || ((j % 3) == 1 && (l % 2) == 1)) URock.FlatTri(P0, P1, P2, UOut);
+					else UIce.FlatTri(P0, P1, P2, UOut);
+				};
+				for (int32 l = 0; l < UNL; ++l)
+					for (int32 j = 0; j < UNS; ++j)
+					{
+						const int32 UJ1 = (j + 1) % UNS;
+						const FVector UA0 = UPt[l * UNS + j], UA1 = UPt[l * UNS + UJ1];
+						if (l + 1 < UNL)
+						{
+							const FVector UB0 = UPt[(l + 1) * UNS + j], UB1 = UPt[(l + 1) * UNS + UJ1];
+							UFace(UA0, UB0, UB1, l, j);
+							UFace(UA0, UB1, UA1, l, j);
+						}
+						else UFace(UA0, UApex, UA1, l, j);
+					}
+				for (int32 sp = 0; sp < 5; ++sp) // hanging rock spurs: broken silhouette like the art
+				{
+					const float UA = Yaw + sp * 72.f + URng.FRandRange(-20.f, 20.f);
+					const FVector USp = Pol((IsletR - 30.f) * URng.FRandRange(0.35f, 0.6f), UA, -80.f - UDepth * URng.FRandRange(0.45f, 0.7f));
+					URock.Chunk(USp, FVector(URng.FRandRange(90.f, 150.f), URng.FRandRange(90.f, 150.f), URng.FRandRange(160.f, 260.f)), URng, 0.35f, UA);
+				}
+			}
 			for (int32 i = 0; i < 22; ++i)
 			{
-				const float A = i * (360.f / 22) + Rng.FRandRange(-5.f, 5.f);
+				const float UA = i * (360.f / 22) + Rng.FRandRange(-5.f, 5.f);
 				const float L = Rng.FRandRange(70.f, 260.f);
-				Ic.Prism(FVector2D(Pol(IsletR - 30.f, A)), 5, Rng.FRandRange(16.f, 30.f), 0.f, -82.f, -82.f - L, A, 0.f, false);
+				Ic.Prism(FVector2D(Pol(IsletR - 30.f, UA)), 5, Rng.FRandRange(16.f, 30.f), 0.f, -82.f, -82.f - L, UA, 0.f, false);
 			}
-			Stretch(Top); Stretch(Under); Stretch(Ic);
+			Stretch(Top); Stretch(USnow); Stretch(URock); Stretch(UIce); Stretch(Ic);
 			AddFrozenProc(Top, Snow, Pv, true);
-			AddFrozenProc(Under, Cliff, Pv, true);
+			AddFrozenProc(USnow, Snow, Pv, true);
+			AddFrozenProc(URock, Glacier, Pv, true); // r7b: pale snowy rock (Stone read dark slate in shadow)
+			AddFrozenProc(UIce, Cliff, Pv, true);
 			AddFrozenProc(Ic, IcePane, Pv, false);
 			// One small snow pine beside the bleachers (outside the side wall, never in front of the seats).
 			for (int32 sd = -1; sd <= 1; sd += 2) // symmetric layout: mirrored pine pair on every islet
