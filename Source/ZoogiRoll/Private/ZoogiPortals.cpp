@@ -438,7 +438,7 @@ void UZoogiPortalSubsystem::TickPropShots(UWorld* W, AZoogiGameMode* G)
 			if (D.IsNearlyZero()) D = FVector(0, 1, 0);
 			ViewQ.Add({ Path(TEXT("air_reticle")), C + D * 420.f + Up * 150.f, C, 55.f, 8, 12 });
 		}
-		if (ViewQ.Num() == 0 && GameT > 12.f && (!bHaloShot || !bIdleShot))
+		if (ViewQ.Num() == 0 && GameT > 12.f && (!bHaloShot || !bIdleShot || !bRailShot || !bGateShot))
 		{
 			for (AZoogiAerialProp* Pr : SM->Props)
 			{
@@ -461,8 +461,25 @@ void UZoogiPortalSubsystem::TickPropShots(UWorld* W, AZoogiGameMode* G)
 					const FVector In = FVector(-C.X, -C.Y, 0.f).GetSafeNormal();
 					ViewQ.Add({ Path(TEXT("bumper_chute_idle")), C + In * (Pr->Size * 6.f + 200.f) + FVector::CrossProduct(Up, In) * 160.f + Up * 60.f, C + Up * 40.f, 60.f, 6, 10 });
 				}
+				else if (!bRailShot && Pr->Kind == EZoogiPropKind::LaunchRail)
+				{
+					bRailShot = true;
+					ViewQ.Add({ Path(TEXT("launch_rail")), C - F * 520.f + Sd * 330.f + Up * 240.f, C + F * 260.f, 60.f, 6, 10 });
+				}
+				else if (Pr->Kind == EZoogiPropKind::Gate && !GateShots.Contains(Pr->Tag))
+				{
+					GateShots.Add(Pr->Tag);
+					ViewQ.Add({ Path(*FString::Printf(TEXT("gate_%s"), *Pr->Tag.ToString())), C + F * (Pr->Size * 3.4f) + Sd * (Pr->Size * 0.9f) + Up * (Pr->Size * 0.9f), C + Up * (Pr->Size * 0.55f), 58.f, 6, 10 });
+				}
 			}
-			bHaloShot = true; bIdleShot = true; // once per run, even if the layout has none
+			if (!bDecorShot)
+			{
+				// Zone 2 aerial cluster behind the arena (decor centred near yaw 270, r 2000)
+				bDecorShot = true;
+				ViewQ.Add({ Path(TEXT("zone2_cluster")), FVector(0.f, -1000.f, 520.f), FVector(0.f, -2050.f, 140.f), 72.f, 12, 10 }); // decor heights scale to the reach envelope (k ~0.2)
+				ViewQ.Add({ Path(TEXT("orbit_ring")), FVector(1300.f, -1300.f, 420.f), FVector(1850.f, 500.f, -90.f), 70.f, 6, 10 });
+			}
+			bHaloShot = true; bIdleShot = true; bRailShot = true; bGateShot = true; // once per run, even if the layout has none
 		}
 	}
 	if (ViewQ.Num() == 0) return;

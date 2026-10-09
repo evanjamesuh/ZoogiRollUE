@@ -531,6 +531,55 @@ void AZoogiAerialProp::BuildVisuals(AZoogiArena* Arena)
 			Ribbon(SB, { F2 * Bd.A, F2 * Bd.B }, -46.f, 46.f, 2.4f);
 			NewVisual(ZoogiUtil::GlowMID(this, Bd.Col, 1.8f), SB);
 		}
+		// Oct 9 pass 2 (ref rail_release_timing): raised stone curbs with cyan inner glow lines, timing pylons at the band
+		// edges, exit chevrons and support piers. Visual only (NoCollision); the rail trigger / impulse are unchanged.
+		auto Curb = [&](float Off, float W, float H)
+		{
+			for (int32 i = 0; i + 1 < Path.Num(); ++i)
+			{
+				const FVector D = (Path[i + 1] - Path[i]).GetSafeNormal2D();
+				if (D.IsNearlyZero()) continue;
+				const FVector Sd = FVector::CrossProduct(Up, D).GetSafeNormal();
+				const FVector A0 = Path[i] + Sd * (Off - W), A1 = Path[i + 1] + Sd * (Off - W);
+				const FVector B0 = Path[i] + Sd * (Off + W), B1 = Path[i + 1] + Sd * (Off + W);
+				SStone.Quad(A0 + Up * H, A1 + Up * H, B1 + Up * H, B0 + Up * H, Up);
+				SStone.Quad(A0, A1, A1 + Up * H, A0 + Up * H, -Sd);
+				SStone.Quad(B0, B1, B1 + Up * H, B0 + Up * H, Sd);
+				if (i % 3 == 0) SDark.Box(B0 + Sd * 6.f + Up * (H * 0.5f), FVector(10.f, 6.f, H * 0.5f), D.Rotation());
+			}
+		};
+		Curb(96.f, 9.f, 24.f);
+		Curb(-96.f, 9.f, 24.f);
+		Ribbon(SGlow, Path, 84.f, 87.f, 24.5f);
+		Ribbon(SGlow, Path, -87.f, -84.f, 24.5f);
+		FZoogiMeshBuilder SPyl[3];
+		const float Edges[] = { E0, E1, C1, L1 };
+		for (int32 e = 0; e < 4; ++e)
+			for (float Sg : { -1.f, 1.f })
+			{
+				const FVector P = F2 * Edges[e] + FVector(-F2.Y, F2.X, 0.f) * (Sg * 120.f);
+				SDark.Box(P + Up * 6.f, FVector(18.f, 18.f, 6.f), F2.Rotation());
+				SStone.Box(P + Up * 40.f, FVector(9.f, 9.f, 30.f), F2.Rotation());
+				Sphere(SPyl[FMath::Min(e, 2)], P + Up * 82.f, 11.f, 10);
+			}
+		NewVisual(ZoogiUtil::GlowMID(this, FLinearColor(1.f, 0.8f, 0.15f), 4.f), SPyl[0]);
+		NewVisual(ZoogiUtil::GlowMID(this, FLinearColor(0.25f, 1.f, 0.4f), 4.f), SPyl[1]);
+		NewVisual(ZoogiUtil::GlowMID(this, FLinearColor(1.f, 0.32f, 0.12f), 4.f), SPyl[2]);
+		{
+			FZoogiMeshBuilder SChev;
+			const FVector R2(-F2.Y, F2.X, 0.f);
+			for (float T = L1 + 40.f; T < Lane1 - 30.f; T += 70.f)
+			{
+				const FVector Tip = F2 * (T + 30.f) + Up * 2.6f;
+				for (float Sg : { -1.f, 1.f })
+				{
+					const FVector Back = F2 * T + R2 * (Sg * 34.f) + Up * 2.6f;
+					const FVector N = FVector::CrossProduct(Up, (Tip - Back).GetSafeNormal()) * 6.f;
+					SChev.Quad(Back - N, Tip - N, Tip + N, Back + N, Up);
+				}
+			}
+			NewVisual(ZoogiUtil::GlowMID(this, Cyan, 3.5f), SChev);
+		}
 		FZoogiMeshBuilder SRing;
 		Torus(SRing, FVector(0, 0, 3.f), FVector::ForwardVector, FVector::RightVector, 84.f, 5.f, 0.f, 360.f, 40, 6);
 		NewVisual(ZoogiUtil::GlowMID(this, Orange, 2.4f), SRing);
@@ -538,17 +587,35 @@ void AZoogiAerialProp::BuildVisuals(AZoogiArena* Arena)
 	else if (Kind == EZoogiPropKind::Gate)
 	{
 		// red / blue horseshoe gate (open at the bottom) standing across the bridge deck
+		// Oct 9 pass 2 (refs frozen_zones_aerial / minigame_layout_frozen): a thick glowing horseshoe with a hot core line,
+		// carved stone blocks behind, ice-crusted footings. Visual only; the gate trigger is unchanged.
 		const bool bRed = Tag == TEXT("red");
 		const FLinearColor GC = bRed ? FLinearColor(1.f, 0.12f, 0.1f) : FLinearColor(0.15f, 0.45f, 1.f);
-		FZoogiMeshBuilder SG;
-		Torus(SG, FVector(0, 0, Size * 0.55f), Side, Up, Size, 13.f, -25.f, 205.f, 48, 8);
-		NewVisual(ZoogiUtil::GlowMID(this, GC, 3.f), SG);
-		Torus(SStone, FVector(0, 0, Size * 0.55f) - Forward * 4.f, Side, Up, Size + 20.f, 9.f, -25.f, 205.f, 48, 6);
+		const FLinearColor GHot = bRed ? FLinearColor(1.f, 0.55f, 0.45f) : FLinearColor(0.6f, 0.85f, 1.f);
+		const FVector GC0(0, 0, Size * 0.55f);
+		FZoogiMeshBuilder SG, SGH;
+		Torus(SG, GC0, Side, Up, Size, 17.f, -25.f, 205.f, 64, 10);
+		NewVisual(ZoogiUtil::GlowMID(this, GC, 3.4f), SG);
+		Torus(SGH, GC0 + Forward * 15.f, Side, Up, Size, 4.f, -25.f, 205.f, 64, 6);
+		Torus(SGH, GC0 - Forward * 15.f, Side, Up, Size, 4.f, -25.f, 205.f, 64, 6);
+		NewVisual(ZoogiUtil::GlowMID(this, GHot, 6.f), SGH);
+		FZoogiMeshBuilder SGO;
+		Torus(SGO, GC0, Side, Up, Size + 44.f, 3.f, -10.f, 190.f, 56, 5);
+		NewVisual(ZoogiUtil::FxMID(this, GC, 2.5f), SGO);
+		StoneBlocks(SStone, GC0 - Forward * 6.f, Side, Up, Forward, Size + 26.f, 13.f, -25.f, 205.f, 14);
 		for (float A : { -25.f, 205.f })
 		{
 			const float R = FMath::DegreesToRadians(A);
-			const FVector P = FVector(0, 0, Size * 0.55f) + Side * FMath::Cos(R) * Size + Up * FMath::Sin(R) * Size;
-			SDark.Box(FVector(P.X, P.Y, (P.Z - 40.f) * 0.5f), FVector(20.f, 20.f, FMath::Max(10.f, (P.Z + 40.f) * 0.5f)), Forward.Rotation());
+			const FVector P = GC0 + Side * FMath::Cos(R) * Size + Up * FMath::Sin(R) * Size;
+			SDark.Box(FVector(P.X, P.Y, (P.Z - 40.f) * 0.5f), FVector(24.f, 24.f, FMath::Max(10.f, (P.Z + 40.f) * 0.5f)), Forward.Rotation());
+			SStone.Box(FVector(P.X, P.Y, 8.f), FVector(36.f, 36.f, 8.f), Forward.Rotation());
+			for (int32 k = 0; k < 3; ++k) HexIce(SStone, FVector(P.X, P.Y, 14.f) + Side * (k - 1) * 26.f + Forward * ((k % 2) ? 22.f : -22.f), 16.f, 40 + k + (A > 0.f ? 10 : 0));
+		}
+		for (int32 k = 0; k < 7; ++k)
+		{
+			const float A = FMath::DegreesToRadians(30.f + k * 20.f);
+			const FVector P = GC0 + Side * FMath::Cos(A) * (Size + 26.f) + Up * FMath::Sin(A) * (Size + 26.f) - Up * 14.f;
+			if (FMath::Sin(A) > 0.5f) Icicle(SStone, P, 26.f + 10.f * (k % 3), 6.f);
 		}
 	}
 	NewVisual(Stone, SStone);
@@ -593,6 +660,8 @@ void AZoogiAerialDecor::Build(AZoogiArena* Arena, const TArray<AZoogiAerialProp*
 	const FVector X = FVector::ForwardVector, Y = FVector::RightVector, Z = FVector::UpVector;
 	// ---- Zone 3: recovery orbit ring (cyan) + outer orange trace, glowing nodes (ref frozen_zones_aerial)
 	Torus(SGlow, FVector(0, 0, -90.f), X, Y, 2000.f, 6.f, 0.f, 360.f, 160, 6);
+	FZoogiMeshBuilder SHot, SRim, SGlass, SCoil;
+	Torus(SHot, FVector(0, 0, -90.f), X, Y, 2000.f, 2.2f, 0.f, 360.f, 160, 4); // hot core line (pass 2)
 	Torus(SOrange, FVector(0, 0, -115.f), X, Y, 2075.f, 4.f, 0.f, 360.f, 160, 6);
 	for (int32 k = 0; k < 12; ++k)
 	{
@@ -600,11 +669,48 @@ void AZoogiAerialDecor::Build(AZoogiArena* Arena, const TArray<AZoogiAerialProp*
 		const bool bC = k % 2 == 0;
 		const float R = bC ? 2000.f : 2075.f;
 		Sphere(bC ? SNodeC : SNodeO, FVector(FMath::Cos(A) * R, FMath::Sin(A) * R, bC ? -90.f : -115.f), 24.f, 12);
+		{
+			const FVector NP(FMath::Cos(A) * R, FMath::Sin(A) * R, bC ? -90.f : -115.f);
+			Sphere(SGlass, NP, 40.f, 14); // glass shell around the glowing node (ref orb nodes)
+			Torus(bC ? SNodeO : SNodeC, NP, X, Y, 42.f, 3.f, 0.f, 360.f, 24, 4);
+		}
 	}
 	// ---- Zone 2: the aerial structure behind the arena (art top): floating discs, hanging rings, a big halo, cables
 	// Oct 8 (Evan 9:26 PM): heights inside the measured reachable envelope (the art top was z 1250; K maps it onto MaxZ)
 	const float K = MaxZ > 0.f ? FMath::Min(1.f, MaxZ / 1250.f) : 1.f;
 	auto Pol = [](float R, float Yaw, float Zz) { const float A = FMath::DegreesToRadians(Yaw); return FVector(FMath::Cos(A) * R, FMath::Sin(A) * R, Zz); };
+	auto Chain = [&](FZoogiMeshBuilder& M, const FVector& A, const FVector& B, float LinkR)
+	{
+		const FVector D = B - A;
+		const float L = D.Size();
+		if (L < 1.f) return;
+		const FVector Dir = D / L;
+		FVector S1 = FVector::CrossProduct(Dir, X);
+		if (S1.SizeSquared() < 0.01f) S1 = FVector::CrossProduct(Dir, Y);
+		S1.Normalize();
+		const FVector S2 = FVector::CrossProduct(Dir, S1).GetSafeNormal();
+		int32 i = 0;
+		for (float T = LinkR; T < L - LinkR * 0.5f; T += LinkR * 2.6f, ++i)
+			Torus(M, A + Dir * T, Dir, (i % 2) ? S1 : S2, LinkR, LinkR * 0.28f, 0.f, 360.f, 10, 4);
+	};
+	auto Coil = [&](FZoogiMeshBuilder& M, const FVector& A, const FVector& B, float CoilR, float WireR, int32 Turns)
+	{
+		const FVector D = B - A;
+		const FVector Dir = D.GetSafeNormal();
+		FVector S1 = FVector::CrossProduct(Dir, Z);
+		if (S1.SizeSquared() < 0.01f) S1 = FVector::CrossProduct(Dir, X);
+		S1.Normalize();
+		const FVector S2 = FVector::CrossProduct(Dir, S1).GetSafeNormal();
+		const int32 N = Turns * 10;
+		FVector Prev = A + S1 * CoilR;
+		for (int32 k = 1; k <= N; ++k)
+		{
+			const float T = (float)k / N, Ang = T * Turns * 2.f * PI;
+			const FVector P = A + D * T + (S1 * FMath::Cos(Ang) + S2 * FMath::Sin(Ang)) * CoilR;
+			Tube(M, Prev, P, WireR, 5);
+			Prev = P;
+		}
+	};
 	struct FDiscDef { float R, Yaw, Zz, Rad; };
 	const FDiscDef Discs[] = { { 1850.f, 252.f, 620.f, 130.f }, { 2050.f, 272.f, 780.f, 110.f }, { 1800.f, 292.f, 690.f, 120.f }, { 2250.f, 262.f, 960.f, 90.f }, { 2150.f, 300.f, 1020.f, 100.f }, { 1950.f, 236.f, 900.f, 85.f } };
 	for (const FDiscDef& D : Discs)
@@ -613,7 +719,14 @@ void AZoogiAerialDecor::Build(AZoogiArena* Arena, const TArray<AZoogiAerialProp*
 		Disc(SStone, C, D.Rad, 22.f);
 		Disc(SIce, C + FVector(0, 0, 3.f), D.Rad * 0.82f, 2.f);
 		Torus(SGlow, C - FVector(0, 0, 11.f), X, Y, D.Rad, 4.5f, 0.f, 360.f, 40, 6);
-		Tube(SDark, C + FVector(0, 0, 2.f), FVector(C.X, C.Y, 2600.f), 3.f, 6);
+		// pass 2 (ref spring pucks): bright rim on both edges, an orange coil spring under the slab ending in a glowing node,
+		// and the hanger as a chain near the disc + a thin cable above
+		Torus(SRim, C + FVector(0, 0, 1.f), X, Y, D.Rad + 2.f, 3.f, 0.f, 360.f, 48, 5);
+		Torus(SRim, C - FVector(0, 0, 21.f), X, Y, D.Rad + 2.f, 3.f, 0.f, 360.f, 48, 5);
+		Coil(SCoil, C - FVector(0, 0, 22.f), C - FVector(0, 0, 92.f), 16.f, 2.6f, 5);
+		Sphere(SNodeO, C - FVector(0, 0, 104.f), 13.f, 10);
+		Chain(SDark, C + FVector(0, 0, 2.f), C + FVector(0, 0, 320.f), 7.f);
+		Tube(SDark, C + FVector(0, 0, 320.f), FVector(C.X, C.Y, 2600.f), 3.f, 6);
 	}
 	// hanging vertical rings (facing the court) and one big horizontal halo over the cluster
 	struct FRingDef { float R, Yaw, Zz, Rad; };
@@ -625,6 +738,8 @@ void AZoogiAerialDecor::Build(AZoogiArena* Arena, const TArray<AZoogiAerialProp*
 		const FVector S = FVector::CrossProduct(Z, In).GetSafeNormal();
 		Torus(SStone, C, S, Z, Rg.Rad, 16.f, 0.f, 360.f, 56, 10);
 		Torus(SGlow, C + In * 8.f, S, Z, Rg.Rad - 14.f, 3.5f, 0.f, 360.f, 56, 6);
+		Torus(SRim, C - In * 8.f, S, Z, Rg.Rad - 14.f, 3.5f, 0.f, 360.f, 56, 6);
+		Torus(SRim, C, S, Z, Rg.Rad + 15.f, 2.5f, 0.f, 360.f, 56, 5);
 		Tube(SDark, C + Z * (Rg.Rad + 14.f), FVector(C.X, C.Y, 2600.f), 3.f, 6);
 	}
 	{
@@ -637,15 +752,54 @@ void AZoogiAerialDecor::Build(AZoogiArena* Arena, const TArray<AZoogiAerialProp*
 			const FVector P = C + FVector(FMath::Cos(A) * 340.f, FMath::Sin(A) * 340.f, 18.f);
 			Tube(SDark, P, FVector(P.X, P.Y, 2800.f), 3.f, 6);
 		}
+		// pass 2 (ref Halo Bank): a stacked bank of glowing rings under the big halo, tied with cables, plus spring hubs
+		const float Lv[] = { 210.f, 400.f };
+		const float Rr[] = { 250.f, 170.f };
+		for (int32 j = 0; j < 2; ++j)
+		{
+			const FVector Cj = C - FVector(0, 0, Lv[j] * K);
+			if (Cj.Z < 120.f) continue;
+			Torus(SStone, Cj, X, Y, Rr[j], 13.f, 0.f, 360.f, 56, 8);
+			Torus(SRim, Cj - FVector(0, 0, 12.f), X, Y, Rr[j], 4.f, 0.f, 360.f, 56, 5);
+			Torus(SRim, Cj + FVector(0, 0, 12.f), X, Y, Rr[j] - 6.f, 2.5f, 0.f, 360.f, 56, 5);
+			for (int32 k = 0; k < 3; ++k)
+			{
+				const float A = FMath::DegreesToRadians(30.f + 120.f * k + 60.f * j);
+				const FVector P = Cj + FVector(FMath::Cos(A) * Rr[j], FMath::Sin(A) * Rr[j], 0.f);
+				Tube(SDark, P, FVector(P.X, P.Y, C.Z), 2.5f, 6);
+			}
+		}
+		Torus(SRim, C + FVector(0, 0, 21.f), X, Y, 340.f, 3.f, 0.f, 360.f, 72, 5);
+		for (int32 k = 0; k < 3; ++k)
+		{
+			// small hanging spring hubs (disc + orange coil + node) around the bank
+			const FVector H = Pol(2000.f + 420.f * FMath::Cos(k * 2.1f), 270.f + (k - 1) * 13.f, FMath::Max(140.f, (980.f - 140.f * k) * K));
+			Disc(SStone, H, 55.f, 12.f);
+			Torus(SRim, H - FVector(0, 0, 6.f), X, Y, 57.f, 3.f, 0.f, 360.f, 32, 5);
+			Coil(SCoil, H - FVector(0, 0, 12.f), H - FVector(0, 0, 62.f), 11.f, 2.2f, 4);
+			Sphere(SNodeO, H - FVector(0, 0, 72.f), 10.f, 10);
+			Tube(SDark, H, FVector(H.X, H.Y, 2600.f), 2.5f, 6);
+		}
 	}
-	// a curved ice slide segment between two discs (the art's aerial track)
+	// pass 2: floating glass orbs with cyan cores drifting through the aerial cluster (ref frozen_zones_aerial)
+	{
+		const FVector Orbs[] = { Pol(1760.f, 248.f, 760.f), Pol(1700.f, 278.f, 470.f), Pol(2300.f, 286.f, 820.f), Pol(1850.f, 306.f, 980.f), Pol(2200.f, 244.f, 1100.f) };
+		for (const FVector& O0 : Orbs)
+		{
+			const FVector O(O0.X, O0.Y, FMath::Max(120.f, O0.Z * K));
+			Sphere(SGlass, O, 30.f, 14);
+			Sphere(SNodeC, O, 13.f, 10);
+		}
+	}
+	// curved ice slide segments between the discs (the art's aerial tracks); pass 2 adds a second, lower S-curve
+	auto Slide = [&](float Yaw0, float Yaw1, float R0, float R1, float Z0, float Z1, float Bow)
 	{
 		TArray<FVector> Pts;
 		for (int32 i = 0; i <= 16; ++i)
 		{
 			const float T = (float)i / 16.f;
-			const float Yaw = FMath::Lerp(244.f, 300.f, T);
-			Pts.Add(Pol(FMath::Lerp(1880.f, 1760.f, T), Yaw, FMath::Max(40.f, (FMath::Lerp(830.f, 600.f, T) + 60.f * FMath::Sin(T * PI)) * K)));
+			const float Yaw = FMath::Lerp(Yaw0, Yaw1, T);
+			Pts.Add(Pol(FMath::Lerp(R0, R1, T) + Bow * FMath::Sin(T * 2.f * PI), Yaw, FMath::Max(40.f, (FMath::Lerp(Z0, Z1, T) + 60.f * FMath::Sin(T * PI)) * K)));
 		}
 		for (int32 i = 0; i + 1 < Pts.Num(); ++i)
 		{
@@ -655,16 +809,23 @@ void AZoogiAerialDecor::Build(AZoogiArena* Arena, const TArray<AZoogiAerialProp*
 			SIce.Quad(Pts[i] - S * 55.f - Z * 14.f, Pts[i + 1] - S * 55.f - Z * 14.f, Pts[i + 1] + S * 55.f - Z * 14.f, Pts[i] + S * 55.f - Z * 14.f, -Z);
 			SDark.Quad(Pts[i] + S * 55.f, Pts[i + 1] + S * 55.f, Pts[i + 1] + S * 55.f - Z * 14.f, Pts[i] + S * 55.f - Z * 14.f, S);
 			SDark.Quad(Pts[i] - S * 55.f, Pts[i + 1] - S * 55.f, Pts[i + 1] - S * 55.f - Z * 14.f, Pts[i] - S * 55.f - Z * 14.f, -S);
-			SGlow.Quad(Pts[i] + S * 50.f + Z * 1.f, Pts[i + 1] + S * 50.f + Z * 1.f, Pts[i + 1] + S * 56.f + Z * 1.f, Pts[i] + S * 56.f + Z * 1.f, Z);
-			SGlow.Quad(Pts[i] - S * 56.f + Z * 1.f, Pts[i + 1] - S * 56.f + Z * 1.f, Pts[i + 1] - S * 50.f + Z * 1.f, Pts[i] - S * 50.f + Z * 1.f, Z);
+			SRim.Quad(Pts[i] + S * 50.f + Z * 1.f, Pts[i + 1] + S * 50.f + Z * 1.f, Pts[i + 1] + S * 56.f + Z * 1.f, Pts[i] + S * 56.f + Z * 1.f, Z);
+			SRim.Quad(Pts[i] - S * 56.f + Z * 1.f, Pts[i + 1] - S * 56.f + Z * 1.f, Pts[i + 1] - S * 50.f + Z * 1.f, Pts[i] - S * 50.f + Z * 1.f, Z);
+			if (i % 4 == 2) Tube(SDark, Pts[i], FVector(Pts[i].X, Pts[i].Y, 2600.f), 2.f, 5);
 		}
-	}
+	};
+	Slide(244.f, 300.f, 1880.f, 1760.f, 830.f, 600.f, 0.f);
+	Slide(296.f, 254.f, 2150.f, 2100.f, 470.f, 360.f, 90.f);
 	Add(Stone, SStone);
 	Add(StoneDark, SDark);
 	Add(IcePane, SIce);
 	Add(Rune, SGlow);
 	Add(ZoogiUtil::GlowMID(this, Orange, 2.2f), SOrange);
 	Add(ZoogiUtil::GlowMID(this, Cyan, 3.f), SNodeC);
+	Add(ZoogiUtil::GlowMID(this, Cyan, 6.f), SRim);
+	Add(ZoogiUtil::GlowMID(this, FLinearColor(0.7f, 0.95f, 1.f), 8.f), SHot);
+	Add(ZoogiUtil::GlowMID(this, Orange, 2.6f), SCoil);
+	Add(ZoogiUtil::FxMID(this, FLinearColor(0.35f, 0.75f, 0.95f), 0.5f), SGlass);
 	Add(ZoogiUtil::GlowMID(this, Orange, 3.f), SNodeO);
 	UE_LOG(LogZoogi, Log, TEXT("BATTLE aerial decor built: meshes=%d (visual only, no collision) props=%d max_z=%.0f k=%.2f"), Meshes.Num(), Props.Num(), MaxZ, K);
 }

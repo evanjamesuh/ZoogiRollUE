@@ -131,6 +131,7 @@ protected:
 	TWeakObjectPtr<AActor> ViewCam, ViewPrev;
 	TMap<TWeakObjectPtr<AActor>, int32> SeenRebounds;
 	int32 PropShotCount = 0;
-	bool bHaloShot = false, bAirShot = false, bIdleShot = false;
+	bool bHaloShot = false, bAirShot = false, bIdleShot = false, bRailShot = false, bGateShot = false, bDecorShot = false;
+	TSet<FName> GateShots;
 	void TickPropShots(UWorld* W, class AZoogiGameMode* G);
 };

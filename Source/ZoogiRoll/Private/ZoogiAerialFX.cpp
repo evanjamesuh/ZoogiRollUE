@@ -179,10 +179,10 @@ void AZoogiAirReticle::Follow(AActor* InTarget, float InRadius)
 	if (Segs.Num() == 0)
 	{
 		UStaticMesh* Cube = ZoogiUtil::BasicShape(TEXT("Cube"));
-		MatRing = ZoogiUtil::FxMID(this, FxCyan, 10.f);
-		MatHot = ZoogiUtil::FxMID(this, FxHot, 14.f);
-		// 48 outer ring + 24 dashed inner + 16 ticks + 8 brackets
-		for (int32 i = 0; i < 96; ++i) Segs.Add(NewFxSeg(this, RootComponent, Cube, (i >= 88 || (i >= 72 && i % 4 == 0)) ? MatHot : MatRing));
+		MatRing = ZoogiUtil::FxMID(this, FxCyan, 1.4f); // pass 2: lower so it reads cyan, not white
+		MatHot = ZoogiUtil::FxMID(this, FxHot, 3.f);
+		// 48 outer ring + 24 dashed inner + 16 ticks + 8 brackets + 8 crosshair bars (ref minigame_layout_frozen)
+		for (int32 i = 0; i < 104; ++i) Segs.Add(NewFxSeg(this, RootComponent, Cube, ((i >= 88 && i < 96) || (i >= 72 && i < 88 && i % 4 == 0)) ? MatHot : MatRing));
 	}
 }
 
@@ -229,6 +229,13 @@ void AZoogiAirReticle::Tick(float Dt)
 		const FVector Dx = X * (FMath::Cos(A) > 0.f ? -1.f : 1.f) * Arm, Dy = Y * (FMath::Sin(A) > 0.f ? -1.f : 1.f) * Arm;
 		Seg(Segs[S++], Corner, Corner + Dx, Th * 1.4f);
 		Seg(Segs[S++], Corner, Corner + Dy, Th * 1.4f);
+	}
+	// crosshair: four bars through the rings, gapped at the ball and running out past the outer ring
+	for (int32 k = 0; k < 4; ++k)
+	{
+		const float A = k * PI * 0.5f;
+		Seg(Segs[S++], P(R1 * 0.62f, A), P(R1 * 0.96f, A), Th * 1.2f);
+		Seg(Segs[S++], P(R0 * 1.04f, A), P(R0 * 1.42f, A), Th * 1.2f);
 	}
 	for (; S < Segs.Num(); ++S) Segs[S]->SetVisibility(false);
 	Light->SetIntensity(Alpha * 9000.f);
