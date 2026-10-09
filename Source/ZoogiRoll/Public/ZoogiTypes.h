@@ -131,6 +131,10 @@ namespace ZoogiUtil
 	 *  clamped 0.5..3): AZoogiArenaPiece max HP and AZoogiRock crack / shatter speeds scale by it; indestructible pillars ignore it.
 	 *  -ZoogiBreakToughness=<x> overrides for one run. */
 	ZOOGIROLL_API float BreakToughness();
+	/** Oct 8 (Evan 11:15 PM): destruction switch. [ZoogiRoll.Arena] bDestruction=False -> arena pieces (walls, crystal posts,
+	 *  buildings...) take no damage and rocks never crack / shatter, on every map; stage forming is unaffected.
+	 *  -ZoogiDestruction=On / Off overrides for one run. */
+	ZOOGIROLL_API bool DestructionEnabled();
 	/** Oct 8 (Evan 9:16 PM): [ZoogiRoll.Characters] OrbStyle=Original re-applies the original orb look (SM_Orb core in deep
 	 *  blue #0341CA x6 inside a light-blue #87CEEB x3 glow sphere; gold star orbs) after InitOrb / MakeStar. Any other value
 	 *  (or -ZoogiOrbStyle=Current) leaves AZoogiOrb's own look. Visual only (no collision / mass change). */

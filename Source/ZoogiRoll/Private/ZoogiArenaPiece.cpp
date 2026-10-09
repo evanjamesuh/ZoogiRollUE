@@ -265,6 +265,7 @@ bool AZoogiArenaPiece::AnythingOverlaps() const
 bool AZoogiArenaPiece::ApplyDamage(float Amount, const FVector& At, const FVector& Dir, EZoogiArtifact Element, AZoogiBall* By)
 {
 	if (bIndestructible || !bBuilt) return false;
+	if (!ZoogiUtil::DestructionEnabled()) return false; // Oct 8 (Evan 11:15 PM): [ZoogiRoll.Arena] bDestruction
 	const float Mul = PowerMultiplier(Surface, Element);
 	const EZoogiPieceState Before = State;
 	if (Mul < 0.f)

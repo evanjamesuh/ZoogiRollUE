@@ -36,6 +36,22 @@ float ZoogiUtil::BreakToughness()
 	return Cached;
 }
 
+bool ZoogiUtil::DestructionEnabled()
+{
+	static int32 Cached = -1;
+	if (Cached < 0)
+	{
+		bool bOn = true;
+		if (GConfig) GConfig->GetBool(TEXT("ZoogiRoll.Arena"), TEXT("bDestruction"), bOn, GGameIni);
+		FString V;
+		if (FParse::Value(FCommandLine::Get(), TEXT("ZoogiDestruction="), V))
+			bOn = V.Equals(TEXT("On"), ESearchCase::IgnoreCase) || V.Equals(TEXT("1")) || V.Equals(TEXT("True"), ESearchCase::IgnoreCase);
+		Cached = bOn ? 1 : 0;
+		UE_LOG(LogTemp, Log, TEXT("ZOOGI destruction=%s"), bOn ? TEXT("on") : TEXT("off"));
+	}
+	return Cached == 1;
+}
+
 void ZoogiUtil::ApplyOrbStyle(AZoogiOrb* O)
 {
 	static int32 bOriginal = -1;

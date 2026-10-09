@@ -1343,6 +1343,7 @@ void AZoogiRock::OnBallHit(AZoogiBall* Ball, const FVector& NormalImpulse, const
 	const float Tough = ZoogiUtil::BreakToughness(); // Oct 8: [ZoogiRoll.Arena] BreakToughness scales both speeds
 	const float CrackV = CrackSpeed * Tough, ShatterV = ShatterSpeed * Tough;
 	if (Vn < CrackV) return;
+	if (!ZoogiUtil::DestructionEnabled()) return; // Oct 8 (Evan 11:15 PM): [ZoogiRoll.Arena] bDestruction
 	LastHitTime = Now;
 	AZoogiGameMode* G = W ? W->GetAuthGameMode<AZoogiGameMode>() : nullptr;
 	// Strong hit: the active shooter while Awakened (infused), or crit-grade contact (>= 90% of its launch speed, the crit rule).
@@ -1374,7 +1375,7 @@ void AZoogiRock::MarkDamaged(const FVector& P)
 void AZoogiRock::Escalate(const FVector& P, const FVector& Dir)
 {
 	const FVector D = Dir.IsNearlyZero() ? (GetActorLocation() - P).GetSafeNormal2D() : Dir;
-	if (State == EZoogiRockState::Shattered) return;
+	if (State == EZoogiRockState::Shattered || !ZoogiUtil::DestructionEnabled()) return; // Oct 8: bDestruction
 	if (State == EZoogiRockState::Cracked) { Shatter(P, D, nullptr); return; }
 	if (bFourStage && !bDamagedStage) { MarkDamaged(P); return; }
 	Crack(P, D, nullptr);

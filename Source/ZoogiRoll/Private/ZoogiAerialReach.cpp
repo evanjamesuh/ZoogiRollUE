@@ -138,6 +138,7 @@ FString UZoogiBattleStateMachine::BestLaunchFor(float ReqZ, float& OutPeak) cons
 	for (const TCHAR* C : { TEXT("floor"), TEXT("ramp"), TEXT("bumper"), TEXT("rail_late"), TEXT("rail_center"), TEXT("rail_early") })
 	{
 		const float E = ReachEnvelope(C);
+		if (E < 0.f) continue; // launch type not measured
 		if (E >= ReqZ && (Best.IsEmpty() || E < OutPeak)) { Best = C; OutPeak = E; }
 	}
 	return Best;
