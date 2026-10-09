@@ -324,6 +324,19 @@ void AZoogiArena::BuildFrozen()
 		for (UProceduralMeshComponent* C : { B0, B1, B2 }) if (C) C->ComponentTags.Add(TEXT("NoCamBlock"));
 	}
 
+	// ---- Polish r6: sky band (frozen_zones_aerial: open bright sky + clouds above the far mountains at the top centre).
+	// Every mountain behind the arena stays under a sight line from the ref_aerial camera (0, 6997, 2690; pitch 12): about
+	// 1.5 deg under the horizon at the frame centre, relaxing toward the frame edges so the peaks still frame both sides.
+	const FVector2D SkyCam(0.f, 6997.f);
+	const float SkyCamZ = 2690.f;
+	auto SkyCapZ = [SkyCam, SkyCamZ](const FVector2D& P) -> float
+	{
+		const FVector2D D = P - SkyCam;
+		if (D.Y > -1000.f) return 1.e6f; // not in front of that camera
+		const float Az = FMath::RadiansToDegrees(FMath::Atan2(FMath::Abs(D.X), -D.Y)); // 0 = frame centre, ~31 = frame edge
+		const float Elev = -1.5f + FMath::Clamp((Az - 14.f) / 14.f, 0.f, 1.f) * 13.5f;
+		return SkyCamZ + D.Size() * FMath::Tan(FMath::DegreesToRadians(Elev));
+	};
 	// ---- distant snow valley + mountain ranges (Buzzy: white peaks with blue shading, cloud sea under the island) ----
 	{
 		// Snow valley far below (fills the view under the island with bright snow instead of void).
@@ -392,6 +405,7 @@ void AZoogiArena::BuildFrozen()
 		};
 		auto Cluster = [&](float R, float A, float H, float Z0)
 		{
+			H = FMath::Max(FMath::Min(H, (SkyCapZ(FVector2D(Pol(R, A))) - Z0) / 1.15f), 250.f); // r6: sky band
 			const FVector2D C0(Pol(R, A));
 			Mountain(C0, H * Rng.FRandRange(0.5f, 0.62f), H, Z0);
 			const int32 Ns = Rng.RandRange(2, 4);
@@ -553,11 +567,12 @@ void AZoogiArena::BuildFrozen()
 				const float Top = FMath::Lerp(-800.f, 4800.f, FMath::Pow(Back, 1.2f)) + MRng.FRandRange(-500.f, 900.f) + (bFar ? 2600.f : 0.f); // r5: low on the camera-side corners
 				const float Hm = Top - Z0;
 				const float Wm = Hm * MRng.FRandRange(1.1f, 1.6f);
-				const float Sz3 = Hm / (float)Sz.Z;
+				float Sz3 = Hm / (float)Sz.Z;
 				const float Sxy = Wm / FMath::Max3((float)Sz.X, (float)Sz.Y, 1.f);
 				// behind the arena (where the spires are dropped) they come in close; on the flanks they sit behind the spires
 				// r5: the flanks come in to the old spire radius (6400-10600) now that the hand-built spires are gone
 				const float R = (bFar ? MRng.FRandRange(13000.f, 15500.f) : Back > 0.4f ? MRng.FRandRange(7600.f, 9000.f) : MRng.FRandRange(7000.f, 9000.f)) + Wm * 0.2f;
+				{ const float Cap = SkyCapZ(FVector2D(Pol(R, A))); if (Top > Cap) Sz3 = FMath::Max(Cap - Z0, 900.f) / (float)Sz.Z; } // r6: sky band (width kept: low wide ridges)
 				const FRotator Rot(0.f, MRng.FRandRange(0.f, 360.f), 0.f);
 				const FVector Scale(Sxy, Sxy, Sz3);
 				const FVector Pivot = Rot.RotateVector(FVector(B.GetCenter().X, B.GetCenter().Y, B.Min.Z) * Scale);
@@ -637,18 +652,31 @@ void AZoogiArena::BuildFrozen()
 	// rune floor during the stage-forming intro.
 	{
 		UMaterialInstanceDynamic* SealMID = nullptr;
-		FlatQuad(FTex(TEXT("T_FrozenSealHalo")), FVector(0.f, 0.f, 0.9f), 0.f, 2.f * ZoogiConst::KnockoffRadius, 1.0f, 2.0f, 1.0f, FLinearColor(0.75f, 0.95f, 1.f), &SealMID);
+		FlatQuad(FTex(TEXT("T_FrozenSealHalo")), FVector(0.f, 0.f, 0.9f), 0.f, 2.f * ZoogiConst::KnockoffRadius, 1.0f, 2.6f, 1.0f, FLinearColor(0.75f, 0.95f, 1.f), &SealMID); // r6: emissive 2.0 -> 2.6
 		if (SealMID && Forming) { SealMID->SetScalarParameterValue(TEXT("Opacity"), 0.f); Forming->AddParamRamp(SealMID, TEXT("Opacity"), 0.f, 1.0f, 0.3f, 2.3f); }
 		// Fountain basin glow under the hub crystal (bright basin rings).
 		FZoogiMeshBuilder Basin;
 		for (int32 s = 0; s < 64; ++s)
 		{
 			const float A0 = 2.f * PI * s / 64, A1 = 2.f * PI * (s + 1) / 64;
-			for (const FVector2D& Rr : { FVector2D(118.f, 132.f), FVector2D(54.f, 60.f) })
+			for (const FVector2D& Rr : { FVector2D(118.f, 132.f), FVector2D(54.f, 60.f), FVector2D(176.f, 184.f), FVector2D(232.f, 236.f) }) // r6: stepped basin tiers
 				Basin.Quad(FVector(FMath::Cos(A0) * Rr.X, FMath::Sin(A0) * Rr.X, 1.1f), FVector(FMath::Cos(A1) * Rr.X, FMath::Sin(A1) * Rr.X, 1.1f),
 					FVector(FMath::Cos(A1) * Rr.Y, FMath::Sin(A1) * Rr.Y, 1.1f), FVector(FMath::Cos(A0) * Rr.Y, FMath::Sin(A0) * Rr.Y, 1.1f), FVector::UpVector);
 		}
 		if (UProceduralMeshComponent* Bc = AddFrozenProc(Basin, ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#7FEAFF")), 3.0f), nullptr, false)) Bc->ComponentTags.Add(TEXT("NoCamBlock"));
+		// r6: glowing water in the basin (soft additive discs, brightest at the centre). Flat, 1.2-1.4 cm above the floor, no collision.
+		{
+			FZoogiMeshBuilder Pool0, Pool1;
+			for (int32 s = 0; s < 64; ++s)
+			{
+				const float A0 = 2.f * PI * s / 64, A1 = 2.f * PI * (s + 1) / 64;
+				Pool0.Quad(FVector(0.f, 0.f, 1.2f), FVector(0.f, 0.f, 1.2f), FVector(FMath::Cos(A1) * 176.f, FMath::Sin(A1) * 176.f, 1.2f), FVector(FMath::Cos(A0) * 176.f, FMath::Sin(A0) * 176.f, 1.2f), FVector::UpVector);
+				Pool1.Quad(FVector(0.f, 0.f, 1.4f), FVector(0.f, 0.f, 1.4f), FVector(FMath::Cos(A1) * 118.f, FMath::Sin(A1) * 118.f, 1.4f), FVector(FMath::Cos(A0) * 118.f, FMath::Sin(A0) * 118.f, 1.4f), FVector::UpVector);
+			}
+			for (UProceduralMeshComponent* Pc : { AddFrozenProc(Pool0, ZoogiUtil::FxMID(this, ZoogiUtil::Hex(TEXT("#5FD8FF")), 0.32f), nullptr, false),
+				AddFrozenProc(Pool1, ZoogiUtil::FxMID(this, ZoogiUtil::Hex(TEXT("#A8F2FF")), 0.42f), nullptr, false) })
+				if (Pc) Pc->ComponentTags.Add(TEXT("NoCamBlock"));
+		}
 	}
 	// ---- Polish r3: ring of 8 small glowing crystal posts on the seal's outer ring (r 1000, between the spawn pads and clear of
 	// the ramp / platform / combo section). Breakable pieces with NO collider (play-floor collision unchanged); low (30 cm,
@@ -944,14 +972,14 @@ void AZoogiArena::BuildFrozen()
 			Cr.Prism(O, 6, 13.f - c * 0.8f, 9.f, 0.f, Hs[c] * 0.6f, c * 17.f, Hs[c] * 0.4f, true);
 			(void)Tilt;
 		}
-		UProceduralMeshComponent* CrM = AddFrozenProc(Cr, ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#69E1F9")), 2.2f), Spin, false);
-		CrM->SetRelativeLocation(FVector(0, 0, 225.f));
-		CrM->SetRelativeScale3D(FVector(1.45f)); // polish r1: the art's big central crystal
+		UProceduralMeshComponent* CrM = AddFrozenProc(Cr, ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#69E1F9")), 3.0f), Spin, false);
+		CrM->SetRelativeLocation(FVector(0, 0, 215.f));
+		CrM->SetRelativeScale3D(FVector(2.0f)); // polish r1: the art's big central crystal; r6: larger + brighter so it reads from the aerial views
 		// Fountain: a faint glowing light column from the basin up to the crystal (visual only).
 		{
 			FZoogiMeshBuilder Col;
 			Col.Prism(FVector2D::ZeroVector, 12, 46.f, 22.f, 2.f, 215.f, 0.f, 0.f, false);
-			if (UProceduralMeshComponent* Cc = AddFrozenProc(Col, ZoogiUtil::FxMID(this, ZoogiUtil::Hex(TEXT("#7FEAFF")), 0.35f), Pv, false)) Cc->ComponentTags.Add(TEXT("NoCamBlock"));
+			if (UProceduralMeshComponent* Cc = AddFrozenProc(Col, ZoogiUtil::FxMID(this, ZoogiUtil::Hex(TEXT("#7FEAFF")), 0.5f), Pv, false)) Cc->ComponentTags.Add(TEXT("NoCamBlock"));
 		}
 		CrM->ComponentTags.Add(TEXT("NoCamBlock"));
 		URotatingMovementComponent* Rot = NewObject<URotatingMovementComponent>(this);
@@ -1194,7 +1222,7 @@ void AZoogiArena::BuildFrozen()
 			const int32 Before = Built.Num();
 			// Symmetric layout: on the side away from the camera axis, half way to the next islet (mirrored east / west).
 			const float FallA = Yaw + (FMath::Cos(FMath::DegreesToRadians(Yaw)) > 0.f ? -22.5f : 22.5f);
-			AddWaterfall(Pol(IsletDist[k] - 60.f, FallA, IsletTopZ - 10.f), FallA, 170.f, 2600.f, 50.f);
+			AddWaterfall(Pol(IsletDist[k] - 60.f, FallA, IsletTopZ - 10.f), FallA, 120.f, 2600.f, 50.f); // r6: narrower
 			for (int32 b = Before; b < Built.Num(); ++b) if (USceneComponent* Wc = Cast<USceneComponent>(Built[b])) Wc->AttachToComponent(Pv, FAttachmentTransformRules::KeepWorldTransform);
 		}
 	}
@@ -1228,14 +1256,21 @@ void AZoogiArena::BuildFrozen()
 	{
 		// Polish r1: 6 falls (front-centre + back-right added), longer drop into the cloud sea.
 		const float Falls[6] = { FallYaw[0], FallYaw[1], 90.f, 270.f, 258.75f, 281.25f }; // symmetric layout: front trio + back trio, never under a bridge
-		const float Wid[6] = { 200.f, 200.f, 260.f, 170.f, 150.f, 150.f }; // mirrored pairs
+		const float Wid[6] = { 130.f, 130.f, 170.f, 120.f, 100.f, 100.f }; // mirrored pairs; r6: narrower ribbons like the art
+		FZoogiMeshBuilder FallCore;
 		UTexture* Cloud = FTex(TEXT("T_FrozenCloud"));
 		for (int32 f = 0; f < 6; ++f)
 		{
 			AddWaterfall(Pol(1775.f, Falls[f], -16.f), Falls[f], Wid[f], 3800.f, 55.f);
+			{ // r6: bright white-cyan core in front of the sheet (additive, visual only)
+				const FVector Sd = Pol(1.f, Falls[f] + 90.f) * (Wid[f] * 0.22f);
+				const FVector T0 = Pol(1775.f + 55.f + 10.f, Falls[f], -16.f - 33.f), T1 = Pol(1775.f + 55.f + 46.f, Falls[f], -16.f - 33.f - 3800.f);
+				FallCore.Quad(T0 - Sd, T0 + Sd, T1 + Sd * 1.25f, T1 - Sd * 1.25f, Pol(1.f, Falls[f]));
+			}
 			for (int32 m = 0; m < 3; ++m)
 				FlatQuad(Cloud, Pol(1900.f + m * 120.f, Falls[f] + Rng.FRandRange(-4.f, 4.f), -1700.f - m * 250.f), Rng.FRandRange(0.f, 360.f), 900.f + m * 300.f, 0.9f, 0.25f, 1.1f, FLinearColor::White, nullptr);
 		}
+		if (UProceduralMeshComponent* Fc = AddFrozenProc(FallCore, ZoogiUtil::FxMID(this, ZoogiUtil::Hex(TEXT("#E8FBFF")), 0.32f), nullptr, false)) Fc->ComponentTags.Add(TEXT("NoCamBlock"));
 	}
 
 	// ---- round 3c gameplay checks (-ZoogiFrozenPlayTest) ----
