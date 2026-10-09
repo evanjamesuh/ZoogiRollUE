@@ -12,7 +12,7 @@ U = np.repeat(((np.arange(W) + 0.5) / W)[None, :], H, 0)
 rng = np.random.default_rng(7)
 
 def hexc(h): return np.array([int(h[i:i+2], 16) for i in (1, 3, 5)], np.float32) / 255
-zen, mid, hor = hexc('#2C78D6'), hexc('#4E9BE6'), hexc('#A6D8F7')
+zen, mid, hor = hexc('#2C78D6'), hexc('#4E9BE6'), hexc('#86C4F2')
 t = np.clip(E / 70, 0, 1)
 sky = np.where((t < 0.35)[..., None], hor + (mid - hor) * (t / 0.35)[..., None], mid + (zen - mid) * np.clip((t - 0.35) / 0.65, 0, 1)[..., None] ** 0.8)
 
