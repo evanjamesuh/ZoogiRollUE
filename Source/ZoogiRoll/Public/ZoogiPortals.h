@@ -111,7 +111,8 @@ protected:
 	TArray<TPair<FString, double>> ShotsLater;
 	int32 ShotCount = 0;
 	// -ZoogiTopShot=<file.png>: one straight-down engine-viewport capture of the whole Frozen layout (camera only, no physics)
-	FString TopShot;
+	FString TopShot, CentreShot; // -ZoogiCentreShot=<file.png>: the centre crystal / fountain from the camera side
+	int32 TopView = 0;
 	int32 TopStage = 0;
 	double TopAt = 0.0;
 	TWeakObjectPtr<AActor> TopCam, TopPrevView;

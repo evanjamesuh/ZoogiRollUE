@@ -332,16 +332,24 @@ void UZoogiPortalSubsystem::TickTopShot(UWorld* W)
 	APlayerController* PC = W ? W->GetFirstPlayerController() : nullptr;
 	if (!PC || W->GetTimeSeconds() < 10.0) return; // after the first aim (the map props spawn then)
 	const double Now = FPlatformTime::Seconds();
+	// views: [0] -ZoogiTopShot straight down (far side yaw 270 at the top, like the match camera),
+	//        [1] -ZoogiCentreShot the centre crystal / fountain from the camera side, low and close
+	struct FV { const FString* Path; FVector Loc; FRotator Rot; float Fov; };
+	const FVector CLook(0.f, 0.f, 140.f), CLoc(0.f, 950.f, 520.f);
+	const FV Views[2] = { { &TopShot, FVector(0.f, 0.f, 9500.f), FRotator(-90.f, 270.f, 0.f), 70.f },
+	                      { &CentreShot, CLoc, (CLook - CLoc).Rotation(), 60.f } };
+	while (TopView < 2 && Views[TopView].Path->IsEmpty()) { ++TopView; TopStage = 0; }
+	if (TopView >= 2) { TopStage = 3; return; }
+	const FV& V = Views[TopView];
 	if (TopStage == 0)
 	{
 		FActorSpawnParameters SP;
 		SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-		// straight down, far side (yaw 270) at the top of the frame like the match camera
-		ACameraActor* Cam = W->SpawnActor<ACameraActor>(FVector(0.f, 0.f, 9500.f), FRotator(-90.f, 270.f, 0.f), SP);
-		if (!Cam) { TopStage = 3; return; }
-		Cam->GetCameraComponent()->SetFieldOfView(70.f);
+		ACameraActor* Cam = W->SpawnActor<ACameraActor>(V.Loc, V.Rot, SP);
+		if (!Cam) { ++TopView; return; }
+		Cam->GetCameraComponent()->SetFieldOfView(V.Fov);
 		Cam->GetCameraComponent()->bConstrainAspectRatio = false;
-		TopPrevView = PC->GetViewTarget();
+		if (!TopPrevView.IsValid()) TopPrevView = PC->GetViewTarget();
 		PC->SetViewTarget(Cam);
 		TopCam = Cam; TopStage = 1; TopAt = Now + 0.8;
 	}
@@ -349,17 +357,21 @@ void UZoogiPortalSubsystem::TickTopShot(UWorld* W)
 	{
 		if (TopCam.IsValid() && PC->GetViewTarget() != TopCam.Get()) PC->SetViewTarget(TopCam.Get()); // keep it while the frame settles
 		if (Now < TopAt) return;
-		FScreenshotRequest::RequestScreenshot(TopShot, false, false);
-		UE_LOG(LogZoogi, Log, TEXT("PORTAL top-down screenshot requested: %s (portals=%d)"), *TopShot, Portals.Num());
+		FScreenshotRequest::RequestScreenshot(*V.Path, false, false); // engine viewport only, no UI
+		UE_LOG(LogZoogi, Log, TEXT("PORTAL view screenshot %d requested: %s (portals=%d)"), TopView, **V.Path, Portals.Num());
 		TopStage = 2; TopAt = Now + 1.0;
 	}
 	else if (TopStage == 2)
 	{
 		if (TopCam.IsValid() && PC->GetViewTarget() != TopCam.Get()) PC->SetViewTarget(TopCam.Get());
 		if (Now < TopAt) return;
-		if (TopPrevView.IsValid()) PC->SetViewTarget(TopPrevView.Get());
 		if (TopCam.IsValid()) TopCam->Destroy();
-		TopStage = 3;
+		++TopView; TopStage = 0;
+		if (TopView >= 2 || (TopView == 1 && CentreShot.IsEmpty()))
+		{
+			if (TopPrevView.IsValid()) PC->SetViewTarget(TopPrevView.Get());
+			TopView = 2; TopStage = 3;
+		}
 	}
 }
 
@@ -367,8 +379,8 @@ void UZoogiPortalSubsystem::Tick(float DeltaTime)
 {
 	UWorld* W = GetWorld();
 	AZoogiGameMode* G = W ? W->GetAuthGameMode<AZoogiGameMode>() : nullptr;
-	if (!bLoaded) { FParse::Value(FCommandLine::Get(), TEXT("ZoogiPortalShots="), ShotDir); FParse::Value(FCommandLine::Get(), TEXT("ZoogiTopShot="), TopShot); }
-	if (!TopShot.IsEmpty() && TopStage < 3 && Portals.Num() > 0) TickTopShot(W);
+	if (!bLoaded) { FParse::Value(FCommandLine::Get(), TEXT("ZoogiPortalShots="), ShotDir); FParse::Value(FCommandLine::Get(), TEXT("ZoogiTopShot="), TopShot); FParse::Value(FCommandLine::Get(), TEXT("ZoogiCentreShot="), CentreShot); }
+	if ((!TopShot.IsEmpty() || !CentreShot.IsEmpty()) && TopStage < 3 && Portals.Num() > 0) TickTopShot(W);
 	for (int32 i = ShotsLater.Num() - 1; i >= 0; --i)
 		if (FPlatformTime::Seconds() >= ShotsLater[i].Value)
 		{
