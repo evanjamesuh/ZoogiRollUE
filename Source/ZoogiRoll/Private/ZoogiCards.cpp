@@ -1,4 +1,7 @@
 #include "ZoogiCards.h"
+#include "ZoogiProgression.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
@@ -258,6 +261,26 @@ namespace ZoogiCards
 	static FSavedDeckQuery& SavedDeckRef() { static FSavedDeckQuery Q; return Q; }
 	void SetSavedDeckQuery(FSavedDeckQuery Query) { SavedDeckRef() = MoveTemp(Query); }
 	const FSavedDeckQuery& GetSavedDeckQuery() { return SavedDeckRef(); }
+	int32 LinkRequiredPowers(TArray<FZoogiCardDef>& Defs, const FString& PowersCsv, FString& OutLog)
+	{
+		TArray<TMap<FString, FString>> Rows; FString Err;
+		if (!ZoogiProgress::ReadCsvRows(PowersCsv, Rows, Err)) { OutLog += FString::Printf(TEXT(" Powers.csv unreadable (%s): no card power links;"), *Err); return 0; }
+		int32 N = 0;
+		for (const TMap<FString, FString>& R : Rows)
+		{
+			const FString* Card = R.Find(TEXT("card_id")); const FString* Power = R.Find(TEXT("power_id"));
+			if (!Card || !Power || Card->IsEmpty() || Power->IsEmpty()) continue;
+			for (FZoogiCardDef& D : Defs) if (D.Id == FName(**Card)) { D.RequiredPower = FName(**Power); ++N; }
+		}
+		OutLog += FString::Printf(TEXT(" %d card(s) linked to powers;"), N);
+		return N;
+	}
+	int32 LinkRequiredPowersFromData(TArray<FZoogiCardDef>& Defs, FString& OutLog)
+	{
+		FString Text;
+		if (!FFileHelper::LoadFileToString(Text, *(FPaths::ProjectContentDir() / TEXT("Data/Progression/Powers.csv")))) { OutLog += TEXT(" no Powers.csv: no card power links;"); return 0; }
+		return LinkRequiredPowers(Defs, Text, OutLog);
+	}
 
 	TArray<FName> FilterDeckByUnlocks(const TArray<FName>& Deck, const IZoogiCardBackend& Backend, int32 DeckSize, int32 MaxCopies, const FPowerUnlockQuery& IsUnlocked, FString& OutLog)
 	{

@@ -196,6 +196,10 @@ namespace ZoogiCards
 	/** Oct 14: the human player's saved deck (menu Deck screen). Not registered (or empty / illegal result) = the default deck. */
 	using FSavedDeckQuery = TFunction<TArray<FName>()>;
 	ZOOGIROLL_API void SetSavedDeckQuery(FSavedDeckQuery Query);
+	/** Fills FZoogiCardDef::RequiredPower from Powers.csv text (power_id,...,card_id). Returns cards linked. Unknown cards are ignored. */
+	ZOOGIROLL_API int32 LinkRequiredPowers(TArray<FZoogiCardDef>& Defs, const FString& PowersCsv, FString& OutLog);
+	/** Same, reading Content/Data/Progression/Powers.csv. */
+	ZOOGIROLL_API int32 LinkRequiredPowersFromData(TArray<FZoogiCardDef>& Defs, FString& OutLog);
 	ZOOGIROLL_API const FSavedDeckQuery& GetSavedDeckQuery();
 	/** Deck-building hook: cards whose RequiredPower is locked never enter the deck; the deck is refilled to DeckSize with other
 	 *  eligible cards (definition order, round-robin, <= MaxCopies each). No query = Deck returned unchanged. Deterministic. */

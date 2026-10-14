@@ -106,7 +106,9 @@ void UZoogiPowerUnlockSubsystem::Initialize(FSubsystemCollectionBase& Collection
 	UE_LOG(LogZoogi, Log, TEXT("UNLOCKS loaded: %d equipped, gems=%d (progression), unlockAll=%d"), Data->EquippedByZoogi.Num(), GetGems(), bUnlockAll ? 1 : 0);
 	// Deck building asks the unlock state through ZoogiCards (2acd98e). No card -> power links are set here (RequiredPower stays empty).
 	TWeakObjectPtr<UZoogiPowerUnlockSubsystem> Weak(this);
-	ZoogiCards::SetPowerUnlockQuery([Weak](FName PowerId) { const UZoogiPowerUnlockSubsystem* S = Weak.Get(); return !S || S->IsUnlocked(PowerId); });
+	// Not in test / capture runs: their decks stay the data deck (parity), whatever the player's profile has unlocked.
+	if (!IsTestRun())
+		ZoogiCards::SetPowerUnlockQuery([Weak](FName PowerId) { const UZoogiPowerUnlockSubsystem* S = Weak.Get(); return !S || S->IsUnlocked(PowerId); });
 	// Saved deck (menu Deck screen) for human players; never in test / capture runs.
 	if (!IsTestRun())
 		ZoogiCards::SetSavedDeckQuery([Weak]() { const UZoogiPowerUnlockSubsystem* S = Weak.Get(); const UZoogiProgressionSubsystem* P = S ? S->Prog() : nullptr; return P ? P->SavedDeck() : TArray<FName>(); });

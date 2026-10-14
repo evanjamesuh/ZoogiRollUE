@@ -50,6 +50,8 @@ void UZoogiCardSubsystem::LoadData(TArray<FZoogiCardDef>& Defs, TArray<FName>& D
 		if (ZoogiCards::ParseCardsCsv(Text, Csv, Err) && Csv.Num() > 0) { Defs = Csv; DataSource = TEXT("csv"); }
 		else UE_LOG(LogZoogi, Warning, TEXT("CARDS Cards.csv rejected (%s): built-in table used"), *Err);
 	}
+	// Oct 14: power cards carry their power (Powers.csv card_id) so locked powers keep their cards out of matches.
+	{ FString LinkLog; ZoogiCards::LinkRequiredPowersFromData(Defs, LinkLog); UE_LOG(LogZoogi, Log, TEXT("CARDS power links:%s"), *LinkLog); }
 	TMap<FString, TArray<FName>> Decks;
 	if (FFileHelper::LoadFileToString(Text, *(Dir / TEXT("Decks.csv"))) && ZoogiCards::ParseDecksCsv(Text, Decks, Err))
 	{

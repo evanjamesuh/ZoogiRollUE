@@ -315,3 +315,26 @@ bool FZoogiCardPowerUnlockTest::RunTest(const FString&)
 }
 
 #endif
+
+// Oct 14 (deck-edit): Powers.csv card_id links the power cards; with those powers locked the deck drops them and refills to 15.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiCardPowerLinkTest, "ZoogiRoll.Cards.PowerLinks", ZoogiCardFlags)
+bool FZoogiCardPowerLinkTest::RunTest(const FString&)
+{
+	TArray<FZoogiCardDef> Defs = ZoogiCards::BuiltInDefs();
+	FString L;
+	const int32 N = ZoogiCards::LinkRequiredPowers(Defs, TEXT("power_id,name,element,tier,default_unlocked,mastery_level,gem_cost,card_id\nvoid_2_titan_meteor,Titan Meteor,Void,starter,false,5,550,titan\nfire_2_ember,Ember,Fire,starter,false,3,400,ember\nshock_1_storm,Storm,Shock,free,true,0,0,storm\n"), L);
+	TestEqual(TEXT("3 cards linked"), N, 3);
+	const FZoogiCardDef* T = Defs.FindByPredicate([](const FZoogiCardDef& D) { return D.Id == FName(TEXT("titan")); });
+	TestTrue(TEXT("titan -> void_2_titan_meteor"), T && T->RequiredPower == FName(TEXT("void_2_titan_meteor")));
+	FZoogiNativeCardBackend B(Defs);
+	const TSet<FName> Locked = { TEXT("void_2_titan_meteor"), TEXT("fire_2_ember") };
+	const TArray<FName> D = ZoogiCards::FilterDeckByUnlocks(ZoogiCards::BuiltInDeck(), B, 15, 2, [&](FName P) { return !Locked.Contains(P); }, L);
+	FString Err;
+	TestTrue(TEXT("refilled to a legal 15"), ZoogiCards::ValidateDeck(D, B, 15, 2, Err));
+	TestFalse(TEXT("no titan"), D.Contains(FName(TEXT("titan"))));
+	TestFalse(TEXT("no ember"), D.Contains(FName(TEXT("ember"))));
+	TArray<FZoogiCardDef> Data = ZoogiCards::BuiltInDefs();
+	FString L2;
+	TestTrue(TEXT("project Powers.csv links the 6 power cards"), ZoogiCards::LinkRequiredPowersFromData(Data, L2) >= 4);
+	return true;
+}

@@ -1171,6 +1171,7 @@ namespace
 			const FString Dir = FPaths::ProjectContentDir() / TEXT("Data");
 			TArray<FZoogiCardDef> Csv;
 			if (FFileHelper::LoadFileToString(Text, *(Dir / TEXT("Cards.csv"))) && ZoogiCards::ParseCardsCsv(Text, Csv, Err) && Csv.Num() > 0) R.Defs = Csv;
+			FString LinkLog; ZoogiCards::LinkRequiredPowersFromData(R.Defs, LinkLog);
 			TMap<FString, TArray<FName>> Decks;
 			if (FFileHelper::LoadFileToString(Text, *(Dir / TEXT("Decks.csv"))) && ZoogiCards::ParseDecksCsv(Text, Decks, Err))
 				if (const TArray<FName>* S = Decks.Find(TEXT("starter"))) R.Deck = *S;
