@@ -34,6 +34,10 @@ class ZOOGIROLL_API UZoogiFramedHUDWidget : public UUserWidget
 	GENERATED_BODY()
 public:
 	int32 PaintBack(const FGeometry& Geo, FSlateWindowElementList& Out, int32 Layer) const;
+	/** The acting player's prompt / action-status text (shown in the active Zoogi's team-column action box). */
+	static FString PromptText(const AZoogiGameMode* G);
+	/** Short label for the action box header (AWAKEN / STANDBY / BATTLE: AIM / ROLLING ...). */
+	static FString ActionLabel(const AZoogiGameMode* G);
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual void NativeTick(const FGeometry& Geo, float Dt) override;
@@ -53,7 +57,6 @@ private:
 	void PlaceW(UWidget* W, const FVector2D& Pos, const FVector2D& Size, bool bShow);
 	void SetPaused(bool bPause);
 	void RouteTray(AZoogiGameMode* G, float s);
-	FString PromptText(const AZoogiGameMode* G) const;
 	FString HintText(const AZoogiGameMode* G) const;
 
 	UPROPERTY() TObjectPtr<UCanvasPanel> Root;

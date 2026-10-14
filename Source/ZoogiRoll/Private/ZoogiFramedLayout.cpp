@@ -59,8 +59,10 @@ namespace ZoogiFramed
 		float ColW = (A < 1.5f ? 220.f : (A > 2.0f ? 250.f : 300.f)) * U;
 		const float Avail = W - S.Left - S.Right;
 		ColW = FMath::Min(ColW, (Avail - 4.f * Gap) * 0.24f);
-		const float PromptH = 46.f * U;
-		const float TrayFull = 236.f * U, TrayMin = PromptH + 8.f * U;
+		// v2 (Evan, Oct 14 9:49): the player prompt lives in the active Zoogi's team-column action box, so the tray is all
+		// card hand / Awaken controls (taller, cards fully visible); collapsed it is a thin strip for system text only.
+		const float PromptH = 30.f * U;
+		const float TrayFull = 272.f * U, TrayMin = PromptH + 6.f * U;
 		const float TrayH = FMath::Lerp(TrayMin, TrayFull, L.TrayOpen);
 		const float X0 = S.Left, X1 = W - S.Right, Y0 = S.Top, Y1 = H - S.Bottom;
 		L.Top = FBox2D(FVector2D(X0 + Gap, Y0 + Gap * 0.5f), FVector2D(X1 - Gap, Y0 + Gap * 0.5f + TopH));
@@ -69,7 +71,7 @@ namespace ZoogiFramed
 		L.Right = FBox2D(FVector2D(X1 - Gap - ColW, AY0), FVector2D(X1 - Gap, AY1));
 		L.Arena = FBox2D(FVector2D(FMath::RoundToFloat(L.Left.Max.X + Gap), FMath::RoundToFloat(AY0)), FVector2D(FMath::RoundToFloat(L.Right.Min.X - Gap), FMath::RoundToFloat(AY1)));
 		L.Tray = FBox2D(FVector2D(X0 + Gap, AY1 + Gap * 0.5f), FVector2D(X1 - Gap, Y1 - Gap * 0.4f));
-		L.Prompt = FBox2D(FVector2D(L.Arena.Min.X, L.Tray.Min.Y + 4.f * U), FVector2D(L.Arena.Max.X, L.Tray.Min.Y + 4.f * U + PromptH));
+		L.Prompt = FBox2D(FVector2D(L.Arena.Min.X, L.Tray.Min.Y + 3.f * U), FVector2D(L.Arena.Max.X, L.Tray.Min.Y + 3.f * U + PromptH)); // system text only (forming / match over)
 		L.bValid = true;
 		return L;
 	}

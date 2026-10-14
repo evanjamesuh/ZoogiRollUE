@@ -3,6 +3,8 @@
 // artifact status), power indicator (infused artifact / committed cards), ring marks (2v2 lives), Episode Energy bar
 // with juice + READY state, active highlight. Team Combo gauge when 2v2 Combo is on. READ-ONLY: never writes game state.
 // There is no HP stat in Zoogi Roll, so no health bar is drawn (ring marks are the only "lives" stat and only exist in 2v2).
+// v2 (Evan, Oct 14 9:49): the acting Zoogi's card gets an ACTION box (prompt / action status / selected-action confirmation
+// / Battle prompt); the left column also carries the event feed under the cards (moved out of the arena corner).
 #pragma once
 
 #include "CoreMinimal.h"
@@ -41,4 +43,6 @@ private:
 	int32 LastActive = -1;
 	float TurnAnim = 1.f;
 	float Time = 0.f;
+	FString LastPrompt;
+	float PromptAnim = 1.f;
 };

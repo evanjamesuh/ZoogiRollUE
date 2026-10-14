@@ -81,6 +81,58 @@ namespace ZoogiBattleHud
 	}
 }
 
+bool UZoogiBattleStateMachine::GetHudPrompt(FZoogiBattleHudPrompt& Out) const
+{
+	using namespace ZoogiBattleHud;
+	Out = FZoogiBattleHudPrompt();
+	if (!bFlow || !Tune.bBattleHUD) return false;
+	const AZoogiGameMode* G = GM();
+	if (!G || G->Phase == EZoogiPhase::Menu || G->Phase == EZoogiPhase::Forming) return false;
+	const UZoogiMiniGameRailRelease* Rail = Cast<UZoogiMiniGameRailRelease>(ActiveMiniGame);
+	const UZoogiMiniGameAirReaction* Air = Cast<UZoogiMiniGameAirReaction>(ActiveMiniGame);
+	if (Rail && Rail->bInputOpen && !Rail->bReleaseRequested)
+	{
+		const bool bMine = G->Balls.IsValidIndex(Rail->Body) && G->Balls[Rail->Body] && !G->Balls[Rail->Body]->bCPU;
+		const float Tot = FMath::Max(0.01f, Tune.RailEarlyWindow + Tune.RailCenterWindow + Tune.RailLateWindow);
+		Out.Title = FString::Printf(TEXT("RAIL RELEASE  P%d"), Rail->Body + 1);
+		Out.Body = bMine ? TEXT("Press F9 in a window: EARLY high arc / CENTER flat / LATE bank") : TEXT("CPU is timing the release...");
+		Out.Accent = CenterC;
+		Out.Frac = FMath::Clamp(Rail->Elapsed / Tot, 0.f, 1.f);
+		Out.RailEarly = Tune.RailEarlyWindow / Tot; Out.RailCenter = Tune.RailCenterWindow / Tot;
+		return true;
+	}
+	if (Air && Air->bInputOpen && Air->Choice == EZoogiAirChoice::None)
+	{
+		const bool bMine = G->Balls.IsValidIndex(Air->Owner) && G->Balls[Air->Owner] && !G->Balls[Air->Owner]->bCPU;
+		Out.Title = FString::Printf(TEXT("AIR REACTION  P%d"), Air->Owner + 1);
+		Out.Body = bMine ? TEXT("[F7] BRACE    [F8] REDIRECT") : TEXT("CPU is choosing...");
+		Out.Accent = FLinearColor(1.f, 0.55f, 0.1f);
+		Out.Frac = FMath::Clamp(Air->InputLeft / FMath::Max(0.1f, Tune.MiniGameInputTimeout), 0.f, 1.f);
+		return true;
+	}
+	if (RealClock < HudRailUntil) { Out.Title = HudRailText; Out.Accent = LastRailWindow == EZoogiRailWindow::Early ? EarlyC : (LastRailWindow == EZoogiRailWindow::Late ? LateC : CenterC); return true; }
+	if (RealClock < HudFlashUntil) { Out.Title = HudFlashText; Out.Accent = HudFlashColor; return true; }
+	if (Pending.Owner >= 0 && Pending.Owner == G->ActivePlayer && Pending.Challenge != EZoogiChallenge::None && G->Phase != EZoogiPhase::GameOver)
+	{
+		const FString Tgt = Pending.DeclaredTarget >= 0 ? BodyLabel(Pending.DeclaredTarget) : FString(TEXT("the lock-on target"));
+		switch (Pending.Challenge)
+		{
+		case EZoogiChallenge::HaloBank: Out.Body = FString::Printf(TEXT("Roll through a Resonance Halo, then hit %s"), *Tgt); break;
+		case EZoogiChallenge::OrbLine: Out.Body = Pending.CommittedOrbs.Num() > 0 ? FString::Printf(TEXT("Touch all %d orbs on the line"), Pending.CommittedOrbs.Num()) : FString(TEXT("Aim through a line of orbs")); break;
+		case EZoogiChallenge::SkyBumper: Out.Body = TEXT("Rebound off a Sky Bumper before any hit"); break;
+		case EZoogiChallenge::RailRelease: Out.Body = TEXT("Roll into the Launch Rail, release in a window"); break;
+		case EZoogiChallenge::Strike: Out.Body = FString::Printf(TEXT("First hit must be %s"), *Tgt); break;
+		case EZoogiChallenge::PartnerIntercept: Out.Body = TEXT("Hit your partner first, then a rival"); break;
+		case EZoogiChallenge::AirReaction: Out.Body = TEXT("Get airborne, then react (F7 / F8)"); break;
+		default: break;
+		}
+		Out.Title = FString::Printf(TEXT("%s  P%d"), *ChallengeTitle(Pending.Challenge), Pending.Owner + 1);
+		Out.Accent = Cyan;
+		return true;
+	}
+	return false;
+}
+
 void UZoogiBattleStateMachine::OnHUDPostRender(AHUD* HUD, UCanvas* Canvas)
 {
 	using namespace ZoogiBattleHud;
@@ -163,6 +215,9 @@ void UZoogiBattleStateMachine::OnHUDPostRender(AHUD* HUD, UCanvas* Canvas)
 	}
 
 	// ---- prompt panel (bottom centre above the status line: the top centre belongs to the Episode callouts)
+	// framed HUD: the same content goes to the active Zoogi's action box in the team column (GetHudPrompt), never over the arena
+	if (!ZoogiFramed::IsActive(GetWorld()))
+	{
 	const float PW = 680.f * U, PX = (W - PW) * 0.5f;
 	float PY = H - 300.f * U;
 	auto Box = [&](float BH, const FLinearColor& Accent)
@@ -233,6 +288,7 @@ void UZoogiBattleStateMachine::OnHUDPostRender(AHUD* HUD, UCanvas* Canvas)
 		D.Text(FString::Printf(TEXT("%s  P%d"), *ChallengeTitle(Pending.Challenge), Pending.Owner + 1), PX + PW * 0.5f, PY + 8.f * U, Cyan, 0.44f, true, true);
 		D.Text(Obj, PX + PW * 0.5f, PY + 44.f * U, FLinearColor::White, 0.36f, true);
 	}
+	} // !framed
 
 	// ---- SHATTERED signal
 	const double SAge = RealClock - LastShatterReal;

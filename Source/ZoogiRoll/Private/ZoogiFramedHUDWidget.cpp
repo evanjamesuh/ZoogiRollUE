@@ -188,7 +188,7 @@ void UZoogiFramedHUDWidget::RouteTray(AZoogiGameMode* G, float s)
 		return;
 	}
 	const ZoogiFramed::FLayout& L = ZoogiFramed::Current();
-	const float Avail = (L.Viewport.Y - L.Safe.Bottom - L.Prompt.Max.Y) * s + 6.f;
+	const float Avail = (L.Viewport.Y - L.Safe.Bottom - L.Tray.Min.Y - 6.f * L.U) * s; // v2: no prompt bar in the tray
 	float Need = 1.f;
 	if (AW->ShowsAwaken()) Need = FMath::Max(Need, 466.f);
 	if (AW->ShowsCards()) Need = FMath::Max(Need, 520.f);
@@ -296,12 +296,24 @@ void UZoogiFramedHUDWidget::NativeTick(const FGeometry& Geo, float Dt)
 	if (P != LastPrompt) { LastPrompt = P; PromptAnim = 0.f; }
 }
 
-FString UZoogiFramedHUDWidget::PromptText(const AZoogiGameMode* G) const
+FString UZoogiFramedHUDWidget::ActionLabel(const AZoogiGameMode* G)
+{
+	if (!G) return FString();
+	if (UZoogiAnimeSubsystem* Anime = G->GetWorld() ? G->GetWorld()->GetSubsystem<UZoogiAnimeSubsystem>() : nullptr) if (Anime->bPlaying) return TEXT("EPISODE");
+	if (G->Phase == EZoogiPhase::Rolling) return TEXT("ROLLING");
+	if (G->Phase == EZoogiPhase::Resolving) return TEXT("RESOLVING");
+	if (G->Stage == EZoogiStage::Draw) return TEXT("DRAW");
+	if (G->Stage == EZoogiStage::Awaken) return G->bAwakenDone ? TEXT("AWAKEN  DONE") : (G->CardsOn() ? TEXT("STANDBY") : TEXT("AWAKEN"));
+	if (G->Stage == EZoogiStage::Battle) return FString::Printf(TEXT("BATTLE: %s"), AZoogiGameMode::StepName(G->BattleStep)).ToUpper();
+	return FString(AZoogiGameMode::StageName(G->Stage)).ToUpper();
+}
+
+FString UZoogiFramedHUDWidget::PromptText(const AZoogiGameMode* G)
 {
 	if (!G) return FString();
 	if (G->Phase == EZoogiPhase::Forming) return TEXT("The arena is forming...  click or press SPACE to skip");
 	if (G->Phase == EZoogiPhase::GameOver) return FString::Printf(TEXT("MATCH OVER  -  %s   REMATCH or MENU (results in the arena)"), *G->Banner);
-	if (UZoogiAnimeSubsystem* Anime = GetWorld()->GetSubsystem<UZoogiAnimeSubsystem>()) if (Anime->bPlaying) return TEXT("Episode playing...  click / SPACE to skip");
+	if (UZoogiAnimeSubsystem* Anime = G->GetWorld() ? G->GetWorld()->GetSubsystem<UZoogiAnimeSubsystem>() : nullptr) if (Anime->bPlaying) return TEXT("Episode playing...  click / SPACE to skip");
 	const AZoogiBall* B = G->GetActiveBall();
 	if (!B) return FString();
 	if (G->Phase == EZoogiPhase::Rolling) return TEXT("Rolling...");
@@ -311,12 +323,12 @@ FString UZoogiFramedHUDWidget::PromptText(const AZoogiGameMode* G) const
 	{
 		if (G->bAwakenDone) return G->AwakenChoiceText.IsEmpty() ? TEXT("Awaken done") : G->AwakenChoiceText;
 		if (B->bCPU) return TEXT("CPU is awakening...");
-		return G->CardsOn() ? TEXT("STANDBY: drag cards onto a target (or click 1-5), then CONFIRM  -  CLEAR resets") : TEXT("AWAKEN: pick a card, then INFUSE / GUARD / SAVE");
+		return G->CardsOn() ? TEXT("Drag cards onto a target (or press 1-5), then CONFIRM. CLEAR resets") : TEXT("Pick a card, then INFUSE / GUARD / SAVE");
 	}
 	if (B->bCPU) return G->TargetLock.IsValid() ? FString::Printf(TEXT("CPU is targeting %s"), *G->TargetName(G->TargetLock.Get())) : TEXT("CPU is choosing a target");
 	if (G->IsPowerUpStep()) return TEXT("POWER UP - launching!");
-	if (G->HasAim()) return FString::Printf(TEXT("AIMING AT %s  -  A/D cut, Up/Down force, SPACE or CONFIRM to launch"), G->bFreeAim ? TEXT("FLOOR POINT") : *G->TargetName(G->TargetLock.Get()).ToUpper());
-	return TEXT("Click a rival or orb in the arena to lock on - or click the floor to aim at a point");
+	if (G->HasAim()) return FString::Printf(TEXT("Aiming at %s. A/D cut, Up/Down force, SPACE or CONFIRM to launch"), G->bFreeAim ? TEXT("FLOOR POINT") : *G->TargetName(G->TargetLock.Get()).ToUpper());
+	return TEXT("Click a rival or orb in the arena to lock on, or click the floor to aim at a point");
 }
 
 FString UZoogiFramedHUDWidget::HintText(const AZoogiGameMode* G) const
@@ -455,12 +467,17 @@ int32 UZoogiFramedHUDWidget::PaintBack(const FGeometry& Geo, FSlateWindowElement
 		ZoogiUIStyle::SPanel(Out, Ly + 2, Geo, R0, RS, FLinearColor(0.03f, 0.10f, 0.36f, 0.95f), FLinearColor(0.25f, 0.85f, 1.f, 1.f), 16.f * u);
 		const FVector2D P0 = L.Prompt.Min * s, PS = (L.Prompt.Max - L.Prompt.Min) * s;
 		const float Sl = 1.f - FMath::Square(1.f - PromptAnim);
-		ZoogiUIStyle::SBox(Out, Ly + 4, Geo, P0, PS, FLinearColor(0.02f, 0.06f, 0.24f, 0.97f), FMath::Lerp(FLinearColor::White, Gold, Sl), PS.Y * 0.5f, 3.f * u);
-		FString P = LastPrompt;
-		const FSlateFontInfo PF = Font(15.f);
-		while (P.Len() > 8 && Measure(P, PF).X > PS.X - 40.f * u) P = P.LeftChop(4) + TEXT("..");
-		const FVector2D PSz = Measure(P, PF);
-		ZoogiUIStyle::SText(Out, Ly + 6, Geo, FVector2D(P0.X + (PS.X - PSz.X) * 0.5f, P0.Y + (PS.Y - PSz.Y) * 0.5f + (1.f - Sl) * 10.f * u), P, PF, FLinearColor(1.f, 1.f, 1.f, Sl));
+		// v2: the player's prompt is in the active Zoogi's action box (team column); the tray only carries system
+		// text when nobody is acting (stage forming, match over)
+		if (!G->GetActiveBall() || G->Phase == EZoogiPhase::GameOver || G->Phase == EZoogiPhase::Forming)
+		{
+			ZoogiUIStyle::SBox(Out, Ly + 4, Geo, P0, PS, FLinearColor(0.02f, 0.06f, 0.24f, 0.97f), FMath::Lerp(FLinearColor::White, Gold, Sl), PS.Y * 0.5f, 3.f * u);
+			FString P = LastPrompt;
+			const FSlateFontInfo PF = Font(14.f);
+			while (P.Len() > 8 && Measure(P, PF).X > PS.X - 40.f * u) P = P.LeftChop(4) + TEXT("..");
+			const FVector2D PSz = Measure(P, PF);
+			ZoogiUIStyle::SText(Out, Ly + 6, Geo, FVector2D(P0.X + (PS.X - PSz.X) * 0.5f, P0.Y + (PS.Y - PSz.Y) * 0.5f + (1.f - Sl) * 10.f * u), P, PF, FLinearColor(1.f, 1.f, 1.f, Sl));
+		}
 		if (L.TrayOpen > 0.6f && !L.bCompact && !G->CardsOn()) // the card hand owns the tray corners in cards mode
 		{
 			const FString H = HintText(G);

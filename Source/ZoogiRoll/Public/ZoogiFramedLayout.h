@@ -19,7 +19,7 @@ namespace ZoogiFramed
 		FVector2D Viewport = FVector2D(1920, 1080);
 		float U = 1.f;            // pixels per 1080p unit
 		bool bCompact = false;    // narrow / ultra-wide (19.5:9) / small: compact columns + collapsible tray
-		float TrayOpen = 1.f;     // 0 = collapsed (prompt bar only), 1 = full tray
+		float TrayOpen = 1.f;     // 0 = collapsed (thin system-text strip), 1 = full tray (card hand / Awaken / battle controls)
 		FMargin Safe;             // safe-area insets (px)
 		FBox2D Top, Left, Right, Arena, Tray, Prompt;
 		bool bValid = false;
