@@ -152,7 +152,9 @@ bool AZoogiGameMode::AwakenInfuse(int32 Pick)
 	if (CardsOn()) return false; // v3: cards replace the artifact hand
 	AZoogiBall* B = GetActiveBall();
 	if (!B || !B->Artifact || Phase != EZoogiPhase::Aiming || Stage != EZoogiStage::Awaken || bAwakenDone) return false;
-	const EZoogiArtifact A = TakePicked(B->Artifact, Pick);
+	EZoogiArtifact A = TakePicked(B->Artifact, Pick);
+	// test flag (Oct 14): -ZoogiForceArt=Ember|Storm|Frost|Titan|Void forces the infused artifact (Void 1 / Void 2 captures)
+	{ FString FA; if (A != EZoogiArtifact::None && FParse::Value(FCommandLine::Get(), TEXT("ZoogiForceArt="), FA)) for (EZoogiArtifact X : { EZoogiArtifact::Ember, EZoogiArtifact::Storm, EZoogiArtifact::Frost, EZoogiArtifact::Titan, EZoogiArtifact::Void }) if (ZoogiArtifacts::Key(X) == FA) A = X; }
 	if (A == EZoogiArtifact::None) return false;
 	B->Artifact->SetInfused(A);
 	bAwakenDone = true;
@@ -177,7 +179,9 @@ bool AZoogiGameMode::AwakenGuard(int32 Pick)
 	if (CardsOn()) return false; // v3: cards replace the artifact hand
 	AZoogiBall* B = GetActiveBall();
 	if (!B || !B->Artifact || Phase != EZoogiPhase::Aiming || Stage != EZoogiStage::Awaken || bAwakenDone) return false;
-	const EZoogiArtifact A = TakePicked(B->Artifact, Pick);
+	EZoogiArtifact A = TakePicked(B->Artifact, Pick);
+	// test flag (Oct 14): -ZoogiForceArt=Ember|Storm|Frost|Titan|Void forces the infused artifact (Void 1 / Void 2 captures)
+	{ FString FA; if (A != EZoogiArtifact::None && FParse::Value(FCommandLine::Get(), TEXT("ZoogiForceArt="), FA)) for (EZoogiArtifact X : { EZoogiArtifact::Ember, EZoogiArtifact::Storm, EZoogiArtifact::Frost, EZoogiArtifact::Titan, EZoogiArtifact::Void }) if (ZoogiArtifacts::Key(X) == FA) A = X; }
 	if (A == EZoogiArtifact::None) return false;
 	B->Artifact->SetGuard(A, TurnCounter);
 	bAwakenDone = true;
