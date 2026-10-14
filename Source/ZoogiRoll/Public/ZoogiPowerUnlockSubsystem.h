@@ -52,6 +52,7 @@ public:
 	static const TCHAR* SlotName; // "ZoogiUnlocks"
 
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+	virtual void Deinitialize() override;
 
 	bool IsUnlocked(FName PowerId) const;
 	/** Checks CanUnlock, pays (gems unless the stat requirement is met), marks unlocked and saves. */

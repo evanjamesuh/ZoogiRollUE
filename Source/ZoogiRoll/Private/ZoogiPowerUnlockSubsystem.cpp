@@ -6,6 +6,7 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "ZoogiRoll.h"
+#include "ZoogiCards.h"
 
 const TCHAR* UZoogiPowerUnlockSubsystem::SlotName = TEXT("ZoogiUnlocks");
 
@@ -62,6 +63,15 @@ void UZoogiPowerUnlockSubsystem::Initialize(FSubsystemCollectionBase& Collection
 	}
 	UE_LOG(LogZoogi, Log, TEXT("UNLOCKS loaded: %d unlocked, %d equipped, gems=%d, unlockAll=%d"),
 		Data->UnlockedPowers.Num(), Data->EquippedByZoogi.Num(), Data->Gems, bUnlockAll ? 1 : 0);
+	// Deck building asks the unlock state through ZoogiCards (2acd98e). No card -> power links are set here (RequiredPower stays empty).
+	TWeakObjectPtr<UZoogiPowerUnlockSubsystem> Weak(this);
+	ZoogiCards::SetPowerUnlockQuery([Weak](FName PowerId) { const UZoogiPowerUnlockSubsystem* S = Weak.Get(); return !S || S->IsUnlocked(PowerId); });
+}
+
+void UZoogiPowerUnlockSubsystem::Deinitialize()
+{
+	ZoogiCards::SetPowerUnlockQuery(nullptr); // back to "no query = everything unlocked"
+	Super::Deinitialize();
 }
 
 const FZoogiPowerDef* UZoogiPowerUnlockSubsystem::FindPower(FName PowerId) const
