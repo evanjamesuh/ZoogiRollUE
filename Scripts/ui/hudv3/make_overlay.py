@@ -39,6 +39,6 @@ for dy in (0, 255):
 a = np.full((H, W), 255, np.uint8)
 a[68:560, 242:1134] = 0      # arena window
 a[0:35, 425:952] = 0         # phase pills (drawn live, active one glows)
-a[30:74, 612:766] = 0        # player + map plate (drawn live)
+a[28:74, 596:782] = 0        # player + map plate (drawn live)
 Image.fromarray(np.dstack([res, a])).save(out)
 print('ok', out)
