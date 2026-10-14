@@ -8,6 +8,7 @@
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "OnlineSubsystem.h"
+#include "OnlineError.h"
 #include "Interfaces/OnlineIdentityInterface.h"
 #include "Interfaces/OnlinePurchaseInterface.h"
 #include "Interfaces/OnlineStoreInterfaceV2.h"

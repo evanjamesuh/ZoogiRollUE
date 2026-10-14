@@ -61,6 +61,45 @@ struct ZOOGIROLL_API FZoogiShotPlayParams
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shot") float DurationOverride = -1.f;
 	/** Index of the local player whose view a MainView shot takes. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shot") int32 PlayerIndex = 0;
+	/** Trick shots: the event point (bank / wall contact). Without it, event-based shots use the arena centre at the focus' height. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shot") bool bHasEventLocation = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shot") FVector EventLocation = FVector::ZeroVector;
+	/** Trick shots (optional): surface normal at the event contact (bank / power bank). Default: event -> arena centre. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shot") bool bHasEventNormal = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shot") FVector EventNormal = FVector::ZeroVector;
+	/** Trick shots (optional): second contact (double bank). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shot") bool bHasSecondEventLocation = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shot") FVector SecondEventLocation = FVector::ZeroVector;
+	/** Trick shots (optional): the line that matters: new direction after a redirect, exit vector of a ring-out, orb path.
+	 *  Default: horizontal, radially outward through the focus. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shot") bool bHasDirection = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shot") FVector Direction = FVector::ZeroVector;
+	/** Optional accent (power colour) for shots with Spec.AccentStrength > 0. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shot") bool bHasAccentColor = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shot") FLinearColor AccentColor = FLinearColor::White;
+};
+
+/** What a shot's camera had to do to stay readable (kept after the shot ends; see GetShotAvoidStats). */
+USTRUCT(BlueprintType)
+struct ZOOGIROLL_API FZoogiShotAvoidStats
+{
+	GENERATED_BODY()
+	UPROPERTY(BlueprintReadOnly, Category = "Shot") int32 Frames = 0;
+	/** Frames where the raw shot position was inside a particle / glow burst (before avoidance). */
+	UPROPERTY(BlueprintReadOnly, Category = "Shot") int32 RawInsideFXFrames = 0;
+	/** Frames where the FINAL camera was inside a burst (should stay 0). */
+	UPROPERTY(BlueprintReadOnly, Category = "Shot") int32 FinalInsideFXFrames = 0;
+	/** Frames where static geometry blocked subject -> camera and the camera was pulled in / lifted. */
+	UPROPERTY(BlueprintReadOnly, Category = "Shot") int32 OccludedFrames = 0;
+	/** Frames where the final camera still had blocking geometry between it and the subject (should stay 0). */
+	UPROPERTY(BlueprintReadOnly, Category = "Shot") int32 FinalOccludedFrames = 0;
+	UPROPERTY(BlueprintReadOnly, Category = "Shot") float MaxAvoidOffsetCm = 0.f;
+	UPROPERTY(BlueprintReadOnly, Category = "Shot") float MaxPullInCm = 0.f;
+	/** Largest half-extent of an avoided burst volume seen (diagnostics). */
+	UPROPERTY(BlueprintReadOnly, Category = "Shot") float MaxVolumeExtentCm = 0.f;
+	/** Slow-mo look frames (presentation only) and the slowest motion rate reached. */
+	UPROPERTY(BlueprintReadOnly, Category = "Shot") int32 SlowLookFrames = 0;
+	UPROPERTY(BlueprintReadOnly, Category = "Shot") float MinMotionRate = 1.f;
 };
 
 USTRUCT(BlueprintType)
@@ -155,10 +194,25 @@ struct FZoogiActiveShot
 	bool bInit = false;
 	float BaseYaw = 0.f;
 	float VelYaw = 0.f;
+	bool bVelSnapPending = false;
 	FVector Pivot = FVector::ZeroVector;
 	FVector LastFocus = FVector::ZeroVector;
 	FVector LastSecondary = FVector::ZeroVector;
 	bool bHasSecondary = false;
+	/** Event point (trick shots); always set (default = arena centre at the focus' start height). */
+	FVector EventLoc = FVector::ZeroVector;
+	bool bEventFromCaller = false;
+	FVector EventNormal = FVector::ZeroVector;   // flattened, unit; flipped to the focus side at init
+	FVector SecondEventLoc = FVector::ZeroVector;
+	bool bHasSecondEvent = false;
+	FVector LineDir = FVector::ZeroVector;       // flattened, unit
+	FLinearColor Accent = FLinearColor::White;
+	/** Shot-local motion clock (real time scaled by the presentation-only slow-mo look). */
+	float MotionClock = 0.f;
+	float MotionRate = 1.f;
+	/** Particle-avoid offset (eased back out when the burst is gone). */
+	FVector AvoidOffset = FVector::ZeroVector;
+	FZoogiShotAvoidStats Stats;
 	/** MainView ease-in source: the live gameplay view, or the previous shot's last view when this one replaced it. */
 	bool bBlendFromFrozen = false;
 	FMinimalViewInfo BlendFrom;
@@ -175,6 +229,10 @@ class ZOOGIROLL_API UZoogiEpisodeCameraDirector : public UTickableWorldSubsystem
 
 public:
 	static UZoogiEpisodeCameraDirector* Get(const UObject* WorldContext);
+
+	/** Fills a trick shot's optional params (contact point / normal, second bank, new line / orb path, power colour)
+	 *  from the Episode core's truth record. Only sets what the record actually contains; never touches gameplay. */
+	static void FillTrickParams(EZoogiShotType Type, const struct FZoogiGameplayTruthRecord& Truth, FZoogiShotPlayParams& InOutParams);
 
 	// USubsystem / FTickableGameObject
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
@@ -212,6 +270,9 @@ public:
 	ACameraActor* GetShotCamera() const { return ShotCam; }
 
 	FOnZoogiShotFinished OnShotFinished;
+	/** Broadcast on world tear-down right after every shot / ease has been ended and the camera + time scale restored
+	 *  (before any actor ends play), so a caller can verify the restoration at that exact moment. */
+	FSimpleMulticastDelegate OnWorldTearDownRestored;
 
 	// ------------------------------------------------------------------ time scale (opt-in)
 	void SetTimeScalePolicy(EZoogiTimeScalePolicy InPolicy) { Policy = InPolicy; }
@@ -224,6 +285,12 @@ public:
 	/** bImmediate puts the prior value back this frame; otherwise eases out from the current value. */
 	void StopTimeScale(bool bImmediate = true);
 	bool IsTimeScaleActive() const { return TS.bActive; }
+	/** Kept for API compatibility: shots never own a time-scale ease any more (slow-mo looks are presentation only). */
+	bool IsTimeScaleOwnedBy(FZoogiShotHandle Shot) const { return TS.bActive && Shot.IsValid() && TimeScaleOwnerShotId == Shot.Id; }
+	/** Occlusion / particle-avoid / slow-mo-look stats of a running or recently finished shot. */
+	bool GetShotAvoidStats(FZoogiShotHandle Shot, FZoogiShotAvoidStats& Out) const;
+	/** Bounds of the active particle / glow bursts the shot camera keeps out of (near Around, within Radius). */
+	void GatherAvoidVolumes(const FVector& Around, float Radius, TArray<FBox>& Out) const;
 	/** Name of an awake simulated body, or empty if all are asleep. */
 	FString FindAwakePhysicsBody() const;
 
@@ -249,6 +316,12 @@ private:
 	void SetCinematicDilation(float Value);
 	void RestoreTimeScaleExact(const TCHAR* Why);
 	float CurveOrEase(UCurveFloat* Curve, EZoogiShotEase Ease, float T) const;
+	float SlowLookWeight(const FZoogiShotSpec& Spec, float Age, float Duration) const;
+	FVector ResolveOcclusion(const FVector& Look, const FVector& Loc, AActor* F, AActor* Sec, bool& bOutBlocked) const;
+	TMap<int32, FZoogiShotAvoidStats> StatsById;
+	mutable uint64 AvoidCacheFrame = 0;
+	mutable FVector AvoidCacheAround = FVector::ZeroVector;
+	mutable TArray<FBox> AvoidCache;
 
 	UPROPERTY() TObjectPtr<UZoogiShotLibrary> Library = nullptr;
 	UPROPERTY() TArray<FZoogiActiveShot> Shots;
@@ -264,6 +337,9 @@ private:
 	FZoogiCameraSnapshot MainViewSnapshot;
 	FDelegateHandle TearDownHandle;
 	bool bTornDown = false;
+	/** Shot whose slow-mo entry owns the running time-scale ease (0 = a direct EaseTimeScale caller owns it). */
+	int32 TimeScaleOwnerShotId = 0;
+	int32 PendingTimeScaleOwner = 0;
 
 	EZoogiTimeScalePolicy Policy = EZoogiTimeScalePolicy::Disabled;
 	struct FTimeScaleState

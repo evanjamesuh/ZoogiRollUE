@@ -111,6 +111,8 @@ protected:
 	void BuildNeon();
 	void BuildTraining();
 	void PlaceIncoming(); // Oct 7: reskin-incoming builder packs on the non-Meadow maps
+	void PlaceObstacles(); // Oct 14: reskin-incoming obstacle sets (ZoogiArenaObstacles.cpp); unbreakable, not pieces
+	UPROPERTY() TArray<TObjectPtr<class AZoogiObstacle>> Obstacles;
 	/** Axis-aligned box (min/max XY in cm, height) with optional collision. */
 	UStaticMeshComponent* AddBox(const FVector2D& Min, const FVector2D& Max, float Bottom, float Top, UMaterialInterface* Mat, bool bCollide);
 	TArray<FBox2D> SolidBoxes;

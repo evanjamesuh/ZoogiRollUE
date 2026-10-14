@@ -9,6 +9,7 @@
 #include "ZoogiTypes.h"
 #include "ZoogiArena.h"
 #include "ZoogiMenuWidget.h"
+#include "ZoogiMenuRoot.h"
 #include "ZoogiAwakenWidget.h"
 #include "ZoogiOrb.h"
 #include "ZoogiArtifacts.h"
@@ -165,7 +166,7 @@ void AZoogiHUD::DrawHUD()
 		{
 			if (!MenuWidget)
 			{
-				MenuWidget = CreateWidget<UZoogiMenuWidget>(PlayerOwner, UZoogiMenuWidget::StaticClass());
+				MenuWidget = CreateWidget<UZoogiMenuRoot>(PlayerOwner, UZoogiMenuRoot::StaticClass());
 				if (MenuWidget) MenuWidget->AddToViewport(10);
 			}
 			if (MenuWidget)

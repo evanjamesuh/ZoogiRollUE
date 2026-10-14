@@ -75,4 +75,22 @@ namespace ZoogiUIStyle
 	ZOOGIROLL_API FSlateBrush RoundBrush(const FLinearColor& Fill, const FLinearColor& Edge, float EdgeW, float R = 10.f);
 	/** Chunky cartoon button: saturated accent plate (navy when idle), navy outline, brighter on hover. */
 	ZOOGIROLL_API FButtonStyle ButtonStyle(const FLinearColor& Accent, bool bFilled);
+
+	// ---- button animation (menu now, in-match HUD later). Drive one FButtonAnim per button each frame; apply the
+	// returned scale as the widget's render scale (pivot centre), Opacity as render opacity and Gloss to the gloss strip.
+	/** Ease-out-back (overshoot ~10%), T in 0..1. */
+	ZOOGIROLL_API float EaseOutBack(float T);
+	struct ZOOGIROLL_API FButtonAnim
+	{
+		float Delay = 0.f;        // screen-enter stagger (s)
+		bool bPrimary = false;    // PLAY / START: subtle idle pulse + gloss shine
+		bool bDisabled = false;   // no animation at all
+		bool bEnter = true;       // pop in on screen enter
+		float Age = 0.f, Scale = 1.f, Vel = 0.f, Gloss = 0.f;
+		bool bWasPressed = false;
+		// outputs
+		float OutScale = 1.f, OutOpacity = 1.f, OutGloss = 0.f; // OutGloss 0 idle .. 1 bright
+		/** Hover/focus grow 1.05 (eased), press squash 0.94 (on touch/mouse down), springy release, enter pop (ease-out-back, 180 ms). */
+		void Tick(bool bHovered, bool bPressed, float Dt, float Time);
+	};
 }
