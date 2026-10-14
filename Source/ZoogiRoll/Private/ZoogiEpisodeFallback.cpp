@@ -47,6 +47,7 @@ bool UZoogiEpisodeSubsystem::FallbackPanel(int32 Slot, AActor* Focus, AActor* Se
 	FZoogiShotPlayParams P;
 	P.RenderTargetSize = bSmall ? FIntPoint(480, 270) : FIntPoint(640, 360);
 	P.DurationOverride = Seconds + 0.25f;
+	if (ZoogiShot::Tier((EZoogiShotType)ShotType) == 2) UZoogiEpisodeCameraDirector::FillTrickParams((EZoogiShotType)ShotType, Truth, P); // trick shots: real contact points / lines
 	const FZoogiShotHandle H = Dir->PlayShotType((EZoogiShotType)ShotType, Focus, Secondary, EZoogiShotOutput::RenderTarget, P);
 	UTextureRenderTarget2D* RT = H.IsValid() ? Dir->GetShotRenderTarget(H) : nullptr;
 	if (!RT) return false;
@@ -90,7 +91,7 @@ void UZoogiEpisodeSubsystem::FallbackTier(int32 Tier)
 	}
 	else if (Tier == 2 && !OnTier.IsBound())
 	{
-		FallbackPanel(0, Subject, Subject != Shooter ? Shooter : nullptr, (uint8)EZoogiShotType::LowAngleHero, Tune.TrickPanelSeconds, Head.IsEmpty() ? FString(TEXT("TRICK SHOT")) : Head, FLinearColor(1.f, 0.86f, 0.36f), false);
+		FallbackPanel(0, Subject, Subject != Shooter ? Shooter : nullptr, (uint8)ZoogiShot::ShotForTrickTags(LiveRec.Tags), Tune.TrickPanelSeconds, Head.IsEmpty() ? FString(TEXT("TRICK SHOT")) : Head, FLinearColor(1.f, 0.86f, 0.36f), false);
 		ShotLater(TEXT("tier2_trick"), 0.5f);
 	}
 	else if (Tier >= 3 && !OnPanels.IsBound() && !Plan.bAirShot)

@@ -1,3 +1,4 @@
+#include "ZoogiObstacle.h"
 #include "ZoogiArena.h"
 #include "ZoogiRock.h"
 #include "ZoogiTopping.h"
@@ -195,6 +196,8 @@ void AZoogiArena::Clear()
 	if (Forming) Forming->Clear();
 	for (AZoogiArenaPiece* P : Pieces) if (IsValid(P)) P->Destroy();
 	Pieces.Reset();
+	for (AZoogiObstacle* O : Obstacles) if (IsValid(O)) O->Destroy();
+	Obstacles.Reset();
 	if (IsValid(Scars)) Scars->Destroy();
 	Scars = nullptr;
 	FloorMID = nullptr;
@@ -334,7 +337,9 @@ void AZoogiArena::Build(EZoogiArena InTheme)
 		M->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 		++CamBlockers;
 	}
-	if (InTheme != EZoogiArena::Meadow) PlaceIncoming(); // Frozen: no pack items, arena tests only // after cam-blocker pass: imported dressing stays camera-transparent
+	if (InTheme != EZoogiArena::Meadow) PlaceIncoming();
+	PlaceObstacles(); // Oct 14: Meadow batch 6 / Night Circuit rev 18.1 obstacle sets (no-op on the other themes)
+	 // Frozen: no pack items, arena tests only // after cam-blocker pass: imported dressing stays camera-transparent
 	UE_LOG(LogZoogi, Log, TEXT("Built arena %s with %d components (%d camera blockers)"), *ZoogiUtil::ArenaName(InTheme), Built.Num(), CamBlockers);
 	// -ZoogiArenaShots: fixed-camera A/B views of the arena (test tooling, see ZoogiArenaShowcase.h).
 	static const TCHAR* Slugs[] = { TEXT("meadow"), TEXT("frozen"), TEXT("volcanic"), TEXT("cosmic"), TEXT("arabian"), TEXT("tomb"), TEXT("neon"), TEXT("training") };
