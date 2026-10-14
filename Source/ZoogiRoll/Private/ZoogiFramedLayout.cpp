@@ -82,7 +82,7 @@ namespace ZoogiFramed
 	{
 		const float U = V.Y / 1080.f;
 		FString Ov;
-		if (FParse::Value(FCommandLine::Get(), TEXT("ZoogiSafeArea="), Ov))
+		if (FParse::Value(FCommandLine::Get(), TEXT("ZoogiSafeArea="), Ov, false))
 		{
 			TArray<FString> P; Ov.ParseIntoArray(P, TEXT(","));
 			if (P.Num() == 4) return FMargin(FCString::Atof(*P[0]) * U, FCString::Atof(*P[1]) * U, FCString::Atof(*P[2]) * U, FCString::Atof(*P[3]) * U);
