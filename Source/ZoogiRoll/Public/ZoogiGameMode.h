@@ -466,6 +466,8 @@ public:
 	static FString TriggerNames(uint32 Mask);
 	bool IsAlly(const AActor* A, const AActor* B) const;
 	AZoogiBall* PartnerOf(const AZoogiBall* B) const;
+	/** Oct 14: floating popup for the card layer (AddPopup is protected). */
+	void CardPopup(const FString& Text, const FVector& World, const FLinearColor& Color) { AddPopup(Text, World, Color); }
 	int32 TeamAlive(int32 Team) const;
 	int32 TeamScore(int32 Team) const;
 	void ComboSetMode(bool bOn);

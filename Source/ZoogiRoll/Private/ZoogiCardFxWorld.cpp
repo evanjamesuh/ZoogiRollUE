@@ -80,6 +80,7 @@ void UZoogiCardSubsystem::FxReset()
 	EmberTrail.Reset(); EmberOwner = -1; MeteorOwner = -1; MeteorT = -1.f; bMeteorUsed = false;
 	PrevVel.Reset(); PendingBursts.Reset(); OrbLife.Reset(); OrbWasOut.Reset();
 	MagnetOrb.Reset(); RelayOrb.Reset(); FxShooter = -1;
+	FanReset();
 }
 
 void UZoogiCardSubsystem::FxUse(const FZoogiFxArmed& F, const FString& What)
@@ -95,6 +96,7 @@ void UZoogiCardSubsystem::FxArm(AZoogiGameMode* G, int32 P, FName Card, int64 Ef
 	if (!D || Card == NCrystal) return; // Crystal Collapse keeps its Phase 2 path (destruction exemption)
 	FZoogiFxArmed& F = Fx.Arm(Card, EffectId, P, G ? G->TurnCounter : 0, D->ParamA, D->ParamB, D->Expiry);
 	UE_LOG(LogZoogi, Log, TEXT("CARDS fx armed %s effect=%lld P%d a=%.2f b=%.2f expiry=%s%s"), *Card.ToString(), EffectId, P + 1, F.A, F.B, ZoogiCards::ExpiryName(F.Expiry), F.bArmed ? TEXT("") : TEXT(" (arms at settle)"));
+	FanOnArm(G, P, Card);
 }
 
 // ------------------------------------------------------------------ shot
@@ -184,6 +186,7 @@ void UZoogiCardSubsystem::FxAfterShot(AZoogiGameMode* G, AZoogiBall* Ball, const
 		else UE_LOG(LogZoogi, Log, TEXT("CARDS fx orb_magnet effect=%lld P%d: no neutral orb within %.0f cm"), M->EffectId, P + 1, ZoogiCardFxTune::MagnetRange);
 	}
 	RelayOrb.Reset();
+	FanOnShot(G, Ball, V); // Oct 14 fantasy layer (no-op in card tests / cards off)
 	if (TestCase == TEXT("effects") && !bTestDone) { TestEffectsOnShot(G, Ball); TestStageContact(G, Ball, V); }
 	if (TestCase == TEXT("followup") && !bTestDone && !G->bInFollowUp) TestStageContact(G, Ball, V);
 }
@@ -216,8 +219,9 @@ void UZoogiCardSubsystem::FxContact(AZoogiBall* Self, AActor* Other, const FVect
 		if (FZoogiFxArmed* B = Fx.Find(NBank, Att->PlayerIndex)) if (B->bBankSetup && B->Uses == 0 && Once(B)) { K *= ZoogiCardFxTune::BankBonus; B->Uses++; B->bConsumed = true; FxUse(*B, FString::Printf(TEXT("bank-setup strike x%.2f (PROPOSED) on P%d"), ZoogiCardFxTune::BankBonus, Victim->PlayerIndex + 1)); }
 		FZoogiFxArmed* Gd = Fx.Find(NGuard, Victim->PlayerIndex);
 		FZoogiFxArmed* An = Fx.Find(NAnchor, Victim->PlayerIndex);
-		if (Once(Gd)) { K *= Gd->B; Gd->Uses++; Gd->bConsumed = true; FxUse(*Gd, FString::Printf(TEXT("consumed: absorb %.0f (display), push x%.2f from P%d (still physical)"), Gd->A, Gd->B, Att->PlayerIndex + 1)); }
+		if (Once(Gd)) { K *= Gd->B; Gd->Uses++; Gd->bConsumed = true; FxUse(*Gd, FString::Printf(TEXT("consumed: absorb %.0f (display), push x%.2f from P%d (still physical)"), Gd->A, Gd->B, Att->PlayerIndex + 1)); FanGuardReflect(G, Victim, Att); }
 		else if (Once(An)) { K *= An->B; An->Uses++; An->bConsumed = true; FxUse(*An, FString::Printf(TEXT("consumed: absorb %.0f (display), push x%.2f from P%d"), An->A, An->B, Att->PlayerIndex + 1)); }
+		if (!An && FanOn() && Fan.Anchors.Contains(Victim->PlayerIndex)) K *= FanTune.AnchorPushK; // fantasy: anchored for the round
 		if (FZoogiFxArmed* T = Fx.Find(NTitan, Victim->PlayerIndex)) if (Once(T)) { K *= T->B; T->Uses++; FxUse(*T, FString::Printf(TEXT("received push x%.2f"), T->B)); }
 		if (K != 1.f && Victim->Sphere)
 		{
@@ -251,9 +255,10 @@ void UZoogiCardSubsystem::FxContact(AZoogiBall* Self, AActor* Other, const FVect
 		if (FZoogiFxArmed* D = Fx.Find(NDouble, Att->PlayerIndex)) if (D->bArmed && Fx.ApplyOnce(D->EffectId, Cid))
 		{
 			Fx.TryBurst(Cid); // burst 1: the physical contact
-			FBurst B; B.Victim = Victim; B.Dv = (Victim->GetBallVelocity() - VPrev) * D->B; B.Dv.Z = 0.f; B.At = Now + D->A; B.Effect = D->EffectId; B.Contact = Cid; B.Owner = Att->PlayerIndex;
+			FBurst B; B.Victim = Victim; B.Dv = (Victim->GetBallVelocity() - VPrev) * (FanOn() ? FanTune.DoubleCloneHit : D->B); B.Dv.Z = 0.f; B.At = Now + D->A; B.Effect = D->EffectId; B.Contact = Cid; B.Owner = Att->PlayerIndex;
 			PendingBursts.Add(B);
 		}
+		FanBallContact(G, Victim, Att, Hit);
 		return;
 	}
 	if (AZoogiOrb* O = Cast<AZoogiOrb>(Other))
@@ -278,6 +283,7 @@ void UZoogiCardSubsystem::FxContact(AZoogiBall* Self, AActor* Other, const FVect
 		return;
 	}
 	// static geometry: Bank Strike needs a real wall / bumper contact (not the floor)
+	if (Self->PlayerIndex == Shooter && FMath::Abs(Hit.ImpactNormal.Z) < 0.5f) FanWall(G, Self, Hit);
 	if (Self->PlayerIndex == Shooter && FMath::Abs(Hit.ImpactNormal.Z) < 0.5f)
 		if (FZoogiFxArmed* B = Fx.Find(NBank, Shooter)) if (!B->bBankSetup && Fx.ApplyOnce(B->EffectId, 1))
 		{
@@ -327,6 +333,7 @@ void UZoogiCardSubsystem::FxTick(AZoogiGameMode* G, float Dt)
 		if (V && V->Sphere && !V->bOut && Fx.TryBurst(B.Contact))
 		{
 			V->Sphere->SetPhysicsLinearVelocity(V->GetBallVelocity() + B.Dv);
+			FanCloneHit(G, V);
 			if (FZoogiFxArmed* D = Fx.Find(NDouble, B.Owner)) { D->Uses++; FxUse(*D, FString::Printf(TEXT("burst 2 on P%d contact=%llx |dv| %.0f (bursts %d)"), V->PlayerIndex + 1, B.Contact, B.Dv.Size(), Fx.BurstsFor(B.Contact))); }
 		}
 		FxMaxBursts = FMath::Max(FxMaxBursts, Fx.BurstsFor(B.Contact));
@@ -428,6 +435,7 @@ void UZoogiCardSubsystem::FxTick(AZoogiGameMode* G, float Dt)
 			B->Sphere->SetPhysicsLinearVelocity(V + FVector(V.X, V.Y, 0.f) / Sp * (B->RollingDecel * (1.f - 0.35f) * Dt));
 			FxFrostTicks++;
 		}
+	FanTick(G, Dt);
 	// previous-frame velocities (this tick runs after physics: the next contact's pre-impact velocity)
 	PrevVel.SetNum(G->Balls.Num());
 	for (int32 i = 0; i < G->Balls.Num(); ++i) PrevVel[i] = G->Balls[i] ? G->Balls[i]->GetBallVelocity() : FVector::ZeroVector;
@@ -438,10 +446,11 @@ void UZoogiCardSubsystem::FxTick(AZoogiGameMode* G, float Dt)
 void UZoogiCardSubsystem::FxLeadActionEnd(AZoogiGameMode* G)
 {
 	if (!Tune.bCards || !G) return;
+	FanLeadActionEnd(G);
 	const int32 P = FxShooter;
 	// Anchor Guard arms after the acting Zoogi settles
 	if (FZoogiFxArmed* A = Fx.Find(NAnchor, P)) if (!A->bArmed && G->Balls.IsValidIndex(P) && !G->Balls[P]->bOut)
-	{ A->bArmed = true; UE_LOG(LogZoogi, Log, TEXT("CARDS fx anchor_guard effect=%lld P%d armed at settle"), A->EffectId, P + 1); }
+	{ A->bArmed = true; UE_LOG(LogZoogi, Log, TEXT("CARDS fx anchor_guard effect=%lld P%d armed at settle"), A->EffectId, P + 1); FanAnchorArmed(G, P); }
 	if (G->Balls.IsValidIndex(P) && FxRingMarksAtShot >= 0)
 		FxNoHealOk &= G->Balls[P]->RingMarks <= FxRingMarksAtShot; // Recovery Roll (and every card) never heals Ring Marks
 	if (MagnetOrb.IsValid() && !MagnetAdded.IsZero() && !MagnetOrb->bOut) MagnetOrb->Sphere->SetPhysicsLinearVelocity(MagnetOrb->Sphere->GetPhysicsLinearVelocity() - MagnetAdded);

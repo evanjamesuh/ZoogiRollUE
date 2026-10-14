@@ -23,6 +23,7 @@
 #include "Misc/Parse.h"
 #include "Engine/GameViewportClient.h"
 #include "ZoogiFramedLayout.h"
+#include "ZoogiCardSubsystem.h"
 
 // ============================================================================
 // Camera director tuning: every number for the per-stage cameras lives here.
@@ -699,6 +700,9 @@ void AZoogiPlayerController::HandleInput(float Dt)
 		return;
 	}
 	if (WasInputKeyJustPressed(EKeys::R) && IsInputKeyDown(EKeys::LeftControl)) { G->StartMatch(); return; }
+	// Oct 14 fantasy cards: a click mid-roll redirects a Precision homing shot (up to 2x) / fires the Recovery Roll dash
+	if (bLMB && G->CardsOn() && !bAwaken)
+		if (UZoogiCardSubsystem* CS = UZoogiCardSubsystem::Get(this)) { FVector Pt; if (FloorPoint(Mouse, Pt) && CS->FantasyTap(G, Pt)) return; }
 	if (WasInputKeyJustPressed(EKeys::C)) G->MenuAction(TEXT("CamStyle"), 0);
 
 	// Classic powers (-ZoogiClassicPowers): E / Q.

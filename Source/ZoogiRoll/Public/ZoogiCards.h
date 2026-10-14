@@ -188,6 +188,8 @@ namespace ZoogiCards
 	ZOOGIROLL_API bool ParseDecksCsv(const FString& Text, TMap<FString, TArray<FName>>& Out, FString& OutError);
 	/** Deck legality: exact DeckSize, <= MaxCopies per id, known ids. */
 	ZOOGIROLL_API bool ValidateDeck(const TArray<FName>& Deck, const IZoogiCardBackend& Backend, int32 DeckSize, int32 MaxCopies, FString& OutError);
+	/** Oct 14: tops a short deck up to DeckSize with owned cards (unlock query; null = all owned), <= MaxCopies each, card table order. */
+	ZOOGIROLL_API void RefillDeck(TArray<FName>& Deck, const IZoogiCardBackend& Backend, int32 DeckSize, int32 MaxCopies, const TFunction<bool(FName)>& IsUnlocked, TArray<FName>& OutAdded);
 	/** Power-unlock seam (Oct 14, Evan): returns true when a power id is unlocked. Unset (default) = everything unlocked and
 	 *  deck building is untouched. A power-unlock system registers it (e.g. the menu branch's UZoogiPowerUnlockSubsystem::IsUnlocked). */
 	using FPowerUnlockQuery = TFunction<bool(FName /*PowerId*/)>;

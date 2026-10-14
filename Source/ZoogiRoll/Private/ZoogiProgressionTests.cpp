@@ -49,7 +49,7 @@ bool FZoogiProgConfigTest::RunTest(const FString&)
 	TestTrue(TEXT("gem packages"), C.GemPackages.Num() >= 1);
 	TestNull(TEXT("awakening pays nothing (no reward row)"), C.FindReward(TEXT("awakening")));
 	int32 Starter = 0; for (const FZoogiPowerRow& P : C.Powers) if (P.Tier == FName(TEXT("starter"))) ++Starter;
-	TestEqual(TEXT("4 starter powers"), Starter, 4);
+	TestEqual(TEXT("3 starter powers (Titan Meteor is advanced)"), Starter, 3);
 	// advanced powers rule (Evan Q12): mastery 6-7 OR 400-600 gems
 	FZoogiProgressionConfig A = C; A.Powers.Add({ TEXT("x_adv"), TEXT("X"), EZoogiCardElement::Fire, TEXT("advanced"), false, 6, 500, NAME_None });
 	TestTrue(TEXT("advanced 6/500 ok"), A.Validate(E));

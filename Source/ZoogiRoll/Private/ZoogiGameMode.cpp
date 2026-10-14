@@ -1069,6 +1069,26 @@ void AZoogiGameMode::PlanCPUShot()
 			BestFrac = FMath::Clamp(InvertLaunch(FMath::Sqrt(2.f * Decel * (To.Size() + 350.f))), 0.35f, 0.9f);
 			UE_LOG(LogZoogi, Log, TEXT("CPU P%d aims Crystal Collapse at %s (%.0f cm)"), ActivePlayer + 1, *Pc->GetName(), To.Size());
 		}
+		else if (const int32 Intent = CardPlan->CPUCardIntent(ActivePlayer))
+		{
+			// fantasy cards want a rival on the line (Storm chain, Frost beam, Precision homing, Steal tether, Heavy boulder,
+			// Ember fireballs, Double clone) or a stop on a rival (Titan meteor lands where the shot stops)
+			AZoogiBall* Best = nullptr; float BD = 2600.f;
+			for (AZoogiBall* O : Balls)
+			{
+				if (!O || O == Me || O->bOut || O->bKnockedOut || (bComboMode && O->TeamIndex == Me->TeamIndex)) continue;
+				const float D = FVector::Dist2D(O->BallLocation(), Me->BallLocation());
+				if (D < BD) { BD = D; Best = O; }
+			}
+			if (Best)
+			{
+				BestDir = (FVector2D(Best->BallLocation()) - B).GetSafeNormal(); CPULock = Best;
+				// a miss rolls on past the rival: keep that free roll 400 cm inside the edge (terrain hops on Volcanic)
+				const float Run = FMath::Min(BD + (Intent == 2 ? -60.f : 300.f), Arena->DistanceToEdge(B, BestDir) - 400.f);
+				BestFrac = FMath::Clamp(InvertLaunch(FMath::Sqrt(2.f * Decel * FMath::Max(0.f, Run))), 0.3f, 0.95f);
+				UE_LOG(LogZoogi, Log, TEXT("CPU P%d card plan: %s P%d (%.0f cm)"), ActivePlayer + 1, Intent == 2 ? TEXT("meteor stop on") : TEXT("rival line to"), Best->PlayerIndex + 1, BD);
+			}
+		}
 		const float Mul = CardPlan->ShotMul(ActivePlayer);
 		if (Mul > 1.001f)
 		{

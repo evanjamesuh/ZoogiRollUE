@@ -309,6 +309,23 @@ namespace ZoogiCards
 		return Out;
 	}
 
+	void RefillDeck(TArray<FName>& Deck, const IZoogiCardBackend& Backend, int32 DeckSize, int32 MaxCopies, const TFunction<bool(FName)>& IsUnlocked, TArray<FName>& OutAdded)
+	{
+		TMap<FName, int32> N;
+		for (const FName& Id : Deck) N.FindOrAdd(Id)++;
+		auto Owned = [&](FName Id) { const FZoogiCardDef* D = Backend.FindDef(Id); return D && (D->RequiredPower.IsNone() || !IsUnlocked || IsUnlocked(D->RequiredPower)); };
+		for (bool bProgress = true; Deck.Num() < DeckSize && bProgress; )
+		{
+			bProgress = false;
+			for (const FZoogiCardDef& D : Backend.AllDefs())
+			{
+				if (Deck.Num() >= DeckSize) break;
+				if (!Owned(D.Id) || N.FindOrAdd(D.Id) >= MaxCopies) continue;
+				++N[D.Id]; Deck.Add(D.Id); OutAdded.Add(D.Id); bProgress = true;
+			}
+		}
+	}
+
 	const TCHAR* ForceLabel(int32 Step, bool bCardsMode)
 	{
 		static const TCHAR* Classic[4] = { TEXT("AUTO"), TEXT("SOFT"), TEXT("MED"), TEXT("FULL") };

@@ -519,6 +519,13 @@ int32 UZoogiCardHandWidget::NativePaint(const FPaintArgs& Args, const FGeometry&
 {
 	int32 L = Super::NativePaint(Args, Geo, Cull, Out, Layer, Style, bParentEnabled) + 1;
 	const FVector2D V = ViewSize;
+	// Oct 14: short saved deck refilled at match start -> notice for 9 s
+	if (const UZoogiCardSubsystem* CN = UZoogiCardSubsystem::Get(this))
+		if (!CN->DeckNotice.IsEmpty() && GetWorld() && GetWorld()->GetTimeSeconds() - CN->DeckNoticeTime < 9.f)
+		{
+			CHBox(Out, L, Geo, FVector2D(V.X * 0.5f - 470.f, V.Y * 0.12f), FVector2D(940.f, 54.f), FLinearColor(0.08f, 0.05f, 0.2f, 0.92f), ZoogiUIStyle::Outline, 14.f, 3.f);
+			CHText(Out, L + 1, Geo, FVector2D(V.X * 0.5f - 450.f, V.Y * 0.12f + 14.f), CN->DeckNotice, 17, FLinearColor(1.f, 0.85f, 0.35f), true);
+		}
 	if (bEnergyVisible)
 	{
 		// deck (bottom left) and discard pile (bottom right) with counts

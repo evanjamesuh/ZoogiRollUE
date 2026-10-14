@@ -84,9 +84,22 @@ void UZoogiCardSubsystem::EnsureMatch(AZoogiGameMode* G)
 	{
 		const TArray<FName> Saved = SQ();
 		FString DeckErr;
-		if (Saved.Num() > 0)
+		TArray<FName> Use = Saved;
+		DeckNotice.Reset();
+		if (Use.Num() > 0 && Use.Num() < Tune.DeckSize)
 		{
-			if (ZoogiCards::ValidateDeck(Saved, *Backend, Tune.DeckSize, Tune.MaxCopies, DeckErr)) { HumanDeck = Saved; LogS += TEXT(" human deck = saved deck;"); }
+			// Oct 14 (Evan): a short saved deck is refilled to DeckSize from owned (unlocked) cards, with an on-screen notice
+			const int32 Was = Use.Num();
+			TArray<FName> Added;
+			ZoogiCards::RefillDeck(Use, *Backend, Tune.DeckSize, Tune.MaxCopies, ZoogiCards::GetPowerUnlockQuery(), Added);
+			TArray<FString> Names; for (const FName& A : Added) { const FZoogiCardDef* D = Backend->FindDef(A); Names.Add(D ? D->Name : A.ToString()); }
+			DeckNotice = FString::Printf(TEXT("Your deck had %d/%d cards - added %s from your collection"), Was, Tune.DeckSize, *FString::Join(Names, TEXT(", ")));
+			DeckNoticeTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f;
+			LogS += FString::Printf(TEXT(" saved deck %d/%d refilled to %d [+%s];"), Was, Tune.DeckSize, Use.Num(), *FString::Join(Names, TEXT(",")));
+		}
+		if (Use.Num() > 0)
+		{
+			if (ZoogiCards::ValidateDeck(Use, *Backend, Tune.DeckSize, Tune.MaxCopies, DeckErr)) { HumanDeck = Use; LogS += TEXT(" human deck = saved deck;"); }
 			else LogS += FString::Printf(TEXT(" saved deck not legal (%s): default deck;"), *DeckErr);
 		}
 	}
@@ -101,7 +114,9 @@ void UZoogiCardSubsystem::EnsureMatch(AZoogiGameMode* G)
 	const int32 Seed = G->GameSeed ^ 0x5EEDCA4D; // own stream: card draws never consume GameRng numbers
 	const bool bOk = RulesV.Init(Backend, Tune, Seed, Decks, Fallback, LogS);
 	LastStandbyTurn = -1;
+	FanTune.Load();
 	FxReset();
+	if (!DeckNotice.IsEmpty()) UE_LOG(LogZoogi, Log, TEXT("CARDS deck notice: %s"), *DeckNotice);
 	CollapseEffectId = 0; CollapseOwner = -1; CollapsePiece.Reset();
 	UE_LOG(LogZoogi, Log, TEXT("CARDS match: backend=%s data=%s defs=%d players=%d seed=%d ok=%d%s"), *Backend->BackendName().ToString(), *DataSource, Defs.Num(), G->Balls.Num(), Seed, bOk ? 1 : 0, *LogS);
 }
@@ -153,6 +168,7 @@ void UZoogiCardSubsystem::BeginStandby(AZoogiGameMode* G)
 	if (P < 0) return;
 	ExpireCollapse(TEXT("turn_end"));
 	if (LastStandbyTurn != G->TurnCounter) FxTurnEnd(G);
+	FanStandby(G, P); // fantasy: this player's round-long effects (Anchor, Recovery, burning patches) end here
 	RulesV.BeginStandby(P, G->TurnCounter);
 	if (ZoogiForcedCard() != NAME_None)
 	{
@@ -271,6 +287,12 @@ void UZoogiCardSubsystem::PlanCPU(AZoogiGameMode* G)
 		const int32 CI = Hand.IndexOfByPredicate([](const FZoogiCardInstance& I) { return I.CardId == NCrystalCPU; });
 		if (bPieceNear && CI != INDEX_NONE) { Order.Remove(CI); Order.Insert(CI, 0); UE_LOG(LogZoogi, Log, TEXT("CARDS cpu P%d: breakable piece in range -> crystal_collapse first"), P + 1); }
 	}
+	// -ZoogiForceCard: the forced card is tried first (per-card capture runs)
+	if (ZoogiForcedCard() != NAME_None)
+	{
+		const int32 FI = Hand.IndexOfByPredicate([](const FZoogiCardInstance& I) { return I.CardId == ZoogiForcedCard(); });
+		if (FI != INDEX_NONE) { Order.Remove(FI); Order.Insert(FI, 0); }
+	}
 	for (int32 i : Order) if (RulesV.Select(P, Hand[i].InstanceId, Ctx) == EZoogiCardResult::Ok) CovSelected.FindOrAdd(Hand[i].CardId)++;
 	FString Choice;
 	Commit(G, Choice);
@@ -286,6 +308,7 @@ void UZoogiCardSubsystem::OnPieceContact(AZoogiArenaPiece* Piece, AZoogiBall* Ba
 	if (!G || G->Stage != EZoogiStage::Battle || ActivePlayer(G) != CollapseOwner) return; // only the committed lead action
 	if (!IsCollapseEligible(Piece)) { UE_LOG(LogZoogi, Log, TEXT("CARDS crystal_collapse effect=%lld contact with %s ignored (not eligible: indestructible/broken)"), CollapseEffectId, *GetNameSafe(Piece)); return; }
 	CollapsePiece = Piece; CollapseAt = At; CollapseDir = Dir;
+	FanSpikes(G, Ball, At); // fantasy: crystal spikes burst at the contact (pushes Zoogis only)
 	CovCond.FindOrAdd(FName(TEXT("crystal_collapse"))).Add(CollapseEffectId);
 	UE_LOG(LogZoogi, Log, TEXT("CARDS crystal_collapse effect=%lld qualified contact P%d -> %s (applies at the Resolve boundary)"), CollapseEffectId, CollapseOwner + 1, *Piece->GetName());
 }

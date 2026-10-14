@@ -190,7 +190,7 @@ FZoogiProgressionConfig FZoogiProgressionConfig::BuiltIn()
 	P(TEXT("void_1_precision"), TEXT("Precision"), EZoogiCardElement::Void, TEXT("starter"), false, 2, 300, TEXT("precision"));
 	P(TEXT("fire_2_ember"), TEXT("Ember"), EZoogiCardElement::Fire, TEXT("starter"), false, 3, 400, TEXT("ember"));
 	P(TEXT("void_2_crystal_collapse"), TEXT("Crystal Collapse"), EZoogiCardElement::Void, TEXT("starter"), false, 4, 500, TEXT("crystal_collapse"));
-	P(TEXT("void_2_titan_meteor"), TEXT("Titan Meteor"), EZoogiCardElement::Void, TEXT("starter"), false, 5, 550, TEXT("titan"));
+	P(TEXT("void_2_titan_meteor"), TEXT("Titan Meteor"), EZoogiCardElement::Void, TEXT("advanced"), false, 6, 550, TEXT("titan"));
 	const TCHAR* TT[7][3] = { { TEXT("arena_rookie"), TEXT("Arena Rookie"), TEXT("A_FIRST_MATCH") }, { TEXT("rolling_challenger"), TEXT("Rolling Challenger"), TEXT("A_WINS_10") },
 		{ TEXT("marble_master"), TEXT("Marble Master"), TEXT("A_MASTERY_5") }, { TEXT("elemental_specialist"), TEXT("Elemental Specialist"), TEXT("A_MASTERY_ALL5") },
 		{ TEXT("arena_champion"), TEXT("Arena Champion"), TEXT("A_WINS_50") }, { TEXT("master_strategist"), TEXT("Master Strategist"), TEXT("A_EXPERT_WINS_10") }, { TEXT("zoogi_legend"), TEXT("Zoogi Legend"), TEXT("A_AFFINITY_MAX") } };

@@ -13,6 +13,7 @@
 #include "Subsystems/WorldSubsystem.h"
 #include "ZoogiCards.h"
 #include "ZoogiCardEffects.h"
+#include "ZoogiCardFantasy.h"
 #include "ZoogiCardSubsystem.generated.h"
 
 class AZoogiGameMode;
@@ -65,6 +66,13 @@ public:
 	/** Oct 14: Crystal Collapse armed for this player this turn: nearest eligible piece within CPU range (null otherwise). */
 	class AZoogiArenaPiece* CPUCollapseTarget(const AZoogiBall* Ball) const;
 	static constexpr float CPUCollapseRange = 1600.f;
+	/** Oct 14 fantasy layer: a human tap (floor point) for Precision redirects / the Recovery Roll dash. True = consumed. */
+	bool FantasyTap(AZoogiGameMode* G, const FVector& World);
+	/** CPU planning hint from the armed cards: 0 none, 1 wants a rival on its line, 2 Titan (stop on a rival: the meteor lands there). */
+	int32 CPUCardIntent(int32 Player) const;
+	/** Deck notice for the human (short saved deck refilled at match start), shown by the card tray for a few seconds. */
+	FString DeckNotice;
+	float DeckNoticeTime = -100.f;
 
 	void DumpCoverage(const FString& Tag) const;
 private:
@@ -92,6 +100,25 @@ private:
 	int32 FxCardSetups = 0, FxSetupRefused = 0;
 	FVector Prev(const AZoogiBall* B) const;
 	FZoogiCardEffectCore Fx;
+	// Oct 14 fantasy layer (ZoogiCardFantasy.cpp)
+	FZoogiCardFantasyTune FanTune;
+	FZoogiCardFantasyState Fan;
+	bool FanOn() const;
+	float FanAmp(const AZoogiBall* B, FName Card) const;
+	void FanShot(AZoogiGameMode* G, FName Card, const TCHAR* Suffix = TEXT(""));
+	void FanOnArm(AZoogiGameMode* G, int32 P, FName Card);
+	void FanAnchorArmed(AZoogiGameMode* G, int32 P);
+	void FanStandby(AZoogiGameMode* G, int32 P);
+	void FanReset();
+	void FanOnShot(AZoogiGameMode* G, AZoogiBall* Ball, const FVector2D& V);
+	void FanBallContact(AZoogiGameMode* G, AZoogiBall* Victim, AZoogiBall* Att, const FHitResult& Hit);
+	void FanGuardReflect(AZoogiGameMode* G, AZoogiBall* Victim, AZoogiBall* Att);
+	void FanWall(AZoogiGameMode* G, AZoogiBall* Ball, const FHitResult& Hit);
+	void FanSpikes(AZoogiGameMode* G, AZoogiBall* Owner, const FVector& At);
+	void FanCloneHit(AZoogiGameMode* G, AZoogiBall* Victim);
+	void FanDash(AZoogiGameMode* G, AZoogiBall* B);
+	void FanTick(AZoogiGameMode* G, float Dt);
+	void FanLeadActionEnd(AZoogiGameMode* G);
 	// Oct 14: equipped power riders (the Zoogi's equipped power from the Powers screen upgrades its linked card)
 	bool PowerRider(const AZoogiBall* B, FName Card) const;
 	TSet<FIntPoint> EmberTrail;

@@ -1363,7 +1363,7 @@ void UZoogiMenuRoot::BuildDeck()
 	Label(FString::Printf(TEXT("IN DECK %d/%d"), CurDeck.Num(), DeckMax), 270.f, 398.f, 180.f, 30.f, 30, CurDeck.Num() == DeckMax ? FLinearColor::White : ZMCGold, EAnchor::Center, 0);
 	Label(FString::Printf(TEXT("LOCKED %d"), Locked), 446.f, 398.f, 130.f, 30.f, 30, ZMCGold, EAnchor::Center, 0);
 	if (PSv) Btn(TEXT("RESET"), ZMCViolet, [this, PSv]() { PSv->SetSavedDeck(TArray<FName>()); bDirty = true; }, 590.f, 387.f, 114.f, 52.f, 26);
-	if (CurDeck.Num() != DeckMax) Label(TEXT("Matches use the starter deck until yours has 15 cards."), 106.f, 444.f, 600.f, 16.f, 18, ZMCGold, EAnchor::Center, 0);
+	if (CurDeck.Num() != DeckMax) Label(TEXT("Short decks are topped up to 15 from your cards at match start."), 106.f, 444.f, 600.f, 16.f, 18, ZMCGold, EAnchor::Center, 0);
 	// selected card side panel
 	const FZoogiCardDef* S = DD.Defs.FindByPredicate([this](const FZoogiCardDef& C) { return C.Id == DeckSel; });
 	if (!S && DD.Defs.Num() > 0) S = &DD.Defs[0];
@@ -1725,6 +1725,9 @@ UTexture2D* UZoogiMenuRoot::PowerArt(const FZoogiPowerDef& D, bool& bOutPlacehol
 	if (TObjectPtr<UTexture2D>* Hit = ArtCache.Find(Key)) { bOutPlaceholder = PlaceholderPowers.Contains(D.PowerId); return Hit->Get(); }
 	const FString P = FPaths::ProjectContentDir() / TEXT("Data/PowerArt") / (D.PowerId.ToString() + TEXT(".png"));
 	UTexture2D* T = FPaths::FileExists(P) ? FImageUtils::ImportFileAsTexture2D(P) : nullptr;
+	// no dedicated power art: use the power's card art from Evan's package (Content/Data/CardArt/<CardArt>.png)
+	const FString CP = FPaths::ProjectContentDir() / TEXT("Data/CardArt") / (D.CardArt + TEXT(".png"));
+	if (!T && !D.CardArt.IsEmpty() && FPaths::FileExists(CP)) T = FImageUtils::ImportFileAsTexture2D(CP);
 	if (!T)
 	{
 		// Placeholder card, 360x600 (aspect 0.6).

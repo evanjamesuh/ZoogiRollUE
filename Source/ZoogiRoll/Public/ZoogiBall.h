@@ -111,6 +111,7 @@ public:
 	void ShellExpand(float Strength);
 	/** Persistent model scale on top of the fit (Titan Core infuse: 1.04, "rock plating"); 1 = normal size. */
 	void SetModelScale(float Scale);
+	float GetModelScale() const { return ModelScale; }
 	/** -ZoogiHookGain=<x> scales every hook (0 disables them, default 1); -ZoogiNoHooks is the same as 0. */
 	static float HookGain();
 
