@@ -5,6 +5,7 @@
 #include "ZoogiOrb.h"
 #include "ZoogiGameMode.h"
 #include "ZoogiArtifacts.h"
+#include "ZoogiArtifactComponent.h"
 #include "ZoogiTitanMeteorFX.h"
 #include "ZoogiPowerUnlockSubsystem.h"
 #include "Engine/GameInstance.h"
@@ -124,9 +125,11 @@ void AZoogiAwakenFX::OnInfuse(UWorld* World, AZoogiBall* InBall, EZoogiArtifact 
 		Off.Z = 0.f;
 		if (UseVoid2(World, InBall->Def.Id))
 		{
-			FVector Impact = Tgt ? Tgt->GetActorLocation() : G + Off;
-			Impact.Z = Tgt ? Impact.Z : G.Z;
-			PlayVoid2(World, G, Impact, Tgt);
+			// Evan 12:58 PM: Void 2 is ARMED here, not fired. The meteor plays at the first real collision with an orb or player
+			// during this infused shot (one per Awaken); no collision before the infusion ends = no meteor.
+			for (TActorIterator<AZoogiAwakenFX> It(World); It; ++It) if (It->Kind == EZoogiAwakenFX::MeteorArm && It->Ball == InBall) It->Finish(0.05f);
+			SpawnFX(World, EZoogiAwakenFX::MeteorArm, G, ZoogiScale, InBall, FVector::ZeroVector, Tgt);
+			UE_LOG(LogZoogi, Log, TEXT("AwakenFX: Void 2 Titan Meteor ARMED for %s (fires on the first orb/player collision)"), *InBall->Def.Name);
 		}
 		else SpawnFX(World, EZoogiAwakenFX::VoidPortal, G, ZoogiScale, InBall, Off, Tgt); // Void 1: portal + gravity pull
 	}
@@ -242,6 +245,9 @@ void AZoogiAwakenFX::Init()
 		for (int32 k = 0; k < 4; ++k) Bolts[k].NextMove = 0.f;
 		if (AZoogiBall* B = Ball.Get()) B->Sphere->OnComponentHit.AddDynamic(this, &AZoogiAwakenFX::OnBallHit);
 		break;
+	case EZoogiAwakenFX::MeteorArm:
+		if (AZoogiBall* B = Ball.Get()) B->Sphere->OnComponentHit.AddDynamic(this, &AZoogiAwakenFX::OnBallHit);
+		break;
 	case EZoogiAwakenFX::ShockHit:
 		Quads->SetMaterial(0, MID(TEXT("MI_ZAFX_Bolt")));
 		Quads->SetMaterial(1, MID(TEXT("MI_ZAFX_Flash")));
@@ -354,12 +360,28 @@ void AZoogiAwakenFX::Finish(float FadeTime)
 	EndAt = Age;
 	Param.Z = FadeTime; // reuse: fade length once finished
 	if (Niagara) Niagara->Deactivate();
-	if (Ball.IsValid() && Kind == EZoogiAwakenFX::ShockChain) Ball->Sphere->OnComponentHit.RemoveDynamic(this, &AZoogiAwakenFX::OnBallHit);
+	if (Ball.IsValid() && (Kind == EZoogiAwakenFX::ShockChain || Kind == EZoogiAwakenFX::MeteorArm)) Ball->Sphere->OnComponentHit.RemoveDynamic(this, &AZoogiAwakenFX::OnBallHit);
 }
 
 void AZoogiAwakenFX::OnBallHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
 {
-	if (EndAt >= 0.f || Kind != EZoogiAwakenFX::ShockChain) return;
+	if (EndAt >= 0.f) return;
+	if (Kind == EZoogiAwakenFX::MeteorArm)
+	{
+		// real collision event: only an orb or another Zoogi counts (floor / walls / pillars don't); presentation only
+		AZoogiBall* B = Ball.Get();
+		if (!B || !OtherActor || OtherActor == B || !(OtherActor->IsA<AZoogiOrb>() || OtherActor->IsA<AZoogiBall>())) return;
+		const FVector BL = B->BallLocation();
+		const float FloorZ = BL.Z - ZoogiConst::ZoogiRadius;
+		const FVector P(Hit.ImpactPoint.X, Hit.ImpactPoint.Y, FloorZ);
+		FVector Dir = B->GetBallVelocity(); Dir.Z = 0.f;
+		if (!Dir.Normalize()) Dir = FVector(OtherActor->GetActorLocation() - BL).GetSafeNormal2D(UE_SMALL_NUMBER, FVector::ForwardVector);
+		PlayVoid2(GetWorld(), P - Dir * 500.f, P, OtherActor);
+		UE_LOG(LogZoogi, Log, TEXT("AwakenFX: Void 2 Titan Meteor FIRED at collision %s with %s"), *P.ToString(), *OtherActor->GetName());
+		Finish(0.05f);
+		return;
+	}
+	if (Kind != EZoogiAwakenFX::ShockChain) return;
 	if (Hit.ImpactNormal.Z > 0.65f) return; // rolling on the floor is not a collision
 	const FVector P(Hit.ImpactPoint.X, Hit.ImpactPoint.Y, Ground.Z);
 	SpawnFX(GetWorld(), EZoogiAwakenFX::ShockHit, P, S, nullptr, FVector::ZeroVector);
@@ -384,6 +406,7 @@ void AZoogiAwakenFX::Tick(float Dt)
 	case EZoogiAwakenFX::ShockChain: TickShock(Dt, Fade); break;
 	case EZoogiAwakenFX::ShockHit: TickShockHit(Dt); break;
 	case EZoogiAwakenFX::VoidPortal: TickVoid(Dt); break;
+	case EZoogiAwakenFX::MeteorArm: TickMeteorArm(); break;
 	}
 }
 
@@ -605,6 +628,18 @@ void AZoogiAwakenFX::TickShockHit(float Dt)
 			M->SetScalarParameterValue(TEXT("Fade"), 1.f - FMath::Clamp((Age - 1.0f) / 2.f, 0.f, 1.f));
 			M->SetScalarParameterValue(TEXT("Glow"), 2.5f * FMath::Exp(-Age * 1.8f) + 0.15f);
 		}
+}
+
+void AZoogiAwakenFX::TickMeteorArm()
+{
+	// disarm (no meteor) once the Void infusion is over: shot resolved, Zoogi out, or 30 s safety
+	if (EndAt >= 0.f) return;
+	const AZoogiBall* B = Ball.Get();
+	if (!B || B->bOut || !B->Artifact || B->Artifact->Infused != EZoogiArtifact::Void || Age > 30.f)
+	{
+		UE_LOG(LogZoogi, Log, TEXT("AwakenFX: Void 2 Titan Meteor disarmed without a collision (no meteor)"));
+		Finish(0.05f);
+	}
 }
 
 void AZoogiAwakenFX::TickVoid(float Dt)

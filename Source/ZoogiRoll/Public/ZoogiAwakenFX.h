@@ -24,7 +24,7 @@ class UPrimitiveComponent;
  *    stays open briefly and pulls nearby orbs toward it before closing.
  *  Assets (materials, textures, Niagara) come from Scripts/kfx/finale/kfx_finale.py under /Game/VFX/AwakenFX. */
 UENUM()
-enum class EZoogiAwakenFX : uint8 { LaunchRing, ShockChain, ShockHit, VoidPortal };
+enum class EZoogiAwakenFX : uint8 { LaunchRing, ShockChain, ShockHit, VoidPortal, MeteorArm }; // MeteorArm: invisible Void 2 watcher (fires the Titan Meteor on the first orb / player collision)
 
 /** Void tuning, [ZoogiRoll.Void] in DefaultGame.ini (Evan, Oct 14). Void 1 = portal gravity pull only; Void 2 = Titan Meteor. */
 struct FZoogiVoidTune
@@ -106,6 +106,7 @@ protected:
 	void TickShock(float Dt, float Fade);
 	void TickShockHit(float Dt);
 	void TickVoid(float Dt);
+	void TickMeteorArm();
 	void Finish(float FadeTime);
 
 	FVector ViewPos() const;
