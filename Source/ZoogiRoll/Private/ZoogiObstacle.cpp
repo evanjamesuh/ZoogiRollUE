@@ -3,6 +3,7 @@
 #include "ZoogiGameMode.h"
 #include "ZoogiEpisodeEnergyComponent.h"
 #include "ZoogiRoll.h"
+#include "ZoogiArena.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "ProceduralMeshComponent.h"
@@ -82,6 +83,13 @@ bool AZoogiObstacle::Overlaps(const FZoogiObsTrigger& T, const FVector& BallW, f
 		const float Rel = FMath::Fmod(A - T.D.X + 720.f, 360.f);
 		return Rel <= T.D.Y - T.D.X && Rho >= T.E.X && Rho <= T.E.Y && L.Z <= T.E.Z + R + 5.f;
 	}
+	case 4: // world arc around the arena centre (world 0,0)
+	{
+		const float Rho = FVector2D(BallW).Size();
+		const float A = FMath::RadiansToDegrees(FMath::Atan2(BallW.Y, BallW.X));
+		const float Rel = FMath::Fmod(A - T.D.X + 720.f, 360.f);
+		return Rel <= T.D.Y - T.D.X && Rho >= T.E.X && Rho <= T.E.Y && BallW.Z <= T.E.Z + R + 5.f;
+	}
 	}
 	return false;
 }
@@ -89,7 +97,27 @@ bool AZoogiObstacle::Overlaps(const FZoogiObsTrigger& T, const FVector& BallW, f
 void AZoogiObstacle::SetOrbShown(bool bShown)
 {
 	if (Spent.Num()) { for (auto& C : Vis) if (C) C->SetVisibility(bShown); for (auto& C : Spent) if (C) C->SetVisibility(!bShown); }
-	else for (auto& C : Vis) if (C) C->SetVisibility(bShown);
+	else
+	{
+		bool bAny = false;
+		for (auto& C : Vis) if (C && C->GetStaticMesh() && C->GetStaticMesh()->GetName().Contains(TEXT("Orb")) && !C->GetStaticMesh()->GetName().Contains(TEXT("Cup"))) { C->SetVisibility(bShown); bAny = true; }
+		if (!bAny || Vis.Num() == 1) for (auto& C : Vis) if (C) C->SetVisibility(bShown);
+	}
+}
+
+float AZoogiObstacle::EdgeR() const { return AZoogiArena::ActiveKnockoffR; }
+
+// Launch tuning (Oct 14): a launch must land on the arena. Ballistic landing (g 980, back to the start height); if it would land past
+// 70% of the ring-out radius the horizontal speed is scaled down until it lands there. Returns the landing radius.
+float AZoogiObstacle::SafeLaunch(const FVector& P, FVector& H, float Up) const
+{
+	const float T = 2.f * FMath::Max(Up, 0.f) / 980.f;
+	const float Lim = EdgeR() * 0.7f;
+	auto LandR = [&](float K) { return FVector2D(P.X + H.X * K * T, P.Y + H.Y * K * T).Size(); };
+	float K = 1.f;
+	if (LandR(1.f) > Lim) { float Lo = 0.f, Hi = 1.f; for (int32 i = 0; i < 20; ++i) { const float M = 0.5f * (Lo + Hi); (LandR(M) > Lim ? Hi : Lo) = M; } K = Lo; }
+	H *= K;
+	return LandR(1.f);
 }
 
 void AZoogiObstacle::Fire(FZoogiObsTrigger& T, AZoogiBall* B, float Now)
@@ -105,17 +133,45 @@ void AZoogiObstacle::Fire(FZoogiObsTrigger& T, AZoogiBall* B, float Now)
 		if (T.P[1] > 0.f) // multiplier along the axis, only moving with it
 		{
 			if (FVector::DotProduct(Pl, DirW) <= 0.f) return;
-			B->SetPlanarVelocity(DirW * Pl.Size() * T.P[1]);
+			B->SetPlanarVelocity(DirW * FMath::Min(Pl.Size() * T.P[1], MaxBoost));
 		}
-		else B->SetPlanarVelocity(Pl + DirW * T.P[0]);
+		else { FVector NV = Pl + DirW * T.P[0]; B->SetPlanarVelocity(NV.GetClampedToMaxSize(MaxBoost)); }
 		UE_LOG(LogZoogi, Log, TEXT("OBSTACLE %s boost P%d %.0f -> %.0f cm/s"), *ObsName.ToString(), B->PlayerIndex + 1, Pl.Size(), B->GetBallVelocity().Size2D());
 		break;
 	}
-	case 2: // Launch
+	case 2: // Launch (P0 < 0 = keep the horizontal velocity)
+	{
 		if (Pl.Size() < T.P[3]) return;
-		B->SetPlanarVelocity(DirW * T.P[0], T.P[1]);
-		UE_LOG(LogZoogi, Log, TEXT("OBSTACLE %s launch P%d fwd %.0f up %.0f"), *ObsName.ToString(), B->PlayerIndex + 1, T.P[0], T.P[1]);
+		FVector H = T.P[0] < 0.f ? Pl : DirW * T.P[0];
+		const float Land = SafeLaunch(B->BallLocation(), H, T.P[1]);
+		B->SetPlanarVelocity(H, T.P[1]);
+		UE_LOG(LogZoogi, Log, TEXT("OBSTACLE %s launch P%d fwd %.0f up %.0f -> lands r%.0f (edge r%.0f)"), *ObsName.ToString(), B->PlayerIndex + 1, H.Size(), T.P[1], Land, EdgeR());
 		break;
+	}
+	case 5: // heading snap (world yaw), speed kept
+	{
+		const FVector Dir = FRotator(0.f, T.P[0], 0.f).Vector();
+		if (FVector::DotProduct(Pl, Dir) <= 0.f) return;
+		B->SetPlanarVelocity(Dir * Pl.Size());
+		UE_LOG(LogZoogi, Log, TEXT("OBSTACLE %s snap P%d heading %.0f"), *ObsName.ToString(), B->PlayerIndex + 1, T.P[0]);
+		break;
+	}
+	case 6: // set a minimum speed along the axis (one-way when P1 > 0)
+	{
+		if (T.P[1] > 0.f && FVector::DotProduct(Pl, DirW) <= 0.f) return;
+		const FVector NewV = DirW * FMath::Min(FMath::Max(Pl.Size(), T.P[0]), MaxBoost);
+		B->SetPlanarVelocity(NewV);
+		UE_LOG(LogZoogi, Log, TEXT("OBSTACLE %s boost P%d %.0f -> %.0f cm/s"), *ObsName.ToString(), B->PlayerIndex + 1, Pl.Size(), NewV.Size());
+		break;
+	}
+	case 7: // two-way multiplier along the axis with a minimum exit speed
+	{
+		const float Sg = FVector::DotProduct(Pl, DirW) >= 0.f ? 1.f : -1.f;
+		const FVector NewV = DirW * Sg * FMath::Min(FMath::Max(Pl.Size() * T.P[0], T.P[1]), MaxBoost);
+		B->SetPlanarVelocity(NewV);
+		UE_LOG(LogZoogi, Log, TEXT("OBSTACLE %s boost P%d %.0f -> %.0f cm/s"), *ObsName.ToString(), B->PlayerIndex + 1, Pl.Size(), NewV.Size());
+		break;
+	}
 	case 3: // Energy orb
 	{
 		if (T.RechargeAt > Now) return;

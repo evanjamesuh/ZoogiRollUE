@@ -668,7 +668,7 @@ void AZoogiGameMode::CheckKnockoffs()
 	{
 		if (!O || O->bOut) continue;
 		const FVector L = O->OrbLocation();
-		if (L.Z < ZoogiConst::FallOutZ || FVector2D(L.X, L.Y).Size() > 8000.f)
+		if (AZoogiArena::IsRingOut(L)) // Frozen Ring 2: also out past r2300
 		{
 			const int32 Scorer = Balls.IsValidIndex(O->LastHitBy) ? O->LastHitBy : ActivePlayer;
 			O->SetOut();
@@ -702,7 +702,7 @@ void AZoogiGameMode::CheckKnockoffs()
 	{
 		if (!B || B->bOut) continue;
 		const FVector L = B->BallLocation();
-		if (L.Z < ZoogiConst::FallOutZ || FVector2D(L.X, L.Y).Size() > 8000.f)
+		if (AZoogiArena::IsRingOut(L)) // Frozen Ring 2: also out past r2300
 		{
 			AZoogiFX::Spawn(GetWorld(), EdgePoint(L, Arena), FLinearColor(1.f, 0.3f, 0.25f), 220.f, 0.7f, false, 7.f);
 			AZoogiFX::Niagara(GetWorld(), TEXT("NS_Burst_Red"), EdgePoint(L, Arena), FRotator::ZeroRotator, 1.4f);

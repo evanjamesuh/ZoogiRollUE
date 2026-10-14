@@ -77,6 +77,11 @@ void AZoogiArenaShowcase::MaybeStart(UWorld* World, const FString& ArenaSlug)
 		S->Poses.Insert(FPose{ TEXT("stands_close_E"), IsletLook(0.f, 2750.f, 140.f),   0.f, 16.f, 1250.f, 70.f }, 0);
 		S->Poses.Insert(FPose{ TEXT("stands_close_W"), IsletLook(180.f, 2750.f, 140.f), 180.f, 16.f, 1250.f, 70.f }, 0);
 	}
+	if (!ArenaSlug.Contains(TEXT("meadow"))) // Oct 14: Evan's map-target framing (pack *match55* renders: camera on +Y, 55 deg)
+	{
+		S->Poses.Insert(FPose{ TEXT("match55"),  FVector(0, -100, 0), 270.f, 55.f, 5600.f, 62.f }, 0);
+		S->Poses.Insert(FPose{ TEXT("match55w"), FVector(0, -100, 0), 270.f, 55.f, 7800.f, 62.f }, 0);
+	}
 	if (ArenaSlug.Contains(TEXT("meadow")))
 		for (FPose& P : S->Poses) { P.Look *= 1.3f; P.Dist *= 1.3f; } // r19: Meadow is built 1.3x larger
 	UE_LOG(LogZoogi, Log, TEXT("Arena showcase: %d views for %s -> %s"), S->Poses.Num(), *ArenaSlug, *ShotDir);

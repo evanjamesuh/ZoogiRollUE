@@ -16,7 +16,7 @@ class AZoogiBall;
 
 struct FZoogiObsTrigger
 {
-	int32 Kind = 0;   // 1 Boost, 2 Launch, 3 Energy, 4 Zone
+	int32 Kind = 0;   // 1 Boost, 2 Launch, 3 Energy, 4 Zone, 5 heading snap, 6 min speed, 7 two-way mult
 	int32 Shape = 0;  // 0 box, 1 sphere, 2 cylinder, 3 arc around the actor origin
 	FVector C = FVector::ZeroVector, E = FVector::ZeroVector;
 	FVector2D D = FVector2D(1.f, 0.f);
@@ -57,4 +57,7 @@ protected:
 	TArray<TWeakObjectPtr<AZoogiBall>> PendingGain;
 	void SetOrbShown(bool bShown);
 	void Fire(FZoogiObsTrigger& T, AZoogiBall* B, float Now);
+	float EdgeR() const;
+	float SafeLaunch(const FVector& P, FVector& H, float Up) const;
+	static constexpr float MaxBoost = 2200.f; // tuning: no trigger pushes a Zoogi past this planar speed
 };

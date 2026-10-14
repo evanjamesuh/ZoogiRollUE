@@ -2,11 +2,13 @@
 # UCX_* parts become invisible collision meshes (one exact convex hull each, from the hull itself); TRIGGER_* parts are skipped in C++.
 import unreal, os, json
 SRC = r"C:/dev/ZoogiRollUnreal/SourceArt/Obstacles"
-OUT = r"C:/dev/ZoogiRollUnreal/Saved/obstacles_import.json"
+OUT = r"C:/dev/ZoogiRollUnreal/Saved/obstacles_import_" + (os.environ.get("OBS_MAPS", "all").replace(",", "_")) + ".json"
 at = unreal.AssetToolsHelpers.get_asset_tools(); eal = unreal.EditorAssetLibrary
 sms = unreal.get_editor_subsystem(unreal.StaticMeshEditorSubsystem) or unreal.EditorStaticMeshLibrary
 rows = []
+ONLY = [x for x in os.environ.get("OBS_MAPS", "").split(",") if x]
 for m in sorted(os.listdir(SRC)):
+    if ONLY and m not in ONLY: continue
     d = os.path.join(SRC, m)
     if not os.path.isdir(d): continue
     for f in sorted(os.listdir(d)):
@@ -32,4 +34,5 @@ for m in sorted(os.listdir(SRC)):
 eal.save_directory("/Game/Env/Obstacles", only_if_is_dirty=False, recursive=True)
 json.dump(rows, open(OUT, "w"), indent=1)
 unreal.log(f"OBS saved {len(rows)} meshes")
+
 

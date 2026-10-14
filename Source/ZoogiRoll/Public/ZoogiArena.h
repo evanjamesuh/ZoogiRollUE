@@ -44,6 +44,12 @@ public:
 	int32 OrbCountOverride = 0;
 	/** Knockoff radius of the arena built last (world cm), for code without an arena pointer (pieces, combo). */
 	static inline float ActiveKnockoffR = ZoogiConst::KnockoffRadius;
+	/** Frozen Ring 2 (Oct 14): ring-out radius beyond the court (0 = off). Out = fell below FallOutZ, or r > OuterOutR when set. */
+	static inline float OuterOutR = 0.f;
+	static bool IsRingOut(const FVector& L);
+	/** Camera boom multiplier for the tactical / overview profiles (1 = default). */
+	float CamScale = 1.f;
+	void BuildFrozenRing2();
 	/** Extra orb spots off the main disc (Frozen bleacher islets, round 3c); world positions, Z = orb centre. Rebuilt per arena. */
 	TArray<FVector> ExtraOrbSpots;
 	/** Per-map starting orb ring (0 = ZoogiConst::OrbRingRadius) and its yaw offset in degrees; reset on every build. */

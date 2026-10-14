@@ -1,5 +1,5 @@
-#include "ZoogiObstacle.h"
 #include "ZoogiArena.h"
+#include "ZoogiObstacle.h"
 #include "ZoogiRock.h"
 #include "ZoogiTopping.h"
 #include "ZoogiRoll.h"
@@ -308,6 +308,18 @@ void AZoogiArena::Build(EZoogiArena InTheme)
 	TerraceGapYaw.Reset(); TerraceGapHalfDeg = 0.f;
 	Theme = InTheme;
 	SetupSky(InTheme);
+	OuterOutR = 0.f; CamScale = 1.f;
+	// Oct 14 (Evan / Arena Maps): Volcanic / Cosmic / Arabian / Tomb use the court the reskin packs and their approved obstacle sets
+	// are authored for: ARENA_R 1550 scaled uniformly by A 1.3 (ring-out r2015, spawns x1.3), 6 orbs on r650 at yaw 15+60k.
+	// Court, floor, rim, Z and mesh scale all scale together (actor scale, as Meadow / Night Circuit / Training).
+	const bool bCourtA = InTheme == EZoogiArena::Volcanic || InTheme == EZoogiArena::Cosmic || InTheme == EZoogiArena::Arabian || InTheme == EZoogiArena::Tomb;
+	if (bCourtA)
+	{
+		BuildScale = 1.3f; SetActorScale3D(FVector(1.3f)); CamScale = 1.15f;
+		KnockoffRadiusOverride = ZoogiConst::KnockoffRadius * 1.3f; ActiveKnockoffR = KnockoffRadiusOverride;
+		SpawnRadiusOverride = ZoogiConst::SpawnRadius * 1.3f; OrbCountOverride = 6;
+		OrbRingRadiusOverride = 650.f; OrbRingYawOffset = 15.f;
+	}
 	switch (InTheme)
 	{
 	case EZoogiArena::Frozen: BuildFrozen(); break;
@@ -318,6 +330,14 @@ void AZoogiArena::Build(EZoogiArena InTheme)
 	case EZoogiArena::Neon: BuildNeon(); break;
 	case EZoogiArena::Training: BuildTraining(); break;
 	default: BuildMeadow(); break;
+	}
+	if (InTheme == EZoogiArena::Frozen) { BuildFrozenRing2(); if (OuterOutR > 0.f) CamScale = 1.39f; } // Oct 14: outer action ring (ZoogiFrozenRing2.cpp)
+	if (bCourtA)
+	{
+		// Arabian's pizza toppings go with the pack court (Arena Maps ruling); rocks move out with the court.
+		for (AZoogiTopping* T : Toppings) if (IsValid(T)) T->Destroy();
+		Toppings.Reset();
+		for (AZoogiRock* Rk : Rocks) if (IsValid(Rk)) Rk->SetActorLocation(FVector(FVector2D(Rk->GetActorLocation()) * 1.3f, Rk->GetActorLocation().Z));
 	}
 	BuildPads();
 	// Camera collision: decorative props near the court (trees, torches, pots, domes...) block only the
@@ -613,7 +633,7 @@ void AZoogiArena::BuildIslet(const FVector& Center, float Radius, const FLinearC
 void AZoogiArena::BuildVolcanic()
 {
 	BuildIsland(ZoogiUtil::Hex(TEXT("#3A2A26")), ZoogiUtil::Hex(TEXT("#5A3A2E")), ZoogiUtil::Hex(TEXT("#FF5722")),
-		ZoogiUtil::Hex(TEXT("#1E1513")), ZoogiUtil::Hex(TEXT("#3A2622")), 0.3f);
+		ZoogiUtil::Hex(TEXT("#1E1513")), ZoogiUtil::Hex(TEXT("#3A2622")), 0.3f, KitFloorMaterial(TEXT("Volcanic"), ZoogiUtil::Hex(TEXT("#FF6A1A")), 1.2f, 1.0f));
 	TArray<FVector4> Rim = {
 		FVector4(32, 13.35, 1.15, 1.2), FVector4(70, 13.5, 1.05, 1.0), FVector4(152, 13.25, 1.2, 1.3),
 		FVector4(196, 13.45, 1.1, 1.1), FVector4(250, 13.3, 1.22, 1.25), FVector4(332, 13.4, 1.08, 1.0) };
@@ -637,7 +657,7 @@ void AZoogiArena::BuildVolcanic()
 void AZoogiArena::BuildCosmic()
 {
 	BuildIsland(ZoogiUtil::Hex(TEXT("#2A2550")), ZoogiUtil::Hex(TEXT("#3F3A7A")), ZoogiUtil::Hex(TEXT("#7C4DFF")),
-		ZoogiUtil::Hex(TEXT("#15122B")), ZoogiUtil::Hex(TEXT("#29224F")), 0.3f);
+		ZoogiUtil::Hex(TEXT("#15122B")), ZoogiUtil::Hex(TEXT("#29224F")), 0.3f, KitFloorMaterial(TEXT("Cosmic"), ZoogiUtil::Hex(TEXT("#8B5CFF")), 1.2f, 1.0f));
 	TArray<FVector4> Rim = {
 		FVector4(32, 13.35, 0.9, 1.2), FVector4(70, 13.5, 0.9, 1.2), FVector4(152, 13.25, 0.9, 1.2),
 		FVector4(196, 13.45, 0.9, 1.2), FVector4(250, 13.3, 0.9, 1.2), FVector4(332, 13.4, 0.9, 1.2) };
@@ -848,7 +868,7 @@ void AZoogiArena::BuildArabian()
 	// RoundIsland kind="saturn", dressed as a PIZZA (Oct 4, Evan): melted-cheese floor over tomato sauce, a golden baked
 	// crust instead of the glowing gold lip, same dark underside. Floor collider and knockoff line are unchanged.
 	BuildIsland(ZoogiUtil::Hex(TEXT("#F2B544")), ZoogiUtil::Hex(TEXT("#E39A2E")), ZoogiUtil::Hex(TEXT("#B9773A")),
-		ZoogiUtil::Hex(TEXT("#1A120C")), ZoogiUtil::Hex(TEXT("#2E2016")), 0.3f);
+		ZoogiUtil::Hex(TEXT("#1A120C")), ZoogiUtil::Hex(TEXT("#2E2016")), 0.3f, KitFloorMaterial(TEXT("Arabian"), ZoogiUtil::Hex(TEXT("#FFC64A")), 1.0f, 1.0f));
 	RockPM = ZoogiPhysics::MakeMaterial(this, 0.3f, 0.5f, false);
 	{
 		const float KR = ZoogiConst::KnockoffRadius;

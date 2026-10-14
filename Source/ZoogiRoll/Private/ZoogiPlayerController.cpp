@@ -857,7 +857,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	using namespace ZoogiCamTune;
 	AZoogiGameMode* G = GM();
 	if (!Cam || !G) return;
-	const float Scale = (G->Arena && G->Arena->IsNeon()) ? NeonScale : 1.f;
+	const float Scale = (G->Arena && G->Arena->IsNeon()) ? NeonScale : (G->Arena ? G->Arena->CamScale : 1.f); // Oct 14: Frozen Ring 2 1.39 (frames r2300), A 1.3 courts 1.15
 
 	if (G->Phase == EZoogiPhase::Forming)
 	{

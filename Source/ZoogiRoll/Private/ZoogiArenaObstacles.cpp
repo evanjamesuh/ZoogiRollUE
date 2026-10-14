@@ -11,6 +11,7 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "Misc/CommandLine.h"
+#include "ProceduralMeshComponent.h"
 #include "ZoogiObstacles.inl"
 
 void AZoogiArena::PlaceObstacles()
@@ -30,14 +31,15 @@ void AZoogiArena::PlaceObstacles()
 		AZoogiObstacle* O = GetWorld()->SpawnActor<AZoogiObstacle>(AZoogiObstacle::StaticClass(), FTransform(FRotator(0.f, In.Yaw, 0.f), Loc), SP);
 		if (!O) continue;
 		O->ObsName = FName(In.Name);
+		const bool bHid = In.Scale < 0.f; const float Sc = FMath::Abs(In.Scale);
 		float Top = 0.f;
-		for (int32 k = 0; k < M.VisNum + M.SpentNum; ++k)
+		for (int32 k = 0; k < (bHid ? 0 : M.VisNum + M.SpentNum); ++k)
 		{
 			const bool bSpent = k >= M.VisNum;
 			UStaticMesh* SM = LoadObject<UStaticMesh>(nullptr, ZoogiObs::Paths[(bSpent ? M.SpentFirst - M.VisNum : M.VisFirst) + k]);
 			if (!SM) { ++NMiss; continue; }
-			O->AddVisual(SM, In.Scale, bSpent);
-			Top = FMath::Max(Top, SM->GetBoundingBox().Max.Z * In.Scale);
+			O->AddVisual(SM, Sc, bSpent);
+			Top = FMath::Max(Top, SM->GetBoundingBox().Max.Z * Sc);
 		}
 		if (In.bCollide && M.HullNum > 0)
 		{
@@ -48,8 +50,10 @@ void AZoogiArena::PlaceObstacles()
 				TArray<FVector>& Pts = Hulls.AddDefaulted_GetRef();
 				for (int32 p = 0; p < H.PtNum; ++p) { const float* F = &ZoogiObs::Pts[(H.PtFirst + p) * 3]; Pts.Add(FVector(F[0], F[1], F[2])); }
 			}
-			O->BuildCollider(Hulls, In.Scale, ZoogiPhysics::MakeMaterial(O, In.Friction, In.Restitution, false));
+			O->BuildCollider(Hulls, Sc, ZoogiPhysics::MakeMaterial(O, In.Friction, In.Restitution, false));
 			NHull += O->NumHulls; ++NSolid;
+			// CPU planning: compact solid obstacles count as posts (IsSpotClear / IsPathBlocked)
+			if (O->Col) { const FBoxSphereBounds Bd = O->Col->Bounds; if (Bd.BoxExtent.X < 140.f && Bd.BoxExtent.Y < 140.f) SolidPosts.Add(FVector2D(Bd.Origin)); }
 		}
 		O->BounceGain = In.BounceGain; O->MaxOut = In.MaxOut;
 		for (const ZoogiObs::FTrig& T : ZoogiObs::Trigs)
@@ -63,11 +67,22 @@ void AZoogiArena::PlaceObstacles()
 		}
 		Obstacles.Add(O);
 		++N;
-		if (Forming)
+		if (Forming && !bHid)
 		{
 			const float Rd = FVector2D(In.X, In.Y).Size();
 			Forming->AddActor(O, EZoogiFormStyle::Rise, FVector(0.f, 0.f, -(FMath::Max(Top, 20.f) + 120.f)), 0.35f + 0.9f * FMath::Clamp(Rd / FMath::Max(KR, 1.f), 0.f, 1.f), 0.7f, 6.f);
 		}
 	}
+	// Required steps (IMPORT.md): Volcanic 12.1 swaps the Outcrop_01 round rim collider for the v121 play bumper (never both);
+	// Cosmic batch 3 replaces the rim pylon visuals (the rim bumper cylinders stay the play collider, the B3 UCX are not built).
+	if (N && Theme == EZoogiArena::Volcanic)
+		for (UActorComponent* C : Built)
+			if (UPrimitiveComponent* PC = Cast<UPrimitiveComponent>(C))
+				if (PC->GetCollisionEnabled() != ECollisionEnabled::NoCollision && FVector2D::Distance(FVector2D(PC->Bounds.Origin), FVector2D(1471.8f, 919.7f)) < 60.f && PC->Bounds.BoxExtent.X < 200.f)
+				{ PC->SetCollisionEnabled(ECollisionEnabled::NoCollision); UE_LOG(LogZoogi, Log, TEXT("Obstacles: Outcrop_01 rim collider %s disabled (v121 play bumper replaces it)"), *PC->GetName()); }
+	if (N && Theme == EZoogiArena::Cosmic)
+		for (UActorComponent* C : Built)
+			if (UStaticMeshComponent* SC = Cast<UStaticMeshComponent>(C))
+				if (SC->GetStaticMesh() && SC->GetStaticMesh()->GetName().StartsWith(TEXT("SM_EmitterPylon"))) SC->SetVisibility(false);
 	if (N) UE_LOG(LogZoogi, Log, TEXT("Obstacles (theme %d): %d placed, %d solid (%d convex hulls, BlockAll), %d triggers, %d missing meshes; unbreakable, not in Crystal Collapse"), Th, N, NSolid, NHull, NTrig, NMiss);
 }

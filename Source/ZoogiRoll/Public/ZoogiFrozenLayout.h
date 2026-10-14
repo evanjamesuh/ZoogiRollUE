@@ -20,18 +20,18 @@ namespace ZoogiFrozen
 	constexpr float WallR = 1455.f;
 	constexpr float WallThick = 34.f;
 	constexpr float WallH = 95.f;
-	constexpr float WallNA0 = 262.f, WallNA1 = 300.f;
+	constexpr float WallNA0 = 262.f, WallNA1 = 296.f; // Ring 2 (Oct 14): 300 re-entry ramp gap
 	// Bridge alignment (Evan Oct 8 10:49 PM): every bridge gets a clear opening in the ring wall centred on its yaw,
 	// +/- BridgeWallGapDeg (rails + Zoogi margin). W was 166-194 (closed the yaw-186 bridge), E was 330-352 (pinched 354).
 	constexpr float BridgeWallGapDeg = 6.5f;
 	// Symmetric layout (Evan Oct 9 12:30 / 12:33 AM): 6 identical bridges, 3 per side, mirrored about the camera axis
 	// (yaw 90 / 270 stay open): 0 / 45 / 315 east, 135 / 180 / 225 west. Each has a centred gap of +/- BridgeWallGapDeg;
 	// every other old gap is walled. N = combo bank wall (unchanged).
-	constexpr float WallWA0 = 141.5f, WallWA1 = 173.5f;
+	constexpr float WallWA0 = 154.f, WallWA1 = 173.5f; // Ring 2 (Oct 14): 150 re-entry ramp gap (141.5-146 is a fill arc)
 	constexpr float WallEA0 = 321.5f, WallEA1 = 353.5f;
 	// Extra breakable ice-wall arcs (same WallR / style, Polish r2) so the whole ring edge is walled except the 4 bridge gaps.
 	// Each pair = yaw from / to (deg).
-	inline const FVector2D WallFillArcs[5] = { FVector2D(6.5f, 38.5f), FVector2D(51.5f, 128.5f), FVector2D(186.5f, 218.5f), FVector2D(231.5f, 262.f), FVector2D(300.f, 308.5f) }; // gaps only at the 6 bridges +/- 6.5
+	inline const FVector2D WallFillArcs[10] = { FVector2D(6.5f, 26.f), FVector2D(34.f, 38.5f), FVector2D(51.5f, 63.5f), FVector2D(71.5f, 108.5f), FVector2D(116.5f, 128.5f), FVector2D(141.5f, 146.f), FVector2D(186.5f, 218.5f), FVector2D(231.5f, 236.f), FVector2D(244.f, 262.f), FVector2D(304.f, 308.5f) }; // Ring 2 (Oct 14): +-4 deg gaps at the 6 re-entry ramps 30/67.5/112.5/150/240/300 (OUTER_RING_PLAN.md); // gaps only at the 6 bridges +/- 6.5
 	// Rim arches: one identical ruin arch centred on each bridge (future Boost Portals, aerial worker): clear opening
 	// 2 * (BridgeArchHalfW - ArchPostR) = 252 cm, springline z 150, crown soffit ~z 280.
 	constexpr float ArchR = 1590.f;
@@ -59,7 +59,7 @@ namespace ZoogiFrozen
 	constexpr float RockDist = 14.0f, RockRad = 0.55f, RockH = 1.5f;
 	// Stand islets: yaw, distance, and whether a pavilion stands behind the bleachers.
 	constexpr float IsletYaw[6] = { 180.f, 0.f, 135.f, 45.f, 225.f, 315.f }; // kept (nudged): 186->180, 354->0, 140->135, 36->45; added 225 (old snow-chute arch 230) + 315 (old 310 arch)
-	constexpr float IsletDist[6] = { 2750.f, 2750.f, 2750.f, 2750.f, 2750.f, 2750.f }; // identical islets / bridge lengths
+	constexpr float IsletDist[6] = { 2900.f, 2900.f, 2900.f, 2900.f, 2900.f, 2900.f }; // Ring 2 (Oct 14): 2750 -> 2900 (front edge 2260, outside Ring 2) // identical islets / bridge lengths
 	constexpr bool IsletPavilion[6] = { false, false, false, false, false, false };
 	constexpr float IsletR = 640.f;              // radial semi-axis (toward the court)
 	constexpr float IsletStretch = 1.4f;         // tangential semi-axis = IsletR * IsletStretch (elliptic islet)
@@ -72,6 +72,6 @@ namespace ZoogiFrozen
 	constexpr float BridgeHalfW = 95.f, BridgeRailH = 30.f, BridgeGapDeg = 14.f;
 	inline bool NearIsletYaw(float A, float Tol) { for (float Y : IsletYaw) if (FMath::Abs(FMath::FindDeltaAngleDegrees(A, Y)) < Tol) return true; return false; }
 	// NW snowy outcrop and the two rim falls.
-	constexpr float OutcropYaw = 270.f, /* symmetric layout: moved between the 225 / 315 islets */ OutcropDist = 1980.f;
-	constexpr float FallYaw[2] = { 112.5f, 67.5f }; // symmetric about the camera axis (yaw 90)
+	constexpr float OutcropYaw = 270.f, /* symmetric layout: moved between the 225 / 315 islets */ OutcropDist = 2650.f; // Ring 2 (Oct 14): 1980 -> 2650 (it sat in Ring 2)
+	constexpr float FallYaw[2] = { 100.f, 80.f }; // Ring 2 (Oct 14): rim falls move off the 67.5 / 112.5 ramps and pour into the crevasse // symmetric about the camera axis (yaw 90)
 }
