@@ -74,7 +74,8 @@ int32 UZoogiTeamColumnWidget::NativePaint(const FPaintArgs& Args, const FGeometr
 	const FVector2D S = Geo.GetLocalSize();
 	if (!G || S.X < 20.f || S.Y < 20.f) return Layer;
 	const int32 L = Layer;
-	const float t0 = TScale;                                  // local px per target px
+	const float t0 = TScale;
+	const bool bOv = HA::Tex(TEXT("overlay")) != nullptr; // hud-v3 overlay: frames / plates come from the full-frame image                                  // local px per target px
 	auto FontT = [&](float Sz, float tt) { return BoldFont(FMath::Max(9, FMath::RoundToInt(Sz * tt)), FMath::Max(1.f, 1.6f * tt)); };
 	auto Txt = [&](int32 Lay, const FVector2D& P, const FString& T, float Sz, float tt, const FLinearColor& C, float Ax = 0.f, float Ay = 0.5f) { HA::Text(Out, Lay, Geo, P, T, FontT(Sz, tt), C, Ax, Ay); };
 	auto TxtW = [&](const FString& T, float Sz, float tt) { return (float)HA::Measure(T, FontT(Sz, tt)).X; };
@@ -99,35 +100,37 @@ int32 UZoogiTeamColumnWidget::NativePaint(const FPaintArgs& Args, const FGeometr
 		const float Slide = bActive ? (1.f - FMath::Square(1.f - TurnAnim)) : 1.f;
 		const float X = (1.f - Slide) * (Side == 0 ? -24.f : 24.f) * t;
 		// group panel (+ active turn glow)
-		if (bActive) ZoogiUIStyle::SBox(Out, L, Geo, FVector2D(X - 4.f * t, Y - 4.f * t), FVector2D(W + 8.f * t, GH + 8.f * t), FLinearColor(HA::Cyan.R, HA::Cyan.G, HA::Cyan.B, 0.18f + 0.14f * FMath::Sin(Time * 4.f)), FLinearColor::Transparent, 12.f * t, 0.f);
-		HA::Nine(Out, L + 1, Geo, FVector2D(X, Y), FVector2D(W, GH), TEXT("group_panel"), FMargin(10.f), t);
+		if (bActive && !bOv) ZoogiUIStyle::SBox(Out, L, Geo, FVector2D(X - 4.f * t, Y - 4.f * t), FVector2D(W + 8.f * t, GH + 8.f * t), FLinearColor(HA::Cyan.R, HA::Cyan.G, HA::Cyan.B, 0.18f + 0.14f * FMath::Sin(Time * 4.f)), FLinearColor::Transparent, 12.f * t, 0.f);
+		if (!bOv) HA::Nine(Out, L + 1, Geo, FVector2D(X, Y), FVector2D(W, GH), TEXT("group_panel"), FMargin(10.f), t);
 		// header bar: team label on the first group, a side gem at the right
-		HA::Nine(Out, L + 2, Geo, FVector2D(X + 8.f * t, Y + 9.f * t), FVector2D(W - 16.f * t, 23.f * t), TEXT("header_bar"), FMargin(8.f, 6.f, 8.f, 6.f), t);
-		if (gi == 0)
+		if (!bOv) HA::Nine(Out, L + 2, Geo, FVector2D(X + 8.f * t, Y + 9.f * t), FVector2D(W - 16.f * t, 23.f * t), TEXT("header_bar"), FMargin(8.f, 6.f, 8.f, 6.f), t);
+		if (gi == 0 && !bOv)
 		{
 			FString Head = G->bComboMode ? AZoogiGameMode::TeamName(Side) : FString::Printf(TEXT("%s  P%d"), Side == 0 ? TEXT("FRIENDLY") : TEXT("RIVAL"), B->PlayerIndex + 1);
 			Txt(L + 6, FVector2D(X + 20.f * t, Y + 20.5f * t), Head.ToUpper(), 10.5f, t, FLinearColor(0.92f, 0.92f, 0.9f));
 		}
 		const TCHAR* GemN = gi == 0 ? (Side == 0 ? TEXT("gem_blue") : TEXT("gem_orange")) : (Side == 1 ? TEXT("gem_teal") : nullptr);
-		if (GemN) HA::Img(Out, L + 3, Geo, FVector2D(X + W - 44.f * t, Y + 3.f * t), FVector2D(34.f, 31.f) * t, GemN);
+		if (GemN && !bOv) HA::Img(Out, L + 3, Geo, FVector2D(X + W - 44.f * t, Y + 3.f * t), FVector2D(34.f, 31.f) * t, GemN);
 		// card panel
 		const FVector2D CP(X + 10.f * t, Y + 38.f * t), CS(W - 20.f * t, 133.f * t);
-		HA::Nine(Out, L + 2, Geo, CP, CS, TEXT("card_panel"), FMargin(10.f), t);
+		if (!bOv) HA::Nine(Out, L + 2, Geo, CP, CS, TEXT("card_panel"), FMargin(10.f), t);
 		// portrait in a status ring: cyan friendly, red rival, bronze when out / knocked out
 		const FVector2D PC = CP + FVector2D(36.f, 35.f) * t;
 		const float PR = 29.f * t;
 		const bool bDim = B->bOut || B->bKnockedOut;
-		ZoogiUIStyle::SBox(Out, L + 3, Geo, PC - FVector2D(PR, PR) * 0.8f, FVector2D(PR, PR) * 1.6f, FLinearColor(0.05f, 0.07f, 0.1f, 1.f), FLinearColor::Transparent, PR * 0.8f, 0.f);
+		if (!bOv) ZoogiUIStyle::SBox(Out, L + 3, Geo, PC - FVector2D(PR, PR) * 0.8f, FVector2D(PR, PR) * 1.6f, FLinearColor(0.05f, 0.07f, 0.1f, 1.f), FLinearColor::Transparent, PR * 0.8f, 0.f);
 		if (const FSlateBrush* Br = Portrait(B->Def.Id))
 		{
+			if (bOv) { const float PS = 54.f * t; FSlateBrush SB = *Br; SB.DrawAs = ESlateBrushDrawType::Image; FSlateDrawElement::MakeBox(Out, L + 4, Geo.ToPaintGeometry(FVector2f(PS, PS), FSlateLayoutTransform(FVector2f(PC - FVector2D(PS, PS) * 0.5f))), &SB, ESlateDrawEffect::None, bDim ? FLinearColor(0.45f, 0.45f, 0.5f) : FLinearColor::White); } else {
 			FSlateBrush RB = *Br; RB.DrawAs = ESlateBrushDrawType::RoundedBox; RB.OutlineSettings = FSlateBrushOutlineSettings(PR * 0.78f);
 			RB.OutlineSettings.RoundingType = ESlateBrushRoundingType::HalfHeightRadius;
-			FSlateDrawElement::MakeBox(Out, L + 4, Geo.ToPaintGeometry(FVector2f(FVector2D(PR, PR) * 1.56f), FSlateLayoutTransform(FVector2f(PC - FVector2D(PR, PR) * 0.78f))), &RB, ESlateDrawEffect::None, bDim ? FLinearColor(0.45f, 0.45f, 0.5f) : FLinearColor::White);
+			FSlateDrawElement::MakeBox(Out, L + 4, Geo.ToPaintGeometry(FVector2f(FVector2D(PR, PR) * 1.56f), FSlateLayoutTransform(FVector2f(PC - FVector2D(PR, PR) * 0.78f))), &RB, ESlateDrawEffect::None, bDim ? FLinearColor(0.45f, 0.45f, 0.5f) : FLinearColor::White); }
 		}
 		else ZoogiUIStyle::SBox(Out, L + 4, Geo, PC - FVector2D(PR, PR) * 0.78f, FVector2D(PR, PR) * 1.56f, B->Def.Color, FLinearColor::Transparent, PR * 0.78f, 0.f);
 		const TCHAR* Ring = bDim ? TEXT("ring_bronze") : (Side == 0 ? TEXT("ring_cyan") : TEXT("ring_red"));
 		const float RP = bActive ? 1.f + 0.04f * FMath::Sin(Time * 5.f) : 1.f;
-		HA::Img(Out, L + 5, Geo, PC - FVector2D(PR, PR) * RP, FVector2D(PR, PR) * 2.f * RP, Ring);
+		if (bOv) { if (bActive) HA::Img(Out, L + 5, Geo, PC - FVector2D(31.f, 31.f) * t, FVector2D(62.f, 62.f) * t, TEXT("prompt_cyanbox"), FLinearColor(1.f, 1.f, 1.f, 0.6f + 0.4f * FMath::Sin(Time * 5.f))); }
+		else HA::Img(Out, L + 5, Geo, PC - FVector2D(PR, PR) * RP, FVector2D(PR, PR) * 2.f * RP, Ring);
 		// name, chips, score, stats
 		const float TX = CP.X + 72.f * t;
 		Txt(L + 6, FVector2D(TX, CP.Y + 17.f * t), FString::Printf(TEXT("P%d %s"), B->PlayerIndex + 1, *B->Def.Name.ToUpper()), 13.f, t, bActive ? FLinearColor(1.f, 0.95f, 0.75f) : FLinearColor(0.95f, 0.93f, 0.88f));
@@ -194,7 +197,7 @@ int32 UZoogiTeamColumnWidget::NativePaint(const FPaintArgs& Args, const FGeometr
 		{
 			const float Sl2 = 1.f - FMath::Square(1.f - PromptAnim);
 			const FVector2D AP(X + 10.f * t, BY), AS(W - 20.f * t, FMath::Min(BH, 64.f * t));
-			HA::Nine(Out, L + 2, Geo, AP, AS, TEXT("action_box"), FMargin(9.f, 9.f, 9.f, 9.f), t, FMath::Lerp(FLinearColor(1.4f, 1.3f, 1.f), FLinearColor::White, Sl2));
+			if (!bOv) HA::Nine(Out, L + 2, Geo, AP, AS, TEXT("action_box"), FMargin(9.f, 9.f, 9.f, 9.f), t, FMath::Lerp(FLinearColor(1.4f, 1.3f, 1.f), FLinearColor::White, Sl2));
 			const FString AL = UZoogiFramedHUDWidget::ActionLabel(G);
 			const float LW = FMath::Max(59.f * t, TxtW(AL, 8.f, t) + 16.f * t);
 			HA::Nine(Out, L + 4, Geo, AP + FVector2D(10.f, 6.f) * t, FVector2D(LW, 15.f * t), TEXT("chip_blue"), FMargin(7.f, 5.f, 7.f, 5.f), t);
@@ -228,10 +231,10 @@ int32 UZoogiTeamColumnWidget::NativePaint(const FPaintArgs& Args, const FGeometr
 		{
 			const FVector2D ES = HA::SizeT(TEXT("emblem"));
 			const float EW = W - 20.f * t, EH = FMath::Min(BH, EW * ES.Y / FMath::Max(1.f, ES.X));
-			HA::Img(Out, L + 2, Geo, FVector2D(X + 10.f * t, BY + (BH - EH) * 0.5f), FVector2D(EW, EH), TEXT("emblem"));
+			if (!bOv) HA::Img(Out, L + 2, Geo, FVector2D(X + 10.f * t, BY + (BH - EH) * 0.5f), FVector2D(EW, EH), TEXT("emblem"));
 		}
 		// diamond connector into the next group
-		if (gi + 1 < Mine.Num()) HA::Img(Out, L + 7, Geo, FVector2D(W * 0.5f - 32.f * t, Y + GH - 18.f * t + Gap * 0.5f), FVector2D(64.f, 40.f) * t, TEXT("connector"));
+		if (gi + 1 < Mine.Num() && !bOv) HA::Img(Out, L + 7, Geo, FVector2D(W * 0.5f - 32.f * t, Y + GH - 18.f * t + Gap * 0.5f), FVector2D(64.f, 40.f) * t, TEXT("connector"));
 	}
 	if (G->bComboMode)
 	{

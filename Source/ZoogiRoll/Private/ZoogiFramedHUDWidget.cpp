@@ -427,6 +427,11 @@ int32 UZoogiFramedHUDWidget::PaintBack(const FGeometry& Geo, FSlateWindowElement
 		}
 	}
 
+	// hud-v3 overlay (Evan 4:25 PM): his target image as ONE full-frame overlay; arena / pills / plate are holes,
+	// live values are drawn on top (layer 6+), the sliced pieces underneath only show through the holes.
+	const bool bOverlay = HA::Tex(TEXT("overlay")) != nullptr;
+	if (bOverlay) HA::Img(Out, Ly + 5, Geo, FVector2D(X0, Y0), FVector2D(X1 - X0, V.Y - L.Safe.Bottom * s - Y0), TEXT("overlay"));
+
 	// 3) top bar: title plate (round / orbs), phase pills + active player / map plate, CAM / MENU plate
 	const AZoogiBall* AB = G->GetActiveBall();
 	{
@@ -501,7 +506,7 @@ int32 UZoogiFramedHUDWidget::PaintBack(const FGeometry& Geo, FSlateWindowElement
 		const float BF = bCards ? FMath::Clamp(TI.EnergyFrac, 0.f, 1.f) : 0.f;
 		if (BF > 0.f) ZoogiUIStyle::SBox(Out, Ly + 5, Geo, TR + FVector2D(277.f, 168.f) * t, FVector2D(92.f * BF, 7.f) * t, FLinearColor(0.78f, 0.45f, 1.f, 1.f), FLinearColor(0.95f, 0.8f, 1.f, 0.6f), 3.5f * t, 1.f * t);
 		// awaken stones (artifact mode): the old central picker lives in the tray now
-		PaintTrayAwaken(Geo, Out, Ly + 4, t);
+		PaintTrayAwaken(Geo, Out, bOverlay ? Ly + 7 : Ly + 4, t);
 		// system text (stage forming / match over) in the recess
 		if (!AB || G->Phase == EZoogiPhase::GameOver || G->Phase == EZoogiPhase::Forming)
 		{
