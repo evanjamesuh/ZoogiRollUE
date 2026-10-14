@@ -546,6 +546,7 @@ protected:
 	FVector FindFreeSpot(const FVector& Desired) const;
 	void AddPopup(const FString& Text, const FVector& World, const FLinearColor& Color);
 	void AddFeed(const FString& Text, const FLinearColor& Color);
+	void CPUSafetyClamp(class AZoogiBall* Ball, FVector2D& V); // Oct 14: no CPU self ring-out (cards mode)
 	void FireShot(const FVector2D& Velocity);
 	void FinishGame();
 

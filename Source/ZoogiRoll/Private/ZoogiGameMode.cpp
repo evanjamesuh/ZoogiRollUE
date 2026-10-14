@@ -18,6 +18,7 @@
 #include "ZoogiCombo.h"
 #include "ZoogiStageForming.h"
 #include "ZoogiArenaPiece.h"
+#include "EngineUtils.h"
 #include "ZoogiCardSubsystem.h"
 #include "ZoogiCardHandWidget.h"
 #include "Engine/World.h"
@@ -796,10 +797,42 @@ bool AZoogiGameMode::ReleaseAim()
 	if (bComboMode && Ball) ComboModifyShot(Ball, V);
 	UZoogiCardSubsystem* CardFx = CardsOn() ? UZoogiCardSubsystem::Get(this) : nullptr; // v3 Phase 3: card shot modifiers (cards on only)
 	if (CardFx && Ball) CardFx->FxModifyShot(this, Ball, V);
+	if (CardFx && Ball && Ball->bCPU) CPUSafetyClamp(Ball, V); // Oct 14 playtest fix: no CPU self ring-out (cards mode)
 	FireShot(V);
 	if (CardFx && Ball) CardFx->FxAfterShot(this, Ball, V);
 	SetBattleStep(EZoogiBattleStep::Rolling);
 	return true;
+}
+
+// Final CPU guard, after every card / power modifier: if the shot's free roll (no Zoogi / piece contact on its line)
+// would carry the Zoogi past the ring edge, cap the speed so it stops 180 cm inside. Contacts = live Zoogis
+// and breakable pieces on the line before the edge (a contact shot is the CPU's intent; the physics decides the rest).
+void AZoogiGameMode::CPUSafetyClamp(AZoogiBall* Ball, FVector2D& V)
+{
+	if (!Ball || !Arena || V.SizeSquared() < 1.f) return;
+	const FVector2D P(Ball->BallLocation());
+	const FVector2D D = V.GetSafeNormal();
+	const float Speed = V.Size(), Decel = Arena->GetRollingDecel();
+	const float Roll = Speed * Speed / (2.f * Decel);
+	const float Edge = Arena->DistanceToEdge(P, D);
+	const float Margin = 180.f;
+	if (Roll <= Edge - Margin) return;
+	const float Reach = FMath::Min(Roll, Edge);
+	auto Hits = [&](const FVector2D& C, float R) { const FVector2D Rel = C - P; const float T = FVector2D::DotProduct(Rel, D); return T > 0.f && T < Reach && FMath::Abs(FVector2D::CrossProduct(D, Rel)) < R; };
+	FString Hit;
+	for (AZoogiBall* O : Balls) if (O && O != Ball && !O->bOut && !O->bKnockedOut && Hits(FVector2D(O->BallLocation()), ZoogiConst::ZoogiRadius * 2.f)) { Hit = O->Def.Name; break; }
+	// orbs are light: the Zoogi rolls on through them (Volcanic smoke: 3 self-falls after "orb contact"), so they do not count as a stop
+	if (Hit.IsEmpty()) for (TActorIterator<AZoogiArenaPiece> It(GetWorld()); It; ++It)
+	{
+		if (!UZoogiCardSubsystem::IsCollapseEligible(*It)) continue;
+		FVector Org, Ext; It->GetActorBounds(true, Org, Ext);
+		const float R = FMath::Min(FMath::Max(Ext.X, Ext.Y), 400.f) + ZoogiConst::ZoogiRadius;
+		if (Hits(FVector2D(Org), R)) { Hit = It->GetName(); break; }
+	}
+	if (!Hit.IsEmpty()) { UE_LOG(LogZoogi, Log, TEXT("CPU P%d safety: roll %.0f > edge %.0f but contact predicted (%s), shot kept"), Ball->PlayerIndex + 1, Roll, Edge, *Hit); return; }
+	const float Safe = FMath::Sqrt(2.f * Decel * FMath::Max(0.f, Edge - Margin));
+	UE_LOG(LogZoogi, Log, TEXT("CPU P%d safety clamp: %.0f -> %.0f cm/s (free roll %.0f cm, edge %.0f cm, no contact on the line)"), Ball->PlayerIndex + 1, Speed, Safe, Roll, Edge);
+	V = D * Safe;
 }
 
 void AZoogiGameMode::FireShot(const FVector2D& Velocity)
@@ -1023,6 +1056,25 @@ void AZoogiGameMode::PlanCPUShot()
 			BestDir = (FVector2D(R->GetActorLocation()) - B).GetSafeNormal();
 			BestFrac = R->GetState() == EZoogiRockState::Intact ? 0.6f : 0.97f; // medium shot cracks, the hard one shatters
 			UE_LOG(LogZoogi, Log, TEXT("RockTest: P%d aims at %s at %.0f%%"), ActivePlayer + 1, *R->GetName(), BestFrac * 100.f);
+		}
+	}
+	// Oct 14 playtest fix (cards mode only): Crystal Collapse armed -> aim at the nearest breakable piece in range,
+	// and plan the speed the shot will really have after Storm / Heavy Roll (FxModifyShot multiplies it later).
+	if (CardsOn()) if (UZoogiCardSubsystem* CardPlan = UZoogiCardSubsystem::Get(this))
+	{
+		if (AZoogiArenaPiece* Pc = CardPlan->CPUCollapseTarget(Me))
+		{
+			const FVector2D To = FVector2D(Pc->GetActorLocation()) - B;
+			BestDir = To.GetSafeNormal(); CPULock = Pc;
+			BestFrac = FMath::Clamp(InvertLaunch(FMath::Sqrt(2.f * Decel * (To.Size() + 350.f))), 0.35f, 0.9f);
+			UE_LOG(LogZoogi, Log, TEXT("CPU P%d aims Crystal Collapse at %s (%.0f cm)"), ActivePlayer + 1, *Pc->GetName(), To.Size());
+		}
+		const float Mul = CardPlan->ShotMul(ActivePlayer);
+		if (Mul > 1.001f)
+		{
+			const float Was = BestFrac;
+			BestFrac = FMath::Clamp(InvertLaunch(ZoogiConst::LaunchSpeedForPull(BestFrac) / Mul), 0.2f, 1.f);
+			UE_LOG(LogZoogi, Log, TEXT("CPU P%d card shot x%.2f: plan %.0f%% -> %.0f%%"), ActivePlayer + 1, Mul, Was * 100.f, BestFrac * 100.f);
 		}
 	}
 	if (bComboMode) ComboPlanCPUForce(BestFrac);

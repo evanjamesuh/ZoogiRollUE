@@ -60,6 +60,11 @@ public:
 	static bool IsEnemy(const AZoogiGameMode* G, const AZoogiBall* A, const AZoogiBall* B);
 	/** Oct 14: CPU aim error multiplier from the acting player's armed cards (Precision x0.7, Heavy Roll x1.2); 1 with cards off. */
 	float AimErrorMul(int32 Player) const;
+	/** Oct 14 playtest fix: the speed multiplier FxModifyShot will apply to this player's next shot (Storm A x Heavy Roll A; 1 with cards off). */
+	float ShotMul(int32 Player) const;
+	/** Oct 14: Crystal Collapse armed for this player this turn: nearest eligible piece within CPU range (null otherwise). */
+	class AZoogiArenaPiece* CPUCollapseTarget(const AZoogiBall* Ball) const;
+	static constexpr float CPUCollapseRange = 1600.f;
 
 	void DumpCoverage(const FString& Tag) const;
 private:

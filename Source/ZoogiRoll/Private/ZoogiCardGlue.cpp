@@ -72,6 +72,7 @@ void AZoogiGameMode::CardsPlanCPU()
 	const FZoogiCardPlayerState* S = B ? C->Rules().Player(B->PlayerIndex) : nullptr;
 	if (S && S->bCommitted)
 	{
+		ReplanCPUShot(); // Oct 14 playtest fix: re-aim with the committed cards (Storm / Heavy speed x, Crystal Collapse target)
 		bAwakenDone = true;
 		AwakenDoneAt = StageTime;
 		UE_LOG(LogZoogi, Log, TEXT("CPU P%d Standby decision: %s"), B->PlayerIndex + 1, *AwakenChoiceText);

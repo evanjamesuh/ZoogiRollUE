@@ -258,7 +258,7 @@ void UZoogiEpisodeAssembler::Assemble(UZoogiBattleStateMachine* SM, const UZoogi
 		}
 		FString Frags;
 		for (const FZoogiEpisodeFragment& F : A.fragments) Frags += FString::Printf(TEXT("%s%s:%s%s"), Frags.IsEmpty() ? TEXT("") : TEXT(","), *F.kind, *F.clip_id, F.unlocked ? TEXT("") : TEXT("(locked)"));
-		UE_LOG(LogZoogi, Log, TEXT("BATTLE assemble player=%d name=%s winner=%d perf=%.2f contributions=%d spotlights=%d segments=%d shattered=%d kos=%d unlock=%s edit=%d fragments=[%s]"),
+		UE_LOG(LogZoogi, Log, TEXT("BATTLE assemble player=%d name=%s winner=%d perf=%.2f contributions=%d spotlights=%d segments=%d segments_shattered=%d kos=%d unlock=%s edit=%d fragments=[%s]"),
 			PS.Player + 1, *PS.Name, A.winner ? 1 : 0, A.performance, A.contributions, A.spotlights, A.segments_completed, A.segments_shattered, A.kos, *A.unlock, A.edit.Num(), *Frags);
 		PlayerResults.Add(A);
 	}

@@ -111,6 +111,23 @@ bool UZoogiCardSubsystem::IsCollapseEligible(const AZoogiArenaPiece* Piece)
 	return Piece && !Piece->IsIndestructible() && !Piece->IsBroken() && Piece->IsBuilt();
 }
 
+AZoogiArenaPiece* UZoogiCardSubsystem::CPUCollapseTarget(const AZoogiBall* Ball) const
+{
+	if (!Tune.bCards || !Ball || CollapseEffectId == 0 || CollapseOwner != Ball->PlayerIndex || !GetWorld()) return nullptr;
+	const FVector2D From(Ball->BallLocation());
+	AZoogiArenaPiece* Best = nullptr; float BestD = CPUCollapseRange;
+	for (TActorIterator<AZoogiArenaPiece> It(GetWorld()); It; ++It)
+		if (IsCollapseEligible(*It)) { const float D = FVector2D::Distance(From, FVector2D(It->GetActorLocation())); if (D < BestD) { BestD = D; Best = *It; } }
+	return Best;
+}
+
+// -ZoogiForceCard=<id> (dev / playtest): that card is put in every hand at Standby (replaces the last drawn card if missing).
+static FName ZoogiForcedCard()
+{
+	static const FName N = []() { FString S; return FParse::Value(FCommandLine::Get(), TEXT("ZoogiForceCard="), S) && !S.IsEmpty() ? FName(*S) : NAME_None; }();
+	return N;
+}
+
 FZoogiCardContext UZoogiCardSubsystem::BuildContext(AZoogiGameMode* G) const
 {
 	FZoogiCardContext C;
@@ -137,6 +154,11 @@ void UZoogiCardSubsystem::BeginStandby(AZoogiGameMode* G)
 	ExpireCollapse(TEXT("turn_end"));
 	if (LastStandbyTurn != G->TurnCounter) FxTurnEnd(G);
 	RulesV.BeginStandby(P, G->TurnCounter);
+	if (ZoogiForcedCard() != NAME_None)
+	{
+		if (Def(ZoogiForcedCard())) { if (RulesV.ForceInHand(P, ZoogiForcedCard())) UE_LOG(LogZoogi, Log, TEXT("CARDS force card %s -> P%d hand (-ZoogiForceCard)"), *ZoogiForcedCard().ToString(), P + 1); }
+		else UE_LOG(LogZoogi, Warning, TEXT("CARDS -ZoogiForceCard=%s: unknown card id"), *ZoogiForcedCard().ToString());
+	}
 	const FZoogiCardPlayerState* S = RulesV.Player(P);
 	FString Hand;
 	for (const FZoogiCardInstance& C : S->Hand) Hand += FString::Printf(TEXT(" %s#%d"), *C.CardId.ToString(), C.InstanceId);
@@ -211,6 +233,8 @@ EZoogiCardResult UZoogiCardSubsystem::Commit(AZoogiGameMode* G, FString& OutChoi
 	return R;
 }
 
+static const FName NCrystalCPU(TEXT("crystal_collapse"));
+
 void UZoogiCardSubsystem::PlanCPU(AZoogiGameMode* G)
 {
 	const int32 P = ActivePlayer(G);
@@ -238,6 +262,15 @@ void UZoogiCardSubsystem::PlanCPU(AZoogiGameMode* G)
 		UE_LOG(LogZoogi, Log, TEXT("CARDS cpu tier=%s P%d tries %d of %d cards"), ZoogiProgress::TierName(CPUTier), P + 1, Order.Num(), Hand.Num());
 	}
 	const FZoogiCardContext Ctx = BuildContext(G);
+	// Oct 14 playtest fix: Crystal Collapse first when a breakable piece is within CPU range (the planner then aims at it).
+	{
+		const AZoogiBall* Me = G ? G->GetActiveBall() : nullptr;
+		bool bPieceNear = false;
+		if (Me && GetWorld()) for (TActorIterator<AZoogiArenaPiece> It(GetWorld()); It; ++It)
+			if (IsCollapseEligible(*It) && FVector2D::Distance(FVector2D(Me->BallLocation()), FVector2D(It->GetActorLocation())) < CPUCollapseRange) { bPieceNear = true; break; }
+		const int32 CI = Hand.IndexOfByPredicate([](const FZoogiCardInstance& I) { return I.CardId == NCrystalCPU; });
+		if (bPieceNear && CI != INDEX_NONE) { Order.Remove(CI); Order.Insert(CI, 0); UE_LOG(LogZoogi, Log, TEXT("CARDS cpu P%d: breakable piece in range -> crystal_collapse first"), P + 1); }
+	}
 	for (int32 i : Order) if (RulesV.Select(P, Hand[i].InstanceId, Ctx) == EZoogiCardResult::Ok) CovSelected.FindOrAdd(Hand[i].CardId)++;
 	FString Choice;
 	Commit(G, Choice);

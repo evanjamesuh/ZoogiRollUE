@@ -258,6 +258,36 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 	bShown = bShow;
 	if (bKeyChanged) { KeyPlayer = B->PlayerIndex; KeyTurn = S->Turn; }
 
+	// Oct 14 playtest fix: after a commit (CPUs commit in ~1 s) the hand is spent, so the tray went empty for the whole
+	// shot. Keep the cards played this turn in the tray (non-interactive, keys < 0) until the turn changes.
+	const FZoogiCardPlayerState* PlayedS = (!bShow && Cards && B && IsEnabled(G) && G->Phase != EZoogiPhase::Menu) ? Cards->Rules().Player(B->PlayerIndex) : nullptr;
+	const bool bShowPlayed = PlayedS && PlayedS->bCommitted && PlayedS->Committed.Num() > 0 && B->PlayerIndex == KeyPlayer && PlayedS->Turn == KeyTurn;
+	TArray<int32> PlayedOrder;
+	for (TPair<int32, FVis>& P : Vis)
+	{
+		if (P.Key >= 0) continue;
+		bool bKeep = false;
+		if (bShowPlayed) for (const FZoogiCardCommitted& K : PlayedS->Committed) if (-(K.Card.InstanceId + 1) == P.Key) bKeep = true;
+		if (!bKeep && P.Value.State == EVis::Hand) { P.Value.State = EVis::ToDiscard; Fly(P.Value, FVector2D(ViewSize.X - 330.f, ViewSize.Y - 40.f), CHDiscardDur, 0.f, 0.45f, 25.f, 140.f, false); }
+	}
+	if (bShowPlayed)
+	{
+		for (const FZoogiCardCommitted& K : PlayedS->Committed)
+		{
+			const int32 Key = -(K.Card.InstanceId + 1);
+			FVis* V = Vis.Find(Key);
+			if (!V)
+			{
+				FVis NV; NV.W = MakeCard(Key, K.Card.CardId); NV.Pos = TargetPos; NV.Scale = 0.3f; NV.Opacity = 0.f;
+				V = &Vis.Add(Key, NV);
+				Fly(*V, TargetPos, 0.35f, 0.15f * PlayedOrder.Num(), 1.f, 0.f, 80.f, true);
+			}
+			if (V->State == EVis::Hand) PlayedOrder.Add(Key);
+		}
+		if (!bShownPlayedLog) { UE_LOG(LogZoogi, Log, TEXT("CARDUI played P%d turn=%d n=%d shown in tray (energy %d/%d)"), KeyPlayer + 1, KeyTurn, PlayedS->Committed.Num(), PlayedS->Energy, Cards->Rules().Tune().EnergyPerTurn); bShownPlayedLog = true; }
+	}
+	else bShownPlayedLog = false;
+
 	int32 SelCost = 0;
 	const FZoogiCardContext Ctx = (bShow && Cards) ? Cards->BuildContext(G) : FZoogiCardContext();
 	if (bShow)
@@ -312,6 +342,7 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 	}
 	else bEnergyVisible = false;
 
+	if (!bShow && PlayedOrder.Num()) HandOrder = PlayedOrder;
 	// fan layout targets (bottom center, overlapping, tilted outward; hover = 1.3x, lift, 0 deg, neighbors spread)
 	const int32 N = HandOrder.Num();
 	const int32 HoverIdx = Hovered.IsValid() ? HandOrder.IndexOfByKey(Hovered->InstanceId) : INDEX_NONE;

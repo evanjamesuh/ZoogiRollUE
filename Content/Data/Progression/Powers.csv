@@ -6,4 +6,4 @@ frost_2_frost,Frost,Frost,free,true,0,0,frost
 void_1_precision,Precision,Void,starter,false,2,300,precision
 fire_2_ember,Ember,Fire,starter,false,3,400,ember
 void_2_crystal_collapse,Crystal Collapse,Void,starter,false,4,500,crystal_collapse
-void_2_titan_meteor,Titan Meteor,Void,starter,false,5,550,titan
+void_2_titan_meteor,Titan Meteor,Void,starter,false,6,550,titan

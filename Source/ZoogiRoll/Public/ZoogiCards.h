@@ -240,6 +240,8 @@ public:
 	EZoogiCardResult CanSelect(int32 P, int32 InstanceId, const FZoogiCardContext& Ctx) const;
 
 	const FZoogiCardPlayerState* Player(int32 P) const { return Players.IsValidIndex(P) ? &Players[P] : nullptr; }
+	/** Oct 14 dev flag -ZoogiForceCard: make sure Id is in P's open hand (renames the last drawn instance if missing). */
+	bool ForceInHand(int32 P, FName Id) { if (!Players.IsValidIndex(P) || Players[P].Hand.Num() == 0) return false; for (const FZoogiCardInstance& I : Players[P].Hand) if (I.CardId == Id) return false; Players[P].Hand.Last().CardId = Id; return true; }
 	int32 NumPlayers() const { return Players.Num(); }
 	const TArray<FZoogiCardEvent>& Events() const { return Ledger; }
 	const IZoogiCardBackend* Backend() const { return BackendPtr.Get(); }

@@ -56,6 +56,15 @@ bool UZoogiCardSubsystem::PowerRider(const AZoogiBall* B, FName Card) const
 	return C && *C == Card;
 }
 
+float UZoogiCardSubsystem::ShotMul(int32 P) const
+{
+	if (!Tune.bCards) return 1.f;
+	float M = 1.f;
+	if (const FZoogiFxArmed* S = Fx.Find(NStorm, P)) M *= S->A;
+	if (const FZoogiFxArmed* H = Fx.Find(NHeavy, P)) M *= H->A;
+	return M;
+}
+
 float UZoogiCardSubsystem::AimErrorMul(int32 P) const
 {
 	if (!Tune.bCards) return 1.f;

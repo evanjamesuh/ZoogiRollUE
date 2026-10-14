@@ -83,7 +83,7 @@ private:
 	TMap<int32, FVis> Vis;        // by card instance id
 	TArray<int32> HandOrder;      // instance ids in hand-slot order (Hand state only)
 	int32 KeyPlayer = -1, KeyTurn = -1;
-	bool bShown = false, bInteractive = false;
+	bool bShown = false, bInteractive = false, bShownPlayedLog = false;
 	TWeakObjectPtr<UZoogiCardWidget> Hovered, Dragging;
 	FVector2D Cursor = FVector2D::ZeroVector;
 	FGeometry CachedGeo;

@@ -156,10 +156,12 @@ int32 UZoogiTeamColumnWidget::NativePaint(const FPaintArgs& Args, const FGeometr
 		Txt(L + 6, X + W - 16.f * u - TxtW(Sc, 30.f + 14.f * Pop), Y + 6.f * u - 6.f * Pop * u, Sc, 30.f + 14.f * Pop, FMath::Lerp(PC + FLinearColor(0.25f, 0.25f, 0.25f, 0.f), Gold, Pop));
 		// stats line (the old scoreboard data)
 		int32 Hand = -1;
-		if (Cards) { if (const FZoogiCardPlayerState* PS2 = Cards->Rules().Player(B->PlayerIndex)) Hand = PS2->Hand.Num(); }
+		int32 Played = 0;
+		if (Cards) { if (const FZoogiCardPlayerState* PS2 = Cards->Rules().Player(B->PlayerIndex)) { Hand = PS2->Hand.Num(); if (PS2->bCommitted) Played = PS2->Committed.Num(); } }
 		else if (G->bArtifactMode && B->Artifact) Hand = B->Artifact->Hand.Num();
 		FString Stats = FString::Printf(TEXT("ORBS %d  KOS %d"), B->OrbsScored, B->KnockOuts);
 		if (Hand >= 0) Stats += FString::Printf(TEXT("  HAND %d"), Hand);
+		if (Played > 0 && B == ActB) Stats += FString::Printf(TEXT("  PLAYED %d"), Played); // Oct 14: cards committed this turn
 		Txt(L + 6, TX, Y + 66.f * u, Stats, 11.5f, FLinearColor(0.72f, 0.9f, 1.f));
 		// status effects + power indicators (chips)
 		TArray<TPair<FString, FLinearColor>> Chips;
