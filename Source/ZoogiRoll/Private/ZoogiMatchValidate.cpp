@@ -20,6 +20,8 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Crc.h"
 #include "Misc/Parse.h"
+#include "UnrealClient.h"
+#include "Misc/Paths.h"
 #include "Serialization/MemoryReader.h"
 #include "Serialization/MemoryWriter.h"
 #include "Serialization/NameAsStringProxyArchive.h"
@@ -234,6 +236,7 @@ void UZoogiMatchValidator::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 	FParse::Value(FCommandLine::Get(), TEXT("ZoogiMatchTest="), MatchTag);
+	FParse::Value(FCommandLine::Get(), TEXT("ZoogiDemoShots="), ShotDir);
 	FString Pts;
 	if (FParse::Value(FCommandLine::Get(), TEXT("ZoogiSaveTest="), Pts, false)) Pts.ParseIntoArray(SavePoints, TEXT(","));
 	if (!SavePoints.IsEmpty() && MatchTag.IsEmpty()) MatchTag = TEXT("save");
@@ -301,6 +304,20 @@ void UZoogiMatchValidator::Tick(float Dt)
 	if (G->TurnCounter != LastTurn) { LastTurn = G->TurnCounter; SinceTurn = 0.f; }
 	else { SinceTurn += Dt; MaxTurnGap = FMath::Max(MaxTurnGap, SinceTurn); }
 	if (SinceTurn > 90.f) { Check(false, FString::Printf(TEXT("stall: turn %d unchanged for 90 s"), G->TurnCounter)); Finish(G, TEXT("stall")); return; }
+	if (!ShotDir.IsEmpty())
+	{
+		if (G->Stage == EZoogiStage::Awaken && G->bAwakenDone && ShotTurn != G->TurnCounter && G->StageTime - G->AwakenDoneAt > 0.3f)
+		{ ShotTurn = G->TurnCounter; DemoShot(FString::Printf(TEXT("turn%02d_P%d_standby_cards"), G->TurnCounter, G->ActivePlayer + 1)); }
+		if (G->bFollowUpOffered && !bWasOfferedShot) DemoShot(FString::Printf(TEXT("turn%02d_followup_offer"), G->TurnCounter));
+		bWasOfferedShot = G->bFollowUpOffered;
+		UZoogiEpisodeDirector* Dd = UZoogiEpisodeDirector::Get(G);
+		const int32 Shown = Dd ? Dd->Played + Dd->Skipped : 0;
+		if (Dd && Dd->Current() && Dd->Current()->T > 1.5f)
+		{
+			const int32 K = FMath::Min(3, FMath::FloorToInt((Dd->Current()->T - 1.5f) / 3.f)); // one shot per 3 s perspective
+			if (Shown * 4 + K >= ShotEpN) { ShotEpN = Shown * 4 + K + 1; DemoShot(FString::Printf(TEXT("turn%02d_episode%d_view%d"), G->TurnCounter, Shown + 1, K + 1)); }
+		}
+	}
 	if (G->Phase == EZoogiPhase::GameOver) Finish(G, TEXT("game_over"));
 }
 
@@ -338,5 +355,14 @@ void UZoogiMatchValidator::Finish(AZoogiGameMode* G, const FString& Why)
 	UE_LOG(LogZoogi, Log, TEXT("MATCH_TEST case=%s result=%s why=%s mode=%s winner=%d turns=%d actions=%d follow_offers=%d follow_ups=%d shatters=%d recoveries=%d awakenings=%d episodes=%d played=%d branches=%s dup_inputs=%d max_turn_gap=%.0fs saves=%d/%d ledger=%08x cards=%08x final=%08x checks=%d fails=%d first_fail=\"%s\""),
 		*MatchTag, Fails == 0 ? TEXT("PASS") : TEXT("FAIL"), *Why, G->bComboMode ? TEXT("2v2") : TEXT("ffa"), Winner, G->TurnCounter, Actions, FollowOffers, Follow, Shatters, Recov, Awaken, EpEvents, D ? D->Played : 0,
 		Branches.IsEmpty() ? TEXT("-") : *Branches, G->DuplicateInputsIgnored, MaxTurnGap, SavesOk, SavesTried, SM && SM->Ledger ? SM->Ledger->Hash() : 0u, C ? C->Rules().StateHash() : 0u, Full, Checks, Fails, *FirstFail);
+	DemoShot(TEXT("result"));
 	QuitIn = 3.f;
+}
+
+void UZoogiMatchValidator::DemoShot(const FString& Name)
+{
+	if (ShotDir.IsEmpty()) return;
+	const FString F = FPaths::Combine(ShotDir, FString::Printf(TEXT("%02d_%s.png"), ++ShotN, *Name));
+	FScreenshotRequest::RequestScreenshot(F, true, false); // game viewport only (with the in-game HUD / UMG)
+	UE_LOG(LogZoogi, Log, TEXT("DEMO_SHOT %s"), *F);
 }

@@ -66,4 +66,7 @@ private:
 	float SinceTurn = 0.f, MaxTurnGap = 0.f, QuitIn = -1.f;
 	int32 FollowOffers = 0;
 	bool bWasOffered = false;
+	// -ZoogiDemoShots=<dir>: engine-viewport screenshots at Standby commits, follow-up offers, episode playback, result
+	FString ShotDir; int32 ShotN = 0, ShotTurn = -1, ShotEpN = 0; bool bWasOfferedShot = false;
+	void DemoShot(const FString& Name);
 };
