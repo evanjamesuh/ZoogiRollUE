@@ -7,6 +7,7 @@
 #include "ZoogiAnimeSubsystem.h"
 #include "ZoogiPowerUnlockSubsystem.h"
 #include "ZoogiProgressionSubsystem.h"
+#include "ZoogiStore.h"
 #include "ZoogiCards.h"
 #include "Misc/FileHelper.h"
 #include "ZoogiRoll.h"
@@ -602,7 +603,9 @@ void UZoogiMenuRoot::BuildTopBar(const FString& Title)
 		Image(Art(Icon), X + 6.f, 30.f, 24.f, 24.f, FLinearColor::White, EAnchor::Right);
 		Label(Val, X + 34.f, 31.f, W - 40.f, 26.f, 30, FLinearColor::White, EAnchor::Right);
 	};
-	Pill(670.f, 90.f, TEXT("icon_coin"), TEXT("12,480")); // placeholder coins
+	// No coin currency exists in the progression data (INTEGRATION.md has gems only): the old 12,480 coin pill now shows the equipped title.
+	if (const UZoogiProgressionSubsystem* TPS = UZoogiProgressionSubsystem::Get(this))
+		if (!TPS->Core().Get().EquippedTitle.IsNone()) Pill(700.f, 120.f, TEXT("icon_check"), TPS->Core().TitleName(TPS->Core().Get().EquippedTitle).ToUpper());
 	Pill(812.f, 70.f, TEXT("icon_gem"), FString::FromInt(U ? U->GetGems() : 0)); // progression wallet (earned + purchased)
 	Btn(FString(), ZMCNavy, [this]() { if (Top() != EZoogiScreen::Settings) Push(EZoogiScreen::Settings); }, 898.f, 20.f, 72.f, 52.f, 30, false, false, EAnchor::Right, TEXT("icon_gear"));
 }
@@ -820,6 +823,23 @@ void UZoogiMenuRoot::BuildPowers()
 	UZoogiPowerUnlockSubsystem* U = UZoogiPowerUnlockSubsystem::Get(this);
 	if (!G || !U || G->MenuPlayers.Num() == 0) return;
 	BuildTopBar(TEXT("POWERS"));
+	// Focus Element (Neutral XP goes here). The data decides where it may change (Economy.csv focus_change_context).
+	if (UZoogiProgressionSubsystem* FPS = UZoogiProgressionSubsystem::Get(this))
+	{
+		Label(FString::Printf(TEXT("FOCUS: %s"), *FString(ZoogiCards::ElementName(FPS->Core().Focus())).ToUpper()), 118.f, 444.f, 150.f, 16.f, 20, FLinearColor::White, EAnchor::Center, 0);
+		const EZoogiCardElement Els[] = { EZoogiCardElement::Void, EZoogiCardElement::Fire, EZoogiCardElement::Shock, EZoogiCardElement::Frost };
+		const FLinearColor ElC[] = { ZMCViolet, ZMCRed, ZMCGold, ZMCCyan };
+		for (int32 e = 0; e < 4; ++e)
+		{
+			const EZoogiCardElement E = Els[e];
+			Btn(FString(ZoogiCards::ElementName(E)).ToUpper(), ElC[e], [this, FPS, E]()
+			{
+				FString W;
+				if (!FPS->SetFocusElement(E, EZoogiPlayContext::Menu, W)) { bModal = true; bModalQuit = false; ModalTitle = TEXT("FOCUS"); ModalBody = W.IsEmpty() ? FString(TEXT("Focus changes in Standby.")) : W; }
+				bDirty = true;
+			}, 270.f + e * 62.f, 440.f, 58.f, 24.f, 16, FPS->Core().Focus() == E);
+		}
+	}
 	const TArray<FZoogiDef>& Roster = ZoogiUtil::Roster();
 	const FZoogiDef& Z = Roster[G->MenuPlayers[0].ZoogiIndex % Roster.Num()];
 	Panel(106.f, 86.f, 410.f, 354.f, ZMPNavy);
@@ -1099,31 +1119,128 @@ void UZoogiMenuRoot::BuildEvents()
 void UZoogiMenuRoot::BuildShop()
 {
 	BuildTopBar(TEXT("SHOP"));
-	TArray<FString> T = { TEXT("FEATURED"), TEXT("ZOOGIS"), TEXT("SKINS"), TEXT("GEMS") };
-	Tabs(T, ShopTab, 106.f, 82.f, 120.f, 8.f);
-	const TCHAR* IArt[] = { TEXT("sera"), TEXT("tavi"), TEXT("pinpoint"), TEXT("nightshade") };
-	const TCHAR* IName[] = { TEXT("SERA"), TEXT("TAVI"), TEXT("PINPOINT"), TEXT("NIGHTSHADE") };
-	const TCHAR* IIcon[] = { TEXT("icon_gem"), TEXT("icon_coin"), TEXT("icon_gem"), TEXT("icon_gem") };
-	const TCHAR* IPrice[] = { TEXT("450"), TEXT("8,000"), TEXT("300"), TEXT("600") };
-	for (int32 i = 0; i < 4; ++i)
+	TArray<FString> T = { TEXT("FEATURED"), TEXT("ZOOGIS"), TEXT("COSMETICS"), TEXT("GEMS"), TEXT("TITLES") };
+	const int32 PrevTab = ShopTab;
+	Tabs(T, ShopTab, 106.f, 82.f, 116.f, 6.f);
+	if (ShopTab != PrevTab) ShopSel = 0;
+	UZoogiProgressionSubsystem* PS = UZoogiProgressionSubsystem::Get(this);
+	if (ShopTab <= 1 || !PS)
 	{
-		const float X = 106.f + i * 152.f;
-		ImgTile(nullptr, FString(), [this, i]() { ShopSel = i; bDirty = true; }, X, 146.f, 144.f, 230.f, ShopSel == i, false, i == 2 ? ZMPTeal : ZMPNavy);
-		Image(Art(IArt[i]), X + 14.f, 158.f, 116.f, 106.f, FLinearColor::White, EAnchor::Center, 14.f);
-		Label(IName[i], X + 8.f, 272.f, 128.f, 20.f, 28, FLinearColor::White, EAnchor::Center, 1);
-		Btn(IPrice[i], ZMCGold, [this, i]() { ShopSel = i; ShowComingSoon(TEXT("Purchases need the economy backend (coins and gems are placeholders).")); }, X + 12.f, 308.f, 120.f, 52.f, 28, false, false, EAnchor::Center, IIcon[i]);
+		// FEATURED / ZOOGIS: still mockup content (no Zoogi / skin catalogue in the progression data yet).
+		const TCHAR* IArt[] = { TEXT("sera"), TEXT("tavi"), TEXT("pinpoint"), TEXT("nightshade") };
+		const TCHAR* IName[] = { TEXT("SERA"), TEXT("TAVI"), TEXT("PINPOINT"), TEXT("NIGHTSHADE") };
+		for (int32 i = 0; i < 4; ++i)
+		{
+			const float X = 106.f + i * 152.f;
+			ImgTile(nullptr, FString(), [this, i]() { ShopSel = i; bDirty = true; }, X, 146.f, 144.f, 230.f, ShopSel == i, false, i == 2 ? ZMPTeal : ZMPNavy);
+			Image(Art(IArt[i]), X + 14.f, 158.f, 116.f, 106.f, FLinearColor::White, EAnchor::Center, 14.f);
+			Label(IName[i], X + 8.f, 272.f, 128.f, 20.f, 28, FLinearColor::White, EAnchor::Center, 1);
+			Btn(TEXT("SOON"), ZMCGold, [this, i]() { ShopSel = i; ShowComingSoon(TEXT("Zoogi and skin offers arrive with their catalogue.")); }, X + 12.f, 308.f, 120.f, 52.f, 28);
+		}
+		return;
 	}
-	ImgTile(nullptr, FString(), [this]() { ShopSel = 4; bDirty = true; }, 714.f, 146.f, 206.f, 176.f, ShopSel == 4, false, ZMPViolet);
-	Label(TEXT("BUNDLE"), 728.f, 156.f, 100.f, 16.f, 24, FLinearColor::White);
-	Image(Art(TEXT("lars")), 770.f, 180.f, 96.f, 90.f, FLinearColor::White, EAnchor::Center, 48.f);
-	Btn(TEXT("BUY"), ZMCGold, [this]() { ShowComingSoon(TEXT("Purchases need the store verification server (coins are placeholders).")); }, 726.f, 340.f, 194.f, 100.f, 60, false, false, EAnchor::Center, TEXT("icon_gem"));
-	if (const UZoogiProgressionSubsystem* PS = UZoogiProgressionSubsystem::Get(this))
+	FZoogiProgression& C = PS->Core();
+	const FZoogiWallet& Wl = C.Get().Wallet;
+	Label(FString::Printf(TEXT("GEMS %d  (earned %d / purchased %d)  -  today %d, %d left, resets %s"), Wl.Total(), Wl.Earned(), Wl.Purchased(),
+		C.EarnedToday(), C.RemainingToday(), *C.NextResetLocal().ToString(TEXT("%H:%M"))), 106.f, 404.f, 600.f, 20.f, 19, FLinearColor::White, EAnchor::Center, 0);
+	auto Modal = [this](const FString& Title, const FString& Body) { bModal = true; bModalQuit = false; ModalTitle = Title; ModalBody = Body; bDirty = true; };
+	const FDateTime Now = FDateTime::UtcNow();
+
+	if (ShopTab == 3) // GEMS: packages from GemPackages.csv; buying goes through the platform store + FZoogiPurchaseService only
 	{
-		const FZoogiProgression& C = PS->Core();
-		const FZoogiWallet& Wl = C.Get().Wallet;
-		Label(FString::Printf(TEXT("GEMS %d  (earned %d / purchased %d)"), Wl.Total(), Wl.Earned(), Wl.Purchased()), 106.f, 392.f, 600.f, 20.f, 20, FLinearColor::White, EAnchor::Left);
-		Label(FString::Printf(TEXT("Today %d - %d left - resets %s"), C.EarnedToday(), C.RemainingToday(), *C.NextResetLocal().ToString(TEXT("%H:%M"))), 106.f, 414.f, 600.f, 20.f, 20, ZMTSoft, EAnchor::Left);
+		const TArray<FZoogiGemPackageRow>& Pk = C.Config().GemPackages;
+		const FLinearColor Fr[] = { ZMCTeal, ZMCNavy, ZMCViolet, ZMCGold };
+		for (int32 i = 0; i < Pk.Num() && i < 4; ++i)
+		{
+			const float X = 106.f + i * 152.f;
+			ImgTile(nullptr, FString(), [this, i]() { ShopSel = i; bDirty = true; }, X, 128.f, 144.f, 260.f, ShopSel == i, false, Fr[i % 4]);
+			Image(Art(TEXT("icon_gem")), X + 42.f, 146.f, 60.f, 60.f);
+			Label(FString::FromInt(Pk[i].Gems), X + 8.f, 214.f, 128.f, 40.f, 48, FLinearColor::White, EAnchor::Center, 1);
+			if (Pk[i].BonusGems > 0) Label(FString::Printf(TEXT("+%d BONUS"), Pk[i].BonusGems), X + 8.f, 258.f, 128.f, 20.f, 22, ZMCGold, EAnchor::Center, 1);
+			Label(FString::Printf(TEXT("$%.2f"), Pk[i].PriceUSD), X + 8.f, 300.f, 128.f, 30.f, 34, FLinearColor::White, EAnchor::Center, 1);
+		}
+		const int32 Sel = FMath::Clamp(ShopSel, 0, FMath::Max(0, Pk.Num() - 1));
+		if (!Pk.IsValidIndex(Sel)) return;
+		const FName PkgId = Pk[Sel].PackageId;
+		Btn(TEXT("BUY"), ZMCGold, [this, PS, PkgId, Modal]()
+		{
+			TSharedPtr<IZoogiStoreBackend> Store = FZoogiPurchaseService::MakePlatformBackend();
+			FString Why;
+			if (!Store.IsValid() || !Store->IsAvailable(Why)) { Modal(TEXT("STORE UNAVAILABLE"), Why.IsEmpty() ? FString(TEXT("No store on this platform yet.")) : Why); return; }
+			const FZoogiGemPackageRow* P = PS->Core().Config().GemPackages.FindByPredicate([PkgId](const FZoogiGemPackageRow& R) { return R.PackageId == PkgId; });
+			if (!P) return;
+			const FString Product = FZoogiPurchaseService::ProductIdFor(*P, Store->StoreName());
+			TWeakObjectPtr<UZoogiMenuRoot> WeakThis(this);
+			TWeakObjectPtr<UZoogiProgressionSubsystem> WeakPS(PS);
+			Store->Purchase(Product, [Store, WeakThis, WeakPS](bool bOk, const FZoogiStoreReceipt& R, const FString& Err)
+			{
+				UZoogiProgressionSubsystem* S = WeakPS.Get(); UZoogiMenuRoot* M = WeakThis.Get();
+				FString Out = Err;
+				EZoogiPurchaseOutcome O = EZoogiPurchaseOutcome::Rejected;
+				if (bOk && S) { O = FZoogiPurchaseService::ProcessReceipt(S->Core(), *Store, R, FDateTime::UtcNow(), Out); S->SaveProfile(); }
+				UE_LOG(LogZoogi, Log, TEXT("SHOP purchase %s -> %s (%s)"), *R.ProductId, FZoogiPurchaseService::OutcomeName(O), *Out);
+				if (M) { M->bModal = true; M->bModalQuit = false; M->ModalTitle = TEXT("PURCHASE"); M->ModalBody = FString::Printf(TEXT("%s %s"), FZoogiPurchaseService::OutcomeName(O), *Out); M->bDirty = true; }
+			});
+		}, 726.f, 340.f, 194.f, 100.f, 60, false, false, EAnchor::Center, TEXT("icon_gem"));
+		Label(TEXT("Real purchases need Evan's store accounts + verification server."), 726.f, 300.f, 194.f, 34.f, 16, ZMTSoft, EAnchor::Center, 0, true);
+		return;
 	}
+
+	if (ShopTab == 2) // COSMETICS (Cosmetics.csv): buy with gems (gems:<price>) or earn; one equipped per slot
+	{
+		const TArray<FZoogiCosmeticRow>& Cs = C.Config().Cosmetics;
+		for (int32 i = 0; i < Cs.Num() && i < 10; ++i)
+		{
+			const FZoogiCosmeticRow& Co = Cs[i];
+			const float X = 106.f + (i % 5) * 120.f, Y = 128.f + (i / 5) * 132.f;
+			const bool bOwned = C.Get().OwnedCosmetics.Contains(Co.Id);
+			const bool bEq = C.EquippedCosmetic(Co.Slot) == Co.Id;
+			ImgTile(nullptr, FString(), [this, i]() { ShopSel = i; bDirty = true; }, X, Y, 114.f, 124.f, ShopSel == i, !bOwned, bEq ? ZMCTeal : bOwned ? ZMCViolet : ZMCNavy);
+			Label(Co.Name.ToUpper(), X + 6.f, Y + 12.f, 102.f, 48.f, 20, FLinearColor::White, EAnchor::Center, 1, true);
+			Label(Co.Slot.ToString().Replace(TEXT("_"), TEXT(" ")), X + 6.f, Y + 64.f, 102.f, 16.f, 15, ZMTSoft, EAnchor::Center, 1);
+			Label(bEq ? FString(TEXT("EQUIPPED")) : bOwned ? FString(TEXT("OWNED")) : Co.Source.StartsWith(TEXT("gems:")) ? Co.Source.RightChop(5) + TEXT(" GEMS") : FString(TEXT("EARN")),
+				X + 6.f, Y + 92.f, 102.f, 18.f, 18, bEq || bOwned ? FLinearColor::White : ZMCGold, EAnchor::Center, 1);
+		}
+		const int32 Sel = FMath::Clamp(ShopSel, 0, FMath::Max(0, Cs.Num() - 1));
+		if (!Cs.IsValidIndex(Sel)) return;
+		const FZoogiCosmeticRow Co = Cs[Sel];
+		const bool bOwned = C.Get().OwnedCosmetics.Contains(Co.Id);
+		const bool bEq = C.EquippedCosmetic(Co.Slot) == Co.Id;
+		Panel(726.f, 128.f, 194.f, 200.f, ZMPViolet);
+		Label(Co.Name.ToUpper(), 738.f, 138.f, 170.f, 50.f, 30, FLinearColor::White, EAnchor::Center, 0, true);
+		Label(bOwned ? FString(TEXT("Owned")) : Co.Source.StartsWith(TEXT("gems:")) ? FString::Printf(TEXT("Costs %s gems"), *Co.Source.RightChop(5)) : FString::Printf(TEXT("Earned from %s"), *Co.Source),
+			738.f, 196.f, 170.f, 40.f, 18, FLinearColor::White, EAnchor::Center, 0, true);
+		if (!Co.bDisplayed) Label(TEXT("Visual not wired yet (needs art)"), 738.f, 246.f, 170.f, 30.f, 16, ZMCGold, EAnchor::Center, 0, true);
+		if (bOwned)
+			Btn(bEq ? TEXT("EQUIPPED") : TEXT("EQUIP"), ZMCTeal, [this, PS, Co, Now]() { if (PS->Core().EquipCosmetic(Co.Id, Now)) PS->SaveProfile(); bDirty = true; },
+				726.f, 340.f, 194.f, 100.f, 50, false, bEq, EAnchor::Center, bEq ? TEXT("icon_check") : FString());
+		else
+			Btn(TEXT("BUY"), ZMCGold, [this, PS, Co, Now, Modal]() { FString W; if (PS->Core().BuyCosmetic(Co.Id, Now, W)) PS->SaveProfile(); else Modal(TEXT("NOT YET"), W); bDirty = true; },
+				726.f, 340.f, 194.f, 100.f, 56, false, !Co.Source.StartsWith(TEXT("gems:")), EAnchor::Center, TEXT("icon_gem"));
+		return;
+	}
+
+	// TITLES (Titles.csv): earned via achievements; display only
+	const TArray<FZoogiTitleRow>& Ts = C.Config().Titles;
+	for (int32 i = 0; i < Ts.Num() && i < 10; ++i)
+	{
+		const FZoogiTitleRow& Ti = Ts[i];
+		const float X = 106.f + (i % 4) * 150.f, Y = 128.f + (i / 4) * 88.f;
+		const bool bOwned = C.Get().OwnedTitles.Contains(Ti.Id);
+		const bool bEq = C.Get().EquippedTitle == Ti.Id;
+		ImgTile(nullptr, FString(), [this, i]() { ShopSel = i; bDirty = true; }, X, Y, 144.f, 80.f, ShopSel == i, !bOwned, bEq ? ZMCTeal : bOwned ? ZMCViolet : ZMCNavy);
+		Label(Ti.Name.ToUpper(), X + 8.f, Y + 10.f, 128.f, 40.f, 22, FLinearColor::White, EAnchor::Center, 1, true);
+		Label(bEq ? FString(TEXT("EQUIPPED")) : bOwned ? FString(TEXT("OWNED")) : FString(TEXT("LOCKED")), X + 8.f, Y + 54.f, 128.f, 16.f, 16, bOwned ? FLinearColor::White : ZMCGold, EAnchor::Center, 1);
+	}
+	const int32 Sel = FMath::Clamp(ShopSel, 0, FMath::Max(0, Ts.Num() - 1));
+	if (!Ts.IsValidIndex(Sel)) return;
+	const FZoogiTitleRow Ti = Ts[Sel];
+	const bool bOwned = C.Get().OwnedTitles.Contains(Ti.Id);
+	Panel(726.f, 128.f, 194.f, 200.f, ZMPViolet);
+	Label(Ti.Name.ToUpper(), 738.f, 138.f, 170.f, 50.f, 30, FLinearColor::White, EAnchor::Center, 0, true);
+	Label(bOwned ? FString(TEXT("Shown on your results badge")) : FString::Printf(TEXT("Earned from achievement %s"), *Ti.Source.ToString()), 738.f, 196.f, 170.f, 60.f, 18, FLinearColor::White, EAnchor::Center, 0, true);
+	Btn(TEXT("EQUIP"), ZMCTeal, [this, PS, Ti, Now]() { if (PS->Core().EquipTitle(Ti.Id, Now)) PS->SaveProfile(); bDirty = true; },
+		726.f, 340.f, 194.f, 100.f, 50, false, !bOwned || C.Get().EquippedTitle == Ti.Id);
 }
 
 // ---- SOCIAL
