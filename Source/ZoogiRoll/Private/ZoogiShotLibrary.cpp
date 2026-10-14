@@ -1,4 +1,5 @@
 #include "ZoogiShotLibrary.h"
+#include "ZoogiEpisodeTypes.h"
 
 namespace ZoogiShot
 {
@@ -33,6 +34,9 @@ namespace ZoogiShot
 		case EZoogiShotType::TrickOrbRelay: return TEXT("TrickOrbRelay");
 		case EZoogiShotType::TrickBoundarySave: return TEXT("TrickBoundarySave");
 		case EZoogiShotType::Airborne: return TEXT("Airborne");
+		case EZoogiShotType::TrickDoubleBank: return TEXT("TrickDoubleBank");
+		case EZoogiShotType::TrickPowerBank: return TEXT("TrickPowerBank");
+		case EZoogiShotType::TrickRingOutLine: return TEXT("TrickRingOutLine");
 		default: return TEXT("Custom");
 		}
 	}
@@ -43,7 +47,7 @@ namespace ZoogiShot
 			EZoogiShotType::CloseUp, EZoogiShotType::LowAngleHero, EZoogiShotType::TopDownImpact, EZoogiShotType::Tracking, EZoogiShotType::PartnerTwoShot,
 			EZoogiShotType::ReactionEye, EZoogiShotType::ReactionSurprise, EZoogiShotType::ReactionComedy,
 			EZoogiShotType::TrickBank, EZoogiShotType::TrickWallRedirect, EZoogiShotType::TrickAllyBump, EZoogiShotType::TrickOrbRelay, EZoogiShotType::TrickBoundarySave,
-			EZoogiShotType::Airborne };
+			EZoogiShotType::Airborne, EZoogiShotType::TrickDoubleBank, EZoogiShotType::TrickPowerBank, EZoogiShotType::TrickRingOutLine };
 		return All;
 	}
 
@@ -53,7 +57,8 @@ namespace ZoogiShot
 		{
 		case EZoogiShotType::ReactionEye: case EZoogiShotType::ReactionSurprise: case EZoogiShotType::ReactionComedy: return 1;
 		case EZoogiShotType::TrickBank: case EZoogiShotType::TrickWallRedirect: case EZoogiShotType::TrickAllyBump:
-		case EZoogiShotType::TrickOrbRelay: case EZoogiShotType::TrickBoundarySave: return 2;
+		case EZoogiShotType::TrickOrbRelay: case EZoogiShotType::TrickBoundarySave:
+		case EZoogiShotType::TrickDoubleBank: case EZoogiShotType::TrickPowerBank: case EZoogiShotType::TrickRingOutLine: return 2;
 		case EZoogiShotType::Airborne: return 3;
 		default: return 0;
 		}
@@ -66,7 +71,51 @@ namespace ZoogiShot
 
 	bool UsesEventPoint(EZoogiShotType Type)
 	{
-		return Type == EZoogiShotType::TrickBank || Type == EZoogiShotType::TrickWallRedirect || Type == EZoogiShotType::TrickBoundarySave;
+		return Type == EZoogiShotType::TrickBank || Type == EZoogiShotType::TrickWallRedirect || Type == EZoogiShotType::TrickBoundarySave
+			|| Type == EZoogiShotType::TrickDoubleBank || Type == EZoogiShotType::TrickPowerBank || Type == EZoogiShotType::TrickOrbRelay;
+	}
+
+	EZoogiShotType ShotForTrickTag(EZoogiEpisodeTag Tag, bool bPower)
+	{
+		switch (Tag)
+		{
+		case EZoogiEpisodeTag::Bank: return bPower ? EZoogiShotType::TrickPowerBank : EZoogiShotType::TrickBank;
+		case EZoogiEpisodeTag::DoubleBank: return bPower ? EZoogiShotType::TrickPowerBank : EZoogiShotType::TrickDoubleBank;
+		case EZoogiEpisodeTag::WallRedirect: return EZoogiShotType::TrickWallRedirect;
+		case EZoogiEpisodeTag::AllyBump: return EZoogiShotType::TrickAllyBump;
+		case EZoogiEpisodeTag::OrbRelay: return EZoogiShotType::TrickOrbRelay;
+		case EZoogiEpisodeTag::BoundarySave: return EZoogiShotType::TrickBoundarySave;
+		case EZoogiEpisodeTag::RingOut: return EZoogiShotType::TrickRingOutLine;
+		case EZoogiEpisodeTag::PowerHit: return EZoogiShotType::TrickPowerBank;
+		default: return EZoogiShotType::LowAngleHero;
+		}
+	}
+
+	EZoogiShotType ShotForTrickTags(const TArray<EZoogiEpisodeTag>& Tags)
+	{
+		const bool bPower = Tags.Contains(EZoogiEpisodeTag::PowerHit);
+		// most specific first: a power bank, then the geometry tricks, then ring-out line; PowerHit alone is not a trick
+		static const EZoogiEpisodeTag Order[] = { EZoogiEpisodeTag::DoubleBank, EZoogiEpisodeTag::Bank, EZoogiEpisodeTag::BoundarySave,
+			EZoogiEpisodeTag::OrbRelay, EZoogiEpisodeTag::AllyBump, EZoogiEpisodeTag::WallRedirect, EZoogiEpisodeTag::RingOut };
+		for (EZoogiEpisodeTag T : Order)
+			if (Tags.Contains(T)) return ShotForTrickTag(T, bPower);
+		return EZoogiShotType::LowAngleHero;
+	}
+
+	const TCHAR* AngleDescription(EZoogiShotType Type)
+	{
+		switch (Type)
+		{
+		case EZoogiShotType::TrickBank: return TEXT("on the wall normal, raised: in and out lines mirror around the contact");
+		case EZoogiShotType::TrickDoubleBank: return TEXT("high, perpendicular to the zigzag: both contacts + the Z path in frame");
+		case EZoogiShotType::TrickPowerBank: return TEXT("tight, low on the contact, tinted in the power colour with a jolt");
+		case EZoogiShotType::TrickWallRedirect: return TEXT("behind the new line at the wall, looking down it");
+		case EZoogiShotType::TrickAllyBump: return TEXT("low two-shot at the contact, ally in the foreground");
+		case EZoogiShotType::TrickOrbRelay: return TEXT("chases the orb from behind along its path toward the receiver");
+		case EZoogiShotType::TrickBoundarySave: return TEXT("outside the rim at floor height, lip in the foreground");
+		case EZoogiShotType::TrickRingOutLine: return TEXT("behind the Zoogi down the exit vector, sinking toward the void");
+		default: return TEXT("");
+		}
 	}
 
 	const TCHAR* OutputName(EZoogiShotOutput Output)
@@ -149,48 +198,75 @@ FZoogiShotSpec UZoogiShotLibrary::MakeDefault(EZoogiShotType Type)
 		S.LookOffset = FVector(0, 0, 6.f); S.SaturationMul = 1.12f; S.ContrastMul = 1.03f;
 		break;
 
-	// ---------------------------------------------------------------- Tier 2: trick shots
+	// ---------------------------------------------------------------- Tier 2: trick shots (each one its own angle)
 	case EZoogiShotType::TrickBank:
-		// High side-on view across the shot path, framing the shooter and the bank point.
-		S.Duration = 2.2f; S.EaseIn = 0.35f; S.EaseOut = 0.4f;
-		S.Heading = EZoogiShotHeading::FocusToEvent; S.YawOffset = 90.f; S.OrbitDegrees = 10.f;
-		S.EventBias = 0.5f; S.bFrameEvent = true; S.SubjectRadius = 70.f; S.MaxFOV = 90.f;
-		S.Pitch = 40.f; S.PitchEnd = 34.f; S.Distance = 820.f; S.DistanceEnd = 700.f;
-		S.FOV = 52.f; S.FOVEnd = 48.f; S.TrackingLag = 4.f; S.LookOffset = FVector::ZeroVector;
+		// Raised, out on the wall's normal through the contact, looking back at it: the incoming and outgoing lines open
+		// as a symmetric V around the bank point (angle in = angle out reads at a glance). Shooter kept in frame.
+		S.Duration = 2.1f; S.EaseIn = 0.3f; S.EaseOut = 0.4f;
+		S.Heading = EZoogiShotHeading::EventNormal; S.YawOffset = 0.f; S.OrbitDegrees = 0.f;
+		S.EventBias = 0.85f; S.bFrameBoth = false; S.bFrameEvent = true; S.SubjectRadius = 70.f; S.MaxFOV = 85.f;
+		S.Pitch = 38.f; S.PitchEnd = 34.f; S.Distance = 900.f; S.DistanceEnd = 800.f;
+		S.FOV = 50.f; S.FOVEnd = 48.f; S.TrackingLag = 0.f; S.LookOffset = FVector::ZeroVector;
+		break;
+	case EZoogiShotType::TrickDoubleBank:
+		// High and square-on to the line between the two contacts: both bank points and the zigzag of the path in one frame.
+		S.Duration = 2.4f; S.EaseIn = 0.35f; S.EaseOut = 0.4f;
+		S.Heading = EZoogiShotHeading::EventChord; S.YawOffset = 0.f; S.OrbitDegrees = 6.f;
+		S.EventBias = 0.5f; S.SecondEventBias = 0.34f; S.bFrameEvent = true; S.bFrameSecondEvent = true; S.SubjectRadius = 80.f; S.MaxFOV = 95.f;
+		S.Pitch = 62.f; S.PitchEnd = 58.f; S.Distance = 1350.f; S.DistanceEnd = 1250.f;
+		S.FOV = 55.f; S.FOVEnd = 52.f; S.LookOffset = FVector::ZeroVector;
+		break;
+	case EZoogiShotType::TrickPowerBank:
+		// Tight and low on the contact itself, a little off the normal, in the power's colour with an impact jolt.
+		S.Duration = 1.7f; S.EaseIn = 0.2f; S.EaseOut = 0.35f;
+		S.Heading = EZoogiShotHeading::EventNormal; S.YawOffset = 42.f; S.OrbitDegrees = -8.f;
+		S.EventBias = 0.9f; S.PivotOffset = FVector(0, 0, 10.f);
+		S.Pitch = 20.f; S.PitchEnd = 15.f; S.Distance = 460.f; S.DistanceEnd = 360.f;
+		S.FOV = 50.f; S.FOVEnd = 42.f; S.MoveEase = EZoogiShotEase::ExpoOut; S.LookOffset = FVector::ZeroVector;
+		S.ShakeDeg = 0.8f; S.ShakeHz = 9.f; S.ShakeDecay = 3.f;
+		S.AccentStrength = 0.35f; S.ContrastMul = 1.08f; S.VignetteAdd = 0.1f;
 		break;
 	case EZoogiShotType::TrickWallRedirect:
-		// Low, near the wall, looking back at the approach; pulls out as the Zoogi leaves on the new line.
+		// At the wall, behind the new direction, looking down the new line the Zoogi leaves on.
 		S.Duration = 2.0f; S.EaseIn = 0.3f; S.EaseOut = 0.4f;
-		S.Heading = EZoogiShotHeading::FocusToEvent; S.YawOffset = 135.f; S.OrbitDegrees = -10.f;
-		S.EventBias = 0.7f; S.bFrameEvent = true; S.SubjectRadius = 60.f;
-		S.Pitch = 9.f; S.PitchEnd = 12.f; S.Distance = 420.f; S.DistanceEnd = 480.f;
-		S.FOV = 58.f; S.FOVEnd = 62.f; S.TrackingLag = 5.f; S.Roll = -3.f; S.LookOffset = FVector(0, 0, 10.f);
+		S.Heading = EZoogiShotHeading::ExitDirection; S.YawOffset = 0.f; S.OrbitDegrees = 0.f;
+		S.EventBias = 0.9f; S.DirectionLead = 260.f; S.bFrameBoth = false; S.SubjectRadius = 60.f;
+		S.Pitch = 13.f; S.PitchEnd = 17.f; S.Distance = 520.f; S.DistanceEnd = 600.f;
+		S.FOV = 60.f; S.FOVEnd = 64.f; S.LookOffset = FVector(0, 0, 10.f);
 		S.ContrastMul = 1.05f;
 		break;
 	case EZoogiShotType::TrickAllyBump:
-		// Tight side two-shot on the contact with a small jolt.
+		// Low two-shot at the contact from behind the ally (ally big in the foreground, shooter coming in behind), jolt.
 		S.Duration = 1.8f; S.EaseIn = 0.25f; S.EaseOut = 0.35f;
-		S.Heading = EZoogiShotHeading::FocusToSecondary; S.YawOffset = 70.f; S.OrbitDegrees = 8.f;
-		S.SecondaryBias = 0.55f; S.bFrameBoth = true;
-		S.Pitch = 10.f; S.PitchEnd = 9.f; S.Distance = 470.f; S.DistanceEnd = 400.f;
-		S.FOV = 46.f; S.FOVEnd = 42.f; S.Roll = -2.f; S.LookOffset = FVector(0, 0, 10.f);
+		S.Heading = EZoogiShotHeading::FocusToSecondary; S.YawOffset = 180.f + 28.f; S.OrbitDegrees = 6.f;
+		S.SecondaryBias = 0.62f; S.bFrameBoth = true; S.FramePadding = 1.2f; S.SubjectRadius = 55.f;
+		S.Pitch = 4.f; S.PitchEnd = 5.f; S.Distance = 330.f; S.DistanceEnd = 290.f;
+		S.FOV = 50.f; S.FOVEnd = 46.f; S.Roll = -2.f; S.LookOffset = FVector(0, 0, 20.f);
 		S.ShakeDeg = 0.5f; S.ShakeHz = 8.f; S.ShakeDecay = 2.5f;
 		break;
 	case EZoogiShotType::TrickOrbRelay:
-		// Over the relaying Zoogi's shoulder toward the orb / partner, easing back as it travels.
+		// Chases the orb from behind along its path (shooter -> receiver), the receiver ahead in frame.
 		S.Duration = 2.2f; S.EaseIn = 0.3f; S.EaseOut = 0.4f;
-		S.Heading = EZoogiShotHeading::FocusToSecondary; S.YawOffset = 20.f;
-		S.SecondaryBias = 0.3f; S.bFrameBoth = true; S.PivotOffset = FVector(0, 0, 15.f);
-		S.Pitch = 15.f; S.PitchEnd = 13.f; S.Distance = 380.f; S.DistanceEnd = 450.f;
-		S.FOV = 50.f; S.FOVEnd = 54.f; S.TrackingLag = 5.f; S.LookOffset = FVector(0, 0, 10.f);
+		S.Heading = EZoogiShotHeading::ExitDirection; S.YawOffset = 14.f;
+		S.SecondaryBias = 1.f; S.EventBias = 0.3f; S.bFrameEvent = true; S.SubjectRadius = 55.f;
+		S.Pitch = 20.f; S.PitchEnd = 16.f; S.Distance = 520.f; S.DistanceEnd = 600.f;
+		S.FOV = 54.f; S.FOVEnd = 56.f; S.TrackingLag = 5.f; S.LookOffset = FVector(0, 0, 10.f);
 		break;
 	case EZoogiShotType::TrickBoundarySave:
-		// From just outside the rim, low, looking back in at the Zoogi teetering on the edge with the arena behind.
+		// Outside the rim, camera at floor height, looking back in: the lip of the arena fills the foreground.
 		S.Duration = 2.0f; S.EaseIn = 0.3f; S.EaseOut = 0.4f;
-		S.Heading = EZoogiShotHeading::FocusToEvent; S.YawOffset = 25.f; S.OrbitDegrees = -8.f;
-		S.Pitch = 5.f; S.PitchEnd = 8.f; S.Distance = 320.f; S.DistanceEnd = 360.f;
-		S.FOV = 50.f; S.FOVEnd = 55.f; S.Roll = 3.f; S.LookOffset = FVector(0, 0, 12.f);
+		S.Heading = EZoogiShotHeading::FocusToEvent; S.YawOffset = 12.f; S.OrbitDegrees = -6.f;
+		S.Pitch = 1.f; S.PitchEnd = 3.f; S.Distance = 280.f; S.DistanceEnd = 320.f; S.PivotOffset = FVector(0, 0, -15.f);
+		S.FOV = 48.f; S.FOVEnd = 52.f; S.Roll = 3.f; S.LookOffset = FVector(0, 0, 18.f);
 		S.VignetteAdd = 0.12f; S.SaturationMul = 1.05f;
+		break;
+	case EZoogiShotType::TrickRingOutLine:
+		// Behind the Zoogi on its exit vector, looking out past the rim into the void, sinking toward the horizon.
+		S.Duration = 2.1f; S.EaseIn = 0.3f; S.EaseOut = 0.4f;
+		S.Heading = EZoogiShotHeading::ExitDirection; S.YawOffset = 0.f;
+		S.DirectionLead = 160.f; S.Pitch = 24.f; S.PitchEnd = 14.f; S.Distance = 480.f; S.DistanceEnd = 580.f;
+		S.FOV = 60.f; S.FOVEnd = 66.f; S.TrackingLag = 4.f; S.LookOffset = FVector(0, 0, -10.f);
+		S.VignetteAdd = 0.15f; S.SaturationMul = 0.92f; S.ContrastMul = 1.06f;
 		break;
 
 	// ---------------------------------------------------------------- Tier 3

@@ -1,4 +1,5 @@
 #include "ZoogiShotTest.h"
+#include "ZoogiEpisodeTypes.h"
 #include "ZoogiRoll.h"
 #include "ZoogiGameMode.h"
 #include "ZoogiBall.h"
@@ -13,6 +14,8 @@
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/StaticMeshActor.h"
+#include "EngineUtils.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/GameViewportClient.h"
 #include "Engine/Engine.h"
@@ -338,6 +341,16 @@ AStaticMeshActor* AZoogiShotTestDriver::SpawnProp(const FVector& At, float Scale
 	return A;
 }
 
+void AZoogiShotTestDriver::TintProp(AStaticMeshActor* A, const FLinearColor& C)
+{
+	if (!A) return;
+	UMaterialInterface* Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+	if (!Base) return;
+	UMaterialInstanceDynamic* MI = UMaterialInstanceDynamic::Create(Base, A);
+	MI->SetVectorParameterValue(TEXT("Color"), C);
+	A->GetStaticMeshComponent()->SetMaterial(0, MI);
+}
+
 void AZoogiShotTestDriver::StartArc(const FVector& From)
 {
 	if (!ArcProp) return;
@@ -349,6 +362,13 @@ void AZoogiShotTestDriver::StartArc(const FVector& From)
 	MaxArcHeight = 0.f;
 	ArcProp->SetActorLocation(ArcStart);
 	ArcProp->SetActorHiddenInGame(false);
+}
+
+static FVector2D RimDir(const FVector& FL)
+{
+	FVector2D U(FL.X, FL.Y);
+	if (U.Size() < 1.f) U = FVector2D(1.f, 0.f);
+	return U.GetSafeNormal();
 }
 
 FZoogiShotHandle AZoogiShotTestDriver::PlayCaseShot(EZoogiShotType Type, EZoogiShotOutput Output, FString& OutSetup)
@@ -380,13 +400,27 @@ FZoogiShotHandle AZoogiShotTestDriver::PlayCaseShot(EZoogiShotType Type, EZoogiS
 			OutSetup = TEXT("focus = kinematic test prop on a ballistic arc (game time, so slow-mo slows it)");
 		}
 		break;
-	case EZoogiShotType::PartnerTwoShot:
 	case EZoogiShotType::TrickAllyBump:
+		if (F)
+		{
+			// The bumped ally right at contact: a Zoogi-sized prop touching P1 (centres 100 cm apart), off the view axis.
+			const FVector FL = F->GetActorLocation();
+			const FVector Side = FRotator(0.f, Snap0.POV.Rotation.Yaw + 60.f, 0.f).Vector();
+			if (TempProp) { TempProp->Destroy(); TempProp = nullptr; }
+			TempProp = SpawnProp(FL + Side * 100.f, 1.f);
+			TintProp(TempProp, FLinearColor(1.f, 0.55f, 0.75f));
+			UseS = TempProp;
+			if (UseS) { P.bHasEventLocation = true; P.EventLocation = FL + Side * 50.f; }
+			OutSetup = FString::Printf(TEXT("ally = Zoogi-sized prop touching P1 at %s, contact = %s"), *(FL + Side * 100.f).ToString(), *P.EventLocation.ToString());
+		}
+		break;
+	case EZoogiShotType::PartnerTwoShot:
 		UseS = SecondaryFor(F);
 		OutSetup = FString::Printf(TEXT("secondary = %s"), *GetNameSafe(UseS));
 		break;
 	case EZoogiShotType::TrickOrbRelay:
 	{
+		// Orb = the relayed orb nearest P1; receiver = the Zoogi nearest that orb; orb path = orb -> receiver.
 		float BestD = TNumericLimits<float>::Max();
 		if (G && F)
 		{
@@ -398,26 +432,101 @@ FZoogiShotHandle AZoogiShotTestDriver::PlayCaseShot(EZoogiShotType Type, EZoogiS
 			}
 		}
 		if (!UseS) UseS = SecondaryFor(F);
-		OutSetup = FString::Printf(TEXT("secondary (relay target) = %s"), *GetNameSafe(UseS));
+		AActor* Recv = nullptr;
+		if (G && UseS)
+		{
+			float RB = TNumericLimits<float>::Max();
+			for (AZoogiBall* B : G->Balls)
+			{
+				if (!B || B == F || B->bOut) continue;
+				const float Dd = FVector::Dist(B->BallLocation(), UseS->GetActorLocation());
+				if (Dd < RB) { RB = Dd; Recv = B; }
+			}
+		}
+		if (UseS && Recv)
+		{
+			P.bHasEventLocation = true; P.EventLocation = Recv->GetActorLocation();
+			P.bHasDirection = true; P.Direction = Recv->GetActorLocation() - UseS->GetActorLocation();
+		}
+		OutSetup = FString::Printf(TEXT("orb = %s, receiver = %s, orb path = %s"), *GetNameSafe(UseS), *GetNameSafe(Recv), *P.Direction.GetSafeNormal().ToString());
 		break;
 	}
 	case EZoogiShotType::TrickBank:
+	case EZoogiShotType::TrickPowerBank:
+	case EZoogiShotType::TrickDoubleBank:
 	case EZoogiShotType::TrickWallRedirect:
 		if (F)
 		{
-			// A point on the rim off to one side of P1, standing in for the bank / wall contact point.
+			// Contacts on the rim wall off to the side of P1 (rim normal points at the arena centre).
 			const FVector FL = F->GetActorLocation();
-			FVector2D U(FL.X, FL.Y);
-			if (U.Size() < 1.f) U = FVector2D(FRotator(0.f, Snap0.POV.Rotation.Yaw, 0.f).Vector());
-			U.Normalize();
-			const FVector2D R = U.GetRotated(Type == EZoogiShotType::TrickBank ? 35.f : -50.f) * (AZoogiArena::ActiveKnockoffR * 0.92f);
-			P.bHasEventLocation = true;
-			P.EventLocation = FVector(R.X, R.Y, FL.Z);
-			OutSetup = FString::Printf(TEXT("event point (rim) = %s"), *P.EventLocation.ToString());
+			// Real wall contact: trace from P1 toward the rim (visibility), ball centre one radius off the hit surface.
+			auto Rim = [&](float Deg, FVector* OutN)
+			{
+				const FVector2D U = RimDir(FL).GetRotated(Deg);
+				const FVector To(U.X * AZoogiArena::ActiveKnockoffR * 1.15f, U.Y * AZoogiArena::ActiveKnockoffR * 1.15f, FL.Z);
+				FHitResult Hit;
+				FCollisionQueryParams Q(TEXT("ShotTestWall"), false);
+				for (TActorIterator<AZoogiBall> It(GetWorld()); It; ++It) Q.AddIgnoredActor(*It);
+				for (TActorIterator<AZoogiOrb> It(GetWorld()); It; ++It) Q.AddIgnoredActor(*It);
+				FVector N = FVector(-U.X, -U.Y, 0.f);
+				FVector L = FVector(U.X, U.Y, 0.f) * AZoogiArena::ActiveKnockoffR * 0.92f + FVector(0, 0, FL.Z);
+				if (GetWorld()->LineTraceSingleByChannel(Hit, FVector(U.X * 300.f, U.Y * 300.f, FL.Z), To, ECC_Visibility, Q) && Hit.bBlockingHit)
+				{
+					N = FVector(Hit.ImpactNormal.X, Hit.ImpactNormal.Y, 0.f).GetSafeNormal();
+					if (N.IsNearlyZero()) N = FVector(-U.X, -U.Y, 0.f);
+					L = Hit.ImpactPoint + N * 50.f; L.Z = FL.Z;
+				}
+				if (OutN) *OutN = N;
+				return L;
+			};
+			FVector N1;
+			const FVector E1 = Rim(Type == EZoogiShotType::TrickWallRedirect ? -50.f : 35.f, &N1);
+			P.bHasEventLocation = true; P.EventLocation = E1;
+			P.bHasEventNormal = true; P.EventNormal = N1;
+			OutSetup = FString::Printf(TEXT("bank contact (rim) = %s normal = %s"), *E1.ToString(), *P.EventNormal.ToString());
+			// the core's contact glow ring at the real contact (as FallbackGlow spawns it; power colour for a power bank)
+			if (TempFX) { TempFX->Destroy(); TempFX = nullptr; }
+			TempFX = AZoogiFX::Spawn(GetWorld(), FVector(E1.X, E1.Y, 6.f), Type == EZoogiShotType::TrickPowerBank ? FLinearColor(0.35f, 0.75f, 1.f) : FLinearColor(1.f, 0.82f, 0.32f), 110.f, 4.f, true, 5.f);
+			if (Type == EZoogiShotType::TrickDoubleBank)
+			{
+				P.bHasSecondEventLocation = true; P.SecondEventLocation = Rim(100.f, nullptr);
+				OutSetup += FString::Printf(TEXT(", 2nd contact = %s"), *P.SecondEventLocation.ToString());
+			}
+			if (Type == EZoogiShotType::TrickPowerBank)
+			{
+				P.bHasAccentColor = true; P.AccentColor = FLinearColor(0.35f, 0.75f, 1.f);
+				OutSetup += TEXT(", power colour = frost blue");
+			}
+			if (Type == EZoogiShotType::TrickWallRedirect)
+			{
+				const FVector In = (E1 - FL).GetSafeNormal2D();
+				const FVector N = P.EventNormal;
+				P.bHasDirection = true; P.Direction = In - 2.f * FVector::DotProduct(In, N) * N;
+				OutSetup += FString::Printf(TEXT(", new line = %s"), *P.Direction.ToString());
+			}
 		}
 		break;
 	case EZoogiShotType::TrickBoundarySave:
-		OutSetup = TEXT("event point = arena centre (default)");
+	case EZoogiShotType::TrickRingOutLine:
+		if (F)
+		{
+			// Kinematic, collision-free Zoogi-sized prop: at the lip (boundary save) or heading out (ring-out line).
+			const FVector FL = F->GetActorLocation();
+			const bool bSave = Type == EZoogiShotType::TrickBoundarySave;
+			const FVector2D U = RimDir(FL).GetRotated(bSave ? 0.f : 25.f);
+			const float R = AZoogiArena::ActiveKnockoffR * (bSave ? 0.9f : 0.72f);
+			if (TempProp) { TempProp->Destroy(); TempProp = nullptr; }
+			TempProp = SpawnProp(FVector(U.X * R, U.Y * R, FL.Z), 1.f);
+			TintProp(TempProp, bSave ? FLinearColor(1.f, 0.85f, 0.2f) : FLinearColor(1.f, 0.35f, 0.3f));
+			if (TempProp) UseF = TempProp;
+			if (!bSave)
+			{
+				const FVector2D Out = U.GetRotated(12.f);
+				P.bHasDirection = true; P.Direction = FVector(Out.X, Out.Y, 0.f);
+			}
+			OutSetup = FString::Printf(TEXT("focus = Zoogi-sized prop at %s (r=%.0f)%s"), *(UseF ? UseF->GetActorLocation().ToString() : FString()), R,
+				bSave ? TEXT(", event = arena centre (default)") : *FString::Printf(TEXT(", exit vector = %s"), *P.Direction.ToString()));
+		}
 		break;
 	default: break;
 	}
@@ -443,12 +552,62 @@ void AZoogiShotTestDriver::Result(bool bPass, const FString& What, const FString
 	UE_LOG(LogZoogi, Log, TEXT("%s"), *Line);
 }
 
+// ------------------------------------------------------------------ trick lookup (pure, no Unreal job state)
+
+void AZoogiShotTestDriver::CheckTrickLookup()
+{
+	using T = EZoogiEpisodeTag;
+	struct FRow { TArray<T> Tags; EZoogiShotType Want; };
+	const FRow Rows[] = {
+		{ { T::Bank }, EZoogiShotType::TrickBank },
+		{ { T::DoubleBank, T::Bank }, EZoogiShotType::TrickDoubleBank },
+		{ { T::Bank, T::PowerHit }, EZoogiShotType::TrickPowerBank },
+		{ { T::DoubleBank, T::PowerHit }, EZoogiShotType::TrickPowerBank },
+		{ { T::WallRedirect }, EZoogiShotType::TrickWallRedirect },
+		{ { T::AllyBump }, EZoogiShotType::TrickAllyBump },
+		{ { T::OrbRelay }, EZoogiShotType::TrickOrbRelay },
+		{ { T::BoundarySave, T::NearMiss }, EZoogiShotType::TrickBoundarySave },
+		{ { T::RingOut }, EZoogiShotType::TrickRingOutLine },
+		{ { T::PowerHit }, EZoogiShotType::LowAngleHero },
+		{ { T::FunnyBounce }, EZoogiShotType::LowAngleHero },
+	};
+	FString Bad;
+	for (const FRow& R : Rows)
+	{
+		const EZoogiShotType Got = ZoogiShot::ShotForTrickTags(R.Tags);
+		FString TagStr;
+		for (T Tg : R.Tags) TagStr += FString(ZoogiEpisode::TagName(Tg)) + TEXT("+");
+		UE_LOG(LogZoogi, Log, TEXT("ZOOGI SHOTTEST   lookup %s -> %s"), *TagStr.LeftChop(1), ZoogiShot::TypeName(Got));
+		if (Got != R.Want) Bad += FString::Printf(TEXT(" %s->%s(want %s)"), *TagStr.LeftChop(1), ZoogiShot::TypeName(Got), ZoogiShot::TypeName(R.Want));
+	}
+	Result(Bad.IsEmpty(), TEXT("TrickLookup_ShotForTrickTags"), Bad.IsEmpty() ? FString::Printf(TEXT("%d tag sets mapped as expected"), (int32)UE_ARRAY_COUNT(Rows)) : Bad);
+
+	// FillTrickParams from a synthetic truth record (two shooter wall contacts, then a floor roll).
+	FZoogiGameplayTruthRecord Tr;
+	Tr.Actor = 0; Tr.LaunchVelocity = FVector(1000, 0, 0);
+	auto Add = [&Tr](float Tm, int32 Body, EZoogiContactKind K, const FVector& L, const FVector& N)
+	{ FZoogiContactEvent E; E.Time = Tm; E.Body = Body; E.Kind = K; E.Location = L; E.Normal = N; E.bMeaningful = true; Tr.Contacts.Add(E); };
+	Add(0.4f, 0, EZoogiContactKind::Wall, FVector(1400, 0, 50), FVector(-1, 0, 0));
+	Add(0.9f, 0, EZoogiContactKind::Wall, FVector(0, 1400, 50), FVector(0, -1, 0));
+	Add(1.5f, 0, EZoogiContactKind::Zoogi, FVector(-600, 600, 50), FVector::ZeroVector);
+	FZoogiShotPlayParams PB, PD, PW;
+	UZoogiEpisodeCameraDirector::FillTrickParams(EZoogiShotType::TrickBank, Tr, PB);
+	UZoogiEpisodeCameraDirector::FillTrickParams(EZoogiShotType::TrickDoubleBank, Tr, PD);
+	UZoogiEpisodeCameraDirector::FillTrickParams(EZoogiShotType::TrickWallRedirect, Tr, PW);
+	const bool bOk = PB.bHasEventLocation && PB.EventLocation.X == 1400.f && PB.bHasEventNormal
+		&& PD.bHasSecondEventLocation && PD.SecondEventLocation.Y == 1400.f
+		&& PW.bHasEventLocation && PW.EventLocation.Y == 1400.f && PW.bHasDirection && PW.Direction.X < 0.f;
+	Result(bOk, TEXT("TrickLookup_FillTrickParams"), FString::Printf(TEXT("bank=%s n=%s | dbl 2nd=%s | redirect at %s dir=%s"),
+		*PB.EventLocation.ToString(), *PB.EventNormal.ToString(), *PD.SecondEventLocation.ToString(), *PW.EventLocation.ToString(), *PW.Direction.ToString()));
+}
+
 // ------------------------------------------------------------------ cases
 
 void AZoogiShotTestDriver::StartCase()
 {
 	UZoogiEpisodeCameraDirector* D = Dir();
 	const ZoogiShotTest::FCase& C = Cases[CaseIdx];
+	if (CaseIdx == 0) CheckTrickLookup();
 	Snap0 = D->CaptureGameplaySnapshot();
 	Handles.Reset();
 	FinishLog.Reset();

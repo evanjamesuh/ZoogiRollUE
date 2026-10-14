@@ -66,6 +66,8 @@ private:
 	AActor* SecondaryFor(AActor* F) const;
 	AStaticMeshActor* SpawnProp(const FVector& At, float Scale);
 	/** Plays one library shot the way the case's family needs it (props, secondary, event point). */
+	void CheckTrickLookup();
+	void TintProp(class AStaticMeshActor* A, const FLinearColor& C);
 	FZoogiShotHandle PlayCaseShot(EZoogiShotType Type, EZoogiShotOutput Output, FString& OutSetup);
 	void StartArc(const FVector& From);
 	void CheckLevelEnd(const TCHAR* When);

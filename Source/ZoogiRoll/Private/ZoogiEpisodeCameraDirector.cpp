@@ -1,4 +1,5 @@
 #include "ZoogiEpisodeCameraDirector.h"
+#include "ZoogiEpisodeTypes.h"
 #include "ZoogiRoll.h"
 #include "ZoogiBall.h"
 #include "ZoogiOrb.h"
@@ -160,6 +161,21 @@ FZoogiShotHandle UZoogiEpisodeCameraDirector::PlayShot(const FZoogiShotSpec& Spe
 	S.bEventFromCaller = Params.bHasEventLocation;
 	// Default event point: the arena centre (floor centre at the origin) at the focus' height.
 	S.EventLoc = Params.bHasEventLocation ? Params.EventLocation : FVector(0.f, 0.f, S.LastFocus.Z);
+	{
+		const FVector Fl(S.LastFocus.X, S.LastFocus.Y, 0.f);
+		FVector N = Params.bHasEventNormal ? FVector(Params.EventNormal.X, Params.EventNormal.Y, 0.f) : FVector(-S.EventLoc.X, -S.EventLoc.Y, 0.f);
+		if (!N.Normalize()) { N = Fl - FVector(S.EventLoc.X, S.EventLoc.Y, 0.f); if (!N.Normalize()) N = FVector(1, 0, 0); }
+		// the open side of the surface is the side the focus is on (or, failing that, the arena centre)
+		const FVector ToF = Fl - FVector(S.EventLoc.X, S.EventLoc.Y, 0.f);
+		if (ToF.SizeSquared() > 100.f ? (FVector::DotProduct(N, ToF) < 0.f) : (FVector::DotProduct(N, -FVector(S.EventLoc.X, S.EventLoc.Y, 0.f)) < 0.f)) N = -N;
+		S.EventNormal = N;
+		S.bHasSecondEvent = Params.bHasSecondEventLocation;
+		S.SecondEventLoc = Params.bHasSecondEventLocation ? Params.SecondEventLocation : S.EventLoc;
+		FVector D = Params.bHasDirection ? FVector(Params.Direction.X, Params.Direction.Y, 0.f) : Fl;
+		if (!D.Normalize()) D = FVector(1, 0, 0);
+		S.LineDir = D;
+		S.Accent = Params.bHasAccentColor ? Params.AccentColor : Spec.DefaultAccent;
+	}
 	H.Id = S.Id;
 
 	if (Output == EZoogiShotOutput::RenderTarget)
@@ -469,6 +485,94 @@ FPostProcessSettings UZoogiEpisodeCameraDirector::BuildShotPostProcess(const FZo
 	return PP;
 }
 
+// Trick-shot pivot: lerp(focus | focus..secondary, event, EventBias), then toward the second event, then along the line.
+static FVector CamDirShotPivot(const FZoogiActiveShot& S, const FZoogiShotSpec& Spec, const FVector& FC, const FVector& SC, bool bSec)
+{
+	FVector P = FMath::Lerp(bSec && Spec.SecondaryBias > 0.f ? FMath::Lerp(FC, SC, Spec.SecondaryBias) : FC, S.EventLoc, Spec.EventBias);
+	if (Spec.SecondEventBias > 0.f && S.bHasSecondEvent) P = FMath::Lerp(P, S.SecondEventLoc, Spec.SecondEventBias);
+	if (Spec.DirectionLead != 0.f) P += S.LineDir * Spec.DirectionLead;
+	return P + Spec.PivotOffset;
+}
+
+// Power-colour accent (tint + bloom lift), weighted like the rest of the grade.
+static void CamDirApplyAccent(FPostProcessSettings& PP, const FZoogiActiveShot& S, float Weight)
+{
+	const float A = S.Spec.AccentStrength * Weight;
+	if (A <= 0.f) return;
+	PP.bOverride_SceneColorTint = true;
+	PP.SceneColorTint = FMath::Lerp(FLinearColor::White, S.Accent, A);
+	const float BaseBloom = PP.bOverride_BloomIntensity ? PP.BloomIntensity : 0.675f;
+	PP.bOverride_BloomIntensity = true;
+	PP.BloomIntensity = BaseBloom * (1.f + 0.8f * A);
+}
+
+void UZoogiEpisodeCameraDirector::FillTrickParams(EZoogiShotType Type, const FZoogiGameplayTruthRecord& Truth, FZoogiShotPlayParams& P)
+{
+	TArray<const FZoogiContactEvent*, TInlineAllocator<8>> Walls;
+	const FZoogiContactEvent* Ally = nullptr;
+	const FZoogiContactEvent* OrbHit = nullptr;
+	for (const FZoogiContactEvent& E : Truth.Contacts)
+	{
+		if (!E.bMeaningful) continue;
+		if (E.Body == Truth.Actor && (E.Kind == EZoogiContactKind::Wall || E.Kind == EZoogiContactKind::Bumper)) Walls.Add(&E);
+		if (!Ally && E.Kind == EZoogiContactKind::Ally) Ally = &E;
+		if (!OrbHit && E.Kind == EZoogiContactKind::Orb && E.Body < 100) OrbHit = &E;
+	}
+	auto NextFrom = [&Truth](const FZoogiContactEvent* After, int32 Body) -> const FZoogiContactEvent*
+	{
+		for (const FZoogiContactEvent& E : Truth.Contacts)
+			if (E.Body == Body && E.Time > After->Time && FVector::Dist2D(E.Location, After->Location) > 30.f) return &E;
+		return nullptr;
+	};
+	auto SetWall = [&P](const FZoogiContactEvent* W)
+	{
+		P.bHasEventLocation = true; P.EventLocation = W->Location;
+		if (!W->Normal.IsNearlyZero()) { P.bHasEventNormal = true; P.EventNormal = W->Normal; }
+	};
+	switch (Type)
+	{
+	case EZoogiShotType::TrickBank:
+	case EZoogiShotType::TrickPowerBank:
+		if (Walls.Num() > 0) SetWall(Walls[0]);
+		if (Type == EZoogiShotType::TrickPowerBank && Truth.Awaken != EZoogiArtifact::None) { P.bHasAccentColor = true; P.AccentColor = ZoogiEpisode::PowerColor(Truth.Awaken); }
+		break;
+	case EZoogiShotType::TrickDoubleBank:
+		if (Walls.Num() > 0) SetWall(Walls[0]);
+		if (Walls.Num() > 1) { P.bHasSecondEventLocation = true; P.SecondEventLocation = Walls[1]->Location; }
+		break;
+	case EZoogiShotType::TrickWallRedirect:
+		if (Walls.Num() > 0)
+		{
+			const FZoogiContactEvent* W = Walls.Last();
+			SetWall(W);
+			if (const FZoogiContactEvent* N = NextFrom(W, Truth.Actor)) { P.bHasDirection = true; P.Direction = N->Location - W->Location; }
+			else if (!W->Normal.IsNearlyZero() && !Truth.LaunchVelocity.IsNearlyZero())
+			{
+				const FVector Nn = W->Normal.GetSafeNormal();
+				P.bHasDirection = true; P.Direction = Truth.LaunchVelocity - 2.f * FVector::DotProduct(Truth.LaunchVelocity, Nn) * Nn;
+			}
+		}
+		break;
+	case EZoogiShotType::TrickAllyBump:
+		if (Ally) { P.bHasEventLocation = true; P.EventLocation = Ally->Location; }
+		break;
+	case EZoogiShotType::TrickOrbRelay:
+		if (OrbHit && OrbHit->OtherBody >= 100)
+		{
+			if (const FZoogiContactEvent* R = NextFrom(OrbHit, OrbHit->OtherBody))
+			{
+				P.bHasEventLocation = true; P.EventLocation = R->Location;
+				P.bHasDirection = true; P.Direction = R->Location - OrbHit->Location;
+			}
+		}
+		break;
+	case EZoogiShotType::TrickRingOutLine:
+		if (!Truth.LaunchVelocity.IsNearlyZero() && Truth.Contacts.Num() == 0) { P.bHasDirection = true; P.Direction = Truth.LaunchVelocity; }
+		break;
+	default: break;
+	}
+}
+
 bool UZoogiEpisodeCameraDirector::EvaluateShotView(FZoogiActiveShot& S, float Dt, FMinimalViewInfo& OutView)
 {
 	AActor* F = S.Focus.Get();
@@ -522,11 +626,30 @@ bool UZoogiEpisodeCameraDirector::EvaluateShotView(FZoogiActiveShot& S, float Dt
 		case EZoogiShotHeading::FocusToEvent:
 			S.BaseYaw = FVector::Dist2D(FC, S.EventLoc) > 1.f ? FMath::RadiansToDegrees(FMath::Atan2(S.EventLoc.Y - FC.Y, S.EventLoc.X - FC.X)) : GameplayYaw;
 			break;
+		case EZoogiShotHeading::EventNormal:
+			// camera = pivot - Dir * dist: Dir = -normal puts the camera out on the normal, looking back at the contact
+			S.BaseYaw = FMath::RadiansToDegrees(FMath::Atan2(-S.EventNormal.Y, -S.EventNormal.X));
+			break;
+		case EZoogiShotHeading::ExitDirection:
+			S.BaseYaw = FMath::RadiansToDegrees(FMath::Atan2(S.LineDir.Y, S.LineDir.X));
+			break;
+		case EZoogiShotHeading::EventChord:
+			if (S.bHasSecondEvent && FVector::Dist2D(S.EventLoc, S.SecondEventLoc) > 1.f)
+			{
+				const FVector C = (S.SecondEventLoc - S.EventLoc).GetSafeNormal2D();
+				FVector Perp(-C.Y, C.X, 0.f);
+				const FVector Mid = (S.EventLoc + S.SecondEventLoc + FC) / 3.f;
+				// camera on the arena-centre side: Dir must point away from the centre
+				if (FVector::DotProduct(Perp, FVector(Mid.X, Mid.Y, 0.f)) < 0.f) Perp = -Perp;
+				S.BaseYaw = FMath::RadiansToDegrees(FMath::Atan2(Perp.Y, Perp.X));
+			}
+			else S.BaseYaw = FVector::Dist2D(FC, S.EventLoc) > 1.f ? FMath::RadiansToDegrees(FMath::Atan2(S.EventLoc.Y - FC.Y, S.EventLoc.X - FC.X)) : GameplayYaw;
+			break;
 		case EZoogiShotHeading::GameplayCamera:
 		default: S.BaseYaw = GameplayYaw; break;
 		}
 		S.VelYaw = S.BaseYaw;
-		S.Pivot = FMath::Lerp(bSec && Spec.SecondaryBias > 0.f ? FMath::Lerp(FC, SC, Spec.SecondaryBias) : FC, S.EventLoc, Spec.EventBias) + Spec.PivotOffset;
+		S.Pivot = CamDirShotPivot(S, Spec, FC, SC, bSec);
 		S.bInit = true;
 	}
 	if (S.bVelSnapPending && (bMoving || S.Age > 0.3f))
@@ -542,7 +665,7 @@ bool UZoogiEpisodeCameraDirector::EvaluateShotView(FZoogiActiveShot& S, float Dt
 
 	const float T = S.MotionClock / FMath::Max(S.Duration, 0.01f);
 	const float M = CurveOrEase(Spec.MotionCurve, Spec.MoveEase, T);
-	const FVector WantPivot = FMath::Lerp(bSec && Spec.SecondaryBias > 0.f ? FMath::Lerp(FC, SC, Spec.SecondaryBias) : FC, S.EventLoc, Spec.EventBias) + Spec.PivotOffset;
+	const FVector WantPivot = CamDirShotPivot(S, Spec, FC, SC, bSec);
 	S.Pivot = (Spec.TrackingLag > 0.f && Dt > 0.f) ? CamDirDampV(S.Pivot, WantPivot, Spec.TrackingLag, Dt) : WantPivot;
 
 	const float Heading = Spec.Heading == EZoogiShotHeading::FocusVelocity ? S.VelYaw : S.BaseYaw;
@@ -551,6 +674,7 @@ bool UZoogiEpisodeCameraDirector::EvaluateShotView(FZoogiActiveShot& S, float Dt
 	float Dist = FMath::Lerp(Spec.Distance, Spec.DistanceEnd, M);
 	if (Spec.bFrameBoth && bSec) Dist = FMath::Max(Dist, FVector::Dist(FC, SC) * 0.55f + Spec.SubjectRadius * 2.f);
 	if (Spec.bFrameEvent) Dist = FMath::Max(Dist, FVector::Dist(FC, S.EventLoc) * 0.55f + Spec.SubjectRadius * 2.f);
+	if (Spec.bFrameSecondEvent && S.bHasSecondEvent) Dist = FMath::Max(Dist, FVector::Dist(S.EventLoc, S.SecondEventLoc) * 0.6f + Spec.SubjectRadius * 2.f);
 	const float Pr = FMath::DegreesToRadians(Pitch);
 	const FVector Dir = FRotator(0.f, Yaw, 0.f).Vector();
 	FVector Loc = S.Pivot - Dir * Dist * FMath::Cos(Pr) + FVector(0, 0, Dist * FMath::Sin(Pr));
@@ -630,14 +754,16 @@ bool UZoogiEpisodeCameraDirector::EvaluateShotView(FZoogiActiveShot& S, float Dt
 	Rot.Roll = Spec.Roll;
 	float Fov = FMath::Lerp(Spec.FOV, Spec.FOVEnd, M);
 	const bool bFrameSec = Spec.bFrameBoth && bSec;
-	if (bFrameSec || Spec.bFrameEvent)
+	const bool bFrameSecond = Spec.bFrameSecondEvent && S.bHasSecondEvent;
+	if (bFrameSec || Spec.bFrameEvent || bFrameSecond)
 	{
 		const float Aspect = 16.f / 9.f;
 		float NeedHalf = 0.f;
-		TArray<FVector, TInlineAllocator<3>> Pts;
+		TArray<FVector, TInlineAllocator<4>> Pts;
 		Pts.Add(FC);
 		if (bFrameSec) Pts.Add(SC);
 		if (Spec.bFrameEvent) Pts.Add(S.EventLoc);
+		if (bFrameSecond) Pts.Add(S.SecondEventLoc);
 		for (const FVector& P : Pts)
 		{
 			const FVector L = Rot.UnrotateVector(P - Loc);
@@ -767,6 +893,7 @@ void UZoogiEpisodeCameraDirector::TickShot(FZoogiActiveShot& S, float Dt, bool& 
 			S.Capture->SetWorldLocationAndRotation(ShotView.Location, ShotView.Rotation);
 			S.Capture->FOVAngle = ShotView.FOV;
 			S.Capture->PostProcessSettings = BuildShotPostProcess(S.Spec, FocusDist, 1.f);
+			CamDirApplyAccent(S.Capture->PostProcessSettings, S, 1.f);
 			CamDirSlowLookGrade(S.Capture->PostProcessSettings, SlowW);
 			S.Capture->PostProcessBlendWeight = 1.f;
 			S.Capture->CaptureSceneDeferred();
@@ -807,6 +934,7 @@ void UZoogiEpisodeCameraDirector::TickShot(FZoogiActiveShot& S, float Dt, bool& 
 		ShotCam->SetActorLocationAndRotation(Out.Location, Out.Rotation);
 		C->SetFieldOfView(Out.FOV);
 		C->PostProcessSettings = BuildShotPostProcess(S.Spec, FocusDist, W);
+		CamDirApplyAccent(C->PostProcessSettings, S, W);
 		CamDirSlowLookGrade(C->PostProcessSettings, SlowW * W);
 		C->PostProcessBlendWeight = Live.PostProcessBlendWeight;
 	}

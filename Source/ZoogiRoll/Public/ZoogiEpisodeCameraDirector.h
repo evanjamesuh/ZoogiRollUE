@@ -64,6 +64,19 @@ struct ZOOGIROLL_API FZoogiShotPlayParams
 	/** Trick shots: the event point (bank / wall contact). Without it, event-based shots use the arena centre at the focus' height. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shot") bool bHasEventLocation = false;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shot") FVector EventLocation = FVector::ZeroVector;
+	/** Trick shots (optional): surface normal at the event contact (bank / power bank). Default: event -> arena centre. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shot") bool bHasEventNormal = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shot") FVector EventNormal = FVector::ZeroVector;
+	/** Trick shots (optional): second contact (double bank). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shot") bool bHasSecondEventLocation = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shot") FVector SecondEventLocation = FVector::ZeroVector;
+	/** Trick shots (optional): the line that matters: new direction after a redirect, exit vector of a ring-out, orb path.
+	 *  Default: horizontal, radially outward through the focus. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shot") bool bHasDirection = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shot") FVector Direction = FVector::ZeroVector;
+	/** Optional accent (power colour) for shots with Spec.AccentStrength > 0. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shot") bool bHasAccentColor = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shot") FLinearColor AccentColor = FLinearColor::White;
 };
 
 /** What a shot's camera had to do to stay readable (kept after the shot ends; see GetShotAvoidStats). */
@@ -189,6 +202,11 @@ struct FZoogiActiveShot
 	/** Event point (trick shots); always set (default = arena centre at the focus' start height). */
 	FVector EventLoc = FVector::ZeroVector;
 	bool bEventFromCaller = false;
+	FVector EventNormal = FVector::ZeroVector;   // flattened, unit; flipped to the focus side at init
+	FVector SecondEventLoc = FVector::ZeroVector;
+	bool bHasSecondEvent = false;
+	FVector LineDir = FVector::ZeroVector;       // flattened, unit
+	FLinearColor Accent = FLinearColor::White;
 	/** Shot-local motion clock (real time scaled by the presentation-only slow-mo look). */
 	float MotionClock = 0.f;
 	float MotionRate = 1.f;
@@ -211,6 +229,10 @@ class ZOOGIROLL_API UZoogiEpisodeCameraDirector : public UTickableWorldSubsystem
 
 public:
 	static UZoogiEpisodeCameraDirector* Get(const UObject* WorldContext);
+
+	/** Fills a trick shot's optional params (contact point / normal, second bank, new line / orb path, power colour)
+	 *  from the Episode core's truth record. Only sets what the record actually contains; never touches gameplay. */
+	static void FillTrickParams(EZoogiShotType Type, const struct FZoogiGameplayTruthRecord& Truth, FZoogiShotPlayParams& InOutParams);
 
 	// USubsystem / FTickableGameObject
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;

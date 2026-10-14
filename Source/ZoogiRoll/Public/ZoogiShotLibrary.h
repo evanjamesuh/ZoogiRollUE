@@ -10,6 +10,7 @@
 #include "ZoogiShotLibrary.generated.h"
 
 class UCurveFloat;
+enum class EZoogiEpisodeTag : uint8;
 
 /**
  * Shot families. Custom = use the spec's numbers as-is (no family defaults).
@@ -30,13 +31,17 @@ enum class EZoogiShotType : uint8
 	ReactionSurprise,
 	ReactionComedy,
 	// Tier 2: trick shots.
-	TrickBank,          // focus = shooter, event = bank point (wall / bumper contact)
-	TrickWallRedirect,  // focus = shooter, event = wall contact point
-	TrickAllyBump,      // focus = shooter, secondary = the bumped ally
-	TrickOrbRelay,      // focus = relaying Zoogi, secondary = orb (or receiving partner)
-	TrickBoundarySave,  // focus = Zoogi saved at the rim, event = arena centre (default)
+	TrickBank,          // focus = shooter, event = bank contact (+ EventNormal): on the wall normal, in / out lines mirror
+	TrickWallRedirect,  // focus = shooter, event = wall contact, Direction = new line: behind the new line, looking down it
+	TrickAllyBump,      // focus = shooter, secondary = bumped ally (event = contact): low two-shot, ally in the foreground
+	TrickOrbRelay,      // focus = relaying Zoogi, secondary = orb, event = receiver, Direction = orb path: chases the orb
+	TrickBoundarySave,  // focus = Zoogi saved at the rim, event = arena centre (default): outside the rim, lip in foreground
 	// Tier 3.
-	Airborne,           // focus = airborne Zoogi; side-on drift with a slow-mo entry (time-scale policy permitting)
+	Airborne,           // focus = airborne Zoogi; side-on drift with a slow-mo look entry (presentation only)
+	// Tier 2 (appended so the numbers above never change).
+	TrickDoubleBank,    // focus = shooter, event = 1st bank, SecondEvent = 2nd bank: high, perpendicular to the zigzag
+	TrickPowerBank,     // focus = shooter, event = bank contact, AccentColor = power colour: tight on the contact, tinted
+	TrickRingOutLine,   // focus = Zoogi leaving, Direction = exit vector (default radial out): down the line into the void
 	Custom
 };
 
@@ -73,7 +78,16 @@ enum class EZoogiShotHeading : uint8
 	 *  Falls back to facing the gameplay camera when the face points (nearly) straight up / down or the focus is not a Zoogi. */
 	FocusFacing,
 	/** Yaw of the line focus -> event point (FZoogiShotPlayParams::EventLocation, default the arena centre). */
-	FocusToEvent
+	FocusToEvent,
+	/** Camera out along the event's surface normal (FZoogiShotPlayParams::EventNormal, flipped to the focus side; default
+	 *  event -> arena centre), looking back at the contact: incoming and outgoing lines mirror around it. */
+	EventNormal,
+	/** Yaw of FZoogiShotPlayParams::Direction (new line / exit vector / orb path; default radial outward through the
+	 *  focus): YawOffset 0 = camera behind, looking down the line. */
+	ExitDirection,
+	/** Perpendicular to event -> second event (the zigzag of a double bank), on the arena-centre side. Falls back to
+	 *  FocusToEvent without a second event. */
+	EventChord
 };
 
 /**
@@ -143,6 +157,12 @@ struct ZOOGIROLL_API FZoogiShotSpec
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Framing", meta = (ClampMin = "0", ClampMax = "1")) float EventBias = 0.f;
 	/** Widen the FOV (never narrow it) so the event point fits as well. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Framing") bool bFrameEvent = false;
+	/** Pivot position between the pivot above (0) and the second event point (1) (double bank). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Framing", meta = (ClampMin = "0", ClampMax = "1")) float SecondEventBias = 0.f;
+	/** Widen the FOV (never narrow it) so the second event point fits as well. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Framing") bool bFrameSecondEvent = false;
+	/** Push the pivot this far (cm) along Direction, flattened (look down the new line / into the void). */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Framing") float DirectionLead = 0.f;
 
 	// ---- motion character (deterministic, no random: the same shot always looks the same)
 	/** Dutch "rocking" (comedy): Roll += RollWobbleDeg * sin(2 pi RollWobbleHz t). */
@@ -170,6 +190,9 @@ struct ZOOGIROLL_API FZoogiShotSpec
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Look") float VignetteAdd = 0.f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Look") float SaturationMul = 1.f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Look") float ContrastMul = 1.f;
+	/** Tint toward an accent colour (FZoogiShotPlayParams::AccentColor, else DefaultAccent) with a bloom lift. 0 = off. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Look", meta = (ClampMin = "0", ClampMax = "1")) float AccentStrength = 0.f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Look") FLinearColor DefaultAccent = FLinearColor(1.f, 0.62f, 0.2f);
 };
 
 /** A set of shot specs (create a data asset of this class to tune shots without code). */
@@ -204,4 +227,11 @@ namespace ZoogiShot
 	ZOOGIROLL_API bool UsesSecondary(EZoogiShotType Type);
 	/** Families that frame an event point (bank, wall redirect, boundary save). */
 	ZOOGIROLL_API bool UsesEventPoint(EZoogiShotType Type);
+	/** The one trick-tag -> shot lookup (Episode core tags, ZoogiEpisodeTypes.h). Non-trick tags return LowAngleHero.
+	 *  bPower: the action carried a power hit (Bank / DoubleBank then become TrickPowerBank). */
+	ZOOGIROLL_API EZoogiShotType ShotForTrickTag(EZoogiEpisodeTag Tag, bool bPower = false);
+	/** Picks the trick shot for an action's whole tag list (most specific trick wins; PowerHit + a bank = power bank). */
+	ZOOGIROLL_API EZoogiShotType ShotForTrickTags(const TArray<EZoogiEpisodeTag>& Tags);
+	/** One-line description of the angle (logs, test report). */
+	ZOOGIROLL_API const TCHAR* AngleDescription(EZoogiShotType Type);
 }
