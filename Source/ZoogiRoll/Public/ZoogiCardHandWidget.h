@@ -10,6 +10,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "ZoogiUIStyle.h"
 #include "ZoogiCardHandWidget.generated.h"
 
 class AZoogiGameMode;
@@ -93,6 +94,7 @@ private:
 	// display copies (refreshed each tick, painted in NativePaint)
 	int32 EnergyShown = 0, EnergyMax = 5, DrawCount = 0, DiscardCount = 0, LastLoggedEnergy = -999;
 	bool bEnergyVisible = false;
+	ZoogiUIStyle::FBarJuice EnergyJuice; // uistyle: Card Energy counter juice (display only)
 	FVector2D TargetPos = FVector2D::ZeroVector;
 	float TargetR = 60.f;
 	bool bTargetOnScreen = false;
