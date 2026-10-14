@@ -171,6 +171,14 @@ UZoogiCardWidget* UZoogiCardHandWidget::MakeCard(int32 InstanceId, FName CardId)
 	C->Cost = D ? D->Cost : 0;
 	C->Color = TypeColor(D ? (uint8)D->Type : 6);
 	C->Art = ArtFor(CardId);
+	switch (D ? D->Element : EZoogiCardElement::Neutral)
+	{
+	case EZoogiCardElement::Void:  C->Tablet = TEXT("tablet_void"); break;
+	case EZoogiCardElement::Fire:  C->Tablet = TEXT("tablet_fire"); break;
+	case EZoogiCardElement::Shock: C->Tablet = TEXT("tablet_storm"); break;
+	case EZoogiCardElement::Frost: C->Tablet = TEXT("tablet_frost"); break;
+	default:                       C->Tablet = TEXT("tablet_arcane"); break;
+	}
 	UCanvasPanelSlot* S = Root->AddChildToCanvas(C);
 	S->SetAnchors(FAnchors(0.f, 0.f));
 	S->SetAlignment(FVector2D(0.5f, 1.f));

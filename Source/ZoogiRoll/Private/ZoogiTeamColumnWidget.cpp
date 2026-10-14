@@ -133,7 +133,15 @@ int32 UZoogiTeamColumnWidget::NativePaint(const FPaintArgs& Args, const FGeometr
 		else HA::Img(Out, L + 5, Geo, PC - FVector2D(PR, PR) * RP, FVector2D(PR, PR) * 2.f * RP, Ring);
 		// name, chips, score, stats
 		const float TX = CP.X + 72.f * t;
-		Txt(L + 6, FVector2D(TX, CP.Y + 17.f * t), FString::Printf(TEXT("P%d %s"), B->PlayerIndex + 1, *B->Def.Name.ToUpper()), 13.f, t, bActive ? FLinearColor(1.f, 0.95f, 0.75f) : FLinearColor(0.95f, 0.93f, 0.88f));
+		{
+			// fit the name between the portrait and the score: shrink to 9.5, then trim with ".."
+			FString Nm = FString::Printf(TEXT("P%d %s"), B->PlayerIndex + 1, *B->Def.Name.ToUpper());
+			const float MaxW = CP.X + CS.X - 12.f * t - TxtW(FString::FromInt(B->Score), 27.f, t) - 8.f * t - TX;
+			float NS = 13.f;
+			while (NS > 9.5f && TxtW(Nm, NS, t) > MaxW) NS -= 0.5f;
+			while (Nm.Len() > 4 && TxtW(Nm, NS, t) > MaxW) Nm = Nm.LeftChop(3) + TEXT("..");
+			Txt(L + 6, FVector2D(TX, CP.Y + 17.f * t), Nm, NS, t, bActive ? FLinearColor(1.f, 0.95f, 0.75f) : FLinearColor(0.95f, 0.93f, 0.88f));
+		}
 		float CX = TX;
 		auto Chip = [&](const TCHAR* Art, const FString& Lb, float Wd)
 		{
@@ -225,6 +233,25 @@ int32 UZoogiTeamColumnWidget::NativePaint(const FPaintArgs& Args, const FGeometr
 					const FVector2D FS = HA::SizeT(TEXT("rbar_full"));
 					HA::Part(Out, L + 6, Geo, RBp, FVector2D(RBs.X * BPr.Frac, RBs.Y), TEXT("rbar_full"), FBox2D(FVector2D::ZeroVector, FVector2D(FS.X * BPr.Frac, FS.Y)), BPr.Accent);
 				}
+			}
+		}
+		else if (BH > 20.f * t && Side == 0 && G->Feed.ContainsByPredicate([](const FZoogiFeedItem& F) { return F.Age < 7.5f; }))
+		{
+			// event feed (back from v2): the friendly column's free slot shows the newest events, fading like the old feed
+			const FVector2D FP(X + 10.f * t, BY), FS(W - 20.f * t, BH);
+			HA::Nine(Out, L + 2, Geo, FP, FS, TEXT("action_box"), FMargin(9.f), t, FLinearColor(0.8f, 0.8f, 0.85f));
+			Txt(L + 6, FP + FVector2D(12.f, 11.f) * t, TEXT("EVENTS"), 7.5f, t, HA::Steel);
+			float FY = FP.Y + 26.f * t;
+			for (const FZoogiFeedItem& F : G->Feed)
+			{
+				const float A = FMath::Clamp(1.f - (F.Age - 6.f) / 1.5f, 0.f, 1.f) * FMath::Clamp(F.Age * 6.f, 0.f, 1.f);
+				if (A <= 0.f) continue;
+				if (FY > FP.Y + FS.Y - 8.f * t) break;
+				FString Ln = F.Text;
+				while (Ln.Len() > 6 && TxtW(Ln, 8.5f, t) > FS.X - 30.f * t) Ln = Ln.LeftChop(3) + TEXT("..");
+				ZoogiUIStyle::SBox(Out, L + 5, Geo, FVector2D(FP.X + 10.f * t, FY - 5.f * t), FVector2D(4.f * t, 10.f * t), FLinearColor(F.Color.R, F.Color.G, F.Color.B, A), FLinearColor::Transparent, 2.f * t, 0.f);
+				Txt(L + 6, FVector2D(FP.X + 20.f * t, FY), Ln, 8.5f, t, FLinearColor(F.Color.R * 0.4f + 0.6f, F.Color.G * 0.4f + 0.6f, F.Color.B * 0.4f + 0.6f, A));
+				FY += 14.f * t;
 			}
 		}
 		else if (BH > 20.f * t)

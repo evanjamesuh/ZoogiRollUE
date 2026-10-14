@@ -36,7 +36,12 @@ def mock(W, H, out):
     ov = Image.open('tex3/overlay.png').convert('RGBA'); OH = Y1 - Y0; LW, RW = int(380 * T), int(410 * T)
     # split at the arena edges, exactly as PaintBack: fixed left / right strips, stretched middle
     im.alpha_composite(ov.crop((0, 0, 380, 768)).resize((LW, OH), Image.LANCZOS), (X0, Y0))
-    im.alpha_composite(ov.crop((380, 0, 966, 768)).resize((X1 - X0 - LW - RW, OH), Image.LANCZOS), (X0 + LW, Y0))
+    sy = OH / 768; tb = int(74 * sy); BW = int(527 * T); xm = (A0[0] + A1[0]) / 2
+    im.alpha_composite(ov.crop((380, 74, 966, 768)).resize((X1 - X0 - LW - RW, OH - tb), Image.LANCZOS), (X0 + LW, Y0 + tb))
+    lw_ = int(xm - BW / 2 - (X0 + LW)); rw_ = int((X1 - RW) - (xm + BW / 2))
+    if lw_ > 0: im.alpha_composite(ov.crop((380, 0, 425, 74)).resize((lw_, tb), Image.LANCZOS), (X0 + LW, Y0))
+    im.alpha_composite(ov.crop((425, 0, 952, 74)).resize((BW, tb), Image.LANCZOS), (int(xm - BW / 2), Y0))
+    if rw_ > 0: im.alpha_composite(ov.crop((952, 0, 966, 74)).resize((rw_, tb), Image.LANCZOS), (int(xm + BW / 2), Y0))
     im.alpha_composite(ov.crop((966, 0, 1376, 768)).resize((RW, OH), Image.LANCZOS), (X1 - RW, Y0))
     d = ImageDraw.Draw(im)
     def txt(x, y, s, sz, c, ax=0.0, ay=0.5):
@@ -59,7 +64,10 @@ def mock(W, H, out):
             p = Image.open(f'por/T_Portrait_{pt}.png').convert('RGBA').resize((int(54 * T), int(54 * T)), Image.LANCZOS)
             im.alpha_composite(p, (int(CP[0] + 36 * T - 27 * T), int(CP[1] + 35 * T - 27 * T)))
             TX = CP[0] + 72 * T
-            txt(TX, CP[1] + 17 * T, nm, 13, (255, 242, 190) if act else (242, 237, 224))
+            maxw = CP[0] + CSx - 12 * T - d.textlength('0', font=font(27 * T)) - 8 * T - TX; ns = 13
+            while ns > 9.5 and d.textlength(nm, font=font(ns * T)) > maxw: ns -= 0.5
+            while len(nm) > 4 and d.textlength(nm, font=font(ns * T)) > maxw: nm = nm[:-3] + '..'
+            txt(TX, CP[1] + 17 * T, nm, ns, (255, 242, 190) if act else (242, 237, 224))
             cxx = TX
             for art, lb, w in [('chip_purple', 'CPU', 34)] + ([('chip_gold', 'TURN', 41)] if act else []):
                 put(art, cxx, CP[1] + 28 * T, w * T, 16 * T); txt(cxx + w * T / 2, CP[1] + 36 * T, lb, 8, W_, 0.5); cxx += (w + 5) * T
@@ -97,7 +105,7 @@ def mock(W, H, out):
     d = ImageDraw.Draw(im)
     d.text((10, H - 22), 'BOX MOCK - not an engine shot', font=font(14), fill=(255, 80, 80))
     im.convert('RGB').save(out); return im
-import os; os.makedirs('shots/v2', exist_ok=True)
-mock(1920, 1080, 'shots/v2/preview_1920x1080.png'); mock(2400, 1080, 'shots/v2/preview_2400x1080.png')
+import os; os.makedirs('shots/v3', exist_ok=True)
+mock(1920, 1080, 'shots/v3/preview_1920x1080.png'); mock(2400, 1080, 'shots/v3/preview_2400x1080.png')
 tg = Image.open('/workspace/ui-polish/stone-ref/hud_v3_target.png').convert('RGB').resize((1920, 1072), Image.LANCZOS)
-pv = Image.open('shots/v2/preview_1920x1080.png'); c = Image.new('RGB', (3840, 1080), (0, 0, 0)); c.paste(tg, (0, 4)); c.paste(pv, (1920, 0)); c.save('shots/v2/compare_preview.png'); print('ok')
+pv = Image.open('shots/v3/preview_1920x1080.png'); c = Image.new('RGB', (3840, 1080), (0, 0, 0)); c.paste(tg, (0, 4)); c.paste(pv, (1920, 0)); c.save('shots/v3/compare_preview.png'); print('ok')

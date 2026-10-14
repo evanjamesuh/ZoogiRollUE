@@ -436,9 +436,17 @@ int32 UZoogiFramedHUDWidget::PaintBack(const FGeometry& Geo, FSlateWindowElement
 		// strip (arena + card tray recess) stretches. Part() takes source px in texture/K units; the overlay is 1x.
 		const float OH = V.Y - L.Safe.Bottom * s - Y0, LW = 380.f * t, RW = 410.f * t;
 		const FVector2D SK = HA::SizeT(TEXT("overlay")) / FVector2D(1376.f, 768.f);
-		auto Strip = [&](float Dx, float Dw, float Sx0, float Sx1) { HA::Part(Out, Ly + 5, Geo, FVector2D(Dx, Y0), FVector2D(Dw, OH), TEXT("overlay"), FBox2D(FVector2D(Sx0 * SK.X, 0.f), FVector2D(Sx1 * SK.X, 768.f * SK.Y))); };
+		auto Strip = [&](float Dx, float Dw, float Sx0, float Sx1, float Sy0 = 0.f, float Sy1 = 768.f)
+		{
+			if (Dw > 0.5f) HA::Part(Out, Ly + 5, Geo, FVector2D(Dx, Y0 + Sy0 / 768.f * OH), FVector2D(Dw, (Sy1 - Sy0) / 768.f * OH), TEXT("overlay"), FBox2D(FVector2D(Sx0 * SK.X, Sy0 * SK.Y), FVector2D(Sx1 * SK.X, Sy1 * SK.Y)));
+		};
 		Strip(X0, LW, 0.f, 380.f);
-		Strip(X0 + LW, X1 - X0 - LW - RW, 380.f, 966.f);
+		// middle: the top band (pills + plate, rows 0..74) keeps its shape centred on the arena, only its plain ends stretch
+		const float MX0 = X0 + LW, MX1 = X1 - RW, Xm = (A0.X + A1.X) * 0.5f, BW = (952.f - 425.f) * t;
+		Strip(MX0, Xm - BW * 0.5f - MX0, 380.f, 425.f, 0.f, 74.f);
+		Strip(Xm - BW * 0.5f, BW, 425.f, 952.f, 0.f, 74.f);
+		Strip(Xm + BW * 0.5f, MX1 - Xm - BW * 0.5f, 952.f, 966.f, 0.f, 74.f);
+		Strip(MX0, MX1 - MX0, 380.f, 966.f, 74.f, 768.f);
 		Strip(X1 - RW, RW, 966.f, 1376.f);
 	}
 

@@ -26,6 +26,7 @@ public:
 	FString Rule;
 	int32 Cost = 0;
 	FLinearColor Color = FLinearColor::White;
+	const TCHAR* Tablet = nullptr; // hud-v3: element tablet (Evan's element_tablets.png) from the card's element
 	bool bAffordable = true;   // CanSelect == Ok (dimmed otherwise)
 	bool bHighlight = false;   // hovered / dragged
 
