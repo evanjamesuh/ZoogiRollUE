@@ -8,6 +8,7 @@
 #include "ZoogiBall.h"
 #include "ZoogiTypes.h"
 #include "ZoogiRoll.h"
+#include "Misc/ConfigCacheIni.h"
 #include "Blueprint/WidgetTree.h"
 #include "Blueprint/WidgetLayoutLibrary.h"
 #include "Components/CanvasPanel.h"
@@ -57,7 +58,13 @@ namespace
 	{
 		FSlateDrawElement::MakeText(Out, L, G.ToPaintGeometry(FVector2f(800.f, 400.f), FSlateLayoutTransform(FVector2f(P))), T, FCoreStyle::GetDefaultFontStyle(bBold ? "Bold" : "Regular", Size), ESlateDrawEffect::None, C);
 	}
-	bool CHFlagOn() { static const bool b = FParse::Param(FCommandLine::Get(), TEXT("ZoogiCardHandUI")); return b; }
+	// Default ON whenever cards mode is on: [ZoogiRoll.Cards] bCardHandUI (default True) or -ZoogiCardHandUI; -ZoogiNoCardHandUI turns it off.
+	bool CHFlagOn()
+	{
+		static const bool b = []() { bool bIni = true; if (GConfig) GConfig->GetBool(TEXT("ZoogiRoll.Cards"), TEXT("bCardHandUI"), bIni, GGameIni);
+			return !FParse::Param(FCommandLine::Get(), TEXT("ZoogiNoCardHandUI")) && (bIni || FParse::Param(FCommandLine::Get(), TEXT("ZoogiCardHandUI"))); }();
+		return b;
+	}
 }
 
 bool UZoogiCardHandWidget::IsEnabled(const AZoogiGameMode* G) { return CHFlagOn() && G && G->CardsOn(); }
