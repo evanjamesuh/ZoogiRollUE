@@ -422,7 +422,7 @@ int32 UZoogiFramedHUDWidget::PaintBack(const FGeometry& Geo, FSlateWindowElement
 		for (int32 i = 0; i < 4; ++i)
 		{
 			const FVector2D Cc = CP[i] + CS * 0.5f + FVector2D(i % 2 ? 10.f : -10.f, i >= 2 ? 10.f : -10.f) * t;
-			SBox(Out, Ly + 3, Geo, Cc - FVector2D(30.f, 30.f) * t, FVector2D(60.f, 60.f) * t, GC, FLinearColor::Transparent, 30.f * t, 0.f);
+			ZoogiUIStyle::SBox(Out, Ly + 3, Geo, Cc - FVector2D(30.f, 30.f) * t, FVector2D(60.f, 60.f) * t, GC, FLinearColor::Transparent, 30.f * t, 0.f);
 			HA::Img(Out, Ly + 4, Geo, CP[i], CS, CN[i]);
 		}
 	}
@@ -434,7 +434,7 @@ int32 UZoogiFramedHUDWidget::PaintBack(const FGeometry& Geo, FSlateWindowElement
 		TxtT(Ly + 6, FVector2D(X0 + 182.5f * t, Y0 + 34.5f * t), FString::Printf(TEXT("%d / %d"), FMath::Clamp(G->RoundNumber, 1, FMath::Max(1, G->MenuRounds)), G->MenuRounds), 11.f, FLinearColor::White, 0.5f);
 		if (G->bComboMode)
 		{
-			SBox(Out, Ly + 5, Geo, FVector2D(X0 + 220.f * t, Y0 + 9.f * t), FVector2D(64.f * t, 15.f * t), FLinearColor(0.11f, 0.10f, 0.09f, 1.f), FLinearColor::Transparent, 3.f * t, 0.f);
+			ZoogiUIStyle::SBox(Out, Ly + 5, Geo, FVector2D(X0 + 220.f * t, Y0 + 9.f * t), FVector2D(64.f * t, 15.f * t), FLinearColor(0.11f, 0.10f, 0.09f, 1.f), FLinearColor::Transparent, 3.f * t, 0.f);
 			TxtT(Ly + 6, FVector2D(X0 + 226.f * t, Y0 + 16.5f * t), TEXT("SCORE"), 7.5f, HA::Steel);
 			TxtT(Ly + 6, FVector2D(X0 + 226.f * t, Y0 + 34.5f * t), FString::Printf(TEXT("%d - %d"), G->TeamScore(0), G->TeamScore(1)), 11.f, HA::GoldText);
 		}
@@ -470,7 +470,7 @@ int32 UZoogiFramedHUDWidget::PaintBack(const FGeometry& Geo, FSlateWindowElement
 		const FSlateFontInfo WF = FontT(8.5f * TPop);
 		const FVector2D WS = HA::Measure(Who, WF);
 		const FVector2D WC = NP + FVector2D(94.5f, 13.f) * t;
-		if (AB) SBox(Out, Ly + 5, Geo, FVector2D(WC.X - WS.X * 0.5f - 11.f * t, WC.Y - 3.f * t), FVector2D(6.f * t, 6.f * t), ZoogiUtil::PlayerColor(AB->PlayerIndex), FLinearColor::Transparent, 3.f * t, 0.f);
+		if (AB) ZoogiUIStyle::SBox(Out, Ly + 5, Geo, FVector2D(WC.X - WS.X * 0.5f - 11.f * t, WC.Y - 3.f * t), FVector2D(6.f * t, 6.f * t), ZoogiUtil::PlayerColor(AB->PlayerIndex), FLinearColor::Transparent, 3.f * t, 0.f);
 		HA::Text(Out, Ly + 6, Geo, WC + FVector2D(4.f * t, 0.f), Who, WF, FLinearColor::White, 0.5f, 0.5f);
 		const UEnum* E = StaticEnum<EZoogiArena>();
 		FString Map = E ? E->GetDisplayNameTextByValue((int64)G->MenuArena).ToString().ToUpper() : TEXT("ARENA");
@@ -491,15 +491,15 @@ int32 UZoogiFramedHUDWidget::PaintBack(const FGeometry& Geo, FSlateWindowElement
 		TxtT(Ly + 6, TL + FVector2D(71.5f, 139.f) * t, bCards ? FString::FromInt(TI.Draw) : FString(TEXT("-")), 15.f, FLinearColor::White, 0.5f);
 		// discard portal: breathing cyan light + count
 		const float Br = 0.5f + 0.5f * FMath::Sin(Time * 2.f);
-		SBox(Out, Ly + 4, Geo, TR + FVector2D(28.f, 20.f) * t, FVector2D(90.f, 110.f) * t, FLinearColor(0.4f, 0.95f, 1.f, 0.06f + 0.08f * Br), FLinearColor::Transparent, 30.f * t, 0.f);
+		ZoogiUIStyle::SBox(Out, Ly + 4, Geo, TR + FVector2D(28.f, 20.f) * t, FVector2D(90.f, 110.f) * t, FLinearColor(0.4f, 0.95f, 1.f, 0.06f + 0.08f * Br), FLinearColor::Transparent, 30.f * t, 0.f);
 		TxtT(Ly + 6, TR + FVector2D(155.f, 184.f) * t, bCards ? FString::Printf(TEXT("DISCARD %d"), TI.Discard) : FString(TEXT("DISCARD")), 8.f, FLinearColor::White, 0.5f);
 		// energy orb: the swirl turns, number + bar live
 		const FVector2D Sh = bCards ? FVector2D(FMath::Sin(Time * 60.f), FMath::Cos(Time * 47.f)) * 4.f * t * TI.Shake : FVector2D::ZeroVector;
 		HA::ImgRot(Out, Ly + 4, Geo, TR + FVector2D(252.f, 50.f) * t, FVector2D(128.f, 128.f) * t, TEXT("orb_swirl"), Time * 0.7f, FLinearColor(1.f, 1.f, 1.f, 1.f));
-		if (bCards && TI.Flash > 0.f) SBox(Out, Ly + 5, Geo, TR + FVector2D(292.f, 78.f) * t, FVector2D(72.f, 72.f) * t, FLinearColor(1.f, 1.f, 1.f, 0.5f * TI.Flash), FLinearColor::Transparent, 36.f * t, 0.f);
+		if (bCards && TI.Flash > 0.f) ZoogiUIStyle::SBox(Out, Ly + 5, Geo, TR + FVector2D(292.f, 78.f) * t, FVector2D(72.f, 72.f) * t, FLinearColor(1.f, 1.f, 1.f, 0.5f * TI.Flash), FLinearColor::Transparent, 36.f * t, 0.f);
 		TxtT(Ly + 6, TR + FVector2D(328.f, 108.f) * t + Sh, bCards ? FString::Printf(TEXT("%d/%d"), TI.Energy, TI.EnergyMax) : FString(TEXT("--")), 16.f, TI.Energy >= 0 ? FLinearColor::White : FLinearColor(1.f, 0.45f, 0.4f), 0.5f);
 		const float BF = bCards ? FMath::Clamp(TI.EnergyFrac, 0.f, 1.f) : 0.f;
-		if (BF > 0.f) SBox(Out, Ly + 5, Geo, TR + FVector2D(277.f, 168.f) * t, FVector2D(92.f * BF, 7.f) * t, FLinearColor(0.78f, 0.45f, 1.f, 1.f), FLinearColor(0.95f, 0.8f, 1.f, 0.6f), 3.5f * t, 1.f * t);
+		if (BF > 0.f) ZoogiUIStyle::SBox(Out, Ly + 5, Geo, TR + FVector2D(277.f, 168.f) * t, FVector2D(92.f * BF, 7.f) * t, FLinearColor(0.78f, 0.45f, 1.f, 1.f), FLinearColor(0.95f, 0.8f, 1.f, 0.6f), 3.5f * t, 1.f * t);
 		// awaken stones (artifact mode): the old central picker lives in the tray now
 		PaintTrayAwaken(Geo, Out, Ly + 4, t);
 		// system text (stage forming / match over) in the recess

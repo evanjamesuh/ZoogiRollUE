@@ -99,7 +99,7 @@ int32 UZoogiTeamColumnWidget::NativePaint(const FPaintArgs& Args, const FGeometr
 		const float Slide = bActive ? (1.f - FMath::Square(1.f - TurnAnim)) : 1.f;
 		const float X = (1.f - Slide) * (Side == 0 ? -24.f : 24.f) * t;
 		// group panel (+ active turn glow)
-		if (bActive) SBox(Out, L, Geo, FVector2D(X - 4.f * t, Y - 4.f * t), FVector2D(W + 8.f * t, GH + 8.f * t), FLinearColor(HA::Cyan.R, HA::Cyan.G, HA::Cyan.B, 0.18f + 0.14f * FMath::Sin(Time * 4.f)), FLinearColor::Transparent, 12.f * t, 0.f);
+		if (bActive) ZoogiUIStyle::SBox(Out, L, Geo, FVector2D(X - 4.f * t, Y - 4.f * t), FVector2D(W + 8.f * t, GH + 8.f * t), FLinearColor(HA::Cyan.R, HA::Cyan.G, HA::Cyan.B, 0.18f + 0.14f * FMath::Sin(Time * 4.f)), FLinearColor::Transparent, 12.f * t, 0.f);
 		HA::Nine(Out, L + 1, Geo, FVector2D(X, Y), FVector2D(W, GH), TEXT("group_panel"), FMargin(10.f), t);
 		// header bar: team label on the first group, a side gem at the right
 		HA::Nine(Out, L + 2, Geo, FVector2D(X + 8.f * t, Y + 9.f * t), FVector2D(W - 16.f * t, 23.f * t), TEXT("header_bar"), FMargin(8.f, 6.f, 8.f, 6.f), t);
@@ -117,14 +117,14 @@ int32 UZoogiTeamColumnWidget::NativePaint(const FPaintArgs& Args, const FGeometr
 		const FVector2D PC = CP + FVector2D(36.f, 35.f) * t;
 		const float PR = 29.f * t;
 		const bool bDim = B->bOut || B->bKnockedOut;
-		SBox(Out, L + 3, Geo, PC - FVector2D(PR, PR) * 0.8f, FVector2D(PR, PR) * 1.6f, FLinearColor(0.05f, 0.07f, 0.1f, 1.f), FLinearColor::Transparent, PR * 0.8f, 0.f);
+		ZoogiUIStyle::SBox(Out, L + 3, Geo, PC - FVector2D(PR, PR) * 0.8f, FVector2D(PR, PR) * 1.6f, FLinearColor(0.05f, 0.07f, 0.1f, 1.f), FLinearColor::Transparent, PR * 0.8f, 0.f);
 		if (const FSlateBrush* Br = Portrait(B->Def.Id))
 		{
 			FSlateBrush RB = *Br; RB.DrawAs = ESlateBrushDrawType::RoundedBox; RB.OutlineSettings = FSlateBrushOutlineSettings(PR * 0.78f);
 			RB.OutlineSettings.RoundingType = ESlateBrushRoundingType::HalfHeightRadius;
 			FSlateDrawElement::MakeBox(Out, L + 4, Geo.ToPaintGeometry(FVector2f(FVector2D(PR, PR) * 1.56f), FSlateLayoutTransform(FVector2f(PC - FVector2D(PR, PR) * 0.78f))), &RB, ESlateDrawEffect::None, bDim ? FLinearColor(0.45f, 0.45f, 0.5f) : FLinearColor::White);
 		}
-		else SBox(Out, L + 4, Geo, PC - FVector2D(PR, PR) * 0.78f, FVector2D(PR, PR) * 1.56f, B->Def.Color, FLinearColor::Transparent, PR * 0.78f, 0.f);
+		else ZoogiUIStyle::SBox(Out, L + 4, Geo, PC - FVector2D(PR, PR) * 0.78f, FVector2D(PR, PR) * 1.56f, B->Def.Color, FLinearColor::Transparent, PR * 0.78f, 0.f);
 		const TCHAR* Ring = bDim ? TEXT("ring_bronze") : (Side == 0 ? TEXT("ring_cyan") : TEXT("ring_red"));
 		const float RP = bActive ? 1.f + 0.04f * FMath::Sin(Time * 5.f) : 1.f;
 		HA::Img(Out, L + 5, Geo, PC - FVector2D(PR, PR) * RP, FVector2D(PR, PR) * 2.f * RP, Ring);
@@ -165,7 +165,7 @@ int32 UZoogiTeamColumnWidget::NativePaint(const FPaintArgs& Args, const FGeometr
 		{
 			const float CW = TxtW(C.Key, 7.5f, t) + 12.f * t;
 			if (SX + CW > CP.X + CS.X - 8.f * t) break;
-			SBox(Out, L + 5, Geo, FVector2D(SX, CP.Y + 72.f * t), FVector2D(CW, 14.f * t), FLinearColor(C.Value.R * 0.35f, C.Value.G * 0.35f, C.Value.B * 0.35f, 0.95f), C.Value, 5.f * t, 1.f * t);
+			ZoogiUIStyle::SBox(Out, L + 5, Geo, FVector2D(SX, CP.Y + 72.f * t), FVector2D(CW, 14.f * t), FLinearColor(C.Value.R * 0.35f, C.Value.G * 0.35f, C.Value.B * 0.35f, 0.95f), C.Value, 5.f * t, 1.f * t);
 			Txt(L + 6, FVector2D(SX + CW * 0.5f, CP.Y + 79.f * t), C.Key, 7.5f, t, FLinearColor::White, 0.5f);
 			SX += CW + 4.f * t;
 		}
@@ -186,7 +186,7 @@ int32 UZoogiTeamColumnWidget::NativePaint(const FPaintArgs& Args, const FGeometr
 				const FVector2D FS = HA::SizeT(TEXT("rbar_full"));
 				HA::Part(Out, L + 6, Geo, BP, FVector2D(BS.X * F, BS.Y), TEXT("rbar_full"), FBox2D(FVector2D::ZeroVector, FVector2D(FS.X * F, FS.Y)), bReady ? FLinearColor(1.f, 0.9f, 0.5f) : FLinearColor::White);
 			}
-			if (J && J->Flash > 0.f) SBox(Out, L + 7, Geo, BP, BS, FLinearColor(1.f, 1.f, 1.f, 0.4f * J->Flash), FLinearColor::Transparent, 6.f * t, 0.f);
+			if (J && J->Flash > 0.f) ZoogiUIStyle::SBox(Out, L + 7, Geo, BP, BS, FLinearColor(1.f, 1.f, 1.f, 0.4f * J->Flash), FLinearColor::Transparent, 6.f * t, 0.f);
 		}
 		// bottom of the group: the acting Zoogi's ACTION box, else the carved emblem plate
 		const float BY = CP.Y + CS.Y + 5.f * t, BH = Y + GH - 9.f * t - BY;
