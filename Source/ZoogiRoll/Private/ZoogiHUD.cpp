@@ -493,7 +493,7 @@ void AZoogiHUD::DrawMatch(AZoogiGameMode* G)
 	// Awaken panel / aim bar: UMG when it's up (AZoogiHUD::UpdateAwakenWidget), Canvas otherwise (-ZoogiCanvasAwaken).
 	const bool bUmgAwaken = AwakenWidget && AwakenWidget->ShowsAwaken();
 	const bool bUmgAim = AwakenWidget && AwakenWidget->ShowsAim();
-	if (G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Awaken && G->CardsOn()) DrawCards(G);
+	if (G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Awaken && G->CardsOn()) { if (!(AwakenWidget && AwakenWidget->ShowsCards())) DrawCards(G); }
 	else if (G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Awaken && !bUmgAwaken) DrawAwaken(G);
 	if (G->IsHumanAiming() && G->IsAimStep() && !bUmgAim) DrawAimControls(G);
 	if (Letterbox < 0.3f && G->bComboMode) Text(TEXT("2v2 COMBO   Awaken: card + I / G / S   Battle: Q switch Zoogi, click target / floor, A/D cut, 1 CONTROL 2 DRIVE 3 LAUNCH, SPACE confirm   Follow-Up: F accept / X skip   C camera"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.75f, 0.85f, 0.85f), 0.36f, false, false);

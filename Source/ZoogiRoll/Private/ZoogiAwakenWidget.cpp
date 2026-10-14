@@ -588,32 +588,34 @@ void UZoogiAwakenWidget::Refresh(float DeltaSeconds, bool bHideAll)
 	PumpGemJobs();
 	BtnFx.RemoveAll([](const FBtnFx& F) { return !F.Btn.IsValid() || !F.Btn->GetParent(); });
 	AZoogiGameMode* G = GetWorld() ? GetWorld()->GetAuthGameMode<AZoogiGameMode>() : nullptr;
-	bool bWantAwaken = false, bWantAim = false;
+	bool bWantAwaken = false, bWantAim = false, bWantCards = false;
 	if (G && Root && !bHideAll && G->Phase == EZoogiPhase::Aiming)
 	{
 		AZoogiBall* B = G->GetActiveBall();
 		bWantAwaken = G->Stage == EZoogiStage::Awaken && !G->bAwakenDone && B && B->Artifact && !G->CardsOn(); // v3: Canvas card panel instead
 		bWantAim = G->IsHumanAiming() && G->IsAimStep();
+		bWantCards = G->CardsOn() && G->Stage == EZoogiStage::Awaken && !G->bAwakenDone && B && G->IsHumanAiming();
 	}
-	if (bWantAwaken)
+	FillPendingCards();
+	if (bWantAwaken || bWantCards)
 	{
-		const FString Sig = AwakenSignature(G);
+		const FString Sig = bWantCards ? CardsSignature(G) : AwakenSignature(G);
 		if (Sig != AwakenSig || !AwakenPanel)
 		{
 			if (AwakenPanel) AwakenPanel->RemoveFromParent();
 			AwakenPanel = nullptr;
 			Controls.RemoveAll([](const FControl& C) { return !C.bAim; });
 			AwakenClicks.Reset();
-			BuildAwaken(G);
+			if (bWantCards) BuildCards(G); else BuildAwaken(G);
 			AwakenSig = Sig;
 			++NumRebuilds;
 		}
 	}
 	if (AwakenPanel)
 	{
-		const ESlateVisibility V = bWantAwaken ? ESlateVisibility::Visible : ESlateVisibility::Collapsed;
+		const ESlateVisibility V = (bWantAwaken || bWantCards) ? ESlateVisibility::Visible : ESlateVisibility::Collapsed;
 		if (AwakenPanel->GetVisibility() != V) AwakenPanel->SetVisibility(V);
-		if (!bWantAwaken) AwakenSig.Reset();
+		if (!bWantAwaken && !bWantCards) AwakenSig.Reset();
 	}
 	if (bWantAim)
 	{
@@ -648,6 +650,7 @@ void UZoogiAwakenWidget::Refresh(float DeltaSeconds, bool bHideAll)
 		if (!bWantAim) AimSig.Reset();
 	}
 	bAwakenShown = bWantAwaken && AwakenPanel != nullptr;
+	bCardsShown = bWantCards && AwakenPanel != nullptr;
 	bAimShown = bWantAim && AimPanel != nullptr;
 	if (bAwakenShown && !bAwakenWasShown) AwakenIntro = 0.f;
 	if (bAimShown && !bAimWasShown) AimIntro = 0.f;
