@@ -6,7 +6,7 @@ public class ZoogiRoll : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 		PublicDependencyModuleNames.AddRange(new string[] {
-			"Core", "CoreUObject", "Engine", "InputCore", "PhysicsCore", "Slate", "SlateCore", "UMG", "Niagara", "NiagaraCore", "MediaAssets", "ProceduralMeshComponent"
+			"Core", "CoreUObject", "Engine", "InputCore", "PhysicsCore", "Slate", "SlateCore", "UMG", "Niagara", "NiagaraCore", "MediaAssets", "ProceduralMeshComponent", "AudioMixer"
 		});
 		if (Target.bBuildEditor) PrivateDependencyModuleNames.AddRange(new string[] { "UnrealEd", "NiagaraEditor" });
 	}

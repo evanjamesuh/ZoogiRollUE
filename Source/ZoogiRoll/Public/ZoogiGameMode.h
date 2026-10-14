@@ -4,6 +4,7 @@
 #include "GameFramework/GameModeBase.h"
 #include "ZoogiTypes.h"
 #include "ZoogiArtifacts.h"
+#include "ZoogiMatchEvents.h"
 #include "ZoogiGameMode.generated.h"
 
 class AZoogiBall;
@@ -530,6 +531,8 @@ public:
 	void TakeShot(const FString& Name);
 	void TakeShotDelayed(const FString& Name, float Delay);
 	TMap<FString, float> DelayedShots;
+	FOnZoogiMatchEvent OnMatchEvent; void NotifyAnimeEvent(const FString& Ev);
+	bool NotifyMatchEvent(EZoogiMatchEvent E, int32 Who = -1, float Mag = 0.f); // music + announcer (ZoogiMusicSubsystem.cpp); true while arena music drives the score
 
 protected:
 	void BeginTurn(int32 PlayerIdx);

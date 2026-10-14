@@ -227,6 +227,7 @@ void UZoogiAnimeSubsystem::PlayEventSfx(const FZoogiCombatEvent& E)
 		}
 	};
 	AZoogiGameMode* G = GetWorld() ? GetWorld()->GetAuthGameMode<AZoogiGameMode>() : nullptr;
+	if (G) G->NotifyAnimeEvent(Ev); // announcer + music surge (KO / Critical / Combo)
 	if (Ev == TEXT("Infuse")) { ZoogiUtil::PlaySfx(this, TEXT("AwakenCharge"), 0.9f); Sting(0.35f); }
 	else if (Ev == TEXT("Guard")) ZoogiUtil::PlaySfx(this, TEXT("GuardClang"), 0.75f, 0.92f);
 	else if (Ev == TEXT("GuardBlock")) ZoogiUtil::PlaySfx(this, TEXT("GuardClang"), 1.f, 1.1f);
