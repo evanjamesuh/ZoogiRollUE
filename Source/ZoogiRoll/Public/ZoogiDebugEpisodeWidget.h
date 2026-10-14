@@ -8,6 +8,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "ZoogiBattleTypes.h"
+#include "ZoogiUIStyle.h"
 #include "ZoogiDebugEpisodeWidget.generated.h"
 
 class AHUD;
@@ -37,4 +38,5 @@ private:
 	double RealClock = 0.0;
 	double ShatterFlashUntil = -1.0;
 	bool bLoggedFirstDraw = false;
+	TArray<ZoogiUIStyle::FBarJuice> EnergyJuice; // uistyle: per-player bar juice (display only)
 };

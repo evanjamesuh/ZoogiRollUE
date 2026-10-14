@@ -225,6 +225,7 @@ protected:
 	TMap<FString, int32> AerialShotCounts;
 	uint8 MapTheme = 0;                    // EZoogiArena of the arena the map layout was built for
 	bool bMapLayout = false;
+	bool bMenuPreviewLayout = false;        // Oct 14: layout spawned for the main-menu map preview (cleared when the menu ends)
 	TWeakObjectPtr<class AZoogiArena> MapArena;
 	TSet<TWeakObjectPtr<AZoogiBall>> PropBoundBalls;
 	TMap<int64, FVector> PropPrevLocal;   // (prop, ball) -> previous ball position in the trigger frame

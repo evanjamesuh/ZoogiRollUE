@@ -162,7 +162,7 @@ struct FZoogiCardTune
 	bool bCards = false;        // [ZoogiRoll.Cards] bCards (default False) / -ZoogiCards / -ZoogiCards=Off
 	int32 HandSize = 5;         // card book: "Draw five"
 	int32 EnergyPerTurn = 5;    // card book: "refresh five Energy"
-	int32 DeckSize = 12;        // PROPOSED (Evan, Oct 13)
+	int32 DeckSize = 15;        // Evan, Oct 14: at least 15 cards
 	int32 MaxCopies = 2;        // PROPOSED (Evan, Oct 13)
 	int32 MaxCardsPerCommit = 5;
 	FString DefaultDeck;        // deck id in Decks.csv
@@ -174,7 +174,7 @@ namespace ZoogiCards
 {
 	/** The 15 universal cards (card book p.17-31). Costs / types / expiries VERIFIED-DOC; Param values PROPOSED (book says so). */
 	ZOOGIROLL_API TArray<FZoogiCardDef> BuiltInDefs();
-	/** Default 12-card deck (PROPOSED): every card once except Storm / Guard / Precision twice... see Decks.csv. */
+	/** Default 15-card deck (PROPOSED): every card once except Storm / Guard / Precision twice... see Decks.csv. */
 	ZOOGIROLL_API TArray<FName> BuiltInDeck();
 	/** Parses Cards.csv text (header row required). Returns false (and leaves Out empty) on any malformed row. */
 	ZOOGIROLL_API bool ParseCardsCsv(const FString& Text, TArray<FZoogiCardDef>& Out, FString& OutError);

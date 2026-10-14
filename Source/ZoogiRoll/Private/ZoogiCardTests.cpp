@@ -8,7 +8,7 @@
 
 namespace ZoogiCardTest
 {
-	static FZoogiCardTune Tune() { FZoogiCardTune T; T.bCards = true; return T; } // defaults: hand 5, energy 5, deck 12, max 2
+	static FZoogiCardTune Tune() { FZoogiCardTune T; T.bCards = true; return T; } // defaults: hand 5, energy 5, deck 15, max 2
 	static TSharedPtr<IZoogiCardBackend> Backend() { return MakeShared<FZoogiNativeCardBackend>(ZoogiCards::BuiltInDefs()); }
 	static bool Make(FZoogiCardRules& R, int32 Players = 2, int32 Seed = 7)
 	{
@@ -66,18 +66,18 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiCardDeckTest, "ZoogiRoll.Cards.DeckRules"
 bool FZoogiCardDeckTest::RunTest(const FString&)
 {
 	auto B = Backend(); FString Err;
-	TestTrue(TEXT("starter deck legal"), ZoogiCards::ValidateDeck(ZoogiCards::BuiltInDeck(), *B, 12, 2, Err));
+	TestTrue(TEXT("starter deck legal"), ZoogiCards::ValidateDeck(ZoogiCards::BuiltInDeck(), *B, 15, 2, Err));
 	TArray<FName> D = ZoogiCards::BuiltInDeck(); D.Pop();
-	TestFalse(TEXT("11 cards rejected"), ZoogiCards::ValidateDeck(D, *B, 12, 2, Err));
+	TestFalse(TEXT("14 cards rejected"), ZoogiCards::ValidateDeck(D, *B, 15, 2, Err));
 	D.Add(TEXT("storm")); // third storm
-	TestFalse(TEXT("3 copies rejected"), ZoogiCards::ValidateDeck(D, *B, 12, 2, Err));
+	TestFalse(TEXT("3 copies rejected"), ZoogiCards::ValidateDeck(D, *B, 15, 2, Err));
 	D.Last() = TEXT("not_a_card");
-	TestFalse(TEXT("unknown id rejected"), ZoogiCards::ValidateDeck(D, *B, 12, 2, Err));
+	TestFalse(TEXT("unknown id rejected"), ZoogiCards::ValidateDeck(D, *B, 15, 2, Err));
 	// an illegal player deck falls back to the starter deck
 	FZoogiCardRules R; FString L;
 	TArray<TArray<FName>> Decks = { ZoogiCards::BuiltInDeck(), D };
 	TestTrue(TEXT("init with one bad deck"), R.Init(B, Tune(), 1, Decks, ZoogiCards::BuiltInDeck(), L));
-	TestEqual(TEXT("fallback deck size"), R.Player(1)->DrawPile.Num(), 12);
+	TestEqual(TEXT("fallback deck size"), R.Player(1)->DrawPile.Num(), 15);
 	// determinism: same seed same order, different seed different order
 	FZoogiCardRules A1, A2, A3; Make(A1, 2, 42); Make(A2, 2, 42); Make(A3, 2, 43);
 	TestTrue(TEXT("same seed same state"), A1.StateHash() == A2.StateHash());
@@ -93,7 +93,7 @@ bool FZoogiCardDrawTest::RunTest(const FString&)
 	R.BeginStandby(0, 1);
 	TestEqual(TEXT("draw 5"), R.Player(0)->Hand.Num(), 5);
 	TestEqual(TEXT("energy 5"), R.Player(0)->Energy, 5);
-	TestEqual(TEXT("pile 7"), R.Player(0)->DrawPile.Num(), 7);
+	TestEqual(TEXT("pile 10"), R.Player(0)->DrawPile.Num(), 10);
 	R.BeginStandby(0, 1); // same turn again: apply once
 	TestEqual(TEXT("no double draw"), R.Player(0)->Hand.Num(), 5);
 	TestEqual(TEXT("P2 untouched"), R.Player(1)->Hand.Num(), 0);
@@ -112,13 +112,13 @@ bool FZoogiCardDrawTest::RunTest(const FString&)
 	R.BeginStandby(0, 3);
 	TestEqual(TEXT("refresh to 5 (not 4+5)"), R.Player(0)->Energy, 5);
 	TestEqual(TEXT("draw 5 again"), R.Player(0)->Hand.Num(), 5);
-	// third standby: 2 left in the pile, reshuffle the discard for the other 3
-	R.BeginStandby(1, 4); R.BeginStandby(0, 5);
+	// 15-card deck: third standby empties the pile, fourth reshuffles the discard
+	R.BeginStandby(1, 4); R.BeginStandby(0, 5); TestEqual(TEXT("pile empty after third draw"), R.Player(0)->DrawPile.Num(), 0); R.BeginStandby(1, 6); R.BeginStandby(0, 7);
 	TestEqual(TEXT("hand 5 after reshuffle"), R.Player(0)->Hand.Num(), 5);
 	bool bReshuffled = false; for (const FZoogiCardEvent& E : R.Events()) bReshuffled |= E.Kind == FName(TEXT("reshuffle")) && E.Player == 0;
 	TestTrue(TEXT("reshuffle logged"), bReshuffled);
 	const FZoogiCardPlayerState* S = R.Player(0);
-	TestEqual(TEXT("12 cards conserved"), S->Hand.Num() + S->DrawPile.Num() + S->Discard.Num() + S->Committed.Num(), 12);
+	TestEqual(TEXT("15 cards conserved"), S->Hand.Num() + S->DrawPile.Num() + S->Discard.Num() + S->Committed.Num(), 15);
 	return true;
 }
 
@@ -219,7 +219,7 @@ bool FZoogiCardCommitOnceTest::RunTest(const FString&)
 		int32 Commits = 0; for (const FZoogiCardEvent& E : R.Events()) Commits += E.Kind == FName(TEXT("commit"));
 		TestEqual(TEXT("one commit event"), Commits, 1);
 		R.EndTurn(0); R.EndTurn(0); // idempotent
-		TestEqual(TEXT("all 12 conserved"), S->Hand.Num() + S->DrawPile.Num() + S->Discard.Num(), 12);
+		TestEqual(TEXT("all 15 conserved"), S->Hand.Num() + S->DrawPile.Num() + S->Discard.Num(), 15);
 	}
 	// empty commit (pass) is legal and spends 0
 	FZoogiCardRules R; Make(R);

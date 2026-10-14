@@ -1,4 +1,4 @@
-# deck_id,card_id (one row per copy). PROPOSED (Evan Oct 13): 12 cards, max 2 copies.
+# deck_id,card_id (one row per copy). Evan Oct 14: 15 cards, max 2 copies.
 deck_id,card_id
 starter,storm
 starter,storm
@@ -12,3 +12,6 @@ starter,titan
 starter,orb_relay
 starter,recovery_roll
 starter,crystal_collapse
+starter,precision
+starter,ember
+starter,anchor_guard
