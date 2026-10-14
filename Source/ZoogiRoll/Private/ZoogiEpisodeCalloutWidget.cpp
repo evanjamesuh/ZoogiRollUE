@@ -79,6 +79,9 @@ TSharedRef<SWidget> UZoogiEpisodeCalloutWidget::RebuildWidget()
 	BannerText->SetJustification(ETextJustify::Center);
 	BannerBox->SetContent(BannerText);
 	BannerBox->SetRenderOpacity(0.f);
+	// Evan Oct 14 1:40 AM CT: the idle (empty, opacity-0) banner frame still showed as a "random square" at screen centre
+	// (anchor 0.5, 0.74). It is only a presentation frame, so it stays Collapsed except while a banner is actually showing.
+	BannerBox->SetVisibility(ESlateVisibility::Collapsed);
 	Anchor(Root, BannerBox, FAnchors(0.5f, 0.74f), FVector2D(0.5f, 0.5f), FMargin(0.f), true);
 	BannerSub = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("BannerSub"));
 	BannerSub->SetFont(EpFont(18.f, false));
@@ -136,6 +139,7 @@ void UZoogiEpisodeCalloutWidget::ShowBanner(const FString& Text, const FString& 
 	BannerBox->SetBrush(EpSolid(FLinearColor(0.02f, 0.03f, 0.08f, 0.8f), Color, 2.f, 8.f));
 	BannerAge = 0.f;
 	BannerLife = Seconds;
+	BannerBox->SetVisibility(ESlateVisibility::HitTestInvisible);
 }
 
 void UZoogiEpisodeCalloutWidget::ShowPanel(int32 PanelSlot, UTexture* Tex, float Seconds, const FString& Caption, const FLinearColor& Frame, bool bSmall)
@@ -195,6 +199,8 @@ void UZoogiEpisodeCalloutWidget::TickEpisode(float Dt)
 		const float A = T < BannerLife ? (T < 0.12f ? T / 0.12f : (T > BannerLife - 0.3f ? (BannerLife - T) / 0.3f : 1.f)) : 0.f;
 		BannerBox->SetRenderOpacity(A);
 		BannerSub->SetRenderOpacity(A);
+		const ESlateVisibility BV = A > 0.01f ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed;
+		if (BannerBox->GetVisibility() != BV) BannerBox->SetVisibility(BV);
 		BannerBox->SetRenderScale(FVector2D(FMath::Lerp(1.25f, 1.f, EaseOutBack(T / 0.25f))));
 	}
 }
