@@ -188,7 +188,7 @@ void AZoogiHUD::DrawHUD()
 	TickUIPolish(G);
 	if (G->Phase == EZoogiPhase::Forming) { DrawForming(G); return; }
 	DrawMatch(G);
-	if (G->Phase == EZoogiPhase::GameOver) DrawResults(G);
+	if (G->Phase == EZoogiPhase::GameOver) { DrawResults(G); DrawProgressionBadge(G); }
 }
 
 void AZoogiHUD::TickClipFrames(AZoogiGameMode* G)

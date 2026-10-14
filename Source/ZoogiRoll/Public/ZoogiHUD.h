@@ -42,6 +42,7 @@ protected:
 	void DrawFlyers(AZoogiGameMode* G);
 	void DrawPower(AZoogiGameMode* G);
 	void DrawResults(AZoogiGameMode* G);
+	void DrawProgressionBadge(AZoogiGameMode* G); // Oct 14 progression: title + border cosmetic + gems today (ZoogiProgressionHUD.cpp)
 	void DrawStages(AZoogiGameMode* G);
 	// Milestone "Awaken" (Canvas, like the rest of the in-match HUD)
 	void DrawAwaken(AZoogiGameMode* G);
