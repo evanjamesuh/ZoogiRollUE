@@ -142,10 +142,10 @@ void UZoogiFrameTrail::OnWorldBeginPlay(UWorld& InWorld)
 
 void UZoogiFrameTrail::ShotTick()
 {
-	// 8 captures 0.25 s apart (2/3 of a lap at 3 s) once the framed layout is up
+	// 13 captures 0.25 s apart (one full lap at 3 s) once the framed layout is up
 	if (!ZoogiFramed::IsActive(GetWorld()) || !ZoogiFramed::Current().bValid) return;
 	if (AZoogiGameMode* G = GetWorld()->GetAuthGameMode<AZoogiGameMode>()) G->TakeShot(FString::Printf(TEXT("frametrail_%02d"), Shots));
-	if (++Shots >= 8) GetWorld()->GetTimerManager().ClearTimer(ShotTimer);
+	if (++Shots >= 13) GetWorld()->GetTimerManager().ClearTimer(ShotTimer);
 }
 
 void UZoogiFrameTrail::Deinitialize()
