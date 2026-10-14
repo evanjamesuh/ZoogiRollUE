@@ -393,7 +393,7 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 		Sc0 = FMath::Clamp((TB - TT - 24.f * FL.T * k) / UZoogiCardWidget::CardH, 0.45f, 1.3f); // shorter: the fan sits down in the recess with less overlap
 		const float Avail = HX1 - HX0 - 20.f * FL.T * k;
 		Spacing = FMath::Min(UZoogiCardWidget::CardW * Sc0 * 1.06f, (Avail - UZoogiCardWidget::CardW * Sc0) / FMath::Max(N - 1, 1));
-		BaseY = TB + 8.f * FL.T * k; ArcK = 1.f; TiltK = 2.5f; HoverSc = Sc0 * 1.1f; HoverY = TB; Spread = Sc0 * 0.5f;
+		BaseY = TB - 7.f * FL.T * k; ArcK = 1.f; // card bottoms stay on screen TiltK = 2.5f; HoverSc = Sc0 * 1.1f; HoverY = TB; Spread = Sc0 * 0.5f;
 		FanCX = (HX0 + HX1) * 0.5f;
 		FramedFanL = FanCX - ((N - 1) * Spacing + UZoogiCardWidget::CardW * Sc0) * 0.5f;
 	}
