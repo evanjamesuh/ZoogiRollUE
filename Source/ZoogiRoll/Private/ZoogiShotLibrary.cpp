@@ -108,7 +108,7 @@ namespace ZoogiShot
 		{
 		case EZoogiShotType::TrickBank: return TEXT("on the wall normal, raised: in and out lines mirror around the contact");
 		case EZoogiShotType::TrickDoubleBank: return TEXT("high, perpendicular to the zigzag: both contacts + the Z path in frame");
-		case EZoogiShotType::TrickPowerBank: return TEXT("tight, low on the contact, tinted in the power colour with a jolt");
+		case EZoogiShotType::TrickPowerBank: return TEXT("close on the Zoogi at / just after contact, contact + power colour as accent, jolt");
 		case EZoogiShotType::TrickWallRedirect: return TEXT("behind the new line at the wall, looking down it");
 		case EZoogiShotType::TrickAllyBump: return TEXT("low two-shot at the contact, ally in the foreground");
 		case EZoogiShotType::TrickOrbRelay: return TEXT("chases the orb from behind along its path toward the receiver");
@@ -175,9 +175,11 @@ FZoogiShotSpec UZoogiShotLibrary::MakeDefault(EZoogiShotType Type)
 	case EZoogiShotType::ReactionEye:
 		// Extreme close-up on the eyes, almost square-on, tiny drift.
 		S.Duration = 1.5f; S.EaseIn = 0.15f; S.EaseOut = 0.3f; S.Ease = EZoogiShotEase::CubicInOut;
-		S.Heading = EZoogiShotHeading::FocusFacing; S.YawOffset = 10.f; S.OrbitDegrees = 4.f;
-		S.Pitch = 4.f; S.PitchEnd = 3.f; S.Distance = 250.f; S.DistanceEnd = 215.f;
-		S.FOV = 27.f; S.FOVEnd = 24.f; S.PivotOffset = FVector(0, 0, 6.f); S.LookOffset = FVector(0, 0, 4.f);
+		// square-on (no yaw bias) so both eyes sit inside the frame; look point a little below the eye line so the eyes
+		// ride in the upper-middle of the frame, clear of the main-view HUD band.
+		S.Heading = EZoogiShotHeading::FocusFacing; S.YawOffset = 0.f; S.OrbitDegrees = 3.f;
+		S.Pitch = 4.f; S.PitchEnd = 3.f; S.Distance = 255.f; S.DistanceEnd = 235.f;
+		S.FOV = 31.f; S.FOVEnd = 28.f; S.PivotOffset = FVector(0, 0, 6.f); S.LookOffset = FVector(0, 0, -8.f);
 		S.SubjectRadius = 30.f; S.VignetteAdd = 0.22f; S.SaturationMul = 1.06f; S.ContrastMul = 1.05f;
 		break;
 	case EZoogiShotType::ReactionSurprise:
@@ -204,9 +206,9 @@ FZoogiShotSpec UZoogiShotLibrary::MakeDefault(EZoogiShotType Type)
 		// as a symmetric V around the bank point (angle in = angle out reads at a glance). Shooter kept in frame.
 		S.Duration = 2.1f; S.EaseIn = 0.3f; S.EaseOut = 0.4f;
 		S.Heading = EZoogiShotHeading::EventNormal; S.YawOffset = 0.f; S.OrbitDegrees = 0.f;
-		S.EventBias = 0.85f; S.bFrameBoth = false; S.bFrameEvent = true; S.SubjectRadius = 70.f; S.MaxFOV = 85.f;
-		S.Pitch = 38.f; S.PitchEnd = 34.f; S.Distance = 900.f; S.DistanceEnd = 800.f;
-		S.FOV = 50.f; S.FOVEnd = 48.f; S.TrackingLag = 0.f; S.LookOffset = FVector::ZeroVector;
+		S.EventBias = 0.55f; S.bFrameBoth = false; S.bFrameEvent = true; S.SubjectRadius = 60.f; S.FramePadding = 1.15f; S.MaxFOV = 72.f;
+		S.Pitch = 36.f; S.PitchEnd = 32.f; S.Distance = 620.f; S.DistanceEnd = 540.f;
+		S.FOV = 46.f; S.FOVEnd = 44.f; S.TrackingLag = 5.f; S.LookOffset = FVector::ZeroVector;
 		break;
 	case EZoogiShotType::TrickDoubleBank:
 		// High and square-on to the line between the two contacts: both bank points and the zigzag of the path in one frame.
@@ -219,12 +221,14 @@ FZoogiShotSpec UZoogiShotLibrary::MakeDefault(EZoogiShotType Type)
 	case EZoogiShotType::TrickPowerBank:
 		// Tight and low on the contact itself, a little off the normal, in the power's colour with an impact jolt.
 		S.Duration = 1.7f; S.EaseIn = 0.2f; S.EaseOut = 0.35f;
-		S.Heading = EZoogiShotHeading::EventNormal; S.YawOffset = 42.f; S.OrbitDegrees = -8.f;
-		S.EventBias = 0.9f; S.PivotOffset = FVector(0, 0, 10.f);
-		S.Pitch = 20.f; S.PitchEnd = 15.f; S.Distance = 460.f; S.DistanceEnd = 360.f;
-		S.FOV = 50.f; S.FOVEnd = 42.f; S.MoveEase = EZoogiShotEase::ExpoOut; S.LookOffset = FVector::ZeroVector;
+		// Anchored on the Zoogi (contact point as the accent, framed alongside), so it is in frame at / just after contact.
+		S.Heading = EZoogiShotHeading::EventNormal; S.YawOffset = 35.f; S.OrbitDegrees = -6.f;
+		S.EventBias = 0.3f; S.bFrameEvent = true; S.SubjectRadius = 55.f; S.FramePadding = 1.15f; S.MaxFOV = 70.f;
+		S.PivotOffset = FVector(0, 0, 5.f); S.TrackingLag = 6.f;
+		S.Pitch = 15.f; S.PitchEnd = 12.f; S.Distance = 400.f; S.DistanceEnd = 330.f;
+		S.FOV = 48.f; S.FOVEnd = 44.f; S.MoveEase = EZoogiShotEase::ExpoOut; S.LookOffset = FVector::ZeroVector;
 		S.ShakeDeg = 0.8f; S.ShakeHz = 9.f; S.ShakeDecay = 3.f;
-		S.AccentStrength = 0.35f; S.ContrastMul = 1.08f; S.VignetteAdd = 0.1f;
+		S.AccentStrength = 0.22f; S.ContrastMul = 1.06f; S.VignetteAdd = 0.1f;
 		break;
 	case EZoogiShotType::TrickWallRedirect:
 		// At the wall, behind the new direction, looking down the new line the Zoogi leaves on.

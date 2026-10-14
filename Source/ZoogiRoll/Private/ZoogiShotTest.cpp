@@ -484,6 +484,20 @@ FZoogiShotHandle AZoogiShotTestDriver::PlayCaseShot(EZoogiShotType Type, EZoogiS
 			P.bHasEventLocation = true; P.EventLocation = E1;
 			P.bHasEventNormal = true; P.EventNormal = N1;
 			OutSetup = FString::Printf(TEXT("bank contact (rim) = %s normal = %s"), *E1.ToString(), *P.EventNormal.ToString());
+			// Bank / power bank: a Zoogi-sized kinematic prop actually rolls in from P1's side, hits the contact during the
+			// shot and leaves on the mirrored line (game time; no collision / physics).
+			if (Type == EZoogiShotType::TrickBank || Type == EZoogiShotType::TrickPowerBank)
+			{
+				BankIn = (E1 - FL).GetSafeNormal2D();
+				BankOut = BankIn - 2.f * FVector::DotProduct(BankIn, N1) * N1;
+				BankE = E1; BankSpeed = 750.f; BankT = 0.f;
+				BankTc = Type == EZoogiShotType::TrickPowerBank ? 0.5f : 0.7f;
+				if (TempProp) { TempProp->Destroy(); TempProp = nullptr; }
+				TempProp = SpawnProp(E1 - BankIn * BankSpeed * BankTc, 1.f);
+				TintProp(TempProp, FLinearColor(0.3f, 0.6f, 1.f));
+				if (TempProp) { UseF = TempProp; bBankMove = true; }
+				OutSetup += FString::Printf(TEXT(", subject = prop rolling in at %.0f cm/s, contact at t=%.2f s, out line = %s"), BankSpeed, BankTc, *BankOut.ToString());
+			}
 			// the core's contact glow ring at the real contact (as FallbackGlow spawns it; power colour for a power bank)
 			if (TempFX) { TempFX->Destroy(); TempFX = nullptr; }
 			TempFX = AZoogiFX::Spawn(GetWorld(), FVector(E1.X, E1.Y, 6.f), Type == EZoogiShotType::TrickPowerBank ? FLinearColor(0.35f, 0.75f, 1.f) : FLinearColor(1.f, 0.82f, 0.32f), 110.f, 4.f, true, 5.f);
@@ -761,6 +775,13 @@ void AZoogiShotTestDriver::RunCase(float RealDt)
 		TrackProp->SetActorLocation(TrackCenter + FVector(FMath::Cos(TrackAngle) * 380.f, FMath::Sin(TrackAngle) * 380.f, 20.f));
 	}
 	// Airborne prop: ballistic arc in game time (dilated, frozen while paused), looping.
+	if (bBankMove && TempProp)
+	{
+		BankT += GetWorld()->GetDeltaSeconds();
+		const float Dd = BankSpeed * (BankT - BankTc);
+		TempProp->SetActorLocation(Dd < 0.f ? BankE + BankIn * Dd : BankE + BankOut * Dd);
+		if (!bBankHitLogged && Dd >= 0.f) { bBankHitLogged = true; UE_LOG(LogZoogi, Log, TEXT("ZOOGI SHOTTEST   subject passed the contact at %.2f s game time"), BankT); }
+	}
 	if (ArcProp && !ArcProp->IsHidden())
 	{
 		ArcTime += GetWorld()->GetDeltaSeconds();
@@ -1007,6 +1028,7 @@ void AZoogiShotTestDriver::Tick(float DeltaSeconds)
 			HidePanel();
 			if (TrackProp) TrackProp->SetActorHiddenInGame(true);
 			if (ArcProp) ArcProp->SetActorHiddenInGame(true);
+			bBankMove = false; bBankHitLogged = false;
 			if (TempProp) { TempProp->Destroy(); TempProp = nullptr; }
 			if (TempFX) { TempFX->Destroy(); TempFX = nullptr; }
 			WaitFrames = 1;

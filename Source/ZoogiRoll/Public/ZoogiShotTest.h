@@ -67,6 +67,7 @@ private:
 	AStaticMeshActor* SpawnProp(const FVector& At, float Scale);
 	/** Plays one library shot the way the case's family needs it (props, secondary, event point). */
 	void CheckTrickLookup();
+	bool bBankMove = false; bool bBankHitLogged = false; float BankT = 0.f, BankTc = 0.f, BankSpeed = 0.f; FVector BankE = FVector::ZeroVector, BankIn = FVector::ZeroVector, BankOut = FVector::ZeroVector;
 	void TintProp(class AStaticMeshActor* A, const FLinearColor& C);
 	FZoogiShotHandle PlayCaseShot(EZoogiShotType Type, EZoogiShotOutput Output, FString& OutSetup);
 	void StartArc(const FVector& From);
