@@ -549,8 +549,8 @@ void AZoogiArena::SetupSky(EZoogiArena InTheme)
 		Sun->SetLightColor(FLinearColor(1.f, 0.95f, 0.86f));
 		SkyLight->SetIntensity(1.0f);
 		SkyLight->SetLightColor(FLinearColor(0.85f, 0.92f, 1.f));
-		Fog->SetFogDensity(0.005f);
-		Fog->SetFogInscatteringColor(FLinearColor(0.6f, 0.75f, 1.f));
+		Fog->SetFogDensity(0.003f); // Oct 14 haze trim: was 0.005 / inscatter (0.6, 0.75, 1.0) (far stands read milky)
+		Fog->SetFogInscatteringColor(FLinearColor(0.5f, 0.64f, 0.88f));
 		Fog->SetStartDistance(2500.f);
 		P.AutoExposureBias = -0.75f; // Oct 14 contrast pass: was -0.5 (read washed out vs 08 previews)
 		P.BloomIntensity = 1.0f;
