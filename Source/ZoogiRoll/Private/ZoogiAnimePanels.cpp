@@ -13,10 +13,10 @@ namespace
 {
 	// Crop of the 16:9 clip shown in each panel (u0, v0, u1, v1): wide / close / low / reaction, like a comic page.
 	const FBox2f GCrop[4] = {
-		FBox2f(FVector2f(0.04f, 0.06f), FVector2f(0.58f, 0.74f)),
-		FBox2f(FVector2f(0.36f, 0.18f), FVector2f(0.76f, 0.68f)),
-		FBox2f(FVector2f(0.00f, 0.28f), FVector2f(0.54f, 0.96f)),
-		FBox2f(FVector2f(0.42f, 0.24f), FVector2f(0.98f, 0.94f)) };
+		FBox2f(FVector2f(0.04f, 0.10f), FVector2f(0.62f, 0.70f)),
+		FBox2f(FVector2f(0.34f, 0.22f), FVector2f(0.76f, 0.66f)),
+		FBox2f(FVector2f(0.00f, 0.34f), FVector2f(0.58f, 0.94f)),
+		FBox2f(FVector2f(0.42f, 0.30f), FVector2f(0.98f, 0.88f)) };
 	const float GTilt[4] = { -2.2f, 1.6f, 1.8f, -1.4f };
 }
 
@@ -26,7 +26,7 @@ FBox2f FZoogiAnimePanels::PanelRect(int32 Index)
 	const bool bRight = Index == 1 || Index == 3;
 	const bool bLow = Index >= 2;
 	const float X0 = bRight ? 0.755f : 0.03f, X1 = bRight ? 0.97f : 0.245f;
-	const float Y0 = bLow ? 0.50f : 0.15f, Y1 = bLow ? 0.80f : 0.45f;
+	const float Y0 = bLow ? 0.575f : 0.335f, Y1 = bLow ? 0.79f : 0.555f; // between the HUD side panels (top) and the hand card (bottom right)
 	return FBox2f(FVector2f(X0, Y0), FVector2f(X1, Y1));
 }
 
