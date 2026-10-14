@@ -179,7 +179,7 @@ FZoogiShotSpec UZoogiShotLibrary::MakeDefault(EZoogiShotType Type)
 		// ride in the upper-middle of the frame, clear of the main-view HUD band.
 		S.Heading = EZoogiShotHeading::FocusFacing; S.YawOffset = 0.f; S.OrbitDegrees = 3.f;
 		S.Pitch = 4.f; S.PitchEnd = 3.f; S.Distance = 255.f; S.DistanceEnd = 235.f;
-		S.FOV = 31.f; S.FOVEnd = 28.f; S.PivotOffset = FVector(0, 0, 6.f); S.LookOffset = FVector(0, 0, -8.f);
+		S.FOV = 31.f; S.FOVEnd = 28.f; S.PivotOffset = FVector(0, 0, 6.f); S.LookOffset = FVector(0, 0, -2.f);
 		S.SubjectRadius = 30.f; S.VignetteAdd = 0.22f; S.SaturationMul = 1.06f; S.ContrastMul = 1.05f;
 		break;
 	case EZoogiShotType::ReactionSurprise:
