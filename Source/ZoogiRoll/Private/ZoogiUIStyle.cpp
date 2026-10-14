@@ -278,3 +278,53 @@ namespace ZoogiUIStyle
 		return S;
 	}
 }
+
+namespace ZoogiUIStyle
+{
+	float EaseOutBack(float T)
+	{
+		T = FMath::Clamp(T, 0.f, 1.f);
+		const float C1 = 1.70158f, C3 = C1 + 1.f;
+		return 1.f + C3 * FMath::Pow(T - 1.f, 3.f) + C1 * FMath::Pow(T - 1.f, 2.f);
+	}
+
+	void FButtonAnim::Tick(bool bHovered, bool bPressed, float Dt, float Time)
+	{
+		Dt = FMath::Min(Dt, 1.f / 20.f);
+		Age += Dt;
+		if (bDisabled) { OutScale = 1.f; OutOpacity = 1.f; OutGloss = 0.f; return; }
+		if (bPressed)
+		{
+			// squash fast (~60 ms), no spring while held
+			Scale = FMath::FInterpTo(Scale, 0.94f, Dt, 35.f);
+			Vel = 0.f;
+		}
+		else
+		{
+			// under-damped spring towards 1.05 (hover) / 1.0: bouncy release, settles in ~150-180 ms
+			const float Target = bHovered ? 1.05f : 1.f;
+			const float K = bWasPressed ? 1400.f : 900.f, C = bWasPressed ? 26.f : 42.f;
+			if (bWasPressed) Vel += 2.2f; // release kick
+			Vel += (K * (Target - Scale) - C * Vel) * Dt;
+			Scale += Vel * Dt;
+		}
+		bWasPressed = bPressed;
+		Gloss = FMath::FInterpTo(Gloss, (bHovered || bPressed) ? 1.f : 0.f, Dt, 18.f);
+		float S = Scale, G = Gloss, Op = 1.f;
+		if (bEnter)
+		{
+			const float T = (Age - Delay) / 0.18f;
+			S *= T <= 0.f ? 0.6f : 0.6f + 0.4f * EaseOutBack(T);
+			Op = FMath::Clamp(T * 2.5f, 0.f, 1.f);
+		}
+		if (bPrimary)
+		{
+			// idle: gentle 1.6 s breathing + a gloss shine flash every 2.4 s
+			const float P = 0.5f + 0.5f * FMath::Sin(Time * 2.f * PI / 1.6f);
+			S *= 1.f + 0.02f * P;
+			const float Ph = FMath::Fmod(Time, 2.4f) / 0.5f;
+			if (Ph < 1.f) G = FMath::Max(G, FMath::Sin(Ph * PI));
+		}
+		OutScale = S; OutOpacity = Op; OutGloss = G;
+	}
+}

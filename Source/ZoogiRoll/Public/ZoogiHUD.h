@@ -7,6 +7,7 @@
 class AZoogiGameMode;
 class UFont;
 class UZoogiMenuWidget;
+class UZoogiMenuRoot;
 class UZoogiAwakenWidget;
 
 struct FZoogiButton
@@ -83,7 +84,7 @@ protected:
 	float Letterbox = 0.f; // Battle cinematic bars (0..1)
 
 	/** UMG main menu (the canvas menu is kept as a fallback behind -ZoogiCanvasMenu). */
-	UPROPERTY() TObjectPtr<UZoogiMenuWidget> MenuWidget;
+	UPROPERTY() TObjectPtr<UZoogiMenuRoot> MenuWidget; // menu (Oct 14): new screen-stack root (was UZoogiMenuWidget)
 	int32 CanvasMenuMode = -1;
 	/** UMG Awaken panel + aim bar (Canvas versions kept behind -ZoogiCanvasAwaken). */
 	UPROPERTY() TObjectPtr<UZoogiAwakenWidget> AwakenWidget;
