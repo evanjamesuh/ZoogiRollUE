@@ -69,8 +69,9 @@ FZoogiVoidTune AZoogiAwakenFX::GetVoidTune()
 		GConfig->GetFloat(TEXT("ZoogiRoll.Void"), TEXT("PullAccel"), T.PullAccel, GGameIni);
 		GConfig->GetFloat(TEXT("ZoogiRoll.Void"), TEXT("PullSeconds"), T.PullSeconds, GGameIni);
 		GConfig->GetFloat(TEXT("ZoogiRoll.Void"), TEXT("MeteorSeconds"), T.MeteorSeconds, GGameIni);
+		GConfig->GetFloat(TEXT("ZoogiRoll.Void"), TEXT("FadeSeconds"), T.FadeSeconds, GGameIni);
 	}
-	T.PullRadius = FMath::Max(50.f, T.PullRadius); T.PullSeconds = FMath::Max(0.1f, T.PullSeconds); T.MeteorSeconds = FMath::Max(1.f, T.MeteorSeconds);
+	T.PullRadius = FMath::Max(50.f, T.PullRadius); T.PullSeconds = FMath::Max(0.1f, T.PullSeconds); T.FadeSeconds = FMath::Clamp(T.FadeSeconds, 0.1f, T.PullSeconds); T.MeteorSeconds = FMath::Max(1.f, T.MeteorSeconds);
 	return T;
 }
 
@@ -79,7 +80,11 @@ bool AZoogiAwakenFX::UseVoid2(UWorld* World, FName ZoogiId)
 	// Void 2 (Titan Meteor) only when unlocked AND equipped on this Zoogi; anything else falls back to Void 1.
 	UGameInstance* GI = World ? World->GetGameInstance() : nullptr;
 	const UZoogiPowerUnlockSubsystem* U = GI ? GI->GetSubsystem<UZoogiPowerUnlockSubsystem>() : nullptr;
-	return U && U->IsUnlocked(ZoogiPowerIds::Void2TitanMeteor) && U->GetEquipped(ZoogiId) == ZoogiPowerIds::Void2TitanMeteor;
+	// test flag: -ZoogiEquip=<PowerId> overrides the equip for every Zoogi (Gameplay & UI's real subsystem has no such switch;
+	// pair it with their -ZoogiUnlockAll cheat for captures)
+	FString Forced; const bool bForced = FParse::Value(FCommandLine::Get(), TEXT("ZoogiEquip="), Forced);
+	const FName Eq = bForced ? FName(*Forced) : (U ? U->GetEquipped(ZoogiId) : NAME_None);
+	return U && U->IsUnlocked(ZoogiPowerIds::Void2TitanMeteor) && Eq == ZoogiPowerIds::Void2TitanMeteor;
 }
 
 AActor* AZoogiAwakenFX::PlayVoid2(UWorld* World, const FVector& From, const FVector& Impact, AActor* Target)
@@ -644,16 +649,18 @@ void AZoogiAwakenFX::TickMeteorArm()
 
 void AZoogiAwakenFX::TickVoid(float Dt)
 {
-	// Void 1 = gravity pull only (Evan, Oct 14): portal opens 0-0.5 s, pulls nearby orbs from 0.35 s for PullSeconds, then
-	// closes in 0.35 s. No rock projectile any more (the meteor is Void 2). Values: [ZoogiRoll.Void] (GetVoidTune).
+	// Void 1 = gravity pull only (Evan, Oct 14): portal opens 0-0.5 s, pulls nearby orbs from 0.35 s for PullSeconds, the last
+	// FadeSeconds of which it smoothly closes. No rock projectile any more (the meteor is Void 2). Values: [ZoogiRoll.Void] (GetVoidTune).
 	if (HitAt < 0.f && Age >= 0.35f) HitAt = Age; // pull start
 	const FZoogiVoidTune Tune = GetVoidTune();
 	const float PullTime = Tune.PullSeconds, PullRadius = Tune.PullRadius, PullAccel = Tune.PullAccel;
 	const float OpenK = EaseBack(Age / 0.5f);
-	const float CloseAt = HitAt >= 0.f ? HitAt + PullTime + 0.1f : 99.f;
-	const float CloseK = 1.f - FMath::Clamp((Age - CloseAt) / 0.35f, 0.f, 1.f);
+	// Evan 12:58 PM: sustain for PullSeconds (5 s default), smooth close over the last FadeSeconds; visuals and pull end together
+	const float FadeT = Tune.FadeSeconds;
+	const float CloseAt = HitAt >= 0.f ? HitAt + PullTime - FadeT : 99.f;
+	const float CloseK = 1.f - FMath::SmoothStep(0.f, 1.f, FMath::Clamp((Age - CloseAt) / FadeT, 0.f, 1.f));
 	const float K = FMath::Max(0.f, OpenK) * CloseK;
-	if (Age > CloseAt + 0.35f && EndAt < 0.f) Finish(0.05f);
+	if (Age > CloseAt + FadeT && EndAt < 0.f) Finish(0.05f);
 
 	const float D = 235.f * S; // ring diameter ~2.35 m in the demo
 	// round 12: tilted, slightly irregular oval (roll about the portal normal, wider than tall, gently breathing)
@@ -683,13 +690,13 @@ void AZoogiAwakenFX::TickVoid(float Dt)
 				const float Kp = 0.3f + 0.7f * (1.f - Dist / PullRadius);
 				O->Sphere->WakeRigidBody();
 				const FVector Vel = O->Sphere->GetPhysicsLinearVelocity();
-				O->Sphere->SetPhysicsLinearVelocity(Vel + FVector(Dv.X, Dv.Y, 0.f).GetSafeNormal() * PullAccel * Kp * Dt);
+				O->Sphere->SetPhysicsLinearVelocity(Vel + FVector(Dv.X, Dv.Y, 0.f).GetSafeNormal() * PullAccel * Kp * CloseK * Dt);
 			}
 		}
 	}
 	// suction motes spiralling into the portal (and a few drifting sparkles while it opens)
 	const bool bPull = HitAt >= 0.f && Age - HitAt < PullTime;
-	const float Rate = bPull ? 45.f : (K > 0.5f ? 10.f : 0.f);
+	const float Rate = bPull ? 45.f * CloseK : (K > 0.5f ? 10.f : 0.f);
 	MoteAcc += Rate * Dt;
 	while (MoteAcc >= 1.f) { MoteAcc -= 1.f; Motes.Add({ Age, (float)Rng.FRandRange(0.f, 2.f * PI), (float)Rng.FRandRange(1.1f, 2.2f), (float)Rng.FRandRange(-0.3f, 0.3f) }); }
 	BeginQuads();

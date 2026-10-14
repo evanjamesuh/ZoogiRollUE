@@ -20,7 +20,7 @@ class UPrimitiveComponent;
  *    aim preview's launch fraction (read-only), fades out when the shot leaves.
  *  - ShockChain (Effect25): violet chain lightning from above the Zoogi's head to the floor with scorch splats; stops on the
  *    Zoogi's first non-floor collision and plays ShockHit (the Effect25_Collision burst) there.
- *  - VoidPortal (Effect5): violet ring portal with a starry interior; a rock flies out to the shot target, then the portal
+ *  - VoidPortal (Effect5): violet ring portal with a starry interior; no rock / projectile (Void 1 = gravity pull only); the portal
  *    stays open briefly and pulls nearby orbs toward it before closing.
  *  Assets (materials, textures, Niagara) come from Scripts/kfx/finale/kfx_finale.py under /Game/VFX/AwakenFX. */
 UENUM()
@@ -31,7 +31,8 @@ struct FZoogiVoidTune
 {
 	float PullRadius = 1000.f;   // cm (was 650)
 	float PullAccel = 1700.f;    // cm/s^2 at the rim scale 0.3..1 toward the sink (was 1100)
-	float PullSeconds = 2.0f;    // s (was 1.4)
+	float PullSeconds = 5.0f;    // s: portal stays open and pulls this long (Evan 12:58 PM; was 2.0, originally 1.4)
+	float FadeSeconds = 1.2f;    // s: smooth close at the end of the pull (pull strength fades with it)
 	float MeteorSeconds = 2.4f;  // Void 2 presentation length (real s)
 };
 
