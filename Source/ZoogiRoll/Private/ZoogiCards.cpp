@@ -170,7 +170,7 @@ namespace ZoogiCards
 	TArray<FName> BuiltInDeck()
 	{
 		return { TEXT("storm"), TEXT("storm"), TEXT("heavy_roll"), TEXT("heavy_roll"), TEXT("guard"), TEXT("guard"),
-			TEXT("precision"), TEXT("bank_strike"), TEXT("titan"), TEXT("orb_relay"), TEXT("recovery_roll"), TEXT("crystal_collapse") };
+			TEXT("precision"), TEXT("bank_strike"), TEXT("titan"), TEXT("orb_relay"), TEXT("recovery_roll"), TEXT("crystal_collapse"), TEXT("precision"), TEXT("ember"), TEXT("anchor_guard") };
 	}
 
 	template <typename EnumT, int32 N>
