@@ -187,3 +187,29 @@ uint32 FZoogiEpisodeCore::Hash() const
 	for (const FZoogiEpContribution& C : ContribV) H = FCrc::StrCrc32(*FString::Printf(TEXT("%d.%d.%d.%d.%d.%d.%d"), C.Opening, C.FollowThrough, C.Receiving, C.Preparing, C.Misses, C.ActiveWithContact, C.RungOut), H);
 	return H;
 }
+
+// ------------------------------------------------------------------ v3 P6 save / resume
+FArchive& operator<<(FArchive& Ar, FZoogiEpFact& F)
+{
+	Ar << F.EventId << F.Seq << F.Kind << F.Turn << F.Round << F.ActionId << F.Actor << F.Targets << F.RingOuts << F.bCollision << F.bFollowUp << F.bShattered
+		<< F.bObjectiveFailed << F.bActorRecovered << F.bMatchOver << F.FinalHash;
+	return Ar;
+}
+FArchive& operator<<(FArchive& Ar, FZoogiEpisode& E)
+{
+	uint8 Br = (uint8)E.Branch;
+	Ar << E.EpisodeId << E.Spender << E.FactEventId << E.FactSeq << Br << E.Duration;
+	E.Branch = (EZoogiEpBranch)Br;
+	int32 N = E.Perspectives.Num(); Ar << N; if (Ar.IsLoading()) E.Perspectives.SetNum(N);
+	for (FZoogiEpPerspective& V : E.Perspectives) { uint8 R = (uint8)V.Role; Ar << V.Player << R << V.Line << V.Start << V.Duration; V.Role = (EZoogiEpRole)R; }
+	return Ar;
+}
+
+void FZoogiEpisodeCore::Serialize(FArchive& Ar)
+{
+	uint32 Ver = 1; Ar << Ver;
+	Ar << Num << bTeams << Names << FactsV << Keys;
+	int32 NC = ContribV.Num(); Ar << NC; if (Ar.IsLoading()) ContribV.SetNum(NC);
+	for (FZoogiEpContribution& C : ContribV) Ar << C.Opening << C.FollowThrough << C.Receiving << C.Preparing << C.Misses << C.ActiveWithContact << C.RungOut;
+	Ar << EpisodesV << Spent << Dups << NumActions << Winner << bEnded;
+}

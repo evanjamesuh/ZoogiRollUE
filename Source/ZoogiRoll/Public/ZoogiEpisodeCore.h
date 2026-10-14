@@ -93,6 +93,9 @@ struct ZOOGIROLL_API FZoogiEpPlayback
 	int32 PerspectiveIndex() const;
 };
 
+ZOOGIROLL_API FArchive& operator<<(FArchive& Ar, FZoogiEpFact& F);
+ZOOGIROLL_API FArchive& operator<<(FArchive& Ar, FZoogiEpisode& E);
+
 class ZOOGIROLL_API FZoogiEpisodeCore
 {
 public:
@@ -111,6 +114,8 @@ public:
 	EZoogiRecap RecapUnlock(int32 P, FString* OutWhy = nullptr) const;
 	bool IsWinnerSide(int32 P) const;
 	uint32 Hash() const;
+	/** v3 P6 save / resume (every field). */
+	void Serialize(FArchive& Ar);
 
 	const TArray<FZoogiEpFact>& Facts() const { return FactsV; }
 	const TArray<FZoogiEpisode>& Episodes() const { return EpisodesV; }

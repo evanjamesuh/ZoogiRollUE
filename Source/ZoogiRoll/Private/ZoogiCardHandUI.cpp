@@ -245,6 +245,66 @@ void UZoogiCardSubsystem::TestHandUiTick(AZoogiGameMode* G)
 	if (HandUiStep == 0 && HandUiShowWait > 0) { UE_LOG(LogZoogi, Log, TEXT("CARDS hand_ui: panel wait %d frames phase=%d stage=%d done=%d"), HandUiShowWait, (int32)G->Phase, (int32)G->Stage, G->bAwakenDone ? 1 : 0); HandUiShowWait = -1000000; }
 	if (++HandUiWait < 8) return; // let the panel build + the toolkit widgets fill
 	HandUiWait = 0;
+	if (TestCase == TEXT("keys") || TestCase == TEXT("dup_input"))
+	{
+		// v3 P6: keyboard-only Standby (1 / Backspace / A / 1 / Enter) and duplicate delivery of the same gameplay input
+		// (same action twice in one frame, and a touch + mouse press on the same card in one frame).
+		const bool bKeys = TestCase == TEXT("keys");
+		auto Commits = [&]() { int32 N = 0; for (const FZoogiCardEvent& E : RulesV.Events()) if (E.Player == P && E.Kind == TEXT("commit") && E.Turn == S->Turn) ++N; return N; };
+		switch (HandUiStep)
+		{
+		case 0:
+			TestCheck(W->ShowsCards(), TEXT("UMG hand panel shown at human Standby"));
+			HandUiEnergy = S->Energy;
+			if (bKeys) Key(EKeys::One);
+			else { G->MenuAction(TEXT("CardToggle"), 0); G->MenuAction(TEXT("CardToggle"), 0); }
+			break;
+		case 1:
+			if (bKeys) { TestCheck(S->Selected.Num() == 1, TEXT("key 1 selected card 1")); Key(EKeys::BackSpace); }
+			else
+			{
+				TestCheck(S->Selected.Num() == 1 && G->DuplicateInputsIgnored == 1, FString::Printf(TEXT("same toggle twice in one frame -> applied once (sel %d, ignored %d)"), S->Selected.Num(), G->DuplicateInputsIgnored));
+				Tap(TEXT("CardToggle"), 1, 1); Tap(TEXT("CardToggle"), 1, 0); // touch + mouse on card 2 in the same frame
+			}
+			break;
+		case 2:
+			if (bKeys) { TestCheck(S->Selected.Num() == 0, TEXT("Backspace cleared the selection")); Key(EKeys::A); }
+			else
+			{
+				const bool bOk = S->Selected.Num() == 2 || RulesV.CanSelect(P, S->Hand[1].InstanceId, BuildContext(G)) != EZoogiCardResult::Ok;
+				TestCheck(bOk, FString::Printf(TEXT("touch + mouse on card 2 in one frame -> toggled once (sel %d, ignored %d)"), S->Selected.Num(), G->DuplicateInputsIgnored));
+				HandUiCost = Cost();
+				G->MenuAction(TEXT("CardCommit"), 0); G->MenuAction(TEXT("CardCommit"), 0);
+			}
+			break;
+		case 3:
+			if (bKeys)
+			{
+				UE_LOG(LogZoogi, Log, TEXT("CARDS keys: A -> awaken request %d (gauge permitting)"), G->bStandbyAwaken ? 1 : 0);
+				Key(EKeys::One);
+			}
+			else
+			{
+				TestCheck(S->bCommitted && Commits() == 1 && S->Energy == HandUiEnergy - HandUiCost, FString::Printf(TEXT("double commit -> one commit, energy %d == %d - %d (commits %d)"), S->Energy, HandUiEnergy, HandUiCost, Commits()));
+				TestCheck(G->DuplicateInputsIgnored >= 2, FString::Printf(TEXT("duplicates ignored %d"), G->DuplicateInputsIgnored));
+				HandUiBall->bCPU = true;
+				UE_LOG(LogZoogi, Log, TEXT("CARDS dup_input done: ignored=%d"), G->DuplicateInputsIgnored);
+				TestFinish(G); return;
+			}
+			break;
+		case 4:
+			TestCheck(S->Selected.Num() == 1, TEXT("key 1 selected card 1 again"));
+			HandUiCost = Cost(); Key(EKeys::Enter); break;
+		case 5:
+			TestCheck(S->bCommitted && S->Energy == HandUiEnergy - HandUiCost && Commits() == 1, FString::Printf(TEXT("Enter committed, energy %d == %d - %d"), S->Energy, HandUiEnergy, HandUiCost));
+			TestCheck(!W->ShowsCards(), TEXT("hand panel closed after Enter"));
+			HandUiBall->bCPU = true;
+			UE_LOG(LogZoogi, Log, TEXT("CARDS keys done: keyboard-only Standby ok"));
+			TestFinish(G); return;
+		}
+		++HandUiStep;
+		return;
+	}
 	switch (HandUiStep)
 	{
 	case 0:

@@ -251,6 +251,7 @@ void UZoogiBattleStateMachine::AddEnergy(int32 Player, float Amount, FName Sourc
 {
 	UZoogiEpisodeEnergyComponent* E = Energy(Player);
 	if (!E || Amount <= 0.f) return;
+	if (const AZoogiGameMode* G = GM()) Amount *= G->CardsEpisodeGainMul(); // v3 P6 PROPOSED earning tune (1.0 with cards off)
 	const float Added = E->Gain(Amount, Source, ActionId);
 	if (Players.IsValidIndex(Player)) Players[Player].EnergyGained += Added;
 	ActionEnergyDelta.FindOrAdd(Player) += Added;

@@ -466,3 +466,38 @@ uint32 FZoogiCardRules::StateHash() const
 	for (const FZoogiCardEvent& E : Ledger) { Mix((uint32)E.EventId); Mix(FCrc::StrCrc32(*E.Kind.ToString())); Mix((uint32)E.InstanceId); Mix((uint32)E.Cost); }
 	return H;
 }
+
+// ------------------------------------------------------------------ v3 P6 save / resume
+namespace
+{
+	void SerInst(FArchive& Ar, FZoogiCardInstance& I) { Ar << I.InstanceId << I.CardId; }
+	void SerInsts(FArchive& Ar, TArray<FZoogiCardInstance>& A)
+	{
+		int32 N = A.Num(); Ar << N; if (Ar.IsLoading()) A.SetNum(N);
+		for (FZoogiCardInstance& I : A) SerInst(Ar, I);
+	}
+	void SerRng(FArchive& Ar, FRandomStream& R)
+	{
+		// FRandomStream keeps its state privately; it is a trivially copyable pair of seeds.
+		static_assert(TIsTriviallyCopyConstructible<FRandomStream>::Value, "FRandomStream must stay trivially copyable for saves");
+		Ar.Serialize(&R, sizeof(FRandomStream));
+	}
+}
+
+void FZoogiCardRules::Serialize(FArchive& Ar)
+{
+	uint32 Ver = 1; Ar << Ver;
+	SerRng(Ar, Rng);
+	int32 NP = Players.Num(); Ar << NP; if (Ar.IsLoading()) Players.SetNum(NP);
+	for (FZoogiCardPlayerState& S : Players)
+	{
+		SerInsts(Ar, S.DrawPile); SerInsts(Ar, S.Hand); SerInsts(Ar, S.Discard);
+		Ar << S.Selected;
+		int32 NC = S.Committed.Num(); Ar << NC; if (Ar.IsLoading()) S.Committed.SetNum(NC);
+		for (FZoogiCardCommitted& C : S.Committed) { SerInst(Ar, C.Card); Ar << C.CommitId << C.EffectId; }
+		Ar << S.Energy << S.Turn << S.bStandbyOpen << S.bCommitted;
+	}
+	int32 NE = Ledger.Num(); Ar << NE; if (Ar.IsLoading()) Ledger.SetNum(NE);
+	for (FZoogiCardEvent& E : Ledger) Ar << E.EventId << E.Turn << E.Player << E.Kind << E.CardId << E.InstanceId << E.Cost << E.EnergyAfter << E.CommitId << E.Detail;
+	Ar << Spent << NextEventId << NextCommitId << NextEffectId;
+}

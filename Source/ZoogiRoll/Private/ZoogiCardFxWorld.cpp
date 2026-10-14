@@ -65,6 +65,7 @@ void UZoogiCardSubsystem::FxModifyShot(AZoogiGameMode* G, AZoogiBall* Ball, FVec
 	float Mul = 1.f;
 	FZoogiFxArmed* S = Fx.Find(NStorm, P);
 	FZoogiFxArmed* H = Fx.Find(NHeavy, P);
+	FxCondIf(S); FxCondIf(H); FxCondIf(Fx.Find(NPrecision, P)); // condition: a lead shot fired with the card active
 	if (S) Mul *= S->A;
 	if (H) Mul *= H->A;
 	FxShotIn = V.Size();
@@ -87,6 +88,7 @@ void UZoogiCardSubsystem::FxModifyShot(AZoogiGameMode* G, AZoogiBall* Ball, FVec
 
 void UZoogiCardSubsystem::FxAfterShot(AZoogiGameMode* G, AZoogiBall* Ball, const FVector2D& V)
 {
+	if (Tune.bCards && Ball) { const int32 Pc = Ball->PlayerIndex; FxCondIf(Fx.Find(NTitan, Pc)); FxCondIf(Fx.Find(NFrost, Pc)); FxCondIf(Fx.Find(NMagnet, Pc)); }
 	if (!Tune.bCards || !G || !Ball || !Ball->Sphere) return;
 	const int32 P = Ball->PlayerIndex;
 	FxRingMarksAtShot = Ball->RingMarks;
@@ -137,6 +139,10 @@ void UZoogiCardSubsystem::FxContact(AZoogiBall* Self, AActor* Other, const FVect
 		// handled once, from the victim's callback (Self = victim, Other = acting Zoogi)
 		if (OB->PlayerIndex != Shooter || Self->PlayerIndex == Shooter || !IsEnemy(G, Self, OB)) return;
 		if (NormalImpulse.Size() < ZoogiCardFxTune::QualifyImpulse) return;
+		// condition: a qualifying enemy contact by the acting Zoogi (attacker cards) / on the victim (defender cards)
+		for (FName Nc : { NEmber, NSteal, NDouble }) FxCondIf(Fx.Find(Nc, OB->PlayerIndex));
+		if (FZoogiFxArmed* Bk = Fx.Find(NBank, OB->PlayerIndex)) if (Bk->bBankSetup) FxCondIf(Bk);
+		for (FName Nc : { NGuard, NAnchor, NTitan }) FxCondIf(Fx.Find(Nc, Self->PlayerIndex));
 		const uint64 Cid = FZoogiCardEffectCore::ContactId(Self->PlayerIndex, OB->PlayerIndex, Ep);
 		AZoogiBall* Victim = Self; AZoogiBall* Att = OB;
 		const FVector VPrev = Prev(Victim), VPost = Victim->GetBallVelocity();
@@ -187,6 +193,7 @@ void UZoogiCardSubsystem::FxContact(AZoogiBall* Self, AActor* Other, const FVect
 		if (Self->PlayerIndex == Shooter)
 			if (FZoogiFxArmed* R = Fx.Find(NRelay, Shooter)) if (!RelayOrb.IsValid())
 			{
+				FxCondIf(R); // condition: the acting Zoogi's real orb contact
 				RelayOrb = O; RelayLife = Life;
 				if (CardSetup(G, ZoogiComboTrigger::OrbRelay, O->OrbLocation(), Oi, Life))
 				{
@@ -201,6 +208,7 @@ void UZoogiCardSubsystem::FxContact(AZoogiBall* Self, AActor* Other, const FVect
 	if (Self->PlayerIndex == Shooter && FMath::Abs(Hit.ImpactNormal.Z) < 0.5f)
 		if (FZoogiFxArmed* B = Fx.Find(NBank, Shooter)) if (!B->bBankSetup && Fx.ApplyOnce(B->EffectId, 1))
 		{
+			FxCondIf(B); // condition: a real bank (wall / bumper) contact
 			B->bBankSetup = true;
 			FxUse(*B, FString::Printf(TEXT("BankSetup: real bank contact with %s"), *GetNameSafe(Other)));
 			CardSetup(G, ZoogiComboTrigger::BankSetup, Hit.ImpactPoint, -1, 0);
@@ -292,6 +300,7 @@ void UZoogiCardSubsystem::FxTick(AZoogiGameMode* G, float Dt)
 			const float Sp = FVector(V.X, V.Y, 0.f).Size();
 			if (FVector::Dist2D(S->BallLocation(), Zone) < ZoogiCardFxTune::RecoveryZoneR && Sp > 1.f)
 			{
+				FxCondIf(R); // condition: rolling inside the safe zone
 				const float Cut = FMath::Min(Sp, S->RollingDecel * (R->A - 1.f) * Dt);
 				S->Sphere->SetPhysicsLinearVelocity(V - FVector(V.X, V.Y, 0.f) / Sp * Cut);
 				if (R->Uses++ == 0) FxUse(*R, FString::Printf(TEXT("deceleration x%.2f inside the safe zone (no heal, Ring Marks %d)"), R->A, S->RingMarks));
@@ -476,4 +485,19 @@ void UZoogiCardSubsystem::TestFollowUpTick(AZoogiGameMode* G)
 	bFuPrevOffered = G->bFollowUpOffered; bFuPrevIn = G->bInFollowUp;
 	FuPrevGauge[0] = G->ComboEnergy[0]; FuPrevGauge[1] = G->ComboEnergy[1];
 	if (G->Phase == EZoogiPhase::GameOver) TestFinish(G);
+}
+
+// ------------------------------------------------------------------ v3 P6 coverage
+void UZoogiCardSubsystem::FxCondIf(const FZoogiFxArmed* F) { if (F) CovCond.FindOrAdd(F->Card).Add(F->EffectId); }
+void UZoogiCardSubsystem::FxCond(FName Card, int32 Owner) { FxCondIf(Fx.Find(Card, Owner)); }
+
+void UZoogiCardSubsystem::DumpCoverage(const FString& Tag) const
+{
+	TMap<FName, int32> Committed;
+	for (const FZoogiCardEvent& E : RulesV.Events()) if (E.Kind == FName(TEXT("commit_card"))) Committed.FindOrAdd(E.CardId)++;
+	for (const FZoogiCardDef& D : ZoogiCards::BuiltInDefs())
+	{
+		const int32* Sel = CovSelected.Find(D.Id); const int32* Com = Committed.Find(D.Id); const TSet<int64>* Cnd = CovCond.Find(D.Id); const int32* Trg = FxUses.Find(D.Id);
+		UE_LOG(LogZoogi, Log, TEXT("CARD_COV tag=%s card=%s selected=%d committed=%d condition=%d triggered=%d"), *Tag, *D.Id.ToString(), Sel ? *Sel : 0, Com ? *Com : 0, Cnd ? Cnd->Num() : 0, Trg ? *Trg : 0);
+	}
 }

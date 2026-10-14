@@ -33,6 +33,8 @@ public:
 	static FZoogiEpFact FactFromLedger(const FZoogiEpisodeLedgerEvent& E);
 
 private:
+	friend struct FZoogiSaveAccess;
+	friend class UZoogiMatchValidator; // v3 P6 save / resume
 	void EnsureReset(UZoogiBattleStateMachine* SM);
 	void TrySpendOn(UZoogiBattleStateMachine* SM, int32 FactIndex);
 	void TestOnFact(UZoogiBattleStateMachine* SM, int32 FactIndex, bool bBeforeSpend);

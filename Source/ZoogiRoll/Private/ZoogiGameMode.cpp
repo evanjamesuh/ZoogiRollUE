@@ -145,6 +145,21 @@ bool AZoogiGameMode::IsHumanAiming() const
 
 void AZoogiGameMode::MenuAction(FName Action, int32 Index)
 {
+	// v3 P6: one physical input can arrive twice in the same frame (touch + its emulated mouse click, a key repeat plus a
+	// button). Gameplay decisions (cards, follow-up, episode skip) are accepted once per (action, index, frame).
+	{
+		const FString A = Action.ToString();
+		if (A.StartsWith(TEXT("Card")) || A.StartsWith(TEXT("Follow")) || A.StartsWith(TEXT("Episode")))
+		{
+			if (Action == LastGameplayAction && Index == LastGameplayIndex && GFrameCounter == LastGameplayFrame)
+			{
+				++DuplicateInputsIgnored;
+				UE_LOG(LogZoogi, Log, TEXT("INPUT duplicate %s %d in frame %llu ignored"), *A, Index, (uint64)GFrameCounter);
+				return;
+			}
+			LastGameplayAction = Action; LastGameplayIndex = Index; LastGameplayFrame = GFrameCounter;
+		}
+	}
 	const int32 RosterNum = ZoogiUtil::Roster().Num();
 	if (Action == "Players") MenuNumPlayers = bComboMode ? 4 : FMath::Clamp(Index, 2, 4);
 	else if (Action == "Mode") ComboSetMode(Index == 1);

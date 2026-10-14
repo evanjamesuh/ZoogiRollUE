@@ -312,6 +312,7 @@ public:
 	int32 AwakenPick = 0;
 	bool bAwakenDone = false;
 	bool bStandbyAwaken = false;        // v3 cards: Episode Awakening requested at Standby (independent of the cards chosen)
+	FName LastGameplayAction; int32 LastGameplayIndex = -1; uint64 LastGameplayFrame = 0; int32 DuplicateInputsIgnored = 0; // v3 P6 duplicate-input guard
 	float AwakenDoneAt = 0.f;
 	FString AwakenChoiceText;
 	int32 TurnCounter = 0;
@@ -327,6 +328,9 @@ public:
 	bool CardsCommit();
 	void CardsToggleAwaken();
 	void CardsPlanCPU();
+	float CardsComboGainMul() const;
+	float CardsEpisodeGainMul() const;
+	float CardsComboStartGauge() const;  // v3 P6 PROPOSED
 	/** v3 P5: CPU Standby Awakening request in cards mode, same decision inputs as the classic Infuse/Guard choice. */
 	void CardsPlanCPUAwaken();
 	void DoDraw();

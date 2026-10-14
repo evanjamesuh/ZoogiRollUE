@@ -103,6 +103,7 @@ public:
 	/** Recognition from a (possibly partial) truth record. Deterministic, used live and at the end of the action. */
 	static FZoogiEpisodeRecognitionRecord Recognize(const FZoogiGameplayTruthRecord& T, const FZoogiEpisodeTuning& Tune);
 
+	friend struct FZoogiSaveAccess; // v3 P6 save / resume
 protected:
 	AZoogiGameMode* GM() const;
 	void BindBodies();

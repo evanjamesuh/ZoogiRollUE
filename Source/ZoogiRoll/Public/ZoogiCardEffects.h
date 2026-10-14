@@ -93,6 +93,8 @@ struct ZOOGIROLL_API FZoogiCardEffectCore
 	static FVector MagnetStep(const FVector& OrbP, const FVector& Start, const FVector& Target, float MaxMove, float Accel, float Dt);
 
 	uint32 Hash() const;
+	/** v3 P6 save / resume (every field). */
+	void Serialize(FArchive& Ar);
 
 private:
 	TSet<uint64> Applied;

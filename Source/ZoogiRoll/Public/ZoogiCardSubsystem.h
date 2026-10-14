@@ -59,7 +59,9 @@ public:
 	const FZoogiCardEffectCore& FxCore() const { return Fx; }
 	static bool IsEnemy(const AZoogiGameMode* G, const AZoogiBall* A, const AZoogiBall* B);
 
+	void DumpCoverage(const FString& Tag) const;
 private:
+	friend struct FZoogiSaveAccess; // v3 P6 save / resume
 	void EnsureMatch(AZoogiGameMode* G);
 	void LoadData(TArray<FZoogiCardDef>& Defs, TArray<FName>& Deck);
 	void ObservePhase(AZoogiGameMode* G);
@@ -95,6 +97,12 @@ private:
 	int32 MagnetOwner = -1, RelayLife = 0, FxShooter = -1, FxRingMarksAtShot = -1;
 	// effect test telemetry (-ZoogiCardTest=effects / mutual_ko)
 	TMap<FName, int32> FxUses;
+	// v3 P6 coverage: selected (accepted selections), condition (effect ids whose trigger condition was met), triggered = FxUses
+	TMap<FName, int32> CovSelected;
+	TMap<FName, TSet<int64>> CovCond;
+	void FxCond(FName Card, int32 Owner);
+	void FxCondIf(const struct FZoogiFxArmed* F);
+	/** One CARD_COV line per card: selected / committed / condition / triggered (event-supported). */
 	float FxShotIn = 0.f, FxShotOut = 0.f, FxShotMul = 1.f, FxTitanPrev = 0.f, FxTitanSet = 0.f, FxMagnetMoved = 0.f, FxMagnetMax = 0.f;
 	int32 FxMaxBursts = 0, FxTitanRestores = 0, FxFrostTicks = 0, FxForceIdx = 0;
 	bool FxTitanRestoreOk = true, FxNoHealOk = true, bMutualTested = false;

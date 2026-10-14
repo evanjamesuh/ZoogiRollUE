@@ -222,6 +222,8 @@ public:
 	const FZoogiCardTune& Tune() const { return TuneV; }
 	/** Order-sensitive hash of every player's piles, energy and the ledger (replay / save checks). */
 	uint32 StateHash() const;
+	/** v3 P6 save / resume: piles, energy, selection, ledger, ids and the shuffle stream (backend + tune are not saved). */
+	void Serialize(FArchive& Ar);
 	/** Total Card Energy spent by P over the match (tests: "costs applied once"). */
 	int32 TotalSpent(int32 P) const { return Spent.IsValidIndex(P) ? Spent[P] : 0; }
 

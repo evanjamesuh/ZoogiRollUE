@@ -179,3 +179,24 @@ uint32 FZoogiCardEffectCore::Hash() const
 	Mix(Applied.Num()); Mix(Frost.Num()); Mix(OrbScored.Num());
 	return H;
 }
+
+// ------------------------------------------------------------------ v3 P6 save / resume
+void FZoogiCardEffectCore::Serialize(FArchive& Ar)
+{
+	uint32 Ver = 1; Ar << Ver;
+	int32 N = Active.Num(); Ar << N; if (Ar.IsLoading()) Active.SetNum(N);
+	for (FZoogiFxArmed& F : Active)
+	{
+		uint8 Ex = (uint8)F.Expiry;
+		Ar << F.Card << F.EffectId << F.Owner << F.Turn << F.A << F.B << Ex << F.bArmed << F.bConsumed << F.bBankSetup << F.Uses;
+		F.Expiry = (EZoogiCardExpiry)Ex;
+	}
+	Ar << Applied << Bursts << SavedMass << Frost << OrbScored;
+	int32 NP = Pairs.Num(); Ar << NP;
+	if (Ar.IsLoading())
+	{
+		Pairs.Reset();
+		for (int32 i = 0; i < NP; ++i) { uint64 K = 0; FPairT P; Ar << K << P.Episode << P.Last; Pairs.Add(K, P); }
+	}
+	else for (TPair<uint64, FPairT>& P : Pairs) { uint64 K = P.Key; Ar << K << P.Value.Episode << P.Value.Last; }
+}

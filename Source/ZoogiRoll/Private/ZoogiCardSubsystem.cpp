@@ -126,7 +126,9 @@ EZoogiCardResult UZoogiCardSubsystem::ToggleSlot(AZoogiGameMode* G, int32 Slot)
 	const FZoogiCardPlayerState* S = RulesV.Player(P);
 	if (!S) return EZoogiCardResult::UnknownPlayer;
 	if (!S->Hand.IsValidIndex(Slot)) return EZoogiCardResult::UnknownInstance;
-	const EZoogiCardResult R = RulesV.Toggle(P, S->Hand[Slot].InstanceId, BuildContext(G));
+	const int32 Inst = S->Hand[Slot].InstanceId; const FName CardId = S->Hand[Slot].CardId;
+	const EZoogiCardResult R = RulesV.Toggle(P, Inst, BuildContext(G));
+	if (R == EZoogiCardResult::Ok && S->Selected.Contains(Inst)) CovSelected.FindOrAdd(CardId)++;
 	UE_LOG(LogZoogi, Log, TEXT("CARDS toggle P%d slot=%d %s -> %s (selected %d)"), P + 1, Slot, *S->Hand[Slot].CardId.ToString(), ZoogiCardResultName(R), S->Selected.Num());
 	return R;
 }
@@ -200,7 +202,7 @@ void UZoogiCardSubsystem::PlanCPU(AZoogiGameMode* G)
 		return WA != WB ? WA > WB : Hand[A].InstanceId < Hand[B].InstanceId;
 	});
 	const FZoogiCardContext Ctx = BuildContext(G);
-	for (int32 i : Order) RulesV.Select(P, Hand[i].InstanceId, Ctx);
+	for (int32 i : Order) if (RulesV.Select(P, Hand[i].InstanceId, Ctx) == EZoogiCardResult::Ok) CovSelected.FindOrAdd(Hand[i].CardId)++;
 	FString Choice;
 	Commit(G, Choice);
 	G->AwakenChoiceText = Choice;
@@ -215,6 +217,7 @@ void UZoogiCardSubsystem::OnPieceContact(AZoogiArenaPiece* Piece, AZoogiBall* Ba
 	if (!G || G->Stage != EZoogiStage::Battle || ActivePlayer(G) != CollapseOwner) return; // only the committed lead action
 	if (!IsCollapseEligible(Piece)) { UE_LOG(LogZoogi, Log, TEXT("CARDS crystal_collapse effect=%lld contact with %s ignored (not eligible: indestructible/broken)"), CollapseEffectId, *GetNameSafe(Piece)); return; }
 	CollapsePiece = Piece; CollapseAt = At; CollapseDir = Dir;
+	CovCond.FindOrAdd(FName(TEXT("crystal_collapse"))).Add(CollapseEffectId);
 	UE_LOG(LogZoogi, Log, TEXT("CARDS crystal_collapse effect=%lld qualified contact P%d -> %s (applies at the Resolve boundary)"), CollapseEffectId, CollapseOwner + 1, *Piece->GetName());
 }
 
@@ -224,6 +227,7 @@ void UZoogiCardSubsystem::ApplyPendingCollapses(AZoogiGameMode* G)
 	AZoogiArenaPiece* Piece = CollapsePiece.Get();
 	const FString Before = AZoogiArenaPiece::StateName(Piece->GetPieceState());
 	const bool bChanged = Piece->ApplyCardCollapse(CollapseEffectId, CollapseAt, CollapseDir);
+	if (bChanged) FxUses.FindOrAdd(FName(TEXT("crystal_collapse")))++;
 	UE_LOG(LogZoogi, Log, TEXT("CARDS crystal_collapse effect=%lld %s: %s -> %s changed=%d (global bDestruction=%d)"), CollapseEffectId, *Piece->GetName(), *Before,
 		*AZoogiArenaPiece::StateName(Piece->GetPieceState()), bChanged ? 1 : 0, ZoogiUtil::DestructionEnabled() ? 1 : 0);
 	CollapseEffectId = 0; CollapseOwner = -1; CollapsePiece.Reset();
@@ -275,7 +279,7 @@ void UZoogiCardSubsystem::Tick(float Dt)
 	ObservePhase(G);
 	FxTick(G, Dt);
 	if (TestCase == TEXT("followup") && !bTestDone) TestFollowUpTick(G);
-	if (TestCase == TEXT("hand_ui") && !bTestDone) { TestHandUiTick(G); return; }
+	if ((TestCase == TEXT("hand_ui") || TestCase == TEXT("keys") || TestCase == TEXT("dup_input")) && !bTestDone) { TestHandUiTick(G); return; }
 	TickForecast(G, Dt);
 	if (!TestCase.IsEmpty() && !bTestDone)
 	{
@@ -317,7 +321,7 @@ void UZoogiCardSubsystem::TestOnStandby(AZoogiGameMode* G, int32 P)
 {
 	if (TestCase.IsEmpty() || bTestDone) return;
 	++TestStandbys;
-	if (TestCase == TEXT("hand_ui") && !HandUiBall.IsValid()) if (AZoogiBall* Hb = G->GetActiveBall()) { Hb->bCPU = false; HandUiBall = Hb; UE_LOG(LogZoogi, Log, TEXT("CARDS hand_ui: P%d human for this Standby"), Hb->PlayerIndex + 1); }
+	if ((TestCase == TEXT("hand_ui") || TestCase == TEXT("keys") || TestCase == TEXT("dup_input")) && !HandUiBall.IsValid()) if (AZoogiBall* Hb = G->GetActiveBall()) { Hb->bCPU = false; HandUiBall = Hb; UE_LOG(LogZoogi, Log, TEXT("CARDS hand_ui: P%d human for this Standby"), Hb->PlayerIndex + 1); }
 	const FZoogiCardPlayerState* S = RulesV.Player(P);
 	const int32 E0 = S->Energy, Sp0 = RulesV.TotalSpent(P), H0 = S->Hand.Num();
 	const int32 Avail = S->Hand.Num() + S->DrawPile.Num() + S->Discard.Num();
