@@ -257,4 +257,35 @@ bool FZoogiCardToolkitTest::RunTest(const FString&)
 	return true;
 }
 
+// Oct 14 (Evan): a card tied to a locked power never enters the deck; the deck is refilled to 15 (max 2) with eligible cards.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiCardPowerUnlockTest, "ZoogiRoll.Cards.PowerUnlockDeck", ZoogiCardFlags)
+bool FZoogiCardPowerUnlockTest::RunTest(const FString&)
+{
+	TestFalse(TEXT("no unlock query registered by default (everything unlocked)"), (bool)ZoogiCards::GetPowerUnlockQuery());
+	TArray<FZoogiCardDef> Defs = ZoogiCards::BuiltInDefs();
+	bool bAllEmpty = true; for (const FZoogiCardDef& D : Defs) bAllEmpty &= D.RequiredPower.IsNone();
+	TestTrue(TEXT("no card requires a power yet"), bAllEmpty);
+	const TArray<FName> Starter = ZoogiCards::BuiltInDeck();
+	FString L;
+	{
+		FZoogiNativeCardBackend B(Defs);
+		TestTrue(TEXT("no query: deck unchanged"), ZoogiCards::FilterDeckByUnlocks(Starter, B, 15, 2, ZoogiCards::FPowerUnlockQuery(), L) == Starter);
+		TestTrue(TEXT("empty RequiredPower: deck unchanged even with everything locked"), ZoogiCards::FilterDeckByUnlocks(Starter, B, 15, 2, [](FName) { return false; }, L) == Starter);
+	}
+	const TSet<FName> Gated = { TEXT("titan"), TEXT("ember"), TEXT("precision"), TEXT("crystal_collapse") };
+	for (FZoogiCardDef& D : Defs) if (Gated.Contains(D.Id)) D.RequiredPower = FName(*(TEXT("power_") + D.Id.ToString()));
+	FZoogiNativeCardBackend B(Defs);
+	TestTrue(TEXT("all unlocked: deck unchanged"), ZoogiCards::FilterDeckByUnlocks(Starter, B, 15, 2, [](FName) { return true; }, L) == Starter);
+	const TArray<FName> D1 = ZoogiCards::FilterDeckByUnlocks(Starter, B, 15, 2, [](FName P) { return P != FName(TEXT("power_titan")); }, L);
+	FString Err;
+	TestTrue(TEXT("titan locked: refilled deck legal (15, max 2)"), ZoogiCards::ValidateDeck(D1, B, 15, 2, Err));
+	TestFalse(TEXT("titan locked: no titan in deck"), D1.Contains(FName(TEXT("titan"))));
+	const TArray<FName> D2 = ZoogiCards::FilterDeckByUnlocks(Starter, B, 15, 2, [](FName) { return false; }, L);
+	TestTrue(TEXT("4 powers locked: refilled deck legal"), ZoogiCards::ValidateDeck(D2, B, 15, 2, Err));
+	bool bNone = true; for (const FName& Id : D2) bNone &= !Gated.Contains(Id);
+	TestTrue(TEXT("4 powers locked: none of their cards in deck"), bNone);
+	TestTrue(TEXT("deterministic"), ZoogiCards::FilterDeckByUnlocks(Starter, B, 15, 2, [](FName) { return false; }, L) == D2);
+	return true;
+}
+
 #endif

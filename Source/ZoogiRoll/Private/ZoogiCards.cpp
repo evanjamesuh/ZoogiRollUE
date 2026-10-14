@@ -244,6 +244,37 @@ namespace ZoogiCards
 		return true;
 	}
 
+	static FPowerUnlockQuery& UnlockQueryRef() { static FPowerUnlockQuery Q; return Q; }
+	void SetPowerUnlockQuery(FPowerUnlockQuery Query) { UnlockQueryRef() = MoveTemp(Query); }
+	const FPowerUnlockQuery& GetPowerUnlockQuery() { return UnlockQueryRef(); }
+
+	TArray<FName> FilterDeckByUnlocks(const TArray<FName>& Deck, const IZoogiCardBackend& Backend, int32 DeckSize, int32 MaxCopies, const FPowerUnlockQuery& IsUnlocked, FString& OutLog)
+	{
+		if (!IsUnlocked) return Deck; // no unlock system: everything unlocked, deck untouched
+		auto Eligible = [&](FName Id) { const FZoogiCardDef* D = Backend.FindDef(Id); return D && (D->RequiredPower.IsNone() || IsUnlocked(D->RequiredPower)); };
+		TArray<FName> Out; TMap<FName, int32> N; TArray<FString> Dropped;
+		for (const FName& Id : Deck)
+		{
+			if (!Eligible(Id)) { Dropped.Add(Id.ToString()); continue; }
+			if (N.FindOrAdd(Id) >= MaxCopies) continue;
+			++N[Id]; Out.Add(Id);
+		}
+		if (Dropped.Num() == 0) return Deck;
+		int32 Added = 0;
+		for (bool bProgress = true; Out.Num() < DeckSize && bProgress; )
+		{
+			bProgress = false;
+			for (const FZoogiCardDef& D : Backend.AllDefs())
+			{
+				if (Out.Num() >= DeckSize) break;
+				if (!Eligible(D.Id) || N.FindOrAdd(D.Id) >= MaxCopies) continue;
+				++N[D.Id]; Out.Add(D.Id); ++Added; bProgress = true;
+			}
+		}
+		OutLog += FString::Printf(TEXT(" locked-power cards removed [%s], refilled %d -> %d cards;"), *FString::Join(Dropped, TEXT(",")), Added, Out.Num());
+		return Out;
+	}
+
 	const TCHAR* ForceLabel(int32 Step, bool bCardsMode)
 	{
 		static const TCHAR* Classic[4] = { TEXT("AUTO"), TEXT("SOFT"), TEXT("MED"), TEXT("FULL") };

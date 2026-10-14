@@ -71,10 +71,17 @@ void UZoogiCardSubsystem::EnsureMatch(AZoogiGameMode* G)
 	FString Why = TEXT("Backend=native");
 	if (!Tune.Backend.Equals(TEXT("native"), ESearchCase::IgnoreCase)) Backend = FZoogiToolkitCardBackend::TryLoad(Defs, Why);
 	if (!Backend.IsValid()) { Backend = MakeShared<FZoogiNativeCardBackend>(Defs); UE_LOG(LogZoogi, Log, TEXT("CARDS backend native (%s)"), *Why); }
+	FString LogS;
+	// Oct 14 (Evan): power unlocks. No registered unlock query (the default) = everything unlocked, decks untouched.
+	TArray<FName> Fallback = ZoogiCards::BuiltInDeck();
+	if (const ZoogiCards::FPowerUnlockQuery& Q = ZoogiCards::GetPowerUnlockQuery())
+	{
+		Deck = ZoogiCards::FilterDeckByUnlocks(Deck, *Backend, Tune.DeckSize, Tune.MaxCopies, Q, LogS);
+		Fallback = ZoogiCards::FilterDeckByUnlocks(Fallback, *Backend, Tune.DeckSize, Tune.MaxCopies, Q, LogS);
+	}
 	TArray<TArray<FName>> Decks; Decks.Init(Deck, G->Balls.Num());
 	const int32 Seed = G->GameSeed ^ 0x5EEDCA4D; // own stream: card draws never consume GameRng numbers
-	FString LogS;
-	const bool bOk = RulesV.Init(Backend, Tune, Seed, Decks, ZoogiCards::BuiltInDeck(), LogS);
+	const bool bOk = RulesV.Init(Backend, Tune, Seed, Decks, Fallback, LogS);
 	LastStandbyTurn = -1;
 	FxReset();
 	CollapseEffectId = 0; CollapseOwner = -1; CollapsePiece.Reset();
