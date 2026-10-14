@@ -463,6 +463,6 @@ uint32 FZoogiCardRules::StateHash() const
 		for (const FZoogiCardInstance& C : S.Discard) Mix(C.InstanceId);
 		Mix((uint32)S.Energy);
 	}
-	for (const FZoogiCardEvent& E : Ledger) { Mix((uint32)E.EventId); Mix(GetTypeHash(E.Kind)); Mix((uint32)E.InstanceId); Mix((uint32)E.Cost); }
+	for (const FZoogiCardEvent& E : Ledger) { Mix((uint32)E.EventId); Mix(FCrc::StrCrc32(*E.Kind.ToString())); Mix((uint32)E.InstanceId); Mix((uint32)E.Cost); }
 	return H;
 }
