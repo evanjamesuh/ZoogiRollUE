@@ -86,8 +86,8 @@ namespace ZoogiHudArt
 		UTexture2D* T = Tex(Name);
 		if (!T || S.X <= 0.5f) return false;
 		FSlateBrush B; B.SetResourceObject(T); B.ImageSize = S; B.DrawAs = ESlateBrushDrawType::Image;
-		const FSlateRenderTransform R(FQuat2D(AngleRad));
-		FSlateDrawElement::MakeBox(Out, L, G.ToPaintGeometry(FVector2D(S), FSlateLayoutTransform(FVector2D(C - S * 0.5f)), FSlateRenderTransform(R), FVector2D(0.5f, 0.5f)), &B, ESlateDrawEffect::None, Tint);
+		const FSlateRenderTransform R{ FQuat2D(AngleRad) };
+		FSlateDrawElement::MakeBox(Out, L, G.ToPaintGeometry(FVector2D(S), FSlateLayoutTransform(FVector2D(C - S * 0.5f)), R, FVector2D(0.5f, 0.5f)), &B, ESlateDrawEffect::None, Tint);
 		return true;
 	}
 
