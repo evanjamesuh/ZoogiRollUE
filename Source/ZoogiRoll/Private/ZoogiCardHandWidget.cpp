@@ -125,7 +125,7 @@ TSharedRef<SWidget> UZoogiCardHandWidget::RebuildWidget()
 			S->SetAnchors(FAnchors(1.f, 1.f)); S->SetAlignment(FVector2D(1.f, 1.f)); S->SetAutoSize(false); S->SetZOrder(1000);
 		}
 		Cast<UCanvasPanelSlot>(ConfirmBtn->Slot)->SetPosition(FVector2D(-24.f, -196.f)); Cast<UCanvasPanelSlot>(ConfirmBtn->Slot)->SetSize(FVector2D(220.f, 52.f));
-		Cast<UCanvasPanelSlot>(ClearBtn->Slot)->SetPosition(FVector2D(-24.f, -256.f)); Cast<UCanvasPanelSlot>(ClearBtn->Slot)->SetSize(FVector2D(220.f, 46.f));
+		Cast<UCanvasPanelSlot>(ClearBtn->Slot)->SetPosition(FVector2D(-24.f, -256.f)); Cast<UCanvasPanelSlot>(ClearBtn->Slot)->SetSize(FVector2D(220.f, 52.f)); // >= 48 dp tap target
 	}
 	SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 	return Super::RebuildWidget();
@@ -200,7 +200,9 @@ FVector2D UZoogiCardHandWidget::Local(const FPointerEvent& Ev) const { return Ca
 
 void UZoogiCardHandWidget::DiscardAll(const FZoogiCardPlayerState* S)
 {
-	const FVector2D Pile(ViewSize.X - 330.f, ViewSize.Y - 40.f);
+	const ZoogiFramed::FLayout& SFL = ZoogiFramed::Current();
+	const float Sk = SFL.bValid && SFL.Viewport.X > 0.f ? ViewSize.X / SFL.Viewport.X : 1.f;
+	const FVector2D Pile(ViewSize.X - 330.f - (SFL.bValid ? SFL.Safe.Right * Sk : 0.f), ViewSize.Y - 40.f - (SFL.bValid ? SFL.Safe.Bottom * Sk : 0.f)); // altar, inside the safe area
 	int32 N = 0, Gone = 0;
 	for (TPair<int32, FVis>& P : Vis)
 	{
@@ -329,6 +331,15 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 		TI.bCards = bEnergyVisible; TI.Draw = DrawCount; TI.Discard = DiscardCount; TI.Energy = EnergyShown; TI.EnergyMax = EnergyMax;
 		TI.EnergyFrac = EnergyMax > 0 ? FMath::Clamp((float)EnergyShown / EnergyMax, 0.f, 1.f) : 0.f; TI.Flash = EnergyJuice.Flash; TI.Shake = EnergyJuice.Shake;
 		ZoogiFramed::SetTrayInfo(TI); // hud-v3: the framed painter draws deck / discard / energy on the tray art
+	}
+
+	// touch: armed card keeps the lifted pose + tooltip; the whole layer takes the next tap while armed
+	if (Armed.IsValid() && (!bInteractive || !Vis.Contains(Armed->InstanceId) || Vis[Armed->InstanceId].State != EVis::Hand)) Armed.Reset();
+	if (Armed.IsValid() && !Dragging.IsValid()) Hovered = Armed;
+	if (Dragging.IsValid()) PressHeld += Dt;
+	{
+		const ESlateVisibility Want = Armed.IsValid() ? ESlateVisibility::Visible : ESlateVisibility::SelfHitTestInvisible;
+		if (GetVisibility() != Want) SetVisibility(Want);
 	}
 
 	// fan layout targets (bottom center, overlapping, tilted outward; hover = 1.3x, lift, 0 deg, neighbors spread)
@@ -460,7 +471,7 @@ bool UZoogiCardHandWidget::CardPress(UZoogiCardWidget* C, const FPointerEvent& E
 {
 	const FVis* V = C ? Vis.Find(C->InstanceId) : nullptr;
 	if (!bInteractive || !V || V->State != EVis::Hand || V->bFly || Dragging.IsValid()) return false;
-	Dragging = C; Hovered = C; Cursor = Local(Ev);
+	Dragging = C; Hovered = C; Cursor = Local(Ev); PressPos = Cursor; PressHeld = 0.f;
 	UE_LOG(LogZoogi, Log, TEXT("CARDUI drag start %s#%d"), *C->CardId.ToString(), C->InstanceId);
 	return true;
 }
@@ -476,13 +487,30 @@ void UZoogiCardHandWidget::CancelDrag(const TCHAR* Why)
 void UZoogiCardHandWidget::CardRelease(UZoogiCardWidget* C, const FPointerEvent& Ev, bool bCancel)
 {
 	Cursor = Local(Ev);
-	if (bCancel) { CancelDrag(TEXT("right_click")); return; }
-	if (!OverTarget()) { CancelDrag(TEXT("released_off_target")); return; }
+	if (bCancel) { CancelDrag(TEXT("right_click")); Armed.Reset(); return; }
+	if (!OverTarget())
+	{
+		// touch / mobile: a tap (no real drag) arms the card; the next tap on the target assigns it, a tap elsewhere disarms
+		if (FVector2D::Distance(Cursor, PressPos) < 14.f && PressHeld < 0.4f)
+		{
+			Armed = Armed.Get() == C ? nullptr : C;
+			Dragging.Reset();
+			UE_LOG(LogZoogi, Log, TEXT("CARDUI tap %s#%d -> %s"), *C->CardId.ToString(), C->InstanceId, Armed.IsValid() ? TEXT("armed (tap the target)") : TEXT("disarmed"));
+			return;
+		}
+		CancelDrag(TEXT("released_off_target")); return;
+	}
+	AssignTo(C);
+}
+
+void UZoogiCardHandWidget::AssignTo(UZoogiCardWidget* C)
+{
 	AZoogiGameMode* G = GetWorld() ? GetWorld()->GetAuthGameMode<AZoogiGameMode>() : nullptr;
 	UZoogiCardSubsystem* Cards = UZoogiCardSubsystem::Get(this);
 	AZoogiBall* B = G ? G->GetActiveBall() : nullptr;
 	const FZoogiCardPlayerState* S = Cards && B ? Cards->Rules().Player(B->PlayerIndex) : nullptr;
 	const int32 HandSlot = S ? S->Hand.IndexOfByPredicate([C](const FZoogiCardInstance& I) { return I.InstanceId == C->InstanceId; }) : INDEX_NONE;
+	Armed.Reset();
 	if (HandSlot == INDEX_NONE) { CancelDrag(TEXT("not_in_hand")); return; }
 	// the one select path (same as the Phase 4 panel / keys 1-5): the card system validates, nothing is spent here
 	G->MenuAction(TEXT("CardToggle"), HandSlot);
@@ -494,6 +522,16 @@ void UZoogiCardHandWidget::CardRelease(UZoogiCardWidget* C, const FPointerEvent&
 		if (FVis* V = Vis.Find(C->InstanceId)) { V->State = EVis::ToTarget; Fly(*V, TargetPos, CHAssignDur, 0.f, 0.3f, 0.f, 60.f, false); }
 		Reacts.Add({ TargetPos, 0.f, C->Color, C->Name });
 	}
+}
+
+FReply UZoogiCardHandWidget::NativeOnMouseButtonDown(const FGeometry& Geo, const FPointerEvent& Ev)
+{
+	UZoogiCardWidget* A = Armed.Get();
+	if (!A || !bInteractive) return Super::NativeOnMouseButtonDown(Geo, Ev);
+	Cursor = Local(Ev);
+	if (OverTarget()) AssignTo(A);
+	else { UE_LOG(LogZoogi, Log, TEXT("CARDUI tap off target -> disarmed")); Armed.Reset(); Hovered.Reset(); }
+	return FReply::Handled();
 }
 
 void UZoogiCardHandWidget::OnConfirm()
@@ -535,7 +573,8 @@ int32 UZoogiCardHandWidget::NativePaint(const FPaintArgs& Args, const FGeometry&
 		ZoogiUIStyle::SBar(Out, L + 1, Geo, FVector2D(V.X - 170.f, V.Y - 30.f), FVector2D(130.f, 14.f), 0.f, ZoogiUIStyle::CardEnergyA, ZoogiUIStyle::CardEnergyB, &EnergyJuice, FMath::Clamp(EnergyMax, 1, 10));
 	}
 	// hover tooltip with the card description
-	if (!HoverTitle.IsEmpty() && !Dragging.IsValid())
+	const bool bLongPress = Dragging.IsValid() && PressHeld >= 0.4f && FVector2D::Distance(Cursor, PressPos) < 14.f; // touch: long-press = tooltip
+	if (!HoverTitle.IsEmpty() && (!Dragging.IsValid() || bLongPress))
 	{
 		const int32 NL = CHLines(HoverTip);
 		FVector2D Sz(400.f, 46.f + NL * 20.f);
@@ -572,6 +611,14 @@ int32 UZoogiCardHandWidget::NativePaint(const FPaintArgs& Args, const FGeometry&
 		const FVis* DV = Vis.Find(Dg->InstanceId);
 		const FVector2D Start = DV ? DV->Pos - FVector2D(0.f, UZoogiCardWidget::CardH * DV->Scale * 0.92f) : FVector2D(V.X * 0.5f, V.Y - 300.f);
 		ZoogiCardTargetArrow::Paint(Out, L + 5, Geo, Start, bOver ? TargetPos : Cursor, bOver && bDragValid ? C : C * FLinearColor(1.f, 1.f, 1.f, 0.85f), Time);
+	}
+	// touch: armed card -> pulsing ring on the target + "TAP TARGET"
+	if (const UZoogiCardWidget* Am = Armed.Get()) if (bTargetOnScreen && !Dragging.IsValid())
+	{
+		const float Pulse = 0.5f + 0.5f * FMath::Sin(Time * 8.f);
+		FLinearColor G1 = Am->Color; G1.A = 0.6f + 0.3f * Pulse;
+		ZoogiCardTargetArrow::Ring(Out, L + 2, Geo, TargetPos, TargetR + 6.f * Pulse, G1, 5.f);
+		CHText(Out, L + 4, Geo, TargetPos + FVector2D(-60.f, -TargetR - 44.f), TEXT("TAP TARGET"), 18, FLinearColor::White, true);
 	}
 	// target reaction: burst ring + card name pop
 	for (const FReact& R : Reacts)
