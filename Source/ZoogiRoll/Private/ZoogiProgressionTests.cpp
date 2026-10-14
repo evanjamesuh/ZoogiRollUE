@@ -395,3 +395,18 @@ bool FZoogiStoreAppleJwsTest::RunTest(const FString&)
 }
 
 #endif
+
+// Oct 14 (deck-edit): the saved deck round-trips through the profile JSON; old profiles without "deck" load with an empty deck.
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiProgSavedDeckTest, "ZoogiRoll.Progression.SavedDeck", ZoogiProgTest::ZoogiProgTestFlags)
+bool FZoogiProgSavedDeckTest::RunTest(const FString&)
+{
+	const FZoogiProgressionConfig C = FZoogiProgressionConfig::BuiltIn();
+	FZoogiProgression A; A.Init(C);
+	TestEqual(TEXT("fresh profile: no saved deck"), A.Get().Deck.Num(), 0);
+	const TArray<FName> D = { TEXT("storm"), TEXT("storm"), TEXT("guard"), TEXT("frost") };
+	A.Mutable().Deck = D;
+	FZoogiProgression B; FString E;
+	TestTrue(TEXT("reload"), B.Load(C, A.Save(), E));
+	TestTrue(TEXT("deck round-trips in order"), B.Get().Deck == D);
+	return true;
+}
