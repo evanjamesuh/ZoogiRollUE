@@ -74,7 +74,7 @@ void FZoogiCardFantasyTune::Load()
 	F(TEXT("StealRange"), StealRange); F(TEXT("StealTime"), StealTime); F(TEXT("StealRate"), StealRate); F(TEXT("StealOnHit"), StealOnHit);
 	F(TEXT("CrystalSpikeR"), CrystalSpikeR); F(TEXT("CrystalSpikePush"), CrystalSpikePush);
 	F(TEXT("MagnetR"), MagnetR); F(TEXT("MagnetTime"), MagnetTime); F(TEXT("MagnetAccel"), MagnetAccel); F(TEXT("MagnetSwirl"), MagnetSwirl);
-	F(TEXT("DoubleCloneHit"), DoubleCloneHit);
+	F(TEXT("DoubleCloneHit"), DoubleCloneHit); F(TEXT("CPUBoostEdgeMargin"), CPUBoostEdgeMargin); F(TEXT("HeavyMaxUp"), HeavyMaxUp);
 	F(TEXT("ChainArrowTime"), ChainArrowTime); GConfig->GetString(S, TEXT("ChainArrowFX"), ChainArrowFX, GGameIni);
 	F(TEXT("AnchorMass"), AnchorMass); F(TEXT("AnchorPushK"), AnchorPushK);
 	F(TEXT("RecoveryDash"), RecoveryDash); F(TEXT("RecoveryUp"), RecoveryUp);
@@ -183,7 +183,7 @@ void UZoogiCardSubsystem::FanOnShot(AZoogiGameMode* G, AZoogiBall* Ball, const F
 	};
 	if (Fx.Find(KCHeavy, P))
 	{
-		Fan.HeavyOwner = P; Fan.HeavySavedMass = Ball->Sphere->GetMass(); Fan.HeavySavedScale = Ball->GetModelScale();
+		Fan.bSelfBoost = true; Fan.HeavyOwner = P; Fan.HeavySavedMass = Ball->Sphere->GetMass(); Fan.HeavySavedScale = Ball->GetModelScale();
 		Ball->Sphere->SetMassOverrideInKg(NAME_None, Fan.HeavySavedMass * FanTune.HeavyMass, true);
 		Ball->SetModelScale(Fan.HeavySavedScale * FanTune.HeavyScale);
 		AZoogiFX::Niagara(W, TEXT("NS_Dust"), Loc, FRotator::ZeroRotator, 2.f);
@@ -330,7 +330,7 @@ void UZoogiCardSubsystem::FanBallContact(AZoogiGameMode* G, AZoogiBall* Victim, 
 		const FVector2D Drain = Flat(VV) * FanTune.StealOnHit;
 		Victim->Sphere->SetPhysicsLinearVelocity(VV - FVector(Drain, 0.f));
 		const FVector2D AD = Flat(Att->GetBallVelocity()).GetSafeNormal();
-		AddVel(Att, AD.IsNearlyZero() ? Drain.GetSafeNormal() : AD, Drain.Size());
+		AddVel(Att, AD.IsNearlyZero() ? Drain.GetSafeNormal() : AD, Drain.Size()); Fan.bSelfBoost = true;
 		AZoogiFX::Spawn(W, Att->BallLocation(), CGreen, 180.f, 0.4f, true, 5.f);
 		UE_LOG(LogZoogi, Log, TEXT("CARDS fantasy momentum_steal P%d: drained %.0f cm/s from P%d on contact"), A + 1, Drain.Size(), Victim->PlayerIndex + 1);
 	}
@@ -354,7 +354,7 @@ void UZoogiCardSubsystem::FanWall(AZoogiGameMode* G, AZoogiBall* Ball, const FHi
 	const float Now = GetWorld()->GetTimeSeconds();
 	if (Now - Fan.BankLastT < 0.15f) return;
 	Fan.BankLastT = Now;
-	++Fan.BankBounces;
+	++Fan.BankBounces; Fan.bSelfBoost = true;
 	const FVector V = Ball->GetBallVelocity();
 	const float Sp = V.Size2D();
 	float NewSp = FMath::Min(Sp * (1.f + FanTune.BankStep * Fan.BankBounces), FMath::Max(Sp, FanTune.BankMaxSpeed));
@@ -547,6 +547,19 @@ void UZoogiCardSubsystem::FanTick(AZoogiGameMode* G, float Dt)
 			if (Fan.BeamT <= 0.f) { AZoogiFX::SpawnTrail(W, SL, CVoid, 50.f, 0.4f, 6.f); Fan.BeamT = 0.06f; }
 		}
 	}
+	// CPU self-boost guard: a fantasy speed-up (bank pinball, steal drain, boulder) never carries a CPU shooter off the ring;
+	// the boulder also stays grounded (islet rails / bridges were launching it 5 m up)
+	if (S->Sphere && !S->bOut && Fan.HeavyOwner == FxShooter) { const FVector HV = S->GetBallVelocity(); if (HV.Z > FanTune.HeavyMaxUp) S->Sphere->SetPhysicsLinearVelocity(FVector(HV.X, HV.Y, FanTune.HeavyMaxUp)); }
+	if (Fan.bSelfBoost && S->bCPU && S->Sphere && !S->bOut && G->Arena)
+	{
+		const FVector BV = S->GetBallVelocity(); const float BSp = BV.Size2D();
+		if (BSp > 50.f)
+		{
+			const float Edge = G->Arena->DistanceToEdge(Flat(SL), Flat(BV) / BSp);
+			const float MaxSp = FMath::Sqrt(2.f * G->Arena->GetRollingDecel() * FMath::Max(0.f, Edge - FanTune.CPUBoostEdgeMargin));
+			if (BSp > MaxSp) S->Sphere->SetPhysicsLinearVelocity(FVector(BV.X / BSp * MaxSp, BV.Y / BSp * MaxSp, BV.Z));
+		}
+	}
 	// Momentum Steal tether
 	if (Fan.TetherOwner == FxShooter && Fan.TetherRival.IsValid() && S->Sphere)
 	{
@@ -561,7 +574,7 @@ void UZoogiCardSubsystem::FanTick(AZoogiGameMode* G, float Dt)
 			{
 				R->Sphere->SetPhysicsLinearVelocity(RV - FVector(Drain, 0.f));
 				const FVector2D AD = Flat(S->GetBallVelocity()).GetSafeNormal();
-				if (!AD.IsNearlyZero()) AddVel(S, AD, Drain.Size());
+				if (!AD.IsNearlyZero()) { AddVel(S, AD, Drain.Size()); Fan.bSelfBoost = true; }
 			}
 			Fan.BeamT -= Dt;
 			if (Fan.BeamT <= 0.f) { Beam(W, SL, R->BallLocation(), CGreen, 6, 30.f); Fan.BeamT = 0.12f; }
