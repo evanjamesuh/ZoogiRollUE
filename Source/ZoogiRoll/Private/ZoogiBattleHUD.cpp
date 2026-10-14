@@ -20,10 +20,13 @@
 #include "Framework/Application/SlateApplication.h"
 #include "Fonts/FontMeasure.h"
 #include "Rendering/SlateRenderer.h"
+#include "Misc/App.h"
+#include "ZoogiUIStyle.h"
 
 namespace ZoogiBattleHud
 {
-	static const FLinearColor Panel(0.02f, 0.03f, 0.08f, 0.72f);
+	static const FLinearColor Panel = ZoogiUIStyle::PanelNavy; // uistyle: saturated navy (was near-black 0.02/0.03/0.08)
+	static TArray<ZoogiUIStyle::FBarJuice> EnergyJuice;         // uistyle: per-player Episode Energy bar juice (display only)
 	static const FLinearColor EarlyC(1.f, 0.85f, 0.2f, 1.f), CenterC(0.3f, 0.95f, 0.45f, 1.f), LateC(1.f, 0.42f, 0.22f, 1.f);
 	static const FLinearColor Cyan(0.45f, 0.9f, 1.f, 1.f);
 
@@ -37,6 +40,7 @@ namespace ZoogiBattleHud
 			FSlateFontInfo Fi = F->GetLegacySlateFontInfo();
 			Fi.Size = FMath::Max(6.f, FMath::RoundToFloat(Fi.Size * Scale * U * (bBig ? 1.75f : 2.3f)));
 			if (bBig) Fi.TypefaceFontName = FName(TEXT("Bold"));
+			ZoogiUIStyle::AddOutline(Fi, FMath::Max(1.f, 2.f * U)); // uistyle: navy outline on every label
 			return Fi;
 		}
 		FVector2D Size(const FString& S, float Scale, bool bBig) const
@@ -118,8 +122,7 @@ void UZoogiBattleStateMachine::OnHUDPostRender(AHUD* HUD, UCanvas* Canvas)
 		const float X = W - 424.f * U, Y0 = 212.f * U;
 		const bool bPend = Pending.Owner >= 0;
 		const float PH = 38.f * U + RowH * Players.Num() + (bPend ? 28.f * U : 0.f) + 26.f * U;
-		D.Rect(X, Y0, PW, PH, Panel);
-		D.Rect(X, Y0, PW, 3.f * U, Cyan);
+		ZoogiUIStyle::CPanel(Canvas, X, Y0, PW, PH, U, Panel, Cyan);
 		D.Text(TEXT("EPISODE ENERGY"), X + 12.f * U, Y0 + 8.f * U, Cyan, 0.42f, false, true);
 		float Y = Y0 + 38.f * U;
 		for (const FZoogiBattlePlayerState& P : Players)
@@ -127,21 +130,24 @@ void UZoogiBattleStateMachine::OnHUDPostRender(AHUD* HUD, UCanvas* Canvas)
 			const bool bActive = P.Player == G->ActivePlayer;
 			const FLinearColor PC = ZoogiUtil::PlayerColor(P.Player);
 			const bool bOut = G->Balls.IsValidIndex(P.Player) && G->Balls[P.Player] && G->Balls[P.Player]->bOut;
-			if (bActive) D.Rect(X + 4.f * U, Y - 2.f * U, PW - 8.f * U, RowH - 2.f * U, FLinearColor(1.f, 1.f, 1.f, 0.07f));
-			D.Rect(X + 10.f * U, Y + 6.f * U, 14.f * U, 14.f * U, PC);
+			if (bActive) ZoogiUIStyle::CRoundRect(Canvas, X + 6.f * U, Y - 2.f * U, PW - 12.f * U, RowH - 2.f * U, 8.f * U, FLinearColor(0.3f, 0.8f, 1.f, 0.16f));
+			ZoogiUIStyle::CRoundRect(Canvas, X + 8.f * U, Y + 4.f * U, 18.f * U, 18.f * U, 5.f * U, ZoogiUIStyle::Outline);
+			ZoogiUIStyle::CRoundRect(Canvas, X + 10.5f * U, Y + 6.5f * U, 13.f * U, 13.f * U, 3.f * U, PC);
 			const FString Nm = FString::Printf(TEXT("P%d %s"), P.Player + 1, *P.Name.Left(8));
-			D.Text(Nm, X + 32.f * U, Y + 3.f * U, bOut ? FLinearColor(0.5f, 0.5f, 0.55f) : (bActive ? FLinearColor(1.f, 0.95f, 0.6f) : FLinearColor::White), 0.36f);
+			D.Text(Nm, X + 32.f * U, Y + 3.f * U, bOut ? ZoogiUIStyle::MutedText : (bActive ? FLinearColor(1.f, 0.95f, 0.6f) : FLinearColor::White), 0.36f);
 			const float E = GetEnergy(P.Player), Cap = FMath::Max(1.f, Tune.EnergyCap);
 			const float BX = X + 170.f * U, BW = 150.f * U, BY = Y + 8.f * U, BH = 12.f * U;
-			D.Rect(BX, BY, BW, BH, FLinearColor(0.f, 0.f, 0.f, 0.55f));
-			FLinearColor Fill = PC; Fill.A = 0.95f;
-			D.Rect(BX, BY, BW * FMath::Clamp(E / Cap, 0.f, 1.f), BH, Fill);
-			for (int32 t = 1; t < 4; ++t) D.Rect(BX + BW * t * 0.25f, BY, 1.f * U, BH, FLinearColor(0.f, 0.f, 0.f, 0.5f));
-			D.Text(FString::Printf(TEXT("%.0f"), E), BX + BW + 8.f * U, Y + 3.f * U, FLinearColor::White, 0.34f);
+			// uistyle: chunky cyan -> electric blue bar, navy outline, gloss, ticks, juice
+			if (EnergyJuice.Num() <= P.Player) EnergyJuice.SetNum(P.Player + 1);
+			ZoogiUIStyle::FBarJuice& J = EnergyJuice[P.Player];
+			J.Update(FMath::Clamp(E / Cap, 0.f, 1.f), FApp::GetDeltaTime());
+			ZoogiUIStyle::CBar(Canvas, BX, BY - 1.f * U, BW, BH + 2.f * U, U, FMath::Clamp(E / Cap, 0.f, 1.f), ZoogiUIStyle::EnergyA, ZoogiUIStyle::EnergyB, &J, 4, (float)RealClock);
+			D.Text(FString::Printf(TEXT("%.0f"), E), BX + BW + 18.f * U, Y + 3.f * U, FLinearColor::White, 0.34f);
 			const UZoogiReactionComponent* R = Reaction(P.Player);
 			if (R && R->bAwakened)
 			{
-				D.Rect(X + PW - 50.f * U, Y + 4.f * U, 42.f * U, 20.f * U, FLinearColor(1.f, 0.55f, 0.1f, 0.9f));
+				ZoogiUIStyle::CRoundRect(Canvas, X + PW - 52.f * U, Y + 2.f * U, 46.f * U, 24.f * U, 7.f * U, ZoogiUIStyle::Outline);
+				ZoogiUIStyle::CRoundRect(Canvas, X + PW - 49.5f * U, Y + 4.5f * U, 41.f * U, 19.f * U, 5.f * U, FLinearColor(1.f, 0.55f, 0.1f, 0.95f));
 				D.Text(FString::Printf(TEXT("AWK%d"), R->ReactionsLeft), X + PW - 29.f * U, Y + 5.f * U, FLinearColor::White, 0.26f, true, true);
 			}
 			Y += RowH;
@@ -152,7 +158,7 @@ void UZoogiBattleStateMachine::OnHUDPostRender(AHUD* HUD, UCanvas* Canvas)
 			D.Text(FString::Printf(TEXT("P%d combo: %s"), Pending.Owner + 1, Row ? *Row->Label : *Pending.ComboId.ToString()), X + 12.f * U, Y + 2.f * U, Cyan, 0.34f);
 			Y += 28.f * U;
 		}
-		D.Text(TEXT("F5 combo  F6 commit  F7/F8 air  F9 rail"), X + 12.f * U, Y + 2.f * U, FLinearColor(0.7f, 0.75f, 0.85f, 0.9f), 0.28f);
+		D.Text(TEXT("F5 combo  F6 commit  F7/F8 air  F9 rail"), X + 12.f * U, Y + 2.f * U, FLinearColor(0.7f, 0.88f, 1.f, 0.95f), 0.28f);
 	}
 
 	// ---- prompt panel (bottom centre above the status line: the top centre belongs to the Episode callouts)
@@ -161,8 +167,7 @@ void UZoogiBattleStateMachine::OnHUDPostRender(AHUD* HUD, UCanvas* Canvas)
 	auto Box = [&](float BH, const FLinearColor& Accent)
 	{
 		PY = H - 120.f * U - BH;
-		D.Rect(PX, PY, PW, BH, Panel);
-		D.Rect(PX, PY, PW, 3.f * U, Accent);
+		ZoogiUIStyle::CPanel(Canvas, PX, PY, PW, BH, U, Panel, Accent);
 	};
 	const UZoogiMiniGameRailRelease* Rail = Cast<UZoogiMiniGameRailRelease>(ActiveMiniGame);
 	const UZoogiMiniGameAirReaction* Air = Cast<UZoogiMiniGameAirReaction>(ActiveMiniGame);
@@ -175,14 +180,17 @@ void UZoogiBattleStateMachine::OnHUDPostRender(AHUD* HUD, UCanvas* Canvas)
 		const float Tot = FMath::Max(0.01f, Tune.RailEarlyWindow + Tune.RailCenterWindow + Tune.RailLateWindow);
 		const float BX = PX + 24.f * U, BW = PW - 48.f * U, BY = PY + 48.f * U, BH = 22.f * U;
 		const float We = BW * Tune.RailEarlyWindow / Tot, Wc = BW * Tune.RailCenterWindow / Tot, Wl = BW - We - Wc;
+		ZoogiUIStyle::CRoundRect(Canvas, BX - 3.5f * U, BY - 3.5f * U, BW + 7.f * U, BH + 7.f * U, 8.f * U, ZoogiUIStyle::Outline);
 		D.Rect(BX, BY, We, BH, EarlyC * FLinearColor(1, 1, 1, 0.85f));
 		D.Rect(BX + We, BY, Wc, BH, CenterC * FLinearColor(1, 1, 1, 0.85f));
 		D.Rect(BX + We + Wc, BY, Wl, BH, LateC * FLinearColor(1, 1, 1, 0.85f));
-		D.Text(TEXT("EARLY / HIGH"), BX + We * 0.5f, BY + 2.f * U, FLinearColor(0.1f, 0.1f, 0.1f), 0.28f, true, true);
-		D.Text(TEXT("CENTER / FLAT"), BX + We + Wc * 0.5f, BY + 2.f * U, FLinearColor(0.1f, 0.1f, 0.1f), 0.28f, true, true);
-		D.Text(TEXT("LATE / BANK"), BX + We + Wc + Wl * 0.5f, BY + 2.f * U, FLinearColor(0.1f, 0.1f, 0.1f), 0.28f, true, true);
+		D.Rect(BX, BY + 2.f * U, BW, BH * 0.25f, FLinearColor(1.f, 1.f, 1.f, 0.4f)); // gloss strip
+		D.Text(TEXT("EARLY / HIGH"), BX + We * 0.5f, BY + 2.f * U, FLinearColor::White, 0.28f, true, true);
+		D.Text(TEXT("CENTER / FLAT"), BX + We + Wc * 0.5f, BY + 2.f * U, FLinearColor::White, 0.28f, true, true);
+		D.Text(TEXT("LATE / BANK"), BX + We + Wc + Wl * 0.5f, BY + 2.f * U, FLinearColor::White, 0.28f, true, true);
 		const float Cx = BX + BW * FMath::Clamp(Rail->Elapsed / Tot, 0.f, 1.f);
-		D.Rect(Cx - 3.f * U, BY - 8.f * U, 6.f * U, BH + 16.f * U, FLinearColor::White);
+		D.Rect(Cx - 5.f * U, BY - 10.f * U, 10.f * U, BH + 20.f * U, ZoogiUIStyle::Outline);
+		D.Rect(Cx - 2.5f * U, BY - 7.5f * U, 5.f * U, BH + 15.f * U, FLinearColor::White);
 	}
 	else if (Air && Air->bInputOpen && Air->Choice == EZoogiAirChoice::None)
 	{
@@ -191,7 +199,7 @@ void UZoogiBattleStateMachine::OnHUDPostRender(AHUD* HUD, UCanvas* Canvas)
 		D.Text(FString::Printf(TEXT("AIR REACTION  P%d"), Air->Owner + 1), PX + PW * 0.5f, PY + 8.f * U, FLinearColor::White, 0.46f, true, true);
 		D.Text(bMine ? TEXT("[F7] BRACE        [F8] REDIRECT") : TEXT("CPU is choosing..."), PX + PW * 0.5f, PY + 42.f * U, FLinearColor(1.f, 0.85f, 0.6f), 0.4f, true);
 		const float Frac = FMath::Clamp(Air->InputLeft / FMath::Max(0.1f, Tune.MiniGameInputTimeout), 0.f, 1.f);
-		D.Rect(PX + 24.f * U, PY + 78.f * U, (PW - 48.f * U) * Frac, 6.f * U, FLinearColor(1.f, 0.55f, 0.1f));
+		ZoogiUIStyle::CBar(Canvas, PX + 24.f * U, PY + 76.f * U, PW - 60.f * U, 8.f * U, U, Frac, FLinearColor(1.f, 0.85f, 0.2f), FLinearColor(1.f, 0.45f, 0.1f), nullptr, 5);
 	}
 	else if (RealClock < HudRailUntil)
 	{
@@ -234,7 +242,7 @@ void UZoogiBattleStateMachine::OnHUDPostRender(AHUD* HUD, UCanvas* Canvas)
 		const float T = 8.f * U;
 		D.Rect(0, 0, W, T, Red); D.Rect(0, H - T, W, T, Red); D.Rect(0, 0, T, H, Red); D.Rect(W - T, 0, T, H, Red);
 		const float Pop = 1.f + 0.25f * FMath::Max(0.f, 1.f - (float)SAge / 0.18f);
-		D.Rect(W * 0.5f - 300.f * U, H * 0.34f, 600.f * U, 110.f * U, FLinearColor(0.08f, 0.f, 0.f, 0.7f * A));
+		ZoogiUIStyle::CPanel(Canvas, W * 0.5f - 300.f * U, H * 0.34f, 600.f * U, 110.f * U, U, FLinearColor(0.5f, 0.02f, 0.12f, 0.85f * A), FLinearColor(1.f, 0.85f, 0.3f, A));
 		D.Text(TEXT("SHATTERED"), W * 0.5f, H * 0.34f + 8.f * U, Red, 1.1f * Pop, true, true);
 		D.Text(LastShatterReason.Left(48), W * 0.5f, H * 0.34f + 78.f * U, FLinearColor(1.f, 0.85f, 0.85f, A), 0.34f, true);
 	}
