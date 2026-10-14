@@ -99,7 +99,7 @@ void AZoogiGameMode::SetStage(EZoogiStage S)
 	switch (S)
 	{
 	case EZoogiStage::Draw:
-		if (bArtifactMode) DoDraw();
+		if (bArtifactMode) { if (CardsOn()) CardsBeginStandby(); else DoDraw(); } // v3: card Standby replaces the artifact draw
 		break;
 	case EZoogiStage::Awaken:
 		bAwakenDone = false;
@@ -509,6 +509,13 @@ void AZoogiGameMode::TickStages(float Dt)
 		if (StageTime >= (bCPU ? DrawCPU : DrawHuman)) SetStage(bArtifactMode ? EZoogiStage::Awaken : EZoogiStage::Battle);
 		break;
 	case EZoogiStage::Awaken:
+		if (CardsOn())
+		{
+			// v3 STANDBY: human commits with COMMIT / Enter, CPU through the same rules; then the normal Aim / Force / Confirm
+			if (!bAwakenDone && bCPU && StageTime >= AwakenCPU) CardsPlanCPU();
+			if (bAwakenDone && !bAnimeBusy && StageTime - AwakenDoneAt >= AwakenBeat) SetStage(EZoogiStage::Battle);
+			break;
+		}
 		if (!bAwakenDone && bCPU && StageTime >= AwakenCPU) PlanCPUAwaken();
 		if (!bAwakenDone && Ball->Artifact && Ball->Artifact->Drawn == EZoogiArtifact::None && Ball->Artifact->Hand.Num() == 0 && StageTime > 0.6f) AwakenSave(); // nothing to use
 		if (bAwakenDone && !bAnimeBusy && StageTime - AwakenDoneAt >= (AwakenChoiceText.StartsWith(TEXT("SAVE")) ? AwakenSaveBeat : AwakenBeat)) SetStage(EZoogiStage::Battle);

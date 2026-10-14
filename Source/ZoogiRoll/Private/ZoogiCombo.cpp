@@ -121,6 +121,7 @@ void AZoogiGameMode::ComboTrigger(uint32 Flag, float Energy, const FVector& Wher
 	if (ShotTriggers & Flag) return;
 	ShotTriggers |= Flag;
 	const FString L = TriggerNames(Flag);
+	Energy *= CardsComboGainMul(); // v3 P6 PROPOSED earning tune (cards on only; 1.0 otherwise)
 	ComboAddEnergy(ComboTeam, Energy, L);
 	const FLinearColor C(1.f, 0.85f, 0.3f);
 	ComboCallout(FString::Printf(TEXT("%s!  +%.0f COMBO"), *L, Energy), C);
@@ -223,6 +224,7 @@ void AZoogiGameMode::ComboStartMatch()
 		Balls.Add(B);
 	}
 	for (int32 t = 0; t < 2; ++t) { ComboEnergy[t] = 0.f; ComboResonance[t] = 0; ArenaControl[t] = 0.f; ComboOrbOuts[t] = 0; ComboNextPick[t] = 0; }
+	if (CardsOn()) { const float S0 = CardsComboStartGauge(); ComboEnergy[0] = ComboEnergy[1] = S0; UE_LOG(LogZoogi, Log, TEXT("CARDS combo start gauge %.0f per team (PROPOSED)"), S0); }
 	bComboMatchOver = false;
 	ComboWinner = -1;
 	ComboOverReason.Reset();
@@ -804,6 +806,12 @@ void AZoogiGameMode::ComboCheckKnockoffs()
 				ComboWinner = 1 - B->TeamIndex;
 				ComboOverReason = FString::Printf(TEXT("both %s Zoogis knocked out"), *TeamName(B->TeamIndex));
 			}
+			else if (TeamAlive(B->TeamIndex) == 0 && bComboMatchOver && ComboWinner == B->TeamIndex && CardsOn())
+			{
+				// v3 cards rules: the last Zoogis of both teams knocked out in the same action = draw (cards on only)
+				ComboWinner = -1;
+				ComboOverReason = TEXT("mutual final KO: both teams' last Zoogis knocked out");
+			}
 		}
 		BigColor = Att >= 0 ? ZoogiUtil::PlayerColor(Att) : FLinearColor(1.f, 0.4f, 0.35f);
 		BigAge = 0.f;
@@ -1324,4 +1332,29 @@ void AZoogiGameMode::TickComboDemo(float Dt)
 			CommitLock();
 		}
 	}
+}
+
+// v3 P6 PROPOSED: cards-mode earning so normal CPU matches reach follow-ups and episodes without test top-ups.
+// -ZoogiComboGainMul= / -ZoogiEpisodeGainMul= override for tuning runs. Cards off: always 1.0 (parity).
+float AZoogiGameMode::CardsComboGainMul() const
+{
+	if (!CardsOn()) return 1.f;
+	static float M = -1.f;
+	if (M < 0.f) { M = 1.5f; FParse::Value(FCommandLine::Get(), TEXT("ZoogiComboGainMul="), M); }
+	return M;
+}
+float AZoogiGameMode::CardsEpisodeGainMul() const
+{
+	if (!CardsOn()) return 1.f;
+	static float M = -1.f;
+	if (M < 0.f) { M = 3.5f; FParse::Value(FCommandLine::Get(), TEXT("ZoogiEpisodeGainMul="), M); }
+	return M;
+}
+float AZoogiGameMode::CardsComboStartGauge() const
+{
+	// v3 P6 PROPOSED: each team starts a cards match with one Partner Follow-Up worth of Combo gauge (cost 30), so the
+	// early setups the CPU builds can actually be followed up. -ZoogiComboStart=<n> overrides; cards off: 0.
+	if (!CardsOn()) return 0.f;
+	float S = 30.f; FParse::Value(FCommandLine::Get(), TEXT("ZoogiComboStart="), S);
+	return FMath::Clamp(S, 0.f, 100.f);
 }

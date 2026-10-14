@@ -1,4 +1,5 @@
 #include "ZoogiAwakenWidget.h"
+#include "ZoogiCards.h"
 #include "ZoogiMenuWidget.h"
 #include "ZoogiGameMode.h"
 #include "ZoogiBall.h"
@@ -569,8 +570,7 @@ void UZoogiAwakenWidget::BuildAim(AZoogiGameMode* G)
 	}
 	else
 	{
-	static const TCHAR* PowerNames[4] = { TEXT("AUTO"), TEXT("SOFT"), TEXT("MED"), TEXT("FULL") };
-	for (int32 i = 0; i < 4; ++i) { MakeButton(P, PowerNames[i], FVector2D(X, BY), FVector2D(96.f, BH), TEXT("AimPower"), i, FLinearColor(1.f, 0.8f, 0.3f), G->AimPowerStep == i); X += 102.f; }
+	for (int32 i = 0; i < 4; ++i) { MakeButton(P, ZoogiCards::ForceLabel(i, G->CardsOn()), FVector2D(X, BY), FVector2D(96.f, BH), TEXT("AimPower"), i, FLinearColor(1.f, 0.8f, 0.3f), G->AimPowerStep == i); X += 102.f; }
 	X += 18.f;
 	MakeButton(P, TEXT("NEXT"), FVector2D(X, BY), FVector2D(110.f, BH), TEXT("AimNext"), 0, Acc, false); X += 118.f;
 	}
@@ -588,32 +588,34 @@ void UZoogiAwakenWidget::Refresh(float DeltaSeconds, bool bHideAll)
 	PumpGemJobs();
 	BtnFx.RemoveAll([](const FBtnFx& F) { return !F.Btn.IsValid() || !F.Btn->GetParent(); });
 	AZoogiGameMode* G = GetWorld() ? GetWorld()->GetAuthGameMode<AZoogiGameMode>() : nullptr;
-	bool bWantAwaken = false, bWantAim = false;
+	bool bWantAwaken = false, bWantAim = false, bWantCards = false;
 	if (G && Root && !bHideAll && G->Phase == EZoogiPhase::Aiming)
 	{
 		AZoogiBall* B = G->GetActiveBall();
-		bWantAwaken = G->Stage == EZoogiStage::Awaken && !G->bAwakenDone && B && B->Artifact;
+		bWantAwaken = G->Stage == EZoogiStage::Awaken && !G->bAwakenDone && B && B->Artifact && !G->CardsOn(); // v3: Canvas card panel instead
 		bWantAim = G->IsHumanAiming() && G->IsAimStep();
+		bWantCards = G->CardsOn() && G->Stage == EZoogiStage::Awaken && !G->bAwakenDone && B && G->IsHumanAiming();
 	}
-	if (bWantAwaken)
+	FillPendingCards();
+	if (bWantAwaken || bWantCards)
 	{
-		const FString Sig = AwakenSignature(G);
+		const FString Sig = bWantCards ? CardsSignature(G) : AwakenSignature(G);
 		if (Sig != AwakenSig || !AwakenPanel)
 		{
 			if (AwakenPanel) AwakenPanel->RemoveFromParent();
 			AwakenPanel = nullptr;
 			Controls.RemoveAll([](const FControl& C) { return !C.bAim; });
 			AwakenClicks.Reset();
-			BuildAwaken(G);
+			if (bWantCards) BuildCards(G); else BuildAwaken(G);
 			AwakenSig = Sig;
 			++NumRebuilds;
 		}
 	}
 	if (AwakenPanel)
 	{
-		const ESlateVisibility V = bWantAwaken ? ESlateVisibility::Visible : ESlateVisibility::Collapsed;
+		const ESlateVisibility V = (bWantAwaken || bWantCards) ? ESlateVisibility::Visible : ESlateVisibility::Collapsed;
 		if (AwakenPanel->GetVisibility() != V) AwakenPanel->SetVisibility(V);
-		if (!bWantAwaken) AwakenSig.Reset();
+		if (!bWantAwaken && !bWantCards) AwakenSig.Reset();
 	}
 	if (bWantAim)
 	{
@@ -648,6 +650,7 @@ void UZoogiAwakenWidget::Refresh(float DeltaSeconds, bool bHideAll)
 		if (!bWantAim) AimSig.Reset();
 	}
 	bAwakenShown = bWantAwaken && AwakenPanel != nullptr;
+	bCardsShown = bWantCards && AwakenPanel != nullptr;
 	bAimShown = bWantAim && AimPanel != nullptr;
 	if (bAwakenShown && !bAwakenWasShown) AwakenIntro = 0.f;
 	if (bAimShown && !bAimWasShown) AimIntro = 0.f;

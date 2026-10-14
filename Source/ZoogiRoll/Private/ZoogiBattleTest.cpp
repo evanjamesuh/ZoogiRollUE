@@ -361,7 +361,16 @@ void UZoogiBattleStateMachine::TickTest(float RealDt)
 	switch (TestStep)
 	{
 	case 1: // Awaken
-		if (G->Stage == EZoogiStage::Awaken && G->StageTime > 0.25f)
+		if (G->Stage == EZoogiStage::Awaken && G->StageTime > 0.25f && G->CardsOn())
+		{
+			// v3 cards mode: the Awaken hand is replaced by STANDBY; P1 commits an empty selection (PASS) so the case
+			// exercises the same battle flow. Episode Awakening (energy) is independent of cards and unchanged.
+			if (FindCase(TestCase)->Aw != EAw::Save && !G->bAwakenDone) G->bStandbyAwaken = true; // Infuse/Guard cases request Awakening
+			const bool bOk = G->bAwakenDone || G->CardsCommit();
+			UE_LOG(LogZoogi, Log, TEXT("BATTLE_TEST cards standby pass=%d"), bOk ? 1 : 0);
+			TestStep = 2;
+		}
+		else if (G->Stage == EZoogiStage::Awaken && G->StageTime > 0.25f)
 		{
 			const EAw Aw = FindCase(TestCase)->Aw;
 			const bool bOk = Aw == EAw::Infuse ? G->AwakenInfuse(0) : (Aw == EAw::Guard ? G->AwakenGuard(0) : G->AwakenSave());

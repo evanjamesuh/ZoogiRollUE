@@ -2,6 +2,7 @@
 // Rules approved by Evan (Oct 4): one Zoogi per player, no HP (damage = knockback / status / score), deterministic crits,
 // Guard covers only the next opponent attack, affinity map in ZoogiArtifacts::Affinity.
 #include "ZoogiGameMode.h"
+#include "Misc/Crc.h"
 #include "ZoogiRoll.h"
 #include "ZoogiBall.h"
 #include "ZoogiOrb.h"
@@ -148,6 +149,7 @@ EZoogiArtifact AZoogiGameMode::PickedArtifact() const
 
 bool AZoogiGameMode::AwakenInfuse(int32 Pick)
 {
+	if (CardsOn()) return false; // v3: cards replace the artifact hand
 	AZoogiBall* B = GetActiveBall();
 	if (!B || !B->Artifact || Phase != EZoogiPhase::Aiming || Stage != EZoogiStage::Awaken || bAwakenDone) return false;
 	const EZoogiArtifact A = TakePicked(B->Artifact, Pick);
@@ -172,6 +174,7 @@ bool AZoogiGameMode::AwakenInfuse(int32 Pick)
 
 bool AZoogiGameMode::AwakenGuard(int32 Pick)
 {
+	if (CardsOn()) return false; // v3: cards replace the artifact hand
 	AZoogiBall* B = GetActiveBall();
 	if (!B || !B->Artifact || Phase != EZoogiPhase::Aiming || Stage != EZoogiStage::Awaken || bAwakenDone) return false;
 	const EZoogiArtifact A = TakePicked(B->Artifact, Pick);
@@ -191,6 +194,7 @@ bool AZoogiGameMode::AwakenGuard(int32 Pick)
 
 bool AZoogiGameMode::AwakenSave()
 {
+	if (CardsOn()) return false; // v3: cards replace the artifact hand
 	AZoogiBall* B = GetActiveBall();
 	if (!B || !B->Artifact || Phase != EZoogiPhase::Aiming || Stage != EZoogiStage::Awaken || bAwakenDone) return false;
 	UZoogiArtifactComponent* AC = B->Artifact;
@@ -212,6 +216,7 @@ bool AZoogiGameMode::AwakenSave()
 
 void AZoogiGameMode::PlanCPUAwaken()
 {
+	if (CardsOn()) { CardsPlanCPU(); return; }
 	AZoogiBall* B = GetActiveBall();
 	if (!B || !B->Artifact || bAwakenDone) return;
 	UZoogiArtifactComponent* AC = B->Artifact;
@@ -609,4 +614,25 @@ void AZoogiGameMode::DoResolve()
 	}
 	UE_LOG(LogZoogi, Log, TEXT("Resolve (turn %d, P%d): %s (%d scoring, %d KO)%s"), TurnCounter, ActivePlayer + 1, *ResolveSummary, ShooterScores, KOs,
 		bLastHitCrit ? TEXT(", crit") : TEXT(""));
+}
+
+void AZoogiGameMode::CardsPlanCPUAwaken()
+{
+	// Same decision inputs as the classic CPU (PlanCPUAwaken): a rival target, near the edge, protecting the lead,
+	// playing safe, or a stocked artifact hand all lead to Infuse / Guard there, i.e. an Awakening under the
+	// InfuseOrGuard rule. In cards mode that becomes the independent Standby request; OnAwakenObserved still applies
+	// the configured ActivationRule exactly as for a human. The coin flips use a hash of (turn, player) instead of
+	// GameRng so the cards-mode RNG stream (shots, cards) is not shifted by this decision.
+	AZoogiBall* B = GetActiveBall();
+	if (!B || bAwakenDone || !B->bCPU || bStandbyAwaken) return;
+	const uint32 H = FCrc::MemCrc32(&TurnCounter, sizeof(TurnCounter), (uint32)B->PlayerIndex * 2654435761u);
+	const float U1 = (H & 0xffff) / 65536.f, U2 = ((H >> 16) & 0xffff) / 65536.f;
+	const bool bRival = Cast<AZoogiBall>(CPULock.Get()) != nullptr;
+	const float Edge = EdgeDistance(Arena, B->BallLocation());
+	bool bLeader = B->Score > 0;
+	for (const AZoogiBall* O : Balls) if (O && O != B && O->Score >= B->Score) bLeader = false;
+	const bool bStocked = B->Artifact && B->Artifact->Hand.Num() >= 1;
+	const TCHAR* Why = bRival ? TEXT("rival target") : Edge < 450.f ? TEXT("near the edge") : (bLeader && U1 < 0.5f) ? TEXT("protecting the lead") : U2 < 0.2f ? TEXT("playing safe") : bStocked ? TEXT("hand stocked") : nullptr;
+	if (Why && Stage == EZoogiStage::Awaken) { bStandbyAwaken = true; UE_LOG(LogZoogi, Log, TEXT("CARDS standby awakening request ON (CPU)")); }
+	UE_LOG(LogZoogi, Log, TEXT("CPU P%d Standby Awakening: %s (%s, edge %.0f cm)"), B->PlayerIndex + 1, Why ? TEXT("REQUEST") : TEXT("no"), Why ? Why : TEXT("orb target, saving"), Edge);
 }

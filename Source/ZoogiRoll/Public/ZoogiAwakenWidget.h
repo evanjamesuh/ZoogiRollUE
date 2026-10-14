@@ -58,6 +58,12 @@ public:
 	bool FindControl(FName Action, int32 Index, FVector2D& OutAbs) const;
 	bool PanelPoint(bool bAimBar, const FVector2D& Frac, FVector2D& OutAbs) const;
 	bool SynthClick(const FVector2D& Abs);
+	/** v3 Phase 4: real Slate touch tap (finger 0) at Abs. */
+	bool SynthTouch(const FVector2D& Abs);
+	bool ShowsCards() const { return bCardsShown; }
+	int32 NumCardVisuals() const { return CardVisuals.Num(); }
+	int32 NumCardFills() const { return CardFills; }
+	bool UsesToolkitCards() const { return CardVisualClass != nullptr; }
 	/** Queue a click at Abs: performed (move + press + release in one go) on a later frame once Slate's hit test
 	 *  finds Expect there (waits up to ~30 frames, e.g. while a panel is being rebuilt or the window resizes). */
 	void QueueClick(const FVector2D& Abs, const FString& Expect);
@@ -92,6 +98,15 @@ protected:
 	bool bBuildingAim = false;
 	FString AwakenSignature(AZoogiGameMode* G) const;
 	FString AimSignature(AZoogiGameMode* G) const;
+	FString CardsSignature(AZoogiGameMode* G) const;
+	void BuildCards(AZoogiGameMode* G);
+	void FillPendingCards();
+	UPROPERTY() TSubclassOf<UUserWidget> CardVisualClass;
+	UPROPERTY() TArray<TObjectPtr<UUserWidget>> CardVisuals;
+	struct FPendingCardFill { TWeakObjectPtr<UUserWidget> Visual; FName CardId; bool bSelected = false; bool bAffordable = true; };
+	TArray<FPendingCardFill> PendingFill;
+	bool bCardVisualMissing = false, bCardsShown = false;
+	int32 CardFills = 0;
 
 	UFUNCTION() FEventReply OnPanelMouseDown(FGeometry MyGeometry, const FPointerEvent& MouseEvent);
 

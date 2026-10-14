@@ -1,4 +1,5 @@
 #include "ZoogiGameMode.h"
+#include "ZoogiEpisodeDirector.h"
 #include "ZoogiBattleStateMachine.h"
 #include "ZoogiEpisodeSubsystem.h"
 #include "ZoogiKFXPreview.h"
@@ -17,6 +18,7 @@
 #include "ZoogiCombo.h"
 #include "ZoogiStageForming.h"
 #include "ZoogiArenaPiece.h"
+#include "ZoogiCardSubsystem.h"
 #include "Engine/World.h"
 #include "Components/SphereComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -143,6 +145,21 @@ bool AZoogiGameMode::IsHumanAiming() const
 
 void AZoogiGameMode::MenuAction(FName Action, int32 Index)
 {
+	// v3 P6: one physical input can arrive twice in the same frame (touch + its emulated mouse click, a key repeat plus a
+	// button). Gameplay decisions (cards, follow-up, episode skip) are accepted once per (action, index, frame).
+	{
+		const FString A = Action.ToString();
+		if (A.StartsWith(TEXT("Card")) || A.StartsWith(TEXT("Follow")) || A.StartsWith(TEXT("Episode")))
+		{
+			if (Action == LastGameplayAction && Index == LastGameplayIndex && GFrameCounter == LastGameplayFrame)
+			{
+				++DuplicateInputsIgnored;
+				UE_LOG(LogZoogi, Log, TEXT("INPUT duplicate %s %d in frame %llu ignored"), *A, Index, (uint64)GFrameCounter);
+				return;
+			}
+			LastGameplayAction = Action; LastGameplayIndex = Index; LastGameplayFrame = GFrameCounter;
+		}
+	}
 	const int32 RosterNum = ZoogiUtil::Roster().Num();
 	if (Action == "Players") MenuNumPlayers = bComboMode ? 4 : FMath::Clamp(Index, 2, 4);
 	else if (Action == "Mode") ComboSetMode(Index == 1);
@@ -169,6 +186,11 @@ void AZoogiGameMode::MenuAction(FName Action, int32 Index)
 	else if (Action == "Infuse") AwakenInfuse(Index >= 0 ? Index : AwakenPick);
 	else if (Action == "Guard") AwakenGuard(Index >= 0 ? Index : AwakenPick);
 	else if (Action == "Save") AwakenSave();
+	else if (Action == "CardToggle") CardsToggle(Index);
+	else if (Action == "CardClear") CardsClear();
+	else if (Action == "CardCommit") CardsCommit();
+	else if (Action == "CardAwaken") CardsToggleAwaken();
+	else if (Action == "EpisodeSkip") { if (UZoogiEpisodeDirector* D = UZoogiEpisodeDirector::Get(this)) D->SkipCurrent(); }
 	else if (Action == "AimNudge") NudgeAim(Index);
 	else if (Action == "AimPower") AimPowerStep = FMath::Clamp(Index, 0, 3);
 	else if (Action == "AimConfirm") CommitLock();
@@ -181,7 +203,7 @@ void AZoogiGameMode::MenuAction(FName Action, int32 Index)
 	else if (Action == "Rematch") StartMatch();
 	else if (Action == "Quit") UKismetSystemLibrary::QuitGame(this, GetWorld()->GetFirstPlayerController(), EQuitPreference::Quit, false);
 	// UI sounds (team brief: short, soft, rounded, never harsh when repeated): confirm / cancel / click.
-	if (Action == "Start" || Action == "Rematch" || Action == "Infuse" || Action == "Guard" || Action == "Save" || Action == "AimConfirm" || Action == "FollowUp")
+	if (Action == "Start" || Action == "Rematch" || Action == "Infuse" || Action == "Guard" || Action == "Save" || Action == "CardCommit" || Action == "AimConfirm" || Action == "FollowUp")
 		ZoogiUtil::PlaySfx(this, TEXT("UiConfirm"), 0.4f);
 	else if (Action == "AimCancel" || Action == "Menu" || Action == "Quit")
 		ZoogiUtil::PlaySfx(this, TEXT("UiCancel"), 0.4f);
@@ -767,7 +789,10 @@ bool AZoogiGameMode::ReleaseAim()
 	}
 	if (Ball) ApplyStatusOnShot(Ball, V);
 	if (bComboMode && Ball) ComboModifyShot(Ball, V);
+	UZoogiCardSubsystem* CardFx = CardsOn() ? UZoogiCardSubsystem::Get(this) : nullptr; // v3 Phase 3: card shot modifiers (cards on only)
+	if (CardFx && Ball) CardFx->FxModifyShot(this, Ball, V);
 	FireShot(V);
+	if (CardFx && Ball) CardFx->FxAfterShot(this, Ball, V);
 	SetBattleStep(EZoogiBattleStep::Rolling);
 	return true;
 }

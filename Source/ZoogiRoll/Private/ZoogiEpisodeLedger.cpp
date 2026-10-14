@@ -5,6 +5,7 @@
 #include "ZoogiBall.h"
 #include "ZoogiArena.h"
 #include "ZoogiRoll.h"
+#include "ZoogiEpisodeDirector.h"
 #include "Engine/World.h"
 #include "HAL/FileManager.h"
 #include "Misc/Crc.h"
@@ -118,6 +119,7 @@ void UZoogiBattleStateMachine::LedgerAction(const FZoogiGameplayTruthRecord& Tru
 	for (int32 T : TL) if (Players.IsValidIndex(T)) Players[T].Contributions++;
 	if (Players.IsValidIndex(Truth.Actor)) Players[Truth.Actor].Contributions++;
 	Ledger->Append(E);
+	if (UZoogiEpisodeDirector* D = UZoogiEpisodeDirector::Get(this)) D->OnLedgerEvent(this, Ledger->Events.Last()); // v3 P5 (read-only consumer)
 }
 
 void UZoogiBattleStateMachine::LedgerSimple(const FString& Kind, int32 Actor, const FString& Detail)
@@ -155,6 +157,7 @@ void UZoogiBattleStateMachine::LedgerSimple(const FString& Kind, int32 Actor, co
 	for (int32 p = 0; p < Players.Num(); ++p) E.episode_energy_delta.Add(0.f);
 	if (Actor >= 0) E.spotlight.Add(Actor);
 	Ledger->Append(E);
+	if (UZoogiEpisodeDirector* D = UZoogiEpisodeDirector::Get(this)) D->OnLedgerEvent(this, Ledger->Events.Last()); // v3 P5 (read-only consumer)
 }
 
 void UZoogiBattleStateMachine::OnMatchEnd(const FString& Why)

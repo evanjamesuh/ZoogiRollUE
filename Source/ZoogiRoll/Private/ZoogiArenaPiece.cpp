@@ -8,6 +8,7 @@
 #include "ZoogiOrb.h"
 #include "ZoogiFX.h"
 #include "ZoogiArtifactComponent.h"
+#include "ZoogiCardSubsystem.h"
 #include "ProceduralMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -235,12 +236,26 @@ void AZoogiArenaPiece::OnBallHit(AZoogiBall* Ball, const FVector& NormalImpulse,
 	const float Vn = FMath::Max(0.f, FVector::DotProduct(V, N2));
 	if (Vn < HitSpeedMin) return;
 	LastHit = Clock;
+	if (UZoogiCardSubsystem* Cards = UZoogiCardSubsystem::Get(this)) Cards->OnPieceContact(this, Ball, ImpactPoint, N2); // v3: qualifying contact (no-op unless -ZoogiCards)
 	const EZoogiArtifact E = Ball->Artifact ? Ball->Artifact->Infused : EZoogiArtifact::None;
 	float Dmg = (Vn - HitSpeedMin) * HitDamagePerSpeed + 6.f;
 	if (E != EZoogiArtifact::None) Dmg *= 1.3f; // an Awakened shooter hits harder
 	UE_LOG(LogZoogi, Log, TEXT("Piece %s (%s, %s) hit by P%d %s at %.0f cm/s normal%s"), *GetName(), *Kind.ToString(), *Surface.ToString(), Ball->PlayerIndex + 1, *Ball->Def.Name, Vn,
 		E != EZoogiArtifact::None ? TEXT(" (infused)") : TEXT(""));
 	ApplyDamage(Dmg, ImpactPoint, N2, E, Ball);
+}
+
+bool AZoogiArenaPiece::ApplyCardCollapse(int64 EffectId, const FVector& At, const FVector& Dir)
+{
+	if (bIndestructible || !bBuilt || State == EZoogiPieceState::Broken || EffectId <= 0 || CardEffectsApplied.Contains(EffectId)) return false;
+	CardEffectsApplied.Add(EffectId);
+	const EZoogiPieceState Before = State;
+	const EZoogiPieceState NewS = (EZoogiPieceState)((uint8)State + 1);
+	SetPieceState(NewS, At, Dir, true); // Broken turns the colliders off (the authored broken variant)
+	HP = NewS == EZoogiPieceState::Broken ? 0.f : (NewS == EZoogiPieceState::Cracked ? MaxHP * 0.3f : MaxHP * 0.6f);
+	Flash = 1.f;
+	UE_LOG(LogZoogi, Log, TEXT("Piece %s (%s): CRYSTAL COLLAPSE effect=%lld %s -> %s (card exemption from bDestruction=False)"), *GetName(), *Kind.ToString(), EffectId, *StateName(Before), *StateName(State));
+	return true;
 }
 
 bool AZoogiArenaPiece::ApplyPower(EZoogiArtifact Element, float Amount, const FVector& At, AZoogiBall* By)

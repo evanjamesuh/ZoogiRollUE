@@ -78,6 +78,11 @@ public:
 	EZoogiPieceState GetPieceState() const { return State; }
 	bool IsIndestructible() const { return bIndestructible; }
 	bool IsBroken() const { return State == EZoogiPieceState::Broken; }
+	bool IsBuilt() const { return bBuilt; }
+	/** v3 Crystal Collapse card (Evan, Oct 13 7:58 PM): advance this piece by ONE authored state for one committed card effect.
+	 *  The only path exempt from [ZoogiRoll.Arena] bDestruction=False. Never touches indestructible pieces (pillars) or a
+	 *  broken piece; each EffectId applies at most once. Called at the Resolve boundary (UZoogiCardSubsystem). */
+	bool ApplyCardCollapse(int64 EffectId, const FVector& At, const FVector& Dir);
 	bool HasColliders() const { return Colliders.Num() > 0; }
 	bool CollisionLive() const { return bCollisionLive; }
 	/** Forming / state control of the colliders (never turns on while broken). */
@@ -155,4 +160,5 @@ protected:
 	FVector2D PathXY = FVector2D::ZeroVector;
 	float PathR = 0.f;
 	int32 Seed = 1;
+	TSet<int64> CardEffectsApplied; // v3 card effect ids already applied (apply once)
 };
