@@ -6,6 +6,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "ZoogiUIStyle.h"
 #include "Blueprint/UserWidget.h"
 #include "ZoogiMenuRoot.generated.h"
 
@@ -17,6 +18,9 @@ class UMediaTexture;
 class UFileMediaSource;
 class AZoogiGameMode;
 class UButton;
+
+/** One live menu button + its animation state (not a UPROPERTY: weak refs, rebuilt with the screen). */
+struct FZoogiMenuAnimBtn { TWeakObjectPtr<UButton> B; TWeakObjectPtr<class UWidget> Gloss; ZoogiUIStyle::FButtonAnim A; };
 
 enum class EZoogiMenuAnchor : uint8 { Left, Center, Right };
 
@@ -119,6 +123,15 @@ private:
 	FVector2D BuiltViewport = FVector2D::ZeroVector;
 	float DesignW = 2400.f;
 	float Time = 0.f;
+	// button animation (ZoogiUIStyle::FButtonAnim per live button)
+	TArray<FZoogiMenuAnimBtn> AnimBtns;
+	int32 AnimScreen = -1;
+	bool bAnimEnter = false;
+	void AddAnim(class UButton* B, UWidget* Gloss, bool bPrimary, bool bDisabled);
+	void TickAnims(float Dt);
+	// -ZoogiMenuClip=<dir>: per-frame captures of the button animations
+	FString ClipDir; int32 ClipFrame = -1; float ClipClock = 0.f; bool ClipHover = false, ClipPress = false;
+	void TickClip(float Dt);
 	FDelegateHandle UnlockHandle;
 
 	// screen state

@@ -218,6 +218,7 @@ void UZoogiMenuRoot::Refresh(float DeltaSeconds)
 		if (PC->WasInputKeyJustPressed(EKeys::Escape) || PC->WasInputKeyJustPressed(EKeys::Android_Back)) HandleBack();
 	}
 	TickTour(DeltaSeconds);
+	TickClip(DeltaSeconds);
 	FVector2D VP(2400.f, 1080.f);
 	if (GEngine && GEngine->GameViewport) GEngine->GameViewport->GetViewportSize(VP);
 	const AZoogiGameMode* G = GM();
@@ -228,6 +229,7 @@ void UZoogiMenuRoot::Refresh(float DeltaSeconds)
 		bDirty = false;
 		Rebuild();
 	}
+	TickAnims(DeltaSeconds);
 }
 
 // ---------------------------------------------------------------------------------------------------------- art
@@ -395,7 +397,8 @@ UWidget* UZoogiMenuRoot::Btn(const FString& Label, const FLinearColor& FillIn, T
 	UOverlay* O = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass());
 	// gloss strip (the shared look: white gloss along the top)
 	UBorder* Gloss = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
-	Gloss->SetBrush(ZoogiUIStyle::RoundBrush(FLinearColor(1.f, 1.f, 1.f, bDisabled ? 0.06f : 0.22f), FLinearColor::Transparent, 0.f, R * 0.7f));
+	Gloss->SetBrush(ZoogiUIStyle::RoundBrush(FLinearColor(1.f, 1.f, 1.f, bDisabled ? 0.06f : 0.42f), FLinearColor::Transparent, 0.f, R * 0.7f));
+	Gloss->SetRenderOpacity(bDisabled ? 1.f : 0.52f); // 0.22 effective idle; TickAnims brightens it on hover / press / shine
 	USizeBox* GB = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
 	GB->SetHeightOverride(FMath::Min(34.f, Ht * ZMK * 0.22f));
 	GB->AddChild(Gloss);
@@ -427,6 +430,7 @@ UWidget* UZoogiMenuRoot::Btn(const FString& Label, const FLinearColor& FillIn, T
 	B->AddChild(O);
 	if (UButtonSlot* S = Cast<UButtonSlot>(O->Slot)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); }
 	BindClick(B, MoveTemp(Fn));
+	AddAnim(B, Gloss, !bDisabled && (Label == TEXT("PLAY") || Label == TEXT("START")), bDisabled);
 	return Place(B, X, Y, Wd, Ht, A);
 }
 
@@ -486,6 +490,7 @@ UWidget* UZoogiMenuRoot::ImgTile(UTexture2D* Tex, const FString& Caption, TFunct
 	B->AddChild(O);
 	if (UButtonSlot* S = Cast<UButtonSlot>(O->Slot)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); }
 	BindClick(B, MoveTemp(Fn));
+	AddAnim(B, nullptr, false, bLocked || !Fn);
 	return Place(B, X, Y, Wd, Ht);
 }
 
@@ -509,6 +514,9 @@ void UZoogiMenuRoot::Rebuild()
 	if (!Root || !WidgetTree) return;
 	Root->ClearChildren();
 	Clicks.Reset();
+	AnimBtns.Reset();
+	bAnimEnter = AnimScreen != (int32)Top() || Stack.Num() == 0;
+	AnimScreen = (int32)Top();
 	Canvas = nullptr;
 	DesignW = FMath::Max(1440.f, 1080.f * BuiltViewport.X / FMath::Max(1.f, BuiltViewport.Y));
 
@@ -1313,4 +1321,54 @@ void UZoogiMenuRoot::SetBackdropPlaying(bool bPlay)
 	if (!BackdropPlayer || BackdropState <= 0) return;
 	if (bPlay && !BackdropPlayer->IsPlaying()) BackdropPlayer->Play();
 	else if (!bPlay && BackdropPlayer->IsPlaying()) BackdropPlayer->Pause();
+}
+
+// ---------------------------------------------------------------------------------------------------------- button animation
+void UZoogiMenuRoot::AddAnim(UButton* B, UWidget* Gloss, bool bPrimary, bool bDisabled)
+{
+	if (!B) return;
+	FZoogiMenuAnimBtn& E = AnimBtns.AddDefaulted_GetRef();
+	E.B = B; E.Gloss = Gloss;
+	E.A.bPrimary = bPrimary; E.A.bDisabled = bDisabled;
+	E.A.bEnter = bAnimEnter && !bDisabled;
+	E.A.Delay = FMath::Min(AnimBtns.Num() - 1, 14) * 0.045f; // 45 ms stagger
+	B->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
+	E.A.Tick(false, false, 0.f, Time);
+	B->SetRenderScale(FVector2D(E.A.OutScale));
+	B->SetRenderOpacity(E.A.OutOpacity);
+}
+
+void UZoogiMenuRoot::TickAnims(float Dt)
+{
+	for (FZoogiMenuAnimBtn& E : AnimBtns)
+	{
+		UButton* B = E.B.Get();
+		if (!B) continue;
+		const bool bScripted = E.A.bPrimary && ClipFrame >= 0;
+		E.A.Tick(B->IsHovered() || B->HasKeyboardFocus() || (bScripted && ClipHover), B->IsPressed() || (bScripted && ClipPress), Dt, Time);
+		B->SetRenderScale(FVector2D(E.A.OutScale));
+		B->SetRenderOpacity(E.A.OutOpacity);
+		if (UWidget* G = E.Gloss.Get()) G->SetRenderOpacity(0.52f + 0.48f * E.A.OutGloss);
+	}
+}
+
+void UZoogiMenuRoot::TickClip(float Dt)
+{
+	if (ClipFrame == -1)
+	{
+		ClipFrame = FParse::Value(FCommandLine::Get(), TEXT("ZoogiMenuClip="), ClipDir) ? 0 : -2;
+		if (ClipFrame == 0) IFileManager::Get().MakeDirectory(*ClipDir, true);
+	}
+	if (ClipFrame < 0) return;
+	ClipClock += Dt;
+	if (ClipClock < 6.f) return;
+	// 6 s: open PLAY (enter stagger), then simulate a press + release on START, then idle shine. One capture per frame.
+	if (ClipFrame == 0) Push(EZoogiScreen::Play);
+	const int32 NF = 75;
+	if (ClipFrame >= NF) { ClipFrame = -2; return; }
+	// scripted on START: hover (frames 30-39), press (40-47), release with hover (48-59)
+	ClipHover = ClipFrame >= 30 && ClipFrame < 60;
+	ClipPress = ClipFrame >= 40 && ClipFrame < 48;
+	FScreenshotRequest::RequestScreenshot(FPaths::Combine(ClipDir, FString::Printf(TEXT("clip_%03d.png"), ClipFrame)), true, false);
+	++ClipFrame;
 }
