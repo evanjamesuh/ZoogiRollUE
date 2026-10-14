@@ -508,8 +508,8 @@ void UZoogiMenuRoot::Rebuild()
 	case EZoogiScreen::Shop: Bg = TEXT("lava_background"); break;
 	default: break;
 	}
-	// HOME shows the live main-menu map preview (589dd96) behind a light wash; the other screens use art backdrops.
-	const bool bLiveMap = Top() == EZoogiScreen::Home && !bAnimeView;
+	// Evan 9:28 AM CT: HOME uses the same opaque Frozen art backdrop as PLAY (covers the live menu-map preview).
+	const bool bLiveMap = false;
 	UObject* BgRes = (EnsureBackdrop() && BackdropTexture) ? (UObject*)BackdropTexture.Get() : bLiveMap ? nullptr : (UObject*)Art(Bg);
 	if (BgRes)
 	{
