@@ -26,7 +26,7 @@ enum class EZoogiArtifact : uint8
 };
 
 UENUM(BlueprintType)
-enum class EZoogiElement : uint8
+enum class EZoogiArtifactElement : uint8
 {
 	Neutral,
 	Fire,
@@ -43,7 +43,7 @@ struct FZoogiArtifactRow : public FTableRowBase
 	GENERATED_BODY()
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) EZoogiArtifact Id = EZoogiArtifact::None;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly) EZoogiElement Element = EZoogiElement::Neutral;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly) EZoogiArtifactElement Element = EZoogiArtifactElement::Neutral;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) FString DisplayName;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) FString InfuseText;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly) FString GuardText;

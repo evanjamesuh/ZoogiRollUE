@@ -282,9 +282,9 @@ void AZoogiShotTestDriver::ExportRT(UTextureRenderTarget2D* RT, const FString& N
 	FTextureRenderTargetResource* Res = RT ? RT->GameThread_GetRenderTargetResource() : nullptr;
 	if (!Res) return;
 	TArray<FColor> Px;
-	FReadSurfaceDataFlags Flags(RCM_UNorm);
-	Flags.SetLinearToGamma(RT->RenderTargetFormat == RTF_RGBA16f);
-	if (!Res->ReadPixels(Px, Flags) || Px.Num() != RT->SizeX * RT->SizeY) return;
+	FReadSurfaceDataFlags ReadFlags(RCM_UNorm);
+	ReadFlags.SetLinearToGamma(RT->RenderTargetFormat == RTF_RGBA16f);
+	if (!Res->ReadPixels(Px, ReadFlags) || Px.Num() != RT->SizeX * RT->SizeY) return;
 	double R = 0, G = 0, B = 0, A = 0;
 	for (FColor& C : Px) { R += C.R; G += C.G; B += C.B; A += C.A; C.A = 255; }
 	const double Inv = 1.0 / FMath::Max(1, Px.Num());

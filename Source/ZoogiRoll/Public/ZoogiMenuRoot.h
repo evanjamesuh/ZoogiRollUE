@@ -1,5 +1,5 @@
 // menu (Oct 14, Evan approved the mockups 8:45 AM CT): the new main menu. One C++ UMG root with a screen stack
-// (Home, Play setup, Zoogi select, Powers, Settings, Collection, Story, Events, Shop, Social, Create) that replaces
+// (Home, Play setup, Zoogi select, Powers, Settings, Collection, Story, Events, Shop, Social, Deck) that replaces
 // UZoogiMenuWidget's role (that file stays in the tree, unused, for an easy revert). Layout is authored in the mockup's
 // 2400x1080 landscape space and fitted to any viewport; touch targets >= 120 px, the primary action bottom right.
 // Every button that starts or configures a match calls the existing AZoogiGameMode::MenuAction entry points.
@@ -27,7 +27,7 @@ enum class EZoogiMenuAnchor : uint8 { Left, Center, Right };
 UENUM()
 enum class EZoogiScreen : uint8
 {
-	Home, Play, ZoogiSelect, Powers, Settings, Collection, Story, Events, Shop, Social, Create
+	Home, Play, ZoogiSelect, Powers, Settings, Collection, Story, Events, Shop, Social, Deck // Deck replaced Create (Oct 14)
 };
 
 /** One per button: runs a bound lambda. */
@@ -100,7 +100,8 @@ private:
 	void BuildEvents();
 	void BuildShop();
 	void BuildSocial();
-	void BuildCreate();
+	void BuildDeck();
+	FName DeckCardPower(FName CardId, const struct FZoogiCardDef* Def) const;
 	void BuildModal();
 	void BuildAnimeView();
 
@@ -142,7 +143,8 @@ private:
 	int32 SelectSlot = 0, PendingZoogi = -1;
 	FName PowerSel;
 	int32 PowerFilter = 0;           // 0 Void, 1 all types
-	int32 SettingsTab = 0, CollectionTab = 0, CollectionSel = 3, EventsTab = 0, ShopTab = 0, ShopSel = 0, SocialTab = 0, StorySel = 1, CreateSel = 0;
+	int32 SettingsTab = 0, CollectionTab = 0, CollectionSel = 3, EventsTab = 0, ShopTab = 0, ShopSel = 0, SocialTab = 0, StorySel = 1, DeckFilter = 0;
+	FName DeckSel, DeckPreview;   // Deck screen: selected card, card shown in the large preview (None = closed)
 	// modal
 	bool bModal = false, bModalQuit = false;
 	FString ModalTitle, ModalBody;

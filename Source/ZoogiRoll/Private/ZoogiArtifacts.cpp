@@ -11,7 +11,7 @@ namespace
 	{
 		TArray<FZoogiArtifactRow> R;
 		R.SetNum((int32)EZoogiArtifact::MAX);
-		auto Make = [&R](EZoogiArtifact Id, EZoogiElement El, const TCHAR* Name, const TCHAR* Inf, const TCHAR* Grd, const TCHAR* Core, const TCHAR* Rim) -> FZoogiArtifactRow&
+		auto Make = [&R](EZoogiArtifact Id, EZoogiArtifactElement El, const TCHAR* Name, const TCHAR* Inf, const TCHAR* Grd, const TCHAR* Core, const TCHAR* Rim) -> FZoogiArtifactRow&
 		{
 			FZoogiArtifactRow& A = R[(int32)Id];
 			A.Id = Id; A.Element = El; A.DisplayName = Name; A.InfuseText = Inf; A.GuardText = Grd;
@@ -19,35 +19,35 @@ namespace
 			return A;
 		};
 		{
-			FZoogiArtifactRow& A = Make(EZoogiArtifact::Ember, EZoogiElement::Fire, TEXT("Ember Stone"),
+			FZoogiArtifactRow& A = Make(EZoogiArtifact::Ember, EZoogiArtifactElement::Fire, TEXT("Ember Stone"),
 				TEXT("Flame burst on hit: pushes everything nearby, target Burned (-15% next shot)"),
 				TEXT("Flame ring: attacker bounces back, you take 40% less knockback"), TEXT("#FF5A1F"), TEXT("#FFC14D"));
 			A.ImpactRadius = 260.f; A.ImpactPush = 900.f; A.StatusTurns = 1; A.GuardAttackerMul = -0.35f;
 			A.ImpactNiagara = TEXT("NS_Explosion"); A.AuraNiagara = TEXT("NS_Burst_Red"); A.AnimeKey = TEXT("Ember"); A.AffinityZoogi = TEXT("vex");
 		}
 		{
-			FZoogiArtifactRow& A = Make(EZoogiArtifact::Storm, EZoogiElement::Lightning, TEXT("Storm Eye"),
+			FZoogiArtifactRow& A = Make(EZoogiArtifact::Storm, EZoogiArtifactElement::Lightning, TEXT("Storm Eye"),
 				TEXT("Lightning chains to 2 more targets on hit, first target Shocked (next shot max 70%)"),
 				TEXT("Arc cage: attacker gets Shocked, you take 40% less knockback"), TEXT("#7FD8FF"), TEXT("#FFFFFF"));
 			A.ImpactRadius = 650.f; A.ImpactPush = 600.f; A.ChainCount = 2; A.StatusTurns = 1;
 			A.ImpactNiagara = TEXT("NS_Burst_White"); A.AuraNiagara = TEXT("NS_Burst_Blue"); A.AnimeKey = TEXT("Storm"); A.AffinityZoogi = TEXT("luma");
 		}
 		{
-			FZoogiArtifactRow& A = Make(EZoogiArtifact::Frost, EZoogiElement::Ice, TEXT("Frost Crystal"),
+			FZoogiArtifactRow& A = Make(EZoogiArtifact::Frost, EZoogiArtifactElement::Ice, TEXT("Frost Crystal"),
 				TEXT("Target Frozen: slides on ice after the hit; ice shards push small things"),
 				TEXT("Ice shell: attacker slowed 40% on contact, you take 40% less knockback"), TEXT("#9EF0FF"), TEXT("#E8FBFF"));
 			A.ImpactRadius = 220.f; A.ImpactPush = 450.f; A.StatusTurns = 1; A.GuardAttackerMul = 0.6f;
 			A.ImpactNiagara = TEXT("NS_Burst_Blue"); A.AuraNiagara = TEXT("NS_Burst_White"); A.AnimeKey = TEXT("Frost"); A.AffinityZoogi = TEXT("moss");
 		}
 		{
-			FZoogiArtifactRow& A = Make(EZoogiArtifact::Titan, EZoogiElement::Earth, TEXT("Titan Core"),
+			FZoogiArtifactRow& A = Make(EZoogiArtifact::Titan, EZoogiArtifactElement::Earth, TEXT("Titan Core"),
 				TEXT("1.7x mass, slightly slower roll; ground shockwave on hit"),
 				TEXT("Rock plating: 1.8x mass while guarded, 40% less knockback"), TEXT("#8C7A63"), TEXT("#FFB347"));
 			A.MassMul = 1.7f; A.LaunchSpeedMul = 0.9f; A.ImpactRadius = 320.f; A.ImpactPush = 700.f; A.GuardMassMul = 1.8f;
 			A.ImpactNiagara = TEXT("NS_Burst_Gold"); A.AuraNiagara = TEXT("NS_Burst_Gold"); A.AnimeKey = TEXT("Titan"); A.AffinityZoogi = TEXT("orin");
 		}
 		{
-			FZoogiArtifactRow& A = Make(EZoogiArtifact::Void, EZoogiElement::Void, TEXT("Void Shard"),
+			FZoogiArtifactRow& A = Make(EZoogiArtifact::Void, EZoogiArtifactElement::Void, TEXT("Void Shard"),
 				TEXT("Gravity well at impact: pulls nearby orbs and rivals in for 0.6 s"),
 				TEXT("Ring-warp barrier: attacker deflected 25 deg, 40% less knockback"), TEXT("#2A0F4F"), TEXT("#B06CFF"));
 			A.ImpactRadius = 450.f; A.PullTime = 0.6f; A.PullAccel = 2500.f; A.GuardReflectDeg = 25.f;

@@ -7,13 +7,15 @@
 #include "Misc/Parse.h"
 #include "ZoogiRoll.h"
 #include "ZoogiCards.h"
+#include "ZoogiProgression.h"
+#include "ZoogiProgressionSubsystem.h"
 
 const TCHAR* UZoogiPowerUnlockSubsystem::SlotName = TEXT("ZoogiUnlocks");
 
 namespace
 {
-	// THE ONE PLACE for power data, unlock requirements and costs. All values are placeholders (Oct 14 mockups:
-	// "Void mastery 5 or 300 gems") until the progression / economy design lands.
+	// Presentation data (name, description, card art) for each power. Requirements and costs are only fallbacks here:
+	// with UZoogiProgressionSubsystem present (always, in game) they are overwritten from Content/Data/Progression/Powers.csv.
 	TArray<FZoogiPowerDef> BuildPowerDefs()
 	{
 		TArray<FZoogiPowerDef> R;
@@ -26,12 +28,12 @@ namespace
 		};
 		Add(ZoogiPowerIds::Void2TitanMeteor, TEXT("Titan Meteor"), "Void", 2,
 			TEXT("Calls a giant void meteor down on your shot's real impact point. Bigger knockback ring, then a gravity pull."),
-			false, 300, "void_mastery", 5, TEXT("titan"));
+			false, 550, "void_mastery", 5, TEXT("titan"));
 		Add("shock_1_storm", TEXT("Storm"), "Shock", 1, TEXT("A crackling storm charge that stuns what it touches."), true, 0, NAME_None, 0, TEXT("storm"));
 		Add("frost_2_frost", TEXT("Frost"), "Frost", 2, TEXT("Freezes the floor in a line; rivals slide."), true, 0, NAME_None, 0, TEXT("frost"));
-		Add("fire_2_ember", TEXT("Ember"), "Fire", 2, TEXT("Leaves a burning trail behind your roll."), false, 200, "fire_mastery", 4, TEXT("ember"));
-		Add("void_1_precision", TEXT("Precision"), "Void", 1, TEXT("Snaps your shot onto the closest target."), false, 150, "void_mastery", 2, TEXT("precision"));
-		Add("void_2_crystal_collapse", TEXT("Crystal Collapse"), "Void", 2, TEXT("Shatters nearby crystal pieces into a shrapnel ring."), false, 250, "void_mastery", 4, TEXT("crystal_collapse"));
+		Add("fire_2_ember", TEXT("Ember"), "Fire", 2, TEXT("Leaves a burning trail behind your roll."), false, 400, "fire_mastery", 3, TEXT("ember"));
+		Add("void_1_precision", TEXT("Precision"), "Void", 1, TEXT("Snaps your shot onto the closest target."), false, 300, "void_mastery", 2, TEXT("precision"));
+		Add("void_2_crystal_collapse", TEXT("Crystal Collapse"), "Void", 2, TEXT("Shatters nearby crystal pieces into a shrapnel ring."), false, 500, "void_mastery", 4, TEXT("crystal_collapse"));
 		return R;
 	}
 
@@ -40,6 +42,13 @@ namespace
 		FString S = Stat.ToString().Replace(TEXT("_"), TEXT(" "));
 		if (S.Len() > 0) S[0] = FChar::ToUpper(S[0]);
 		return FText::FromString(S);
+	}
+
+	/** "void_mastery" -> Void. */
+	bool MasteryStatElement(FName Stat, EZoogiElement& Out)
+	{
+		FString S = Stat.ToString();
+		return S.RemoveFromEnd(TEXT("_mastery")) && ZoogiCards::ParseElement(S, Out) && Out != EZoogiElement::Neutral;
 	}
 }
 
@@ -50,19 +59,51 @@ UZoogiPowerUnlockSubsystem* UZoogiPowerUnlockSubsystem::Get(const UObject* World
 	return GI ? GI->GetSubsystem<UZoogiPowerUnlockSubsystem>() : nullptr;
 }
 
+UZoogiProgressionSubsystem* UZoogiPowerUnlockSubsystem::Prog() const
+{
+	const UGameInstance* GI = GetGameInstance();
+	return GI ? GI->GetSubsystem<UZoogiProgressionSubsystem>() : nullptr;
+}
+
 void UZoogiPowerUnlockSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
+	Collection.InitializeDependency<UZoogiProgressionSubsystem>();
 	Super::Initialize(Collection);
 	Defs = BuildPowerDefs();
 	bUnlockAll = FParse::Param(FCommandLine::Get(), TEXT("ZoogiUnlockAll"));
+	// ZoogiUnlocks now only keeps EquippedByZoogi (per-Zoogi equipped power). Gems, mastery and unlocks live in ZoogiProgression.json.
 	Data = Cast<UZoogiUnlockSave>(UGameplayStatics::LoadGameFromSlot(SlotName, 0));
-	if (!Data)
+	if (!Data) Data = Cast<UZoogiUnlockSave>(UGameplayStatics::CreateSaveGameObject(UZoogiUnlockSave::StaticClass()));
+
+	UZoogiProgressionSubsystem* P = Prog();
+	if (P)
 	{
-		Data = Cast<UZoogiUnlockSave>(UGameplayStatics::CreateSaveGameObject(UZoogiUnlockSave::StaticClass()));
-		Data->Stats.Add("void_mastery", 3); // placeholder progress shown in the mockup (3 / 5)
+		// Requirements / costs from Powers.csv (retuned values); presentation stays in BuildPowerDefs.
+		for (FZoogiPowerDef& D : Defs)
+			if (const FZoogiPowerRow* Row = P->Core().Config().FindPower(D.PowerId))
+			{
+				D.bDefaultUnlocked = Row->bDefaultUnlocked;
+				D.GemCost = Row->GemCost;
+				D.RequirementValue = Row->MasteryLevel;
+				D.RequirementStat = Row->MasteryLevel > 0 ? FName(*FString::Printf(TEXT("%s_mastery"), *FString(ZoogiCards::ElementName(Row->Element)).ToLower())) : NAME_None;
+			}
+		// One-time migration of unlocks bought in the old slot (never the placeholder 340 gems / void_mastery 3).
+		if (Data->UnlockedPowers.Num() > 0)
+		{
+			const FDateTime Now = FDateTime::UtcNow();
+			int32 Moved = 0;
+			for (const FName& Id : Data->UnlockedPowers)
+				if (!P->Core().IsPowerUnlocked(Id)) { P->Core().Mutable().Unlocks.Add({ Id, TEXT("migrated"), Now }); ++Moved; }
+			Data->UnlockedPowers.Empty();
+			Data->Stats.Empty();
+			if (Moved > 0) P->SaveProfile();
+			Save();
+			UE_LOG(LogZoogi, Log, TEXT("UNLOCKS migrated %d unlock(s) from slot %s into the progression profile"), Moved, SlotName);
+		}
+		ProgHandle = P->OnChanged.AddWeakLambda(this, [this]() { OnUnlocksChanged.Broadcast(); });
 	}
-	UE_LOG(LogZoogi, Log, TEXT("UNLOCKS loaded: %d unlocked, %d equipped, gems=%d, unlockAll=%d"),
-		Data->UnlockedPowers.Num(), Data->EquippedByZoogi.Num(), Data->Gems, bUnlockAll ? 1 : 0);
+	else UE_LOG(LogZoogi, Warning, TEXT("UNLOCKS: no UZoogiProgressionSubsystem - everything but default powers reads as locked, 0 gems"));
+	UE_LOG(LogZoogi, Log, TEXT("UNLOCKS loaded: %d equipped, gems=%d (progression), unlockAll=%d"), Data->EquippedByZoogi.Num(), GetGems(), bUnlockAll ? 1 : 0);
 	// Deck building asks the unlock state through ZoogiCards (2acd98e). No card -> power links are set here (RequiredPower stays empty).
 	TWeakObjectPtr<UZoogiPowerUnlockSubsystem> Weak(this);
 	ZoogiCards::SetPowerUnlockQuery([Weak](FName PowerId) { const UZoogiPowerUnlockSubsystem* S = Weak.Get(); return !S || S->IsUnlocked(PowerId); });
@@ -71,6 +112,7 @@ void UZoogiPowerUnlockSubsystem::Initialize(FSubsystemCollectionBase& Collection
 void UZoogiPowerUnlockSubsystem::Deinitialize()
 {
 	ZoogiCards::SetPowerUnlockQuery(nullptr); // back to "no query = everything unlocked"
+	if (UZoogiProgressionSubsystem* P = Prog()) P->OnChanged.Remove(ProgHandle);
 	Super::Deinitialize();
 }
 
@@ -83,16 +125,25 @@ bool UZoogiPowerUnlockSubsystem::IsUnlocked(FName PowerId) const
 {
 	const FZoogiPowerDef* D = FindPower(PowerId);
 	if (!D) return false;
-	return bUnlockAll || D->bDefaultUnlocked || (Data && Data->UnlockedPowers.Contains(PowerId));
+	if (bUnlockAll || D->bDefaultUnlocked) return true;
+	const UZoogiProgressionSubsystem* P = Prog();
+	return P && P->Core().IsPowerUnlocked(PowerId);
 }
 
 int32 UZoogiPowerUnlockSubsystem::GetStat(FName Stat) const
 {
-	const int32* V = Data ? Data->Stats.Find(Stat) : nullptr;
-	return V ? *V : 0;
+	const UZoogiProgressionSubsystem* P = Prog();
+	if (!P) return 0;
+	EZoogiElement E;
+	if (MasteryStatElement(Stat, E)) return P->Core().MasteryLevel(E);
+	return P->Core().Stat(Stat);
 }
 
-int32 UZoogiPowerUnlockSubsystem::GetGems() const { return Data ? Data->Gems : 0; }
+int32 UZoogiPowerUnlockSubsystem::GetGems() const
+{
+	const UZoogiProgressionSubsystem* P = Prog();
+	return P ? P->Core().Get().Wallet.Total() : 0;
+}
 
 FText UZoogiPowerUnlockSubsystem::RequirementText(FName PowerId) const
 {
@@ -109,8 +160,11 @@ bool UZoogiPowerUnlockSubsystem::CanUnlock(FName PowerId, FText& Why) const
 	const FZoogiPowerDef* D = FindPower(PowerId);
 	if (!D) { Why = FText::FromString(TEXT("Unknown power")); return false; }
 	if (IsUnlocked(PowerId)) { Why = FText::FromString(TEXT("Already unlocked")); return false; }
-	if (!D->RequirementStat.IsNone() && GetStat(D->RequirementStat) >= D->RequirementValue) { Why = FText::GetEmpty(); return true; }
-	if (D->GemCost > 0 && GetGems() >= D->GemCost) { Why = FText::GetEmpty(); return true; }
+	const UZoogiProgressionSubsystem* P = Prog();
+	if (!P) { Why = FText::FromString(TEXT("Progression unavailable")); return false; }
+	bool bByMastery = false;
+	FString W;
+	if (P->Core().CanUnlockPower(PowerId, bByMastery, W)) { Why = FText::GetEmpty(); return true; }
 	Why = FText::FromString(FString::Printf(TEXT("Need: %s"), *RequirementText(PowerId).ToString()));
 	return false;
 }
@@ -118,14 +172,13 @@ bool UZoogiPowerUnlockSubsystem::CanUnlock(FName PowerId, FText& Why) const
 bool UZoogiPowerUnlockSubsystem::Unlock(FName PowerId)
 {
 	FText Why;
-	if (!Data || !CanUnlock(PowerId, Why)) return false;
-	const FZoogiPowerDef* D = FindPower(PowerId);
-	const bool bByStat = !D->RequirementStat.IsNone() && GetStat(D->RequirementStat) >= D->RequirementValue;
-	if (!bByStat) Data->Gems -= D->GemCost;
-	Data->UnlockedPowers.Add(PowerId);
-	UE_LOG(LogZoogi, Log, TEXT("UNLOCKS unlocked %s (%s)"), *PowerId.ToString(), bByStat ? TEXT("requirement") : TEXT("gems"));
-	Save();
-	OnUnlocksChanged.Broadcast();
+	UZoogiProgressionSubsystem* P = Prog();
+	if (!P || !CanUnlock(PowerId, Why)) return false;
+	FString W;
+	if (!P->UnlockPower(PowerId, W)) { UE_LOG(LogZoogi, Warning, TEXT("UNLOCKS %s refused by progression: %s"), *PowerId.ToString(), *W); return false; }
+	const FZoogiUnlockRecord* Rec = P->Core().Get().Unlocks.FindByPredicate([PowerId](const FZoogiUnlockRecord& R) { return R.PowerId == PowerId; });
+	UE_LOG(LogZoogi, Log, TEXT("UNLOCKS unlocked %s (%s) gems now %d"), *PowerId.ToString(), Rec ? *Rec->Method : TEXT("?"), GetGems());
+	OnUnlocksChanged.Broadcast(); // SaveProfile already broadcast OnChanged too; menu rebuilds are idempotent
 	return true;
 }
 

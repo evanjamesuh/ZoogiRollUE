@@ -6,6 +6,9 @@
 #include "ZoogiUIStyle.h"
 #include "ZoogiAnimeSubsystem.h"
 #include "ZoogiPowerUnlockSubsystem.h"
+#include "ZoogiProgressionSubsystem.h"
+#include "ZoogiCards.h"
+#include "Misc/FileHelper.h"
 #include "ZoogiRoll.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
@@ -80,7 +83,7 @@ namespace
 		case EZoogiScreen::Events: return TEXT("Events");
 		case EZoogiScreen::Shop: return TEXT("Shop");
 		case EZoogiScreen::Social: return TEXT("Social");
-		case EZoogiScreen::Create: return TEXT("Create");
+		case EZoogiScreen::Deck: return TEXT("Deck");
 		}
 		return TEXT("?");
 	}
@@ -192,6 +195,7 @@ void UZoogiMenuRoot::PopToHome()
 void UZoogiMenuRoot::HandleBack()
 {
 	if (bModal) { bModal = false; bDirty = true; return; }
+	if (!DeckPreview.IsNone()) { DeckPreview = NAME_None; bDirty = true; return; }
 	if (bAnimeView)
 	{
 		if (UZoogiAnimeSubsystem* A = GetWorld()->GetSubsystem<UZoogiAnimeSubsystem>()) A->StopMenuMovie();
@@ -576,7 +580,7 @@ void UZoogiMenuRoot::Rebuild()
 	case EZoogiScreen::Events: BuildEvents(); break;
 	case EZoogiScreen::Shop: BuildShop(); break;
 	case EZoogiScreen::Social: BuildSocial(); break;
-	case EZoogiScreen::Create: BuildCreate(); break;
+	case EZoogiScreen::Deck: BuildDeck(); break;
 	}
 	if (bModal) BuildModal();
 }
@@ -599,7 +603,7 @@ void UZoogiMenuRoot::BuildTopBar(const FString& Title)
 		Label(Val, X + 34.f, 31.f, W - 40.f, 26.f, 30, FLinearColor::White, EAnchor::Right);
 	};
 	Pill(670.f, 90.f, TEXT("icon_coin"), TEXT("12,480")); // placeholder coins
-	Pill(812.f, 70.f, TEXT("icon_gem"), FString::FromInt(U ? U->GetGems() : 340)); // placeholder gems
+	Pill(812.f, 70.f, TEXT("icon_gem"), FString::FromInt(U ? U->GetGems() : 0)); // progression wallet (earned + purchased)
 	Btn(FString(), ZMCNavy, [this]() { if (Top() != EZoogiScreen::Settings) Push(EZoogiScreen::Settings); }, 898.f, 20.f, 72.f, 52.f, 30, false, false, EAnchor::Right, TEXT("icon_gear"));
 }
 
@@ -641,8 +645,8 @@ void UZoogiMenuRoot::BuildHome()
 	Btn(TEXT("POWERS"), ZMCViolet, [this]() { Push(EZoogiScreen::Powers); }, 108.f, 262.f, 150.f, 52.f, 36);
 	Btn(TEXT("COLLECTION"), ZMCNavy, [this]() { Push(EZoogiScreen::Collection); }, 108.f, 322.f, 150.f, 52.f, 34);
 	Panel(106.f, 386.f, 494.f, 64.f, ZMPNavy);
-	const TCHAR* Dock[] = { TEXT("EVENTS"), TEXT("SHOP"), TEXT("SOCIAL"), TEXT("CREATE"), TEXT("RADIO") };
-	const EZoogiScreen DockS[] = { EZoogiScreen::Events, EZoogiScreen::Shop, EZoogiScreen::Social, EZoogiScreen::Create, EZoogiScreen::Home };
+	const TCHAR* Dock[] = { TEXT("EVENTS"), TEXT("SHOP"), TEXT("SOCIAL"), TEXT("DECK"), TEXT("RADIO") };
+	const EZoogiScreen DockS[] = { EZoogiScreen::Events, EZoogiScreen::Shop, EZoogiScreen::Social, EZoogiScreen::Deck, EZoogiScreen::Home };
 	for (int32 i = 0; i < 5; ++i)
 	{
 		const EZoogiScreen S = DockS[i];
@@ -1022,7 +1026,7 @@ void UZoogiMenuRoot::BuildCollection()
 		624.f, 168.f, 170.f, 84.f, 18, FLinearColor::White, EAnchor::Center, 0, true);
 	if (D) Label(FString::Printf(TEXT("SPD %d - PWR %d - DEF %d - CTL %d"), D->Speed, D->Power, D->Defense, D->Control), 624.f, 270.f, 290.f, 18.f, 20, FLinearColor::White);
 	ImgTile(Art(E.Art), FString(), nullptr, 798.f, 98.f, 110.f, 100.f, false, false, FLinearColor::White);
-	Btn(TEXT("CREATE"), ZMCViolet, [this]() { Push(EZoogiScreen::Create); }, 610.f, 388.f, 104.f, 52.f, 30);
+	Btn(TEXT("DECK"), ZMCViolet, [this]() { Push(EZoogiScreen::Deck); }, 610.f, 388.f, 104.f, 52.f, 30);
 	Btn(TEXT("CUSTOMIZE"), ZMCGold, [this]() { ShowComingSoon(TEXT("The skin / trail editor isn't in the Unreal build yet.")); }, 726.f, 340.f, 194.f, 100.f, 50);
 }
 
@@ -1112,7 +1116,14 @@ void UZoogiMenuRoot::BuildShop()
 	ImgTile(nullptr, FString(), [this]() { ShopSel = 4; bDirty = true; }, 714.f, 146.f, 206.f, 176.f, ShopSel == 4, false, ZMPViolet);
 	Label(TEXT("BUNDLE"), 728.f, 156.f, 100.f, 16.f, 24, FLinearColor::White);
 	Image(Art(TEXT("lars")), 770.f, 180.f, 96.f, 90.f, FLinearColor::White, EAnchor::Center, 48.f);
-	Btn(TEXT("BUY"), ZMCGold, [this]() { ShowComingSoon(TEXT("Purchases need the economy backend (coins and gems are placeholders).")); }, 726.f, 340.f, 194.f, 100.f, 60, false, false, EAnchor::Center, TEXT("icon_gem"));
+	Btn(TEXT("BUY"), ZMCGold, [this]() { ShowComingSoon(TEXT("Purchases need the store verification server (coins are placeholders).")); }, 726.f, 340.f, 194.f, 100.f, 60, false, false, EAnchor::Center, TEXT("icon_gem"));
+	if (const UZoogiProgressionSubsystem* PS = UZoogiProgressionSubsystem::Get(this))
+	{
+		const FZoogiProgression& C = PS->Core();
+		const FZoogiWallet& Wl = C.Get().Wallet;
+		Label(FString::Printf(TEXT("GEMS %d  (earned %d / purchased %d)"), Wl.Total(), Wl.Earned(), Wl.Purchased()), 106.f, 392.f, 600.f, 20.f, 20, FLinearColor::White, EAnchor::Left);
+		Label(FString::Printf(TEXT("Today %d - %d left - resets %s"), C.EarnedToday(), C.RemainingToday(), *C.NextResetLocal().ToString(TEXT("%H:%M"))), 106.f, 414.f, 600.f, 20.f, 20, ZMTSoft, EAnchor::Left);
+	}
 }
 
 // ---- SOCIAL
@@ -1144,30 +1155,125 @@ void UZoogiMenuRoot::BuildSocial()
 	Btn(TEXT("ADD FRIEND"), ZMCGold, [this]() { ShowComingSoon(TEXT("Friends need the online backend.")); }, 726.f, 340.f, 194.f, 100.f, 46);
 }
 
-// ---- CREATE
-void UZoogiMenuRoot::BuildCreate()
+// ---- DECK (replaces the old CREATE screen, Evan Oct 14): every card - owned (art, uncropped), in the current deck, locked (dimmed + lock + requirement).
+namespace
 {
-	BuildTopBar(TEXT("CREATE"));
-	const TCHAR* TN[] = { TEXT("CREATE ZOOGI"), TEXT("MAP EDITOR"), TEXT("ARENA SHOWCASE"), TEXT("ARENA EDITOR") };
-	const TCHAR* TS[] = { TEXT("Design a custom Zoogi"), TEXT("Place walls, zones, models"), TEXT("Fly-through of every arena"), TEXT("Edit layout presets") };
-	const FLinearColor TC[] = { ZMCViolet, ZMCTeal, ZMCNavy, ZMCNavy };
-	const bool TDev[] = { false, true, false, true };
-	for (int32 i = 0; i < 4; ++i)
+	struct ZMDeckData { TArray<FZoogiCardDef> Defs; TArray<FName> Deck; };
+	const ZMDeckData& ZMDeck()
 	{
-		const float X = 106.f + i * 204.f;
-		const bool bHidden = TDev[i] && !ZMDevFlag();
-		ImgTile(nullptr, FString(), [this, i]() { CreateSel = i; bDirty = true; }, X, 100.f, 194.f, 226.f, CreateSel == i, bHidden, bHidden ? ZMCDisabled : TC[i]);
-		Label(TN[i], X + 10.f, 250.f, 174.f, 26.f, 32, FLinearColor::White, EAnchor::Center, 1);
-		Label(bHidden ? TEXT("Developer tool (-ZoogiDev)") : TS[i], X + 10.f, 286.f, 174.f, 20.f, 19, ZMTSoft, EAnchor::Center, 1);
+		// Same sources as UZoogiCardSubsystem::LoadData (Cards.csv / Decks.csv 'starter', built-in fallback); read-only here.
+		static ZMDeckData D = []()
+		{
+			ZMDeckData R;
+			R.Defs = ZoogiCards::BuiltInDefs();
+			R.Deck = ZoogiCards::BuiltInDeck();
+			FString Text, Err;
+			const FString Dir = FPaths::ProjectContentDir() / TEXT("Data");
+			TArray<FZoogiCardDef> Csv;
+			if (FFileHelper::LoadFileToString(Text, *(Dir / TEXT("Cards.csv"))) && ZoogiCards::ParseCardsCsv(Text, Csv, Err) && Csv.Num() > 0) R.Defs = Csv;
+			TMap<FString, TArray<FName>> Decks;
+			if (FFileHelper::LoadFileToString(Text, *(Dir / TEXT("Decks.csv"))) && ZoogiCards::ParseDecksCsv(Text, Decks, Err))
+				if (const TArray<FName>* S = Decks.Find(TEXT("starter"))) R.Deck = *S;
+			return R;
+		}();
+		return D;
 	}
-	Label(TEXT("Developer tools (map / arena editor) are hidden behind the -ZoogiDev flag."), 106.f, 340.f, 600.f, 20.f, 20, ZMTSoft);
-	const int32 Sel = CreateSel;
-	const bool bHiddenSel = TDev[Sel] && !ZMDevFlag();
-	Btn(TEXT("OPEN"), ZMCGold, [this, Sel, bHiddenSel]()
+	FLinearColor ZMElementColor(EZoogiElement E)
 	{
-		if (bHiddenSel) ShowComingSoon(TEXT("This editor is a developer tool. Run with -ZoogiDev."));
-		else ShowComingSoon(Sel == 0 ? TEXT("Create Zoogi isn't in the Unreal build yet.") : Sel == 2 ? TEXT("Arena showcase: coming soon to the menu.") : TEXT("The in-game editor isn't in the Unreal build yet (dev)."));
-	}, 726.f, 340.f, 194.f, 100.f, 64, false, bHiddenSel);
+		switch (E)
+		{
+		case EZoogiElement::Void: return ZMCViolet;
+		case EZoogiElement::Fire: return ZMCRed;
+		case EZoogiElement::Shock: return ZMCGold;
+		case EZoogiElement::Frost: return ZMCCyan;
+		default: return ZMCTeal;
+		}
+	}
+}
+
+/** Power gating a card: FZoogiCardDef::RequiredPower, else the Powers.csv row whose card_id is this card. */
+FName UZoogiMenuRoot::DeckCardPower(FName CardId, const FZoogiCardDef* Def) const
+{
+	if (Def && !Def->RequiredPower.IsNone()) return Def->RequiredPower;
+	if (const UZoogiProgressionSubsystem* PS = UZoogiProgressionSubsystem::Get(this))
+		for (const FZoogiPowerRow& R : PS->Core().Config().Powers) if (R.CardId == CardId) return R.PowerId;
+	return NAME_None;
+}
+
+void UZoogiMenuRoot::BuildDeck()
+{
+	BuildTopBar(TEXT("DECK"));
+	const ZMDeckData& DD = ZMDeck();
+	const UZoogiPowerUnlockSubsystem* U = UZoogiPowerUnlockSubsystem::Get(this);
+	auto IsOwned = [&](const FZoogiCardDef& C) { const FName P = DeckCardPower(C.Id, &C); return P.IsNone() || !U || U->IsUnlocked(P); };
+	auto InDeck = [&](FName Id) { int32 N = 0; for (const FName& D : DD.Deck) if (D == Id) ++N; return N; };
+	int32 Owned = 0, Locked = 0;
+	for (const FZoogiCardDef& C : DD.Defs) { if (IsOwned(C)) ++Owned; else ++Locked; }
+	TArray<FString> F = { TEXT("ALL"), TEXT("OWNED"), TEXT("IN DECK"), TEXT("LOCKED") };
+	Tabs(F, DeckFilter, 106.f, 80.f, 110.f, 6.f);
+	TArray<const FZoogiCardDef*> Shown;
+	for (const FZoogiCardDef& C : DD.Defs)
+	{
+		const bool bOwn = IsOwned(C);
+		if (DeckFilter == 0 || (DeckFilter == 1 && bOwn) || (DeckFilter == 2 && InDeck(C.Id) > 0) || (DeckFilter == 3 && !bOwn)) Shown.Add(&C);
+	}
+	const float CW = 70.f, CH = 117.f;
+	for (int32 i = 0; i < Shown.Num() && i < 16; ++i)
+	{
+		const FZoogiCardDef& C = *Shown[i];
+		const FName Id = C.Id;
+		const float X = 106.f + (i % 8) * 76.f, Y = 128.f + (i / 8) * 126.f;
+		const bool bOwn = IsOwned(C);
+		UTexture2D* T = Art(Id.ToString());
+		ImgTile(T, T ? FString() : C.Name, [this, Id]() { DeckSel = Id; DeckPreview = Id; bDirty = true; }, X, Y, CW, CH, DeckSel == Id, !bOwn, ZMElementColor(C.Element), false, 16);
+		if (const int32 N = InDeck(Id))
+		{
+			UBorder* B = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+			B->SetBrush(ZoogiUIStyle::RoundBrush(ZMCGold, ZoogiUIStyle::Outline, 3.f, 12.f));
+			B->SetHorizontalAlignment(HAlign_Center); B->SetVerticalAlignment(VAlign_Center);
+			B->SetContent(Txt(FString::Printf(TEXT("x%d"), N), 16, FLinearColor::White, 2.f));
+			B->SetVisibility(ESlateVisibility::HitTestInvisible);
+			Place(B, X + CW - 26.f, Y - 6.f, 30.f, 16.f);
+		}
+	}
+	// counts strip
+	Panel(106.f, 386.f, 606.f, 54.f, ZMPTeal);
+	Label(FString::Printf(TEXT("OWNED %d/%d"), Owned, DD.Defs.Num()), 118.f, 398.f, 180.f, 30.f, 30, FLinearColor::White, EAnchor::Center, 0);
+	Label(FString::Printf(TEXT("IN DECK %d"), DD.Deck.Num()), 310.f, 398.f, 180.f, 30.f, 30, FLinearColor::White, EAnchor::Center, 0);
+	Label(FString::Printf(TEXT("LOCKED %d"), Locked), 500.f, 398.f, 180.f, 30.f, 30, ZMCGold, EAnchor::Center, 0);
+	// selected card side panel
+	const FZoogiCardDef* S = DD.Defs.FindByPredicate([this](const FZoogiCardDef& C) { return C.Id == DeckSel; });
+	if (!S && DD.Defs.Num() > 0) S = &DD.Defs[0];
+	if (S)
+	{
+		const bool bOwn = IsOwned(*S);
+		const FName P = DeckCardPower(S->Id, S);
+		Panel(726.f, 86.f, 194.f, 240.f, ZMPViolet);
+		Label(FString::Printf(TEXT("%s - %s"), ZoogiCards::ElementName(S->Element), ZoogiCards::TypeName(S->Type)), 738.f, 96.f, 170.f, 16.f, 18, ZMTLabel, EAnchor::Center, 0);
+		Label(S->Name.ToUpper(), 738.f, 114.f, 170.f, 40.f, 36, FLinearColor::White, EAnchor::Center, 0, true);
+		Label(FString::Printf(TEXT("Energy %d"), S->Cost), 738.f, 158.f, 170.f, 18.f, 20, ZMCGold, EAnchor::Center, 0);
+		Label(S->Rule, 738.f, 180.f, 170.f, 80.f, 17, FLinearColor::White, EAnchor::Center, 0, true);
+		const FString St = bOwn ? (InDeck(S->Id) ? FString::Printf(TEXT("Owned - in deck x%d"), InDeck(S->Id)) : FString(TEXT("Owned - not in deck")))
+			: FString::Printf(TEXT("Locked - %s"), U ? *U->RequirementText(P).ToString() : TEXT("needs its power"));
+		Label(St, 738.f, 268.f, 170.f, 48.f, 18, bOwn ? ZMTSoft : ZMCGold, EAnchor::Center, 0, true);
+		const FName Sel = S->Id;
+		Btn(TEXT("PREVIEW"), ZMCGold, [this, Sel]() { DeckPreview = Sel; bDirty = true; }, 726.f, 340.f, 194.f, 100.f, 56);
+	}
+	// large preview (tap anywhere to close)
+	if (const FZoogiCardDef* PV = DeckPreview.IsNone() ? nullptr : DD.Defs.FindByPredicate([this](const FZoogiCardDef& C) { return C.Id == DeckPreview; }))
+	{
+		const bool bOwn = IsOwned(*PV);
+		const FName P = DeckCardPower(PV->Id, PV);
+		Btn(FString(), ZMHex(TEXT("0B1E5C")).CopyWithNewOpacity(0.86f), [this]() { DeckPreview = NAME_None; bDirty = true; }, 30.f, 20.f, 964.f, 440.f, 20);
+		ImgTile(Art(PV->Id.ToString()), FString(), [this]() { DeckPreview = NAME_None; bDirty = true; }, 250.f, 40.f, 240.f, 400.f, true, !bOwn, ZMElementColor(PV->Element), false, 30);
+		Panel(510.f, 60.f, 300.f, 300.f, ZMElementColor(PV->Element).CopyWithNewOpacity(0.95f));
+		Label(PV->Name.ToUpper(), 524.f, 74.f, 272.f, 50.f, 52, FLinearColor::White, EAnchor::Center, 0, true);
+		Label(FString::Printf(TEXT("%s - %s - Energy %d"), ZoogiCards::ElementName(PV->Element), ZoogiCards::TypeName(PV->Type), PV->Cost), 524.f, 130.f, 272.f, 22.f, 22, FLinearColor::White, EAnchor::Center, 0);
+		Label(PV->Rule, 524.f, 160.f, 272.f, 120.f, 22, FLinearColor::White, EAnchor::Center, 0, true);
+		Label(bOwn ? FString::Printf(TEXT("OWNED - IN DECK x%d"), InDeck(PV->Id)) : FString::Printf(TEXT("LOCKED - %s"), U ? *U->RequirementText(P).ToString() : TEXT("")),
+			524.f, 300.f, 272.f, 50.f, 24, FLinearColor::White, EAnchor::Center, 0, true);
+		Btn(TEXT("CLOSE"), ZMCGold, [this]() { DeckPreview = NAME_None; bDirty = true; }, 560.f, 372.f, 200.f, 60.f, 34);
+	}
 }
 
 // ---- modal + anime
@@ -1230,7 +1336,7 @@ void UZoogiMenuRoot::TickTour(float Dt)
 	const bool bUnlockedRun = U && U->IsUnlockAllCheat();
 	const FString Tag = bUnlockedRun ? TEXT("_unlockall") : TEXT("");
 	static const TCHAR* Names[] = { TEXT("01_home"), TEXT("02_play_setup"), TEXT("03_zoogi_select"), TEXT("04_powers"), TEXT("05_powers_after_equip"), TEXT("06_settings"), TEXT("06b_settings_about"),
-		TEXT("07_collection"), TEXT("08_story_comics"), TEXT("09_events"), TEXT("10_shop"), TEXT("11_social"), TEXT("12_create"), TEXT("13_home_back_quit_modal"), TEXT("14_play_before_start"), TEXT("16_home_after_tour") };
+		TEXT("07_collection"), TEXT("08_story_comics"), TEXT("09_events"), TEXT("10_shop"), TEXT("11_social"), TEXT("12_deck"), TEXT("13_home_back_quit_modal"), TEXT("14_play_before_start"), TEXT("16_home_after_tour") };
 	const int32 NumShots = UE_ARRAY_COUNT(Names);
 	if (bTourSetupDone)
 	{
@@ -1272,7 +1378,7 @@ void UZoogiMenuRoot::TickTour(float Dt)
 	case 9: PopToHome(); Push(EZoogiScreen::Events); break;
 	case 10: PopToHome(); Push(EZoogiScreen::Shop); break;
 	case 11: PopToHome(); Push(EZoogiScreen::Social); break;
-	case 12: PopToHome(); Push(EZoogiScreen::Create); break;
+	case 12: PopToHome(); DeckPreview = NAME_None; Push(EZoogiScreen::Deck); break;
 	case 13: HandleBack(); HandleBack(); break; // BACK -> HOME, BACK on HOME -> quit modal
 	case 14: HandleBack(); Push(EZoogiScreen::Play); break; // close the modal, open PLAY
 	case 15: PopToHome(); break;
