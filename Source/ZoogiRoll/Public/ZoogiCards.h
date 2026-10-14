@@ -50,6 +50,7 @@ struct ZOOGIROLL_API FZoogiCardDef
 	int32 CPUWeight = 1;         // CPU Standby preference (higher first)
 	FString Rule;                // one-line rule text (card book)
 	bool bRequiresAlive = true;  // a KO actor cannot activate (Recovery Roll: explicit in the card book)
+	FName RequiredPower;         // Oct 14 (Evan): optional power id gating deck entry (power unlocks); None = always eligible. Empty for all 15 cards.
 };
 
 /** One physical card in a deck (two copies of Storm are two instances). */
@@ -182,6 +183,14 @@ namespace ZoogiCards
 	ZOOGIROLL_API bool ParseDecksCsv(const FString& Text, TMap<FString, TArray<FName>>& Out, FString& OutError);
 	/** Deck legality: exact DeckSize, <= MaxCopies per id, known ids. */
 	ZOOGIROLL_API bool ValidateDeck(const TArray<FName>& Deck, const IZoogiCardBackend& Backend, int32 DeckSize, int32 MaxCopies, FString& OutError);
+	/** Power-unlock seam (Oct 14, Evan): returns true when a power id is unlocked. Unset (default) = everything unlocked and
+	 *  deck building is untouched. A power-unlock system registers it (e.g. the menu branch's UZoogiPowerUnlockSubsystem::IsUnlocked). */
+	using FPowerUnlockQuery = TFunction<bool(FName /*PowerId*/)>;
+	ZOOGIROLL_API void SetPowerUnlockQuery(FPowerUnlockQuery Query);
+	ZOOGIROLL_API const FPowerUnlockQuery& GetPowerUnlockQuery();
+	/** Deck-building hook: cards whose RequiredPower is locked never enter the deck; the deck is refilled to DeckSize with other
+	 *  eligible cards (definition order, round-robin, <= MaxCopies each). No query = Deck returned unchanged. Deterministic. */
+	ZOOGIROLL_API TArray<FName> FilterDeckByUnlocks(const TArray<FName>& Deck, const IZoogiCardBackend& Backend, int32 DeckSize, int32 MaxCopies, const FPowerUnlockQuery& IsUnlocked, FString& OutLog);
 	ZOOGIROLL_API const TCHAR* TypeName(EZoogiCardType T);
 	ZOOGIROLL_API const TCHAR* ExpiryName(EZoogiCardExpiry E);
 	ZOOGIROLL_API const TCHAR* TargetName(EZoogiCardTarget T);
