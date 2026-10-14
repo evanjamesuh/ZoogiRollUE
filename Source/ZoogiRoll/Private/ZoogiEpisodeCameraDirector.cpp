@@ -3,6 +3,8 @@
 #include "ZoogiRoll.h"
 #include "ZoogiBall.h"
 #include "ZoogiOrb.h"
+#include "ZoogiArena.h"
+#include "ZoogiGameMode.h"
 #include "ZoogiShotTest.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
@@ -574,20 +576,48 @@ void UZoogiEpisodeCameraDirector::FillTrickParams(EZoogiShotType Type, const FZo
 	}
 }
 
+// ---- ring-out safety helpers
+static constexpr float CamDirFloorZ = 0.f;          // arena floor top
+static constexpr float CamDirLeftPlayHold = 0.35f;  // MainView: seconds a shot may keep looking after its focus left play
+
+static bool CamDirLeavingPlay(UWorld* W, const AActor* F, const FVector& FC)
+{
+	if (const AZoogiBall* B = Cast<AZoogiBall>(F)) { if (B->bOut) return true; }
+	if (FC.Z < CamDirFloorZ - ZoogiConst::ZoogiRadius) return true;
+	const AZoogiGameMode* G = W ? Cast<AZoogiGameMode>(W->GetAuthGameMode()) : nullptr;
+	const bool bRadial = !(G && G->Arena && G->Arena->IsNeonRect());
+	return bRadial && AZoogiArena::ActiveKnockoffR > 0.f && FVector2D(FC.X, FC.Y).Size() > AZoogiArena::ActiveKnockoffR;
+}
+
+static FVector CamDirCourtClamp(FVector P)
+{
+	const float MaxR = AZoogiArena::ActiveKnockoffR * 0.92f;
+	FVector2D P2(P.X, P.Y);
+	if (MaxR > 0.f && P2.Size() > MaxR) { P2 = P2.GetSafeNormal() * MaxR; P.X = P2.X; P.Y = P2.Y; }
+	P.Z = FMath::Max(P.Z, CamDirFloorZ + ZoogiConst::ZoogiRadius);
+	return P;
+}
+
 bool UZoogiEpisodeCameraDirector::EvaluateShotView(FZoogiActiveShot& S, float Dt, FMinimalViewInfo& OutView)
 {
 	AActor* F = S.Focus.Get();
 	if (!IsValid(F) || F->IsActorBeingDestroyed()) return false;
 	const FZoogiShotSpec& Spec = S.Spec;
-	const FVector FC = CamDirSubjectCenter(F);
+	const FVector FCraw = CamDirSubjectCenter(F);
+	// Ring-out safety: once the focus leaves play (out / past the ring / below the floor) the shot stops following it
+	// (pivot frozen at its last in-play point, clamped to the court) and lets the falling Zoogi leave the frame.
+	const bool bLeft = CamDirLeavingPlay(GetWorld(), F, FCraw);
+	if (!bLeft) { S.CourtFocus = FCraw; S.bHaveCourtFocus = true; S.LeftPlayAge = -1.f; }
+	else if (S.LeftPlayAge < 0.f) { S.LeftPlayAge = 0.f; UE_LOG(LogZoogi, Log, TEXT("CAMDIR shot %d: focus %s left play at %s, pivot frozen"), S.Id, *F->GetName(), *FCraw.ToString()); }
+	const FVector FC = bLeft ? CamDirCourtClamp(S.bHaveCourtFocus ? S.CourtFocus : FCraw) : FCraw;
 	AActor* Sec = S.Secondary.Get();
 	const bool bSec = IsValid(Sec) && !Sec->IsActorBeingDestroyed();
 	const FVector SC = bSec ? CamDirSubjectCenter(Sec) : FC;
 
 	// Velocity from the observed motion (works for physics bodies and for moved actors alike).
-	const FVector Vel = Dt > 1e-4f ? (FC - S.LastFocus) / Dt : FVector::ZeroVector;
+	const FVector Vel = Dt > 1e-4f ? (FCraw - S.LastFocus) / Dt : FVector::ZeroVector;
 	const float VelYawNow = FMath::RadiansToDegrees(FMath::Atan2(Vel.Y, Vel.X));
-	const bool bMoving = FVector2D(Vel.X, Vel.Y).Size() > 30.f;
+	const bool bMoving = !bLeft && FVector2D(Vel.X, Vel.Y).Size() > 30.f;
 
 	if (!S.bInit)
 	{
@@ -662,7 +692,7 @@ bool UZoogiEpisodeCameraDirector::EvaluateShotView(FZoogiActiveShot& S, float Dt
 	{
 		S.VelYaw = FRotator::NormalizeAxis(S.VelYaw + FRotator::NormalizeAxis(VelYawNow - S.VelYaw) * (1.f - FMath::Exp(-3.f * Dt)));
 	}
-	S.LastFocus = FC;
+	S.LastFocus = FCraw;
 
 	const float T = S.MotionClock / FMath::Max(S.Duration, 0.01f);
 	const float M = CurveOrEase(Spec.MotionCurve, Spec.MoveEase, T);
@@ -751,6 +781,7 @@ bool UZoogiEpisodeCameraDirector::EvaluateShotView(FZoogiActiveShot& S, float Dt
 		}
 	}
 
+	if (S.LeftPlayAge >= 0.f) Loc.Z = FMath::Max(Loc.Z, CamDirFloorZ + 2.f * ZoogiConst::ZoogiRadius); // never dive below the court
 	FRotator Rot = (Look - Loc).Rotation();
 	Rot.Roll = Spec.Roll;
 	float Fov = FMath::Lerp(Spec.FOV, Spec.FOVEnd, M);
@@ -871,6 +902,18 @@ void UZoogiEpisodeCameraDirector::TickShot(FZoogiActiveShot& S, float Dt, bool& 
 {
 	bOutFinished = false;
 	S.Age += Dt;
+	// Ring-out safety: a MainView shot whose focus left play hands the view back (eased) after a short beat, so the
+	// arena is never lost for long; render-target shots keep their frozen framing (the main view is untouched).
+	if (S.LeftPlayAge >= 0.f)
+	{
+		S.LeftPlayAge += Dt;
+		if (S.Output == EZoogiShotOutput::MainView && !S.bStopping && S.LeftPlayAge >= CamDirLeftPlayHold && S.Age < S.Duration - S.Spec.EaseOut)
+		{
+			const float In = (S.Spec.EaseIn > 0.f && S.Age < S.Spec.EaseIn) ? CurveOrEase(nullptr, S.Spec.Ease, S.Age / S.Spec.EaseIn) : 1.f;
+			S.bStopping = true; S.StopAge = 0.f; S.StopWeight = In;
+			UE_LOG(LogZoogi, Log, TEXT("CAMDIR shot %d: focus out of play for %.2f s, easing back to the gameplay view"), S.Id, S.LeftPlayAge);
+		}
+	}
 	// Presentation-only slow-mo look: the shot's own motion slows; world time is never touched.
 	const float SlowW = SlowLookWeight(S.Spec, S.Age, S.Duration);
 	S.MotionRate = FMath::Lerp(1.f, FMath::Clamp(S.Spec.SlowMoTarget, 0.05f, 1.f), SlowW);

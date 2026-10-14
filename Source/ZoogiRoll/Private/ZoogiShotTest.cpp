@@ -5,6 +5,8 @@
 #include "ZoogiBall.h"
 #include "ZoogiOrb.h"
 #include "ZoogiArena.h"
+#include "ZoogiPlayerController.h"
+#include "Camera/CameraComponent.h"
 #include "ZoogiFX.h"
 #include "NiagaraFunctionLibrary.h"
 #include "NiagaraSystem.h"
@@ -199,6 +201,11 @@ void AZoogiShotTestDriver::BuildCases()
 	Add(ZoogiShotTest::ECaseKind::AirborneSlowMoRefused, TEXT("Airborne_SlowLook_PolicyDisabled_RenderTarget"), EZoogiShotType::Airborne, EZoogiShotOutput::RenderTarget);
 	Add(ZoogiShotTest::ECaseKind::AvoidParticles, TEXT("AvoidParticles_Tracking_MainView"), EZoogiShotType::Tracking, EZoogiShotOutput::MainView);
 	Add(ZoogiShotTest::ECaseKind::AvoidOcclusion, TEXT("AvoidOcclusion_CloseUp_RenderTarget"), EZoogiShotType::CloseUp, EZoogiShotOutput::RenderTarget);
+	Add(ZoogiShotTest::ECaseKind::RingOutSimLegacy, TEXT("RingOutFall_GameplayFollow_BEFORE_legacy_rule"), EZoogiShotType::Custom, EZoogiShotOutput::MainView);
+	Add(ZoogiShotTest::ECaseKind::RingOutSimFixed, TEXT("RingOutFall_GameplayFollow_AFTER_fixed_rule"), EZoogiShotType::Custom, EZoogiShotOutput::MainView);
+	Add(ZoogiShotTest::ECaseKind::RingOutDirector, TEXT("RingOutFall_TrickRingOutLine_MainView"), EZoogiShotType::TrickRingOutLine, EZoogiShotOutput::MainView);
+	Add(ZoogiShotTest::ECaseKind::RingOutDirector, TEXT("RingOutFall_Tracking_MainView"), EZoogiShotType::Tracking, EZoogiShotOutput::MainView);
+	Add(ZoogiShotTest::ECaseKind::RingOutDirector, TEXT("RingOutFall_Airborne_MainView"), EZoogiShotType::Airborne, EZoogiShotOutput::MainView);
 	Add(ZoogiShotTest::ECaseKind::LevelEnd, TEXT("LevelEnd"), EZoogiShotType::TopDownImpact, EZoogiShotOutput::MainView);
 }
 
@@ -615,6 +622,133 @@ void AZoogiShotTestDriver::CheckTrickLookup()
 		*PB.EventLocation.ToString(), *PB.EventNormal.ToString(), *PD.SecondEventLocation.ToString(), *PW.EventLocation.ToString(), *PW.Direction.ToString()));
 }
 
+// ------------------------------------------------------------------ ring-out fall
+
+FVector AZoogiShotTestDriver::FallPos(float T) const
+{
+	// Rolls outward along the floor at 650 cm/s, leaves the rim at FallEdgeT, then falls under gravity while drifting out.
+	if (T <= FallEdgeT) return FallStart + FallDir * 650.f * T;
+	const float Tf = T - FallEdgeT;
+	return FallStart + FallDir * (650.f * FallEdgeT + 560.f * Tf) + FVector(0.f, 0.f, -490.f * Tf * Tf);
+}
+
+void AZoogiShotTestDriver::StartRingOut(EZoogiShotType Type, bool bSim)
+{
+	UZoogiEpisodeCameraDirector* D = Dir();
+	AActor* F = Focus();
+	const FVector FL = F ? F->GetActorLocation() : FVector(-1000.f, 0.f, 50.f);
+	// Toward the rim in front of the gameplay camera (so the fall happens where the Tactical view looks).
+	const FVector2D U = RimDir(FL).GetRotated(20.f);
+	const float R = AZoogiArena::ActiveKnockoffR;
+	FallDir = FVector(U.X, U.Y, 0.f);
+	FallStart = FallDir * (R * 0.6f) + FVector(0.f, 0.f, ZoogiConst::ZoogiRadius);
+	FallEdgeT = (R * 0.95f - R * 0.6f) / 650.f;
+	FallT = 0.f;
+	bRingOut = true; bRingOutSim = bSim; bRingOutDone = false; bLateShot = false;
+	RingLossNow = RingLossMax = 0.f; RingMinCamZ = 1e9f; RingFrames = RingOutFrames = 0; RingSeconds = 3.4f;
+	SimCourtZ = ZoogiConst::ZoogiRadius;
+	if (TempProp) { TempProp->Destroy(); TempProp = nullptr; }
+	TempProp = SpawnProp(FallStart, 1.f);
+	TintProp(TempProp, FLinearColor(0.3f, 0.6f, 1.f));
+	CaseMid = FallEdgeT + 0.9f; // mid-fall frame
+	if (bSim)
+	{
+		SimPivot = FVector(FL.X, FL.Y, SimCourtZ) * 0.f + FVector(0.f, 0.f, SimCourtZ);
+		FActorSpawnParameters SP; SP.ObjectFlags |= RF_Transient;
+		SimCam = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), Snap0.POV.Location, Snap0.POV.Rotation, SP);
+		if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0); PC && SimCam) PC->SetViewTarget(SimCam);
+		UE_LOG(LogZoogi, Log, TEXT("ZOOGI SHOTTEST   ring-out sim (%s rule): prop from %s along %s, rim at t=%.2f s; Tactical follow simulated on a temp camera"),
+			bRingOutLegacy ? TEXT("LEGACY") : TEXT("FIXED"), *FallStart.ToString(), *FallDir.ToString(), FallEdgeT);
+	}
+	else
+	{
+		const FZoogiShotSpec* Lib = D->GetShotLibrary()->FindByType(Type);
+		FZoogiShotSpec Spec = Lib ? *Lib : UZoogiShotLibrary::MakeDefault(Type);
+		Spec.Duration = FMath::Max(Spec.Duration, FallEdgeT + 2.2f); // long enough to still be running when the prop falls
+		FZoogiShotPlayParams P;
+		P.bHasDirection = true; P.Direction = FallDir;
+		Handles.Add(D->PlayShot(Spec, TempProp, nullptr, EZoogiShotOutput::MainView, P));
+		RingSeconds = Spec.Duration + 0.6f;
+		UE_LOG(LogZoogi, Log, TEXT("ZOOGI SHOTTEST   ring-out director shot %s (%.2f s) on a prop rolling off the rim at t=%.2f s"), ZoogiShot::TypeName(Type), Spec.Duration, FallEdgeT);
+	}
+}
+
+void AZoogiShotTestDriver::CheckRingOutView(const FMinimalViewInfo& V, float Dt)
+{
+	const float Aspect = 16.f / 9.f;
+	const FVector L = V.Rotation.UnrotateVector(FVector::ZeroVector - V.Location); // arena centre (floor centre)
+	const float Th = FMath::Tan(FMath::DegreesToRadians(V.FOV * 0.5f));
+	const bool bIn = L.X > 1.f && FMath::Abs(L.Y) / L.X <= Th && FMath::Abs(L.Z) / L.X <= Th / Aspect;
+	RingFrames++;
+	if (!bIn) { RingOutFrames++; RingLossNow += Dt; RingLossMax = FMath::Max(RingLossMax, RingLossNow); } else RingLossNow = 0.f;
+	RingMinCamZ = FMath::Min(RingMinCamZ, V.Location.Z);
+}
+
+void AZoogiShotTestDriver::TickRingOut(float Dt)
+{
+	if (bRingOutDone) return;
+	FallT += Dt;
+	const FVector Pos = FallPos(FallT);
+	if (TempProp) TempProp->SetActorLocation(Pos);
+	if (!bLateShot && FallT >= FallEdgeT + 2.2f) { bLateShot = true; Shot(Cases[CaseIdx].Name + TEXT("_late")); }
+	APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
+	if (bRingOutSim && SimCam && PC)
+	{
+		AZoogiGameMode* G = GM();
+		float Pitch = 55.f, Dist = 2400.f, Fov = 80.f, Lag = 3.f;
+		AZoogiPlayerController::TacticalBoom(G, Pitch, Dist, Fov, Lag);
+		const bool bSimOut = Pos.Z < -600.f; // the game marks a faller out well below the rim
+		FVector Want;
+		if (bRingOutLegacy)
+		{
+			// Pre-fix rule (ZoogiPlayerController.cpp before this commit): pivot = lerp(centre, shooter, 0.55) until bOut / z < -600,
+			// court height tracking the shooter down to -200, probe swept from the (falling) pivot.
+			if (!bSimOut && Pos.Z > -200.f) SimCourtZ = Pos.Z;
+			const FVector C0(0.f, 0.f, SimCourtZ);
+			Want = (bSimOut || Pos.Z < -600.f) ? C0 : FMath::Lerp(C0, Pos, 0.55f);
+		}
+		else
+		{
+			if (!AZoogiPlayerController::IsLeavingPlay(Pos, bSimOut, SimCourtZ) && Pos.Z > -200.f) SimCourtZ = Pos.Z;
+			Want = AZoogiPlayerController::TacticalRollPivot(Pos, bSimOut, SimCourtZ);
+		}
+		SimPivot = SimPivot + (Want - SimPivot) * (1.f - FMath::Exp(-Lag * Dt));
+		if (!bRingOutLegacy) SimPivot.Z = FMath::Max(SimPivot.Z, SimCourtZ - 100.f);
+		const float Yaw = Snap0.POV.Rotation.Yaw;
+		const float Pr = FMath::DegreesToRadians(Pitch);
+		const FVector Desired = SimPivot - FRotator(0.f, Yaw, 0.f).Vector() * Dist * FMath::Cos(Pr) + FVector(0.f, 0.f, Dist * FMath::Sin(Pr));
+		// collision probe like the controller's (sphere sweep pivot -> camera on ECC_Camera, Zoogis / orbs / props ignored)
+		FVector From = Want + FVector(0.f, 0.f, 150.f);
+		if (!bRingOutLegacy) From.Z = FMath::Max(From.Z, SimCourtZ + 60.f);
+		FCollisionQueryParams Q(TEXT("ShotTestRingProbe"), false);
+		for (TActorIterator<AZoogiBall> It(GetWorld()); It; ++It) Q.AddIgnoredActor(*It);
+		for (TActorIterator<AZoogiOrb> It(GetWorld()); It; ++It) Q.AddIgnoredActor(*It);
+		if (TempProp) Q.AddIgnoredActor(TempProp);
+		FHitResult Hit;
+		FVector Loc = Desired;
+		if (GetWorld()->SweepSingleByChannel(Hit, From, Desired, FQuat::Identity, ECC_Camera, FCollisionShape::MakeSphere(20.f), Q) && !Hit.bStartPenetrating)
+			Loc = From + (Desired - From) * FMath::Clamp(Hit.Time - 0.02f, 0.08f, 1.f);
+		if (!bRingOutLegacy) Loc.Z = FMath::Max(Loc.Z, SimCourtZ);
+		SimCam->SetActorLocation(Loc);
+		SimCam->SetActorRotation((SimPivot - Loc).Rotation());
+		SimCam->GetCameraComponent()->SetFieldOfView(Fov);
+		FMinimalViewInfo V; V.Location = Loc; V.Rotation = (SimPivot - Loc).Rotation(); V.FOV = Fov;
+		if (FallT > 0.1f) CheckRingOutView(V, Dt);
+		if (FallT >= RingSeconds)
+		{
+			PC->SetViewTarget(Snap0.ViewTarget.Get());
+			bRingOutDone = true;
+		}
+	}
+	else if (PC && PC->PlayerCameraManager)
+	{
+		// Director shots may look down the exit line while the Zoogi is still rolling (RingOutLine's intended look);
+		// what is checked is the fall: from the moment the prop leaves the rim.
+		if (FallT > FallEdgeT) CheckRingOutView(PC->PlayerCameraManager->GetCameraCacheView(), Dt);
+		if (FallT >= RingSeconds) bRingOutDone = true;
+	}
+}
+
 // ------------------------------------------------------------------ cases
 
 void AZoogiShotTestDriver::StartCase()
@@ -718,6 +852,14 @@ void AZoogiShotTestDriver::StartCase()
 		bTimeScaleStarted = D->EaseTimeScale(TSpec);
 		break;
 	}
+	case ZoogiShotTest::ECaseKind::RingOutSimLegacy:
+	case ZoogiShotTest::ECaseKind::RingOutSimFixed:
+		bRingOutLegacy = C.Kind == ZoogiShotTest::ECaseKind::RingOutSimLegacy;
+		StartRingOut(C.Type, true);
+		break;
+	case ZoogiShotTest::ECaseKind::RingOutDirector:
+		StartRingOut(C.Type, false);
+		break;
 	case ZoogiShotTest::ECaseKind::AvoidParticles:
 	{
 		// A white glow burst (+ a Niagara white burst) right where the tracking camera would sit; the camera must stay out of it.
@@ -791,6 +933,7 @@ void AZoogiShotTestDriver::RunCase(float RealDt)
 		MaxArcHeight = FMath::Max(MaxArcHeight, Pos.Z - ArcStart.Z);
 		ArcProp->SetActorLocation(Pos);
 	}
+	if (bRingOut) TickRingOut(GetWorld()->GetDeltaSeconds());
 	// RenderTarget output must leave the main view completely alone, every frame.
 	if ((C.Kind == ZoogiShotTest::ECaseKind::Shot || C.Kind == ZoogiShotTest::ECaseKind::AirborneSlowMoRefused || C.Kind == ZoogiShotTest::ECaseKind::AvoidOcclusion) && C.Output == EZoogiShotOutput::RenderTarget)
 	{
@@ -876,7 +1019,8 @@ void AZoogiShotTestDriver::RunCase(float RealDt)
 		if (C.Kind == ZoogiShotTest::ECaseKind::Overlap && Handles.Num() >= 3) ExportRT(D->GetShotRenderTarget(Handles[2]), C.Name + TEXT("_rendertarget"));
 	}
 	const bool bIdle = D->NumActiveShots() == 0 && !D->IsTimeScaleActive();
-	if (bIdle && StepTime > 0.2f && (C.Kind != ZoogiShotTest::ECaseKind::LevelEnd))
+	const bool bRingWait = bRingOut && !bRingOutDone;
+	if (bIdle && !bRingWait && StepTime > 0.2f && (C.Kind != ZoogiShotTest::ECaseKind::LevelEnd))
 	{
 		Step = ZoogiShotTest::EStep::WaitEnd;
 		WaitFrames = 4;
@@ -942,6 +1086,28 @@ void AZoogiShotTestDriver::Verify()
 				St.Frames, St.RawInsideFXFrames, St.FinalInsideFXFrames, St.OccludedFrames, St.FinalOccludedFrames, St.MaxAvoidOffsetCm, St.MaxPullInCm, St.MaxVolumeExtentCm));
 		}
 		else if (C.Kind != ZoogiShotTest::ECaseKind::Shot) { bPass = false; Extra.Add(TEXT("no avoid stats")); }
+	}
+	if (C.Kind == ZoogiShotTest::ECaseKind::RingOutSimLegacy || C.Kind == ZoogiShotTest::ECaseKind::RingOutSimFixed || C.Kind == ZoogiShotTest::ECaseKind::RingOutDirector)
+	{
+		// Arena centre in the view frustum (gameplay follow: every frame; director shots: during the fall, at most 1 s at a time)
+		// and the camera never below the court (floor top + one Zoogi radius).
+		const float MaxLoss = C.Kind == ZoogiShotTest::ECaseKind::RingOutDirector ? 1.0f : 0.f;
+		const bool bFrame = RingLossMax <= MaxLoss + 1e-3f;
+		const bool bHeight = RingMinCamZ >= ZoogiConst::ZoogiRadius - 1.f;
+		const bool bFell = FallT > FallEdgeT + 1.5f;
+		const FString Line = FString::Printf(TEXT("ring-out fall %.2f s (edge at %.2f s, prop fell to z=%.0f): arena centre outside the frustum %d/%d frames, longest %.2f s (allowed %.2f) | lowest camera z=%.0f (court %.0f)"),
+			FallT, FallEdgeT, FallPos(FallT).Z, RingOutFrames, RingFrames, RingLossMax, MaxLoss, RingMinCamZ, ZoogiConst::ZoogiRadius);
+		if (C.Kind == ZoogiShotTest::ECaseKind::RingOutSimLegacy)
+		{
+			// BEFORE: the pre-fix rule, recorded for comparison only (expected to lose the arena / dive).
+			Extra.Add(FString::Printf(TEXT("BEFORE (legacy rule, informational: %s) %s"), (bFrame && bHeight) ? TEXT("would pass") : TEXT("reproduces the bug"), *Line));
+			bPass &= bFell;
+		}
+		else
+		{
+			bPass &= bFrame && bHeight && bFell;
+			Extra.Add(Line);
+		}
 	}
 	if (FinishLog.Num()) Extra.Add(TEXT("ends ") + FString::Join(FinishLog, TEXT(",")));
 	if (AZoogiGameMode* G = GM()) Extra.Add(FString::Printf(TEXT("stage %d phase %d"), (int32)G->Stage, (int32)G->Phase));
@@ -1028,7 +1194,8 @@ void AZoogiShotTestDriver::Tick(float DeltaSeconds)
 			HidePanel();
 			if (TrackProp) TrackProp->SetActorHiddenInGame(true);
 			if (ArcProp) ArcProp->SetActorHiddenInGame(true);
-			bBankMove = false; bBankHitLogged = false;
+			bBankMove = false; bBankHitLogged = false; bRingOut = false;
+			if (SimCam) { SimCam->Destroy(); SimCam = nullptr; }
 			if (TempProp) { TempProp->Destroy(); TempProp = nullptr; }
 			if (TempFX) { TempFX->Destroy(); TempFX = nullptr; }
 			WaitFrames = 1;

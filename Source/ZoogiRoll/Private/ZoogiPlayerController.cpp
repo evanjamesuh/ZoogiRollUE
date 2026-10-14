@@ -853,6 +853,39 @@ void AZoogiPlayerController::ApplyPostProcess(float Dt, int32 Profile, float Foc
 	S.DepthOfFieldFstop = FMath::Lerp(32.f, 2.2f, FMath::Clamp(PPDof, 0.f, 1.f)); // f/32 = effectively sharp
 }
 
+bool AZoogiPlayerController::IsLeavingPlay(const FVector& L, bool bOut, float CourtZ, bool bRadialArena)
+{
+	if (bOut) return true;
+	if (L.Z < CourtZ - 1.5f * ZoogiConst::ZoogiRadius) return true;                 // dropped below the floor it was rolling on
+	return bRadialArena && FVector2D(L.X, L.Y).Size() > AZoogiArena::ActiveKnockoffR; // past the knockoff ring
+}
+
+FVector AZoogiPlayerController::TacticalRollPivot(const FVector& SL, bool bOut, float CourtZ, bool bRadialArena)
+{
+	using namespace ZoogiCamTune;
+	const FVector C0(0.f, 0.f, CourtZ);
+	if (IsLeavingPlay(SL, bOut, CourtZ, bRadialArena)) return C0;
+	FVector P = FMath::Lerp(C0, SL, TacRollTrack);
+	if (bRadialArena)
+	{
+		const float MaxR = AZoogiArena::ActiveKnockoffR * 0.8f;
+		FVector2D P2(P.X, P.Y);
+		if (P2.Size() > MaxR) { P2 = P2.GetSafeNormal() * MaxR; P.X = P2.X; P.Y = P2.Y; }
+	}
+	P.Z = FMath::Max(P.Z, CourtZ);
+	return P;
+}
+
+void AZoogiPlayerController::TacticalBoom(const AZoogiGameMode* G, float& OutPitch, float& OutDist, float& OutFov, float& OutPosLag)
+{
+	using namespace ZoogiCamTune;
+	const float Scale = (G && G->Arena && G->Arena->IsNeon()) ? NeonScale : (G && G->Arena ? G->Arena->CamScale : 1.f);
+	OutPitch = Profiles[PTactical].Pitch;
+	OutDist = Profiles[PTactical].Dist * 1.05f * Scale; // the Rolling DistMul
+	OutFov = Profiles[PTactical].Fov;
+	OutPosLag = Profiles[PTactical].PosLag;
+}
+
 void AZoogiPlayerController::UpdateCamera(float Dt)
 {
 	using namespace ZoogiCamTune;
@@ -932,9 +965,12 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	}
 	UZoogiAnimeSubsystem* Anime = GetWorld()->GetSubsystem<UZoogiAnimeSubsystem>();
 	const AZoogiBall* FocusBall = Cast<AZoogiBall>(AnimeFocus.Get());
-	const bool bFocusGone = FocusBall && (FocusBall->bOut || FocusBall->BallLocation().Z < -200.f);
+	const bool bRadial = !(G->Arena && G->Arena->IsNeonRect());
+	const bool bFocusGone = FocusBall && IsLeavingPlay(FocusBall->BallLocation(), FocusBall->bOut, CourtZ, bRadial);
 	const bool bAnimeShot = bAnimeCam && Anime && Anime->IsBusy() && AnimeFocus.IsValid() && !bFocusGone;
-	if (Shooter && !Shooter->bOut && SL.Z > -200.f) CourtZ = SL.Z;
+	// Court height only from a shooter still in play (a falling Zoogi must not drag the camera pivots down with it).
+	const bool bShooterLeaving = !Shooter || IsLeavingPlay(SL, Shooter->bOut, CourtZ, bRadial);
+	if (!bShooterLeaving && SL.Z > -200.f) CourtZ = SL.Z;
 	const bool bTac = !G->bCinematicCam;
 
 	// Lock changes in Main swing (switching = whip-pan).
@@ -1002,8 +1038,8 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		}
 		else if (G->Phase == EZoogiPhase::Rolling)
 		{
-			const bool bGone = !Shooter || Shooter->bOut || SL.Z < -600.f;
-			WantPivot = bGone ? C0 : FMath::Lerp(C0, SL, TacRollTrack);
+			// Ring-out safe: clamped to the court, the arena centre once the shooter leaves play (was: followed it down to -600).
+			WantPivot = TacticalRollPivot(SL, !Shooter || Shooter->bOut, CourtZ, bRadial);
 			DistMul = 1.05f * Scale;
 		}
 		else
@@ -1115,7 +1151,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	case ECine::End:
 	default:
 	{
-		const bool bGone = !Shooter || Shooter->bOut || Shooter->BallLocation().Z < -600.f;
+		const bool bGone = bShooterLeaving; // ring-out safe: stop following as soon as the shooter leaves play
 		if (T < FollowTime && !bGone)
 		{
 			PIdx = PFollow;
@@ -1211,10 +1247,15 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		Look = Damp(Look, WantLook, P.PosLag, Dt);
 	}
 
+	// Ring-out safety: pivots and the look point never sink below the court.
+	Pivot.Z = FMath::Max(Pivot.Z, CourtZ - 100.f);
+	Look.Z = FMath::Max(Look.Z, CourtZ - 100.f);
+	ProbeFrom.Z = FMath::Max(ProbeFrom.Z, CourtZ + 60.f);
 	const FRotator Heading(0.f, Yaw, 0.f);
 	const float Pr = FMath::DegreesToRadians(Pitch);
 	const FVector Desired = Pivot - Heading.Vector() * Dist * FMath::Cos(Pr) + FVector(0, 0, Dist * FMath::Sin(Pr));
-	const FVector Loc = ProbeCamera(ProbeFrom, Desired, Dt);
+	FVector Loc = ProbeCamera(ProbeFrom, Desired, Dt);
+	Loc.Z = FMath::Max(Loc.Z, CourtZ); // and the camera never drops below the court
 
 	FRotator Rot = (Look - Loc).Rotation();
 	Rot.Roll = Dutch;
