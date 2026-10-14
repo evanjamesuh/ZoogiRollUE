@@ -1,4 +1,5 @@
 #include "ZoogiEpisodeCameraDirector.h"
+#include "ZoogiEpisodeTypes.h"
 #include "ZoogiRoll.h"
 #include "ZoogiBall.h"
 #include "ZoogiOrb.h"
@@ -8,6 +9,10 @@
 #include "Camera/PlayerCameraManager.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Components/PrimitiveComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Particles/ParticleSystemComponent.h"
+#include "ZoogiFX.h"
+#include "UObject/UObjectIterator.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
@@ -22,6 +27,8 @@
 
 namespace ZoogiCamDirPrivate
 {
+	TAutoConsoleVariable<int32> CVarAllowTimeDilation(TEXT("zoogi.Shot.AllowTimeDilation"), 0,
+		TEXT("Core rule: physics is never dilated, so EaseTimeScale refuses unless this is 1 (debug only)."));
 	TAutoConsoleVariable<int32> CVarShotRTFormat(TEXT("zoogi.Shot.RTFormat"), 0,
 		TEXT("Render target format for director-created shot targets: 0 = RGBA8 sRGB (default), 1 = RGBA8 linear, 2 = RGBA16F."));
 
@@ -43,6 +50,18 @@ namespace ZoogiCamDirPrivate
 		R.Rotation = FQuat::Slerp(A.Rotation.Quaternion(), B.Rotation.Quaternion(), W).Rotator();
 		R.FOV = FMath::Lerp(A.FOV, B.FOV, W);
 		return R;
+	}
+
+	void CamDirSlowLookGrade(FPostProcessSettings& PP, float W)
+	{
+		if (W <= 0.001f) return;
+		const float V = PP.bOverride_VignetteIntensity ? PP.VignetteIntensity : 0.4f;
+		PP.bOverride_VignetteIntensity = true;
+		PP.VignetteIntensity = V + 0.15f * W;
+		const FVector4 Sat = PP.bOverride_ColorSaturation ? PP.ColorSaturation : FVector4(1, 1, 1, 1);
+		const float M = FMath::Lerp(1.f, 0.9f, W);
+		PP.bOverride_ColorSaturation = true;
+		PP.ColorSaturation = FVector4(Sat.X * M, Sat.Y * M, Sat.Z * M, Sat.W);
 	}
 
 	UCameraComponent* CamDirCameraComponentOf(AActor* A)
@@ -103,6 +122,7 @@ void UZoogiEpisodeCameraDirector::HandleWorldBeginTearDown(UWorld* InWorld)
 	}
 	while (Shots.Num() > 0) FinishShot(Shots.Num() - 1, EZoogiShotEndReason::WorldEnding);
 	if (TS.bActive) RestoreTimeScaleExact(TEXT("world ending"));
+	OnWorldTearDownRestored.Broadcast();
 	if (ShotCam) { ShotCam->Destroy(); ShotCam = nullptr; }
 	if (CaptureRig) { CaptureRig->Destroy(); CaptureRig = nullptr; }
 	FreeCaptures.Reset();
@@ -138,6 +158,24 @@ FZoogiShotHandle UZoogiEpisodeCameraDirector::PlayShot(const FZoogiShotSpec& Spe
 	S.Secondary = Secondary;
 	S.Duration = FMath::Max(0.1f, Params.DurationOverride > 0.f ? Params.DurationOverride : Spec.Duration);
 	S.LastFocus = CamDirSubjectCenter(Focus);
+	S.bEventFromCaller = Params.bHasEventLocation;
+	// Default event point: the arena centre (floor centre at the origin) at the focus' height.
+	S.EventLoc = Params.bHasEventLocation ? Params.EventLocation : FVector(0.f, 0.f, S.LastFocus.Z);
+	{
+		const FVector Fl(S.LastFocus.X, S.LastFocus.Y, 0.f);
+		FVector N = Params.bHasEventNormal ? FVector(Params.EventNormal.X, Params.EventNormal.Y, 0.f) : FVector(-S.EventLoc.X, -S.EventLoc.Y, 0.f);
+		if (!N.Normalize()) { N = Fl - FVector(S.EventLoc.X, S.EventLoc.Y, 0.f); if (!N.Normalize()) N = FVector(1, 0, 0); }
+		// the open side of the surface is the side the focus is on (or, failing that, the arena centre)
+		const FVector ToF = Fl - FVector(S.EventLoc.X, S.EventLoc.Y, 0.f);
+		if (ToF.SizeSquared() > 100.f ? (FVector::DotProduct(N, ToF) < 0.f) : (FVector::DotProduct(N, -FVector(S.EventLoc.X, S.EventLoc.Y, 0.f)) < 0.f)) N = -N;
+		S.EventNormal = N;
+		S.bHasSecondEvent = Params.bHasSecondEventLocation;
+		S.SecondEventLoc = Params.bHasSecondEventLocation ? Params.SecondEventLocation : S.EventLoc;
+		FVector D = Params.bHasDirection ? FVector(Params.Direction.X, Params.Direction.Y, 0.f) : Fl;
+		if (!D.Normalize()) D = FVector(1, 0, 0);
+		S.LineDir = D;
+		S.Accent = Params.bHasAccentColor ? Params.AccentColor : Spec.DefaultAccent;
+	}
 	H.Id = S.Id;
 
 	if (Output == EZoogiShotOutput::RenderTarget)
@@ -208,6 +246,7 @@ void UZoogiEpisodeCameraDirector::StopShot(FZoogiShotHandle Shot, bool bImmediat
 		FinishShot(Idx, EZoogiShotEndReason::Stopped);
 		return;
 	}
+	if (TS.bActive && TimeScaleOwnerShotId == S.Id) StopTimeScale(false); // eases out with the shot; FinishShot snaps any rest
 	if (!S.bStopping)
 	{
 		// Ease out from whatever weight the shot has right now.
@@ -270,6 +309,13 @@ void UZoogiEpisodeCameraDirector::FinishShot(int32 Index, EZoogiShotEndReason Re
 	{
 		MainViewShotId = 0;
 		RestoreMainView(Reason);
+	}
+	StatsById.Add(S.Id, S.Stats);
+	if (StatsById.Num() > 64) { TArray<int32> K; StatsById.GetKeys(K); K.Sort(); for (int32 i = 0; i < K.Num() - 64; ++i) StatsById.Remove(K[i]); }
+	if (TS.bActive && TimeScaleOwnerShotId == S.Id)
+	{
+		// The shot's slow-mo is timed to be over before the shot ends; any early end puts the prior value back now.
+		RestoreTimeScaleExact(TEXT("owning shot ended"));
 	}
 	static const TCHAR* ReasonNames[] = { TEXT("completed"), TEXT("stopped"), TEXT("replaced"), TEXT("focus lost"), TEXT("world ending") };
 	UE_LOG(LogZoogi, Log, TEXT("CAMDIR shot %d %s (%s) ended: %s after %.2f s"), S.Id, *S.Spec.Name.ToString(), ZoogiShot::OutputName(S.Output), ReasonNames[FMath::Clamp((int32)Reason, 0, 4)], S.Age);
@@ -439,6 +485,94 @@ FPostProcessSettings UZoogiEpisodeCameraDirector::BuildShotPostProcess(const FZo
 	return PP;
 }
 
+// Trick-shot pivot: lerp(focus | focus..secondary, event, EventBias), then toward the second event, then along the line.
+static FVector CamDirShotPivot(const FZoogiActiveShot& S, const FZoogiShotSpec& Spec, const FVector& FC, const FVector& SC, bool bSec)
+{
+	FVector P = FMath::Lerp(bSec && Spec.SecondaryBias > 0.f ? FMath::Lerp(FC, SC, Spec.SecondaryBias) : FC, S.EventLoc, Spec.EventBias);
+	if (Spec.SecondEventBias > 0.f && S.bHasSecondEvent) P = FMath::Lerp(P, S.SecondEventLoc, Spec.SecondEventBias);
+	if (Spec.DirectionLead != 0.f) P += S.LineDir * Spec.DirectionLead;
+	return P + Spec.PivotOffset;
+}
+
+// Power-colour accent (tint + bloom lift), weighted like the rest of the grade.
+static void CamDirApplyAccent(FPostProcessSettings& PP, const FZoogiActiveShot& S, float Weight)
+{
+	const float A = S.Spec.AccentStrength * Weight;
+	if (A <= 0.f) return;
+	PP.bOverride_SceneColorTint = true;
+	PP.SceneColorTint = FMath::Lerp(FLinearColor::White, S.Accent, A);
+	const float BaseBloom = PP.bOverride_BloomIntensity ? PP.BloomIntensity : 0.675f;
+	PP.bOverride_BloomIntensity = true;
+	PP.BloomIntensity = BaseBloom * (1.f + 0.8f * A);
+}
+
+void UZoogiEpisodeCameraDirector::FillTrickParams(EZoogiShotType Type, const FZoogiGameplayTruthRecord& Truth, FZoogiShotPlayParams& P)
+{
+	TArray<const FZoogiContactEvent*, TInlineAllocator<8>> Walls;
+	const FZoogiContactEvent* Ally = nullptr;
+	const FZoogiContactEvent* OrbHit = nullptr;
+	for (const FZoogiContactEvent& E : Truth.Contacts)
+	{
+		if (!E.bMeaningful) continue;
+		if (E.Body == Truth.Actor && (E.Kind == EZoogiContactKind::Wall || E.Kind == EZoogiContactKind::Bumper)) Walls.Add(&E);
+		if (!Ally && E.Kind == EZoogiContactKind::Ally) Ally = &E;
+		if (!OrbHit && E.Kind == EZoogiContactKind::Orb && E.Body < 100) OrbHit = &E;
+	}
+	auto NextFrom = [&Truth](const FZoogiContactEvent* After, int32 Body) -> const FZoogiContactEvent*
+	{
+		for (const FZoogiContactEvent& E : Truth.Contacts)
+			if (E.Body == Body && E.Time > After->Time && FVector::Dist2D(E.Location, After->Location) > 30.f) return &E;
+		return nullptr;
+	};
+	auto SetWall = [&P](const FZoogiContactEvent* W)
+	{
+		P.bHasEventLocation = true; P.EventLocation = W->Location;
+		if (!W->Normal.IsNearlyZero()) { P.bHasEventNormal = true; P.EventNormal = W->Normal; }
+	};
+	switch (Type)
+	{
+	case EZoogiShotType::TrickBank:
+	case EZoogiShotType::TrickPowerBank:
+		if (Walls.Num() > 0) SetWall(Walls[0]);
+		if (Type == EZoogiShotType::TrickPowerBank && Truth.Awaken != EZoogiArtifact::None) { P.bHasAccentColor = true; P.AccentColor = ZoogiEpisode::PowerColor(Truth.Awaken); }
+		break;
+	case EZoogiShotType::TrickDoubleBank:
+		if (Walls.Num() > 0) SetWall(Walls[0]);
+		if (Walls.Num() > 1) { P.bHasSecondEventLocation = true; P.SecondEventLocation = Walls[1]->Location; }
+		break;
+	case EZoogiShotType::TrickWallRedirect:
+		if (Walls.Num() > 0)
+		{
+			const FZoogiContactEvent* W = Walls.Last();
+			SetWall(W);
+			if (const FZoogiContactEvent* N = NextFrom(W, Truth.Actor)) { P.bHasDirection = true; P.Direction = N->Location - W->Location; }
+			else if (!W->Normal.IsNearlyZero() && !Truth.LaunchVelocity.IsNearlyZero())
+			{
+				const FVector Nn = W->Normal.GetSafeNormal();
+				P.bHasDirection = true; P.Direction = Truth.LaunchVelocity - 2.f * FVector::DotProduct(Truth.LaunchVelocity, Nn) * Nn;
+			}
+		}
+		break;
+	case EZoogiShotType::TrickAllyBump:
+		if (Ally) { P.bHasEventLocation = true; P.EventLocation = Ally->Location; }
+		break;
+	case EZoogiShotType::TrickOrbRelay:
+		if (OrbHit && OrbHit->OtherBody >= 100)
+		{
+			if (const FZoogiContactEvent* R = NextFrom(OrbHit, OrbHit->OtherBody))
+			{
+				P.bHasEventLocation = true; P.EventLocation = R->Location;
+				P.bHasDirection = true; P.Direction = R->Location - OrbHit->Location;
+			}
+		}
+		break;
+	case EZoogiShotType::TrickRingOutLine:
+		if (!Truth.LaunchVelocity.IsNearlyZero() && Truth.Contacts.Num() == 0) { P.bHasDirection = true; P.Direction = Truth.LaunchVelocity; }
+		break;
+	default: break;
+	}
+}
+
 bool UZoogiEpisodeCameraDirector::EvaluateShotView(FZoogiActiveShot& S, float Dt, FMinimalViewInfo& OutView)
 {
 	AActor* F = S.Focus.Get();
@@ -473,25 +607,65 @@ bool UZoogiEpisodeCameraDirector::EvaluateShotView(FZoogiActiveShot& S, float Dt
 			{
 				const FVector V0 = F->GetVelocity();
 				if (FVector2D(V0.X, V0.Y).Size() > 30.f) S.BaseYaw = FMath::RadiansToDegrees(FMath::Atan2(V0.Y, V0.X));
+				else S.bVelSnapPending = true; // kinematically moved actors report no velocity: take the first observed motion
 			}
 			break;
 		case EZoogiShotHeading::World: S.BaseYaw = 0.f; break;
+		case EZoogiShotHeading::FocusFacing:
+		{
+			S.BaseYaw = GameplayYaw; // camera on the gameplay camera's side (the face is assumed to look at the player)
+			FVector Face = F->GetActorForwardVector();
+			if (const AZoogiBall* B = Cast<AZoogiBall>(F)) { if (B->Visual) Face = B->Visual->GetForwardVector(); }
+			if (FMath::Abs(Face.Z) < 0.85f && FVector2D(Face.X, Face.Y).Size() > 0.2f)
+			{
+				// Camera = pivot - Dir * dist, so a heading opposite to the face puts the camera in front of it.
+				S.BaseYaw = FMath::RadiansToDegrees(FMath::Atan2(Face.Y, Face.X)) + 180.f;
+			}
+			break;
+		}
+		case EZoogiShotHeading::FocusToEvent:
+			S.BaseYaw = FVector::Dist2D(FC, S.EventLoc) > 1.f ? FMath::RadiansToDegrees(FMath::Atan2(S.EventLoc.Y - FC.Y, S.EventLoc.X - FC.X)) : GameplayYaw;
+			break;
+		case EZoogiShotHeading::EventNormal:
+			// camera = pivot - Dir * dist: Dir = -normal puts the camera out on the normal, looking back at the contact
+			S.BaseYaw = FMath::RadiansToDegrees(FMath::Atan2(-S.EventNormal.Y, -S.EventNormal.X));
+			break;
+		case EZoogiShotHeading::ExitDirection:
+			S.BaseYaw = FMath::RadiansToDegrees(FMath::Atan2(S.LineDir.Y, S.LineDir.X));
+			break;
+		case EZoogiShotHeading::EventChord:
+			if (S.bHasSecondEvent && FVector::Dist2D(S.EventLoc, S.SecondEventLoc) > 1.f)
+			{
+				const FVector C = (S.SecondEventLoc - S.EventLoc).GetSafeNormal2D();
+				FVector Perp(-C.Y, C.X, 0.f);
+				const FVector Mid = (S.EventLoc + S.SecondEventLoc + FC) / 3.f;
+				// camera on the arena-centre side: Dir must point away from the centre
+				if (FVector::DotProduct(Perp, FVector(Mid.X, Mid.Y, 0.f)) < 0.f) Perp = -Perp;
+				S.BaseYaw = FMath::RadiansToDegrees(FMath::Atan2(Perp.Y, Perp.X));
+			}
+			else S.BaseYaw = FVector::Dist2D(FC, S.EventLoc) > 1.f ? FMath::RadiansToDegrees(FMath::Atan2(S.EventLoc.Y - FC.Y, S.EventLoc.X - FC.X)) : GameplayYaw;
+			break;
 		case EZoogiShotHeading::GameplayCamera:
 		default: S.BaseYaw = GameplayYaw; break;
 		}
 		S.VelYaw = S.BaseYaw;
-		S.Pivot = (bSec && Spec.SecondaryBias > 0.f ? FMath::Lerp(FC, SC, Spec.SecondaryBias) : FC) + Spec.PivotOffset;
+		S.Pivot = CamDirShotPivot(S, Spec, FC, SC, bSec);
 		S.bInit = true;
 	}
-	if (Spec.Heading == EZoogiShotHeading::FocusVelocity && bMoving)
+	if (S.bVelSnapPending && (bMoving || S.Age > 0.3f))
+	{
+		S.bVelSnapPending = false;
+		if (bMoving) S.VelYaw = VelYawNow;
+	}
+	else if (Spec.Heading == EZoogiShotHeading::FocusVelocity && bMoving)
 	{
 		S.VelYaw = FRotator::NormalizeAxis(S.VelYaw + FRotator::NormalizeAxis(VelYawNow - S.VelYaw) * (1.f - FMath::Exp(-3.f * Dt)));
 	}
 	S.LastFocus = FC;
 
-	const float T = S.Age / FMath::Max(S.Duration, 0.01f);
-	const float M = CurveOrEase(Spec.MotionCurve, Spec.Ease, T);
-	const FVector WantPivot = (bSec && Spec.SecondaryBias > 0.f ? FMath::Lerp(FC, SC, Spec.SecondaryBias) : FC) + Spec.PivotOffset;
+	const float T = S.MotionClock / FMath::Max(S.Duration, 0.01f);
+	const float M = CurveOrEase(Spec.MotionCurve, Spec.MoveEase, T);
+	const FVector WantPivot = CamDirShotPivot(S, Spec, FC, SC, bSec);
 	S.Pivot = (Spec.TrackingLag > 0.f && Dt > 0.f) ? CamDirDampV(S.Pivot, WantPivot, Spec.TrackingLag, Dt) : WantPivot;
 
 	const float Heading = Spec.Heading == EZoogiShotHeading::FocusVelocity ? S.VelYaw : S.BaseYaw;
@@ -499,41 +673,98 @@ bool UZoogiEpisodeCameraDirector::EvaluateShotView(FZoogiActiveShot& S, float Dt
 	const float Pitch = FMath::Lerp(Spec.Pitch, Spec.PitchEnd, M);
 	float Dist = FMath::Lerp(Spec.Distance, Spec.DistanceEnd, M);
 	if (Spec.bFrameBoth && bSec) Dist = FMath::Max(Dist, FVector::Dist(FC, SC) * 0.55f + Spec.SubjectRadius * 2.f);
+	if (Spec.bFrameEvent) Dist = FMath::Max(Dist, FVector::Dist(FC, S.EventLoc) * 0.55f + Spec.SubjectRadius * 2.f);
+	if (Spec.bFrameSecondEvent && S.bHasSecondEvent) Dist = FMath::Max(Dist, FVector::Dist(S.EventLoc, S.SecondEventLoc) * 0.6f + Spec.SubjectRadius * 2.f);
 	const float Pr = FMath::DegreesToRadians(Pitch);
 	const FVector Dir = FRotator(0.f, Yaw, 0.f).Vector();
 	FVector Loc = S.Pivot - Dir * Dist * FMath::Cos(Pr) + FVector(0, 0, Dist * FMath::Sin(Pr));
 	const FVector Look = S.Pivot + Spec.LookOffset;
 
-	if (Spec.bAvoidOcclusion)
+	// ---- readability: static occluders (sweep subject -> camera, pull in or lift) and particle / glow bursts.
 	{
-		FCollisionQueryParams Q(SCENE_QUERY_STAT(ZoogiShotProbe), false);
-		Q.AddIgnoredActor(F);
-		if (bSec) Q.AddIgnoredActor(Sec);
-		if (ShotCam) Q.AddIgnoredActor(ShotCam);
-		for (int32 Try = 0; Try < 6; ++Try)
+		auto Place = [&](float DPitch, float DistMul, float DYaw)
 		{
-			FHitResult Hit;
-			if (!GetWorld()->SweepSingleByChannel(Hit, Look, Loc, FQuat::Identity, ECC_Camera, FCollisionShape::MakeSphere(12.f), Q)) break;
-			const UPrimitiveComponent* HC = Hit.GetComponent();
-			if (Hit.bStartPenetrating || (HC && HC->IsSimulatingPhysics()))
+			const float P2 = FMath::DegreesToRadians(FMath::Clamp(Pitch + DPitch, -30.f, 88.f));
+			const FVector D2 = FRotator(0.f, Yaw + DYaw, 0.f).Vector();
+			const float R2 = Dist * DistMul;
+			return S.Pivot - D2 * R2 * FMath::Cos(P2) + FVector(0, 0, R2 * FMath::Sin(P2));
+		};
+		auto Occlude = [&](const FVector& In, bool& bBlocked)
+		{
+			bBlocked = false;
+			if (!Spec.bAvoidOcclusion) return In;
+			FVector OutP = ResolveOcclusion(Look, In, F, bSec ? Sec : nullptr, bBlocked);
+			if (bBlocked && FVector::Dist(OutP, Look) < 0.4f * FVector::Dist(In, Look))
 			{
-				// Moving bodies (Zoogis, orbs, rubble) never push the shot camera around; only static set pieces do.
-				if (AActor* HA = Hit.GetActor()) { Q.AddIgnoredActor(HA); continue; }
-				break;
+				// A deep pull-in reads badly: try going over the occluder first.
+				for (float Lift : { 20.f, 40.f })
+				{
+					bool bB2 = false;
+					const FVector Up = ResolveOcclusion(Look, Place(Lift, 1.f, 0.f), F, bSec ? Sec : nullptr, bB2);
+					if (!bB2) { OutP = Up; break; }
+				}
 			}
-			Loc = Look + (Loc - Look) * FMath::Clamp(Hit.Time - 0.02f, 0.1f, 1.f);
-			break;
+			return OutP;
+		};
+		TArray<FBox> FX;
+		if (Spec.bAvoidParticles) GatherAvoidVolumes(Look, Dist + 1500.f, FX);
+		auto InsideFX = [&](const FVector& P)
+		{
+			for (const FBox& B : FX) if (B.ExpandBy(Spec.ParticleMargin).IsInsideOrOn(P)) return true;
+			return false;
+		};
+		bool bBlocked = false;
+		const FVector Base = Occlude(Loc, bBlocked);
+		if (bBlocked) { S.Stats.OccludedFrames++; S.Stats.MaxPullInCm = FMath::Max(S.Stats.MaxPullInCm, FVector::Dist(Base, Loc)); }
+		FVector Want = Base;
+		for (const FBox& B : FX) S.Stats.MaxVolumeExtentCm = FMath::Max(S.Stats.MaxVolumeExtentCm, (float)B.GetExtent().GetMax());
+		if (FX.Num() > 0 && InsideFX(Base))
+		{
+			S.Stats.RawInsideFXFrames++;
+			// Lift first (keeps the readable high angle), then pull in, swing, back off.
+			static const FVector Cands[] = {
+				FVector(15.f, 1.f, 0.f), FVector(0.f, 0.75f, 0.f), FVector(30.f, 1.f, 0.f), FVector(0.f, 1.f, 25.f), FVector(0.f, 1.f, -25.f),
+				FVector(15.f, 0.6f, 0.f), FVector(45.f, 1.f, 0.f), FVector(0.f, 1.f, 50.f), FVector(0.f, 1.f, -50.f), FVector(20.f, 1.4f, 0.f), FVector(0.f, 1.7f, 0.f),
+				// The subject is inside a big burst: go wide and high until the camera is clear of it.
+				FVector(30.f, 2.2f, 0.f), FVector(40.f, 3.0f, 0.f), FVector(55.f, 3.8f, 0.f), FVector(65.f, 4.6f, 0.f) };
+			for (const FVector& Cd : Cands)
+			{
+				bool bB = false;
+				const FVector P = Occlude(Place(Cd.X, Cd.Y, Cd.Z), bB);
+				if (!InsideFX(P)) { Want = P; break; }
+			}
+		}
+		const FVector WantOffset = Want - Base;
+		const FVector Eased = (Dt > 0.f) ? CamDirDampV(S.AvoidOffset, WantOffset, 6.f, Dt) : WantOffset;
+		// Never ease INTO a burst: snap out when the eased position would be inside one.
+		S.AvoidOffset = (FX.Num() > 0 && InsideFX(Base + Eased)) ? WantOffset : Eased;
+		Loc = Base + S.AvoidOffset;
+		S.Stats.MaxAvoidOffsetCm = FMath::Max(S.Stats.MaxAvoidOffsetCm, S.AvoidOffset.Size());
+		S.Stats.Frames++;
+		if (FX.Num() > 0 && InsideFX(Loc)) S.Stats.FinalInsideFXFrames++;
+		if (Spec.bAvoidOcclusion)
+		{
+			bool bStill = false;
+			ResolveOcclusion(Look, Loc, F, bSec ? Sec : nullptr, bStill);
+			if (bStill) S.Stats.FinalOccludedFrames++;
 		}
 	}
 
 	FRotator Rot = (Look - Loc).Rotation();
 	Rot.Roll = Spec.Roll;
 	float Fov = FMath::Lerp(Spec.FOV, Spec.FOVEnd, M);
-	if (Spec.bFrameBoth && bSec)
+	const bool bFrameSec = Spec.bFrameBoth && bSec;
+	const bool bFrameSecond = Spec.bFrameSecondEvent && S.bHasSecondEvent;
+	if (bFrameSec || Spec.bFrameEvent || bFrameSecond)
 	{
 		const float Aspect = 16.f / 9.f;
 		float NeedHalf = 0.f;
-		for (const FVector& P : { FC, SC })
+		TArray<FVector, TInlineAllocator<4>> Pts;
+		Pts.Add(FC);
+		if (bFrameSec) Pts.Add(SC);
+		if (Spec.bFrameEvent) Pts.Add(S.EventLoc);
+		if (bFrameSecond) Pts.Add(S.SecondEventLoc);
+		for (const FVector& P : Pts)
 		{
 			const FVector L = Rot.UnrotateVector(P - Loc);
 			if (L.X < 10.f) continue;
@@ -542,6 +773,16 @@ bool UZoogiEpisodeCameraDirector::EvaluateShotView(FZoogiActiveShot& S, float Dt
 			NeedHalf = FMath::Max(NeedHalf, FMath::Max(H, V) + FMath::Atan2(Spec.SubjectRadius, L.X));
 		}
 		Fov = FMath::Clamp(FMath::Max(Fov, FMath::RadiansToDegrees(2.f * NeedHalf) * Spec.FramePadding), 5.f, Spec.MaxFOV);
+	}
+	// Deterministic motion character (no randomness: the same shot always plays the same).
+	const float Tm = S.MotionClock;
+	if (Spec.RollWobbleDeg != 0.f) Rot.Roll += Spec.RollWobbleDeg * FMath::Sin(UE_TWO_PI * Spec.RollWobbleHz * Tm);
+	if (Spec.ShakeDeg != 0.f)
+	{
+		const float A = Spec.ShakeDeg * (Spec.ShakeDecay > 0.f ? FMath::Exp(-Spec.ShakeDecay * Tm) : 1.f);
+		const float SW = UE_TWO_PI * Spec.ShakeHz;
+		Rot.Pitch += A * (0.7f * FMath::Sin(SW * Tm + 0.3f) + 0.3f * FMath::Sin(1.73f * SW * Tm + 1.1f));
+		Rot.Yaw += A * (0.7f * FMath::Sin(1.21f * SW * Tm + 2.0f) + 0.3f * FMath::Sin(2.37f * SW * Tm + 0.5f));
 	}
 	OutView = FMinimalViewInfo();
 	OutView.Location = Loc;
@@ -552,10 +793,88 @@ bool UZoogiEpisodeCameraDirector::EvaluateShotView(FZoogiActiveShot& S, float Dt
 	return true;
 }
 
+float UZoogiEpisodeCameraDirector::SlowLookWeight(const FZoogiShotSpec& Spec, float Age, float Duration) const
+{
+	if (!Spec.bSlowMoEntry) return 0.f;
+	// Same window shape the old time-scale entry had, fitted inside the shot.
+	const float Avail = FMath::Max(0.f, Duration - Spec.SlowMoDelay - 0.1f);
+	const float In = FMath::Min(Spec.SlowMoEaseIn, Avail * 0.3f);
+	const float Out = FMath::Min(Spec.SlowMoEaseOut, Avail * 0.4f);
+	const float Hold = FMath::Clamp(Spec.SlowMoHold, 0.f, FMath::Max(0.f, Avail - In - Out));
+	const float T = Age - Spec.SlowMoDelay;
+	if (T <= 0.f) return 0.f;
+	if (T < In) return ZoogiShot::ApplyEase(EZoogiShotEase::SmoothStep, T / FMath::Max(In, 1e-3f));
+	if (T < In + Hold) return 1.f;
+	if (T < In + Hold + Out) return 1.f - ZoogiShot::ApplyEase(EZoogiShotEase::SmoothStep, (T - In - Hold) / FMath::Max(Out, 1e-3f));
+	return 0.f;
+}
+
+void UZoogiEpisodeCameraDirector::GatherAvoidVolumes(const FVector& Around, float Radius, TArray<FBox>& Out) const
+{
+	UWorld* W = GetWorld();
+	if (!W) return;
+	if (AvoidCacheFrame == GFrameCounter && FVector::DistSquared(AvoidCacheAround, Around) < 1.f) { Out.Append(AvoidCache); return; }
+	TArray<FBox> Found;
+	auto Consider = [&](const FBox& B)
+	{
+		if (!B.IsValid) return;
+		const FVector Ext = B.GetExtent();
+		// Effects with huge fixed bounds (sky, ambient snow) cannot be avoided meaningfully; ignore them.
+		if (Ext.GetMax() > 1500.f || Ext.GetMax() < 5.f) return;
+		if (B.ComputeSquaredDistanceToPoint(Around) > Radius * Radius) return;
+		Found.Add(B);
+	};
+	for (TObjectIterator<UFXSystemComponent> It; It; ++It)
+	{
+		UFXSystemComponent* C = *It;
+		if (!C || C->GetWorld() != W || !C->IsRegistered() || !C->IsActive() || !C->IsVisible() || C->IsBeingDestroyed()) continue;
+		if (const AActor* O = C->GetOwner()) { if (O->IsHidden()) continue; }
+		Consider(C->Bounds.GetBox());
+	}
+	for (TActorIterator<AZoogiFX> It(W); It; ++It)
+	{
+		if (It->IsHidden() || It->IsActorBeingDestroyed()) continue;
+		Consider(It->GetComponentsBoundingBox(true));
+	}
+	AvoidCacheFrame = GFrameCounter;
+	AvoidCacheAround = Around;
+	AvoidCache = Found;
+	Out.Append(Found);
+}
+
+FVector UZoogiEpisodeCameraDirector::ResolveOcclusion(const FVector& Look, const FVector& Loc, AActor* F, AActor* Sec, bool& bOutBlocked) const
+{
+	bOutBlocked = false;
+	FCollisionQueryParams Q(SCENE_QUERY_STAT(ZoogiShotProbe), false);
+	if (F) Q.AddIgnoredActor(F);
+	if (Sec) Q.AddIgnoredActor(Sec);
+	if (ShotCam) Q.AddIgnoredActor(ShotCam);
+	for (int32 Try = 0; Try < 6; ++Try)
+	{
+		FHitResult Hit;
+		if (!GetWorld()->SweepSingleByChannel(Hit, Look, Loc, FQuat::Identity, ECC_Camera, FCollisionShape::MakeSphere(12.f), Q)) return Loc;
+		const UPrimitiveComponent* HC = Hit.GetComponent();
+		if (Hit.bStartPenetrating || (HC && HC->IsSimulatingPhysics()))
+		{
+			// Moving bodies (Zoogis, orbs, rubble) never push the shot camera around; only static set pieces do.
+			if (AActor* HA = Hit.GetActor()) { Q.AddIgnoredActor(HA); continue; }
+			return Loc;
+		}
+		bOutBlocked = true;
+		return Look + (Loc - Look) * FMath::Clamp(Hit.Time - 0.02f, 0.1f, 1.f);
+	}
+	return Loc;
+}
+
 void UZoogiEpisodeCameraDirector::TickShot(FZoogiActiveShot& S, float Dt, bool& bOutFinished, EZoogiShotEndReason& OutReason)
 {
 	bOutFinished = false;
 	S.Age += Dt;
+	// Presentation-only slow-mo look: the shot's own motion slows; world time is never touched.
+	const float SlowW = SlowLookWeight(S.Spec, S.Age, S.Duration);
+	S.MotionRate = FMath::Lerp(1.f, FMath::Clamp(S.Spec.SlowMoTarget, 0.05f, 1.f), SlowW);
+	S.MotionClock += Dt * S.MotionRate;
+	if (SlowW > 0.01f) { S.Stats.SlowLookFrames++; S.Stats.MinMotionRate = FMath::Min(S.Stats.MinMotionRate, S.MotionRate); }
 	FMinimalViewInfo ShotView;
 	if (!EvaluateShotView(S, Dt, ShotView))
 	{
@@ -574,6 +893,8 @@ void UZoogiEpisodeCameraDirector::TickShot(FZoogiActiveShot& S, float Dt, bool& 
 			S.Capture->SetWorldLocationAndRotation(ShotView.Location, ShotView.Rotation);
 			S.Capture->FOVAngle = ShotView.FOV;
 			S.Capture->PostProcessSettings = BuildShotPostProcess(S.Spec, FocusDist, 1.f);
+			CamDirApplyAccent(S.Capture->PostProcessSettings, S, 1.f);
+			CamDirSlowLookGrade(S.Capture->PostProcessSettings, SlowW);
 			S.Capture->PostProcessBlendWeight = 1.f;
 			S.Capture->CaptureSceneDeferred();
 		}
@@ -613,6 +934,8 @@ void UZoogiEpisodeCameraDirector::TickShot(FZoogiActiveShot& S, float Dt, bool& 
 		ShotCam->SetActorLocationAndRotation(Out.Location, Out.Rotation);
 		C->SetFieldOfView(Out.FOV);
 		C->PostProcessSettings = BuildShotPostProcess(S.Spec, FocusDist, W);
+		CamDirApplyAccent(C->PostProcessSettings, S, W);
+		CamDirSlowLookGrade(C->PostProcessSettings, SlowW * W);
 		C->PostProcessBlendWeight = Live.PostProcessBlendWeight;
 	}
 	if (bStopDone) { bOutFinished = true; OutReason = EZoogiShotEndReason::Stopped; }
@@ -683,6 +1006,11 @@ bool UZoogiEpisodeCameraDirector::EaseTimeScale(const FZoogiTimeScaleSpec& Spec)
 	UWorld* W = GetWorld();
 	AWorldSettings* WS = W ? W->GetWorldSettings() : nullptr;
 	if (!WS || bTornDown) return false;
+	if (CVarAllowTimeDilation.GetValueOnGameThread() == 0)
+	{
+		UE_LOG(LogZoogi, Log, TEXT("CAMDIR time-scale ease refused: physics is never dilated (core rule); use the Episode pause-hold or a shot's presentation-only slow-mo look"));
+		return false;
+	}
 	if (Policy == EZoogiTimeScalePolicy::Disabled)
 	{
 		UE_LOG(LogZoogi, Log, TEXT("CAMDIR time-scale ease refused: policy Disabled (opt in with SetTimeScalePolicy)"));
@@ -698,6 +1026,7 @@ bool UZoogiEpisodeCameraDirector::EaseTimeScale(const FZoogiTimeScaleSpec& Spec)
 		}
 	}
 	if (!TS.bActive) TS.Prior = WS->CinematicTimeDilation; // exact original, kept across overlapping eases
+	TimeScaleOwnerShotId = PendingTimeScaleOwner; // a direct caller takes the ease over from any shot
 	TS.bActive = true;
 	TS.Spec = Spec;
 	TS.From = WS->CinematicTimeDilation;
@@ -737,6 +1066,7 @@ void UZoogiEpisodeCameraDirector::RestoreTimeScaleExact(const TCHAR* Why)
 		WS->CinematicTimeDilation = TS.Prior;
 	}
 	UE_LOG(LogZoogi, Log, TEXT("CAMDIR time-scale restored to %.6f (%s)"), TS.Prior, Why);
+	TimeScaleOwnerShotId = 0;
 	TS.bActive = false;
 	TS.bOut = false;
 }
@@ -870,4 +1200,11 @@ bool UZoogiEpisodeCameraDirector::CompareSnapshots(const FZoogiCameraSnapshot& A
 	OutReport = FString::Printf(TEXT("vt=%s dLoc=%.5fcm dRot=%.5fdeg dFov=%.5f"), *GetNameSafe(B.ViewTarget.Get()), DLoc, DRot, DFov);
 	if (Bad.Num() > 0) OutReport += TEXT(" MISMATCH: ") + FString::Join(Bad, TEXT(", "));
 	return Bad.Num() == 0;
+}
+
+bool UZoogiEpisodeCameraDirector::GetShotAvoidStats(FZoogiShotHandle Shot, FZoogiShotAvoidStats& Out) const
+{
+	if (const FZoogiActiveShot* A = Shots.FindByPredicate([&](const FZoogiActiveShot& S) { return S.Id == Shot.Id; })) { Out = A->Stats; return true; }
+	if (const FZoogiShotAvoidStats* F = StatsById.Find(Shot.Id)) { Out = *F; return true; }
+	return false;
 }
