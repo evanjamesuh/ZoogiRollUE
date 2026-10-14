@@ -82,6 +82,7 @@ protected:
 	float U = 1.f; // UI scale (1 at 1080p)
 	float Time = 0.f;
 	float Letterbox = 0.f; // Battle cinematic bars (0..1)
+	FVector2D FrameOrg = FVector2D::ZeroVector; // framed HUD: viewport position of this canvas (the arena view rect); zero full-screen
 
 	/** UMG main menu (the canvas menu is kept as a fallback behind -ZoogiCanvasMenu). */
 	UPROPERTY() TObjectPtr<UZoogiMenuRoot> MenuWidget; // menu (Oct 14): new screen-stack root (was UZoogiMenuWidget)

@@ -89,6 +89,8 @@ private:
 	FGeometry CachedGeo;
 	FVector2D ViewSize = FVector2D(1920.f, 1080.f);
 	float Time = 0.f;
+	// framed HUD (v2): the fan sits fully inside the bottom tray, bigger; tooltip goes in the tray beside the fan
+	float FramedFanL = -1.f, FramedTrayTop = 0.f;
 	TArray<FReact> Reacts;
 
 	// display copies (refreshed each tick, painted in NativePaint)

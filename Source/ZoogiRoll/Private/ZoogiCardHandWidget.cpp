@@ -29,6 +29,7 @@
 #include "Brushes/SlateRoundedBoxBrush.h"
 #include "Styling/CoreStyle.h"
 #include "ZoogiUIStyle.h"
+#include "ZoogiFramedLayout.h"
 
 namespace
 {
@@ -229,6 +230,15 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 	Super::NativeTick(Geo, Dt);
 	CachedGeo = Geo;
 	ViewSize = Geo.GetLocalSize();
+	{
+		// framed HUD: CONFIRM / CLEAR sit in the bottom tray's right corner (inside the safe area), not over the arena
+		const bool bFr = ZoogiFramed::IsActive(GetWorld()) && ZoogiFramed::Current().bValid;
+		const ZoogiFramed::FLayout& FL = ZoogiFramed::Current();
+		const float k = bFr && FL.Viewport.X > 0.f ? ViewSize.X / FL.Viewport.X : 1.f;
+		const float R = bFr ? -24.f - FL.Safe.Right * k : -24.f, Bm = bFr ? -FL.Safe.Bottom * k : 0.f;
+		if (ConfirmBtn) if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(ConfirmBtn->Slot)) S->SetPosition(FVector2D(R, bFr ? Bm - 30.f : -196.f));
+		if (ClearBtn) if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(ClearBtn->Slot)) S->SetPosition(FVector2D(R, bFr ? Bm - 92.f : -256.f));
+	}
 	Time += Dt;
 	AZoogiGameMode* G = GetWorld() ? GetWorld()->GetAuthGameMode<AZoogiGameMode>() : nullptr;
 	UZoogiCardSubsystem* Cards = UZoogiCardSubsystem::Get(this);
@@ -305,17 +315,34 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 	// fan layout targets (bottom center, overlapping, tilted outward; hover = 1.3x, lift, 0 deg, neighbors spread)
 	const int32 N = HandOrder.Num();
 	const int32 HoverIdx = Hovered.IsValid() ? HandOrder.IndexOfByKey(Hovered->InstanceId) : INDEX_NONE;
-	const float Spacing = FMath::Min(108.f, 640.f / FMath::Max(N, 1));
+	float Spacing = FMath::Min(108.f, 640.f / FMath::Max(N, 1));
+	// framed HUD (v2): the tray no longer carries the prompt bar, so the hand is laid out fully inside it: bigger cards,
+	// whole art visible at the card's own aspect (no bottom crop), a gentle fan, hover grows a little and stays in the tray
+	const bool bFrTray = ZoogiFramed::IsActive(GetWorld()) && ZoogiFramed::Current().bValid;
+	float Sc0 = 1.f, BaseY = ViewSize.Y + 70.f, ArcK = 7.f, TiltK = 6.f, HoverSc = CHHoverScale, HoverY = ViewSize.Y - 8.f, Spread = 1.f;
+	FramedFanL = -1.f;
+	if (bFrTray)
+	{
+		const ZoogiFramed::FLayout& FL = ZoogiFramed::Current();
+		const float k = FL.Viewport.X > 0.f ? ViewSize.X / FL.Viewport.X : 1.f;
+		const float TT = FL.Tray.Min.Y * k, TB = FL.Tray.Max.Y * k;
+		FramedTrayTop = TT;
+		Sc0 = FMath::Clamp((TB - TT - 22.f * FL.U * k) / UZoogiCardWidget::CardH, 0.55f, 1.3f);
+		const float HalfW = FMath::Max(200.f, ViewSize.X * 0.5f - 400.f * FL.U * k - FL.Safe.Right * k);
+		Spacing = FMath::Min(UZoogiCardWidget::CardW * Sc0 * 1.04f, (2.f * HalfW - UZoogiCardWidget::CardW * Sc0) / FMath::Max(N - 1, 1));
+		BaseY = TB - 8.f * FL.U * k; ArcK = 2.5f; TiltK = 2.5f; HoverSc = Sc0 * 1.1f; HoverY = TB - 4.f * FL.U * k; Spread = Sc0 * 0.6f;
+		FramedFanL = ViewSize.X * 0.5f - ((N - 1) * Spacing + UZoogiCardWidget::CardW * Sc0) * 0.5f;
+	}
 	TMap<int32, FVector4> Layout; // x, y, angle, scale
 	for (int32 i = 0; i < N; ++i)
 	{
 		const float K = i - (N - 1) * 0.5f;
-		float X = ViewSize.X * 0.5f + K * Spacing, Y = ViewSize.Y + 70.f + K * K * 7.f, A = K * 6.f, Sc = 1.f;
+		float X = ViewSize.X * 0.5f + K * Spacing, Y = BaseY + K * K * ArcK, A = K * TiltK, Sc = Sc0;
 		if (HoverIdx != INDEX_NONE)
 		{
 			const int32 D = i - HoverIdx;
-			if (D == 0) { A = 0.f; Sc = CHHoverScale; Y = ViewSize.Y - 8.f; }
-			else X += FMath::Sign((float)D) * (FMath::Abs(D) == 1 ? 58.f : 28.f);
+			if (D == 0) { A = 0.f; Sc = HoverSc; Y = HoverY; }
+			else X += FMath::Sign((float)D) * (FMath::Abs(D) == 1 ? 58.f : 28.f) * Spread;
 		}
 		Layout.Add(HandOrder[i], FVector4(X, Y, A, Sc));
 	}
@@ -489,8 +516,11 @@ int32 UZoogiCardHandWidget::NativePaint(const FPaintArgs& Args, const FGeometry&
 	if (!HoverTitle.IsEmpty() && !Dragging.IsValid())
 	{
 		const int32 NL = CHLines(HoverTip);
-		const FVector2D Sz(400.f, 46.f + NL * 20.f);
-		const FVector2D P(FMath::Clamp(V.X * 0.5f - Sz.X * 0.5f, 10.f, V.X - Sz.X - 10.f), V.Y - UZoogiCardWidget::CardH * CHHoverScale - Sz.Y - 24.f);
+		FVector2D Sz(400.f, 46.f + NL * 20.f);
+		const bool bTrayTip = FramedFanL > 0.f && FramedFanL - 160.f >= 340.f;
+		if (bTrayTip) Sz.X = FMath::Min(400.f, FramedFanL - 160.f);
+		FVector2D P(FMath::Clamp(V.X * 0.5f - Sz.X * 0.5f, 10.f, V.X - Sz.X - 10.f), V.Y - UZoogiCardWidget::CardH * CHHoverScale - Sz.Y - 24.f);
+		if (bTrayTip) P = FVector2D(FramedFanL - 10.f - Sz.X, FramedTrayTop + 12.f); // framed: in the tray left of the fan, not over the arena
 		ZoogiUIStyle::SPanel(Out, L + 2, Geo, P, Sz, ZoogiUIStyle::PanelNavy, ZoogiUIStyle::Gold, 12.f);
 		CHText(Out, L + 3, Geo, P + FVector2D(14.f, 8.f), HoverTitle, 14, FLinearColor(1.f, 0.9f, 0.6f), true);
 		CHText(Out, L + 3, Geo, P + FVector2D(14.f, 34.f), HoverTip, 12, FLinearColor(0.9f, 0.92f, 1.f));

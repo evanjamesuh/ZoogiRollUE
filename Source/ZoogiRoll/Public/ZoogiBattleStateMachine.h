@@ -58,6 +58,15 @@ struct FZoogiCPUPropPlan
 	bool IsFor(int32 InPlayer, int32 InTurn) const { return Player == InPlayer && Turn == InTurn && Player >= 0; }
 };
 
+/** framed HUD: Battle prompt content (see UZoogiBattleStateMachine::GetHudPrompt). */
+struct FZoogiBattleHudPrompt
+{
+	FString Title, Body;
+	FLinearColor Accent = FLinearColor::White;
+	float Frac = -1.f;               // progress bar 0..1 (rail cursor / air timeout), < 0 = none
+	float RailEarly = -1.f, RailCenter = -1.f; // rail window split (fractions of the bar), < 0 = plain bar
+};
+
 UCLASS()
 class ZOOGIROLL_API UZoogiBattleStateMachine : public UTickableWorldSubsystem
 {
@@ -112,6 +121,9 @@ public:
 	void CancelCombo(const FString& Why);
 	bool CanAffordCombo(int32 Player, const FZoogiEpisodeComboRow& C) const;
 	const FZoogiPendingSegment& GetPending() const { return Pending; }
+	/** framed HUD: the Battle prompt panel's content (rail / air reaction / result flash / route objective) so the framed
+	 *  layout can show it in the active Zoogi's team-column action box instead of over the arena. Read-only. */
+	bool GetHudPrompt(FZoogiBattleHudPrompt& Out) const;
 	/** FAIL -> SHATTER -> NEXT_PLAYER: cancels the pending segment, skips cards / scenes / holds, ends the turn now. */
 	void Shatter(const FString& Why);
 
