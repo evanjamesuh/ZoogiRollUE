@@ -1,0 +1,15 @@
+# Economy scalars (Evan Q5/Q11/Q13). All tunable here; no balance values in code.
+key,value
+daily_match_gem_cap,500
+daily_reset_hour_local,4
+rollback_tolerance_minutes,10
+start_gems,0
+start_mastery_level,1
+earned_balance_cap,999999
+spend_order,EarnedFirst
+idle_fraction_zero_reward,0.5
+focus_change_context,Standby
+# Daily diminishing returns (earning plan 6.2): match gems + match XP from the Nth+1 match of the day on are multiplied by dr_mult.
+dr_after_matches,5
+dr_mult,0.5
+rewarded_match_ids_kept,64
