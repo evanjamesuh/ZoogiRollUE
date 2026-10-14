@@ -110,6 +110,10 @@ private:
 	void SetLocalSetting(const TCHAR* Key, int32 Value);
 	int32 GetLocalSetting(const TCHAR* Key, int32 Default) const;
 	void TickTour(float Dt);
+	/** Content/Data/PowerArt/<id>.png, else a procedural placeholder card (bOutPlaceholder = true). */
+	UTexture2D* PowerArt(const struct FZoogiPowerDef& D, bool& bOutPlaceholder);
+	void PowerPlaceholderText(const struct FZoogiPowerDef& D, float X, float Y, float Wd, float Ht);
+	TSet<FName> PlaceholderPowers;
 	void OnUnlocksChanged() { bDirty = true; }
 
 	UPROPERTY() TObjectPtr<UOverlay> Root;

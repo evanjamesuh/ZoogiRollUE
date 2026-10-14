@@ -791,7 +791,8 @@ void UZoogiMenuRoot::BuildZoogiSelect()
 	const FName Eq = U ? U->GetEquipped(D.Id) : NAME_None;
 	const FZoogiPowerDef* PD = U && !Eq.IsNone() ? U->FindPower(Eq) : nullptr;
 	Btn(FString(), ZMCNavy, [this]() { Push(EZoogiScreen::Powers); }, 610.f, 258.f, 300.f, 54.f, 24);
-	if (PD) Image(Art(PD->CardArt), 620.f, 263.f, 26.f, 44.f);
+	bool bPh = false;
+	if (PD) Image(PowerArt(*PD, bPh), 620.f, 263.f, 26.f, 44.f);
 	Label(PD ? FString::Printf(TEXT("POWER: %s %d - %s"), *PD->Type.ToString().ToUpper(), PD->Tier, *PD->Name.ToString().ToUpper()) : FString::Printf(TEXT("POWER: %s"), *ZMUpper(D.Ability)),
 		652.f, 266.f, 250.f, 18.f, 24, FLinearColor::White);
 	Label(PD ? FString(TEXT("Equipped - change in POWERS")) : D.AbilityDesc, 652.f, 285.f, 250.f, 24.f, 16, ZMTSoft, EAnchor::Center, 0, true);
@@ -829,7 +830,9 @@ void UZoogiMenuRoot::BuildPowers()
 		const FZoogiPowerDef* D = Shown[i];
 		const FName Id = D->PowerId;
 		const float X = 118.f + (i % 3) * 132.f, Y = 148.f + (i / 3) * 145.f;
-		ImgTile(Art(D->CardArt), FString(), [this, Id]() { PowerSel = Id; bDirty = true; }, X, Y, 124.f, 140.f, PowerSel == Id, !U->IsUnlocked(Id), ZMHex(TEXT("1A1A2E")), false, 20);
+		bool bPh = false;
+		ImgTile(PowerArt(*D, bPh), FString(), [this, Id]() { PowerSel = Id; bDirty = true; }, X, Y, 124.f, 140.f, PowerSel == Id, !U->IsUnlocked(Id), ZMHex(TEXT("1A1A2E")), false, 20);
+		if (bPh) PowerPlaceholderText(*D, X, Y, 124.f, 140.f);
 		if (U->GetEquipped(Z.Id) == Id)
 		{
 			UBorder* C = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
@@ -845,8 +848,11 @@ void UZoogiMenuRoot::BuildPowers()
 	const bool bUnlocked = U->IsUnlocked(PowerSel);
 	const bool bEquipped = U->GetEquipped(Z.Id) == PowerSel;
 	Panel(528.f, 86.f, 394.f, 238.f, ZMPViolet);
-	ImgTile(Art(S->CardArt), TEXT("PREVIEW"), [this]() { ShowComingSoon(TEXT("Power preview video: Animations & Powers' visuals land here.")); },
+	bool bSPh = false;
+	UTexture2D* STex = PowerArt(*S, bSPh);
+	ImgTile(STex, bSPh ? FString() : FString(TEXT("PREVIEW")), [this]() { ShowComingSoon(TEXT("Power preview video: Animations & Powers' visuals land here.")); },
 		542.f, 98.f, 172.f, 214.f, false, !bUnlocked, ZMHex(TEXT("15122A")), false, 26);
+	if (bSPh) PowerPlaceholderText(*S, 542.f, 98.f, 172.f, 214.f);
 	Label(FString::Printf(TEXT("%s - TIER %d"), *S->Type.ToString().ToUpper(), S->Tier), 726.f, 100.f, 190.f, 14.f, 22, ZMTLabel);
 	Label(S->Name.ToString().ToUpper(), 726.f, 114.f, 190.f, 60.f, 44, FLinearColor::White, EAnchor::Center, 0, true);
 	{
@@ -1371,4 +1377,177 @@ void UZoogiMenuRoot::TickClip(float Dt)
 	ClipPress = ClipFrame >= 40 && ClipFrame < 48;
 	FScreenshotRequest::RequestScreenshot(FPaths::Combine(ClipDir, FString::Printf(TEXT("clip_%03d.png"), ClipFrame)), true, false);
 	++ClipFrame;
+}
+
+// ---------------------------------------------------------------------------------------------------------- power art
+// Every power has its own art slot: Content/Data/PowerArt/<power_id>.png. Until the real art lands, a procedural
+// placeholder card (family colour, unique vector glyph, card aspect 0.6) is drawn instead. Drop the PNG in: no code change.
+namespace
+{
+	FLinearColor ZMFamilyColor(FName Type)
+	{
+		if (Type == "Void") return ZMHex(TEXT("7B3FE4"));
+		if (Type == "Shock") return ZMHex(TEXT("F2C420"));
+		if (Type == "Frost") return ZMHex(TEXT("38C6F0"));
+		if (Type == "Fire") return ZMHex(TEXT("FF6A1A"));
+		return ZMHex(TEXT("3A6BE0"));
+	}
+	float ZMSeg(FVector2f P, FVector2f A, FVector2f B)
+	{
+		const FVector2f AB = B - A; const float T = FMath::Clamp(FVector2f::DotProduct(P - A, AB) / FMath::Max(1e-6f, AB.SizeSquared()), 0.f, 1.f);
+		return (P - (A + AB * T)).Size();
+	}
+	bool ZMInPoly(FVector2f P, const TArray<FVector2f>& V)
+	{
+		bool c = false;
+		for (int32 i = 0, j = V.Num() - 1; i < V.Num(); j = i++)
+			if (((V[i].Y > P.Y) != (V[j].Y > P.Y)) && (P.X < (V[j].X - V[i].X) * (P.Y - V[i].Y) / (V[j].Y - V[i].Y) + V[i].X)) c = !c;
+		return c;
+	}
+	float ZMPolyDist(FVector2f P, const TArray<FVector2f>& V) // signed: <0 inside
+	{
+		float D = 1e9f; for (int32 i = 0, j = V.Num() - 1; i < V.Num(); j = i++) D = FMath::Min(D, ZMSeg(P, V[j], V[i]));
+		return ZMInPoly(P, V) ? -D : D;
+	}
+	// Glyph signed distance in [-1,1]^2 (y down). One distinct shape per power id; unknown ids get a hashed rune.
+	float ZMGlyph(FName Id, FVector2f P)
+	{
+		const FString S = Id.ToString();
+		if (S.Contains(TEXT("titan_meteor")))
+		{
+			float D = (P - FVector2f(0.22f, 0.22f)).Size() - 0.42f; // meteor body
+			for (int32 k = 0; k < 3; ++k) { const float o = (k - 1) * 0.2f; D = FMath::Min(D, ZMSeg(P, FVector2f(-0.05f + o, -0.05f - o), FVector2f(-0.75f + o, -0.75f - o)) - 0.07f); } // trails
+			return D;
+		}
+		if (S.Contains(TEXT("storm")))
+			return ZMPolyDist(P, { {0.15f,-0.9f},{-0.5f,0.1f},{-0.05f,0.1f},{-0.25f,0.9f},{0.5f,-0.15f},{0.05f,-0.15f},{0.3f,-0.9f} });
+		if (S.Contains(TEXT("frost")))
+		{
+			float D = 1e9f;
+			for (int32 k = 0; k < 6; ++k)
+			{
+				const float a = k * PI / 3.f; const FVector2f Dir(FMath::Cos(a), FMath::Sin(a));
+				D = FMath::Min(D, ZMSeg(P, FVector2f(0, 0), Dir * 0.85f) - 0.07f);
+				const FVector2f M = Dir * 0.5f, N(-Dir.Y, Dir.X);
+				D = FMath::Min(D, ZMSeg(P, M, M + (Dir + N) * 0.2f) - 0.05f);
+				D = FMath::Min(D, ZMSeg(P, M, M + (Dir - N) * 0.2f) - 0.05f);
+			}
+			return D;
+		}
+		if (S.Contains(TEXT("ember")))
+		{
+			const float Body = (P - FVector2f(0.f, 0.3f)).Size() - 0.5f;
+			const float Tip = ZMPolyDist(P, { {0.f,-0.9f},{-0.48f,0.2f},{0.48f,0.2f} });
+			const float Outer = FMath::Min(Body, Tip);
+			const float Inner = FMath::Min((P - FVector2f(0.f, 0.45f)).Size() - 0.22f, ZMPolyDist(P, { {0.f,-0.2f},{-0.2f,0.35f},{0.2f,0.35f} }));
+			return FMath::Max(Outer, -Inner + 0.0f) ;
+		}
+		if (S.Contains(TEXT("precision")))
+		{
+			float D = FMath::Abs((P).Size() - 0.6f) - 0.07f;
+			D = FMath::Min(D, (P).Size() - 0.12f);
+			D = FMath::Min(D, ZMSeg(P, FVector2f(0, -0.95f), FVector2f(0, -0.35f)) - 0.06f);
+			D = FMath::Min(D, ZMSeg(P, FVector2f(0, 0.35f), FVector2f(0, 0.95f)) - 0.06f);
+			D = FMath::Min(D, ZMSeg(P, FVector2f(-0.95f, 0), FVector2f(-0.35f, 0)) - 0.06f);
+			D = FMath::Min(D, ZMSeg(P, FVector2f(0.35f, 0), FVector2f(0.95f, 0)) - 0.06f);
+			return D;
+		}
+		if (S.Contains(TEXT("crystal_collapse")))
+		{
+			float D = ZMPolyDist(P, { {0.f,-0.42f},{0.22f,0.f},{0.f,0.42f},{-0.22f,0.f} });
+			for (int32 k = 0; k < 6; ++k)
+			{
+				const float a = k * PI / 3.f + PI / 6.f; const FVector2f C(FMath::Cos(a) * 0.72f, FMath::Sin(a) * 0.72f), R(FMath::Cos(a), FMath::Sin(a)), N(-R.Y, R.X);
+				D = FMath::Min(D, ZMPolyDist(P, { C + R * 0.2f, C + N * 0.09f, C - R * 0.12f, C - N * 0.09f }));
+			}
+			return D;
+		}
+		const uint32 H = GetTypeHash(S); // fallback rune: n-gon
+		const int32 Nn = 3 + (H % 4); TArray<FVector2f> V;
+		for (int32 k = 0; k < Nn; ++k) { const float a = k * 2.f * PI / Nn - PI / 2.f; V.Add(FVector2f(FMath::Cos(a), FMath::Sin(a)) * 0.7f); }
+		return FMath::Abs(ZMPolyDist(P, V)) - 0.08f;
+	}
+}
+
+UTexture2D* UZoogiMenuRoot::PowerArt(const FZoogiPowerDef& D, bool& bOutPlaceholder)
+{
+	bOutPlaceholder = false;
+	const FString Key = TEXT("powerart:") + D.PowerId.ToString();
+	if (TObjectPtr<UTexture2D>* Hit = ArtCache.Find(Key)) { bOutPlaceholder = PlaceholderPowers.Contains(D.PowerId); return Hit->Get(); }
+	const FString P = FPaths::ProjectContentDir() / TEXT("Data/PowerArt") / (D.PowerId.ToString() + TEXT(".png"));
+	UTexture2D* T = FPaths::FileExists(P) ? FImageUtils::ImportFileAsTexture2D(P) : nullptr;
+	if (!T)
+	{
+		// Placeholder card, 360x600 (aspect 0.6).
+		const int32 W = 360, H = 600;
+		const FLinearColor Fam = ZMFamilyColor(D.Type);
+		const FLinearColor Navy = ZoogiUIStyle::Outline, Dark = Fam * 0.22f, Mid = Fam * 0.55f;
+		TArray<FColor> Px; Px.SetNumUninitialized(W * H);
+		auto RoundRectD = [](float x, float y, float x0, float y0, float x1, float y1, float r)
+		{
+			const float cx = FMath::Clamp(x, x0 + r, x1 - r), cy = FMath::Clamp(y, y0 + r, y1 - r);
+			const float d = FVector2f(x - cx, y - cy).Size() - r;
+			const bool in = x > x0 && x < x1 && y > y0 && y < y1;
+			return in ? FMath::Min(d, 0.f) : FMath::Max(d, 0.f);
+		};
+		for (int32 y = 0; y < H; ++y)
+			for (int32 x = 0; x < W; ++x)
+			{
+				const float fx = x + 0.5f, fy = y + 0.5f;
+				FLinearColor C = FLinearColor::Transparent;
+				const float Outer = RoundRectD(fx, fy, 2, 2, W - 2, H - 2, 28);
+				if (Outer < 1.f)
+				{
+					C = FMath::Lerp(Mid, Dark, fy / H); C.A = 1.f;
+					// art window with radial family glow
+					const float Win = RoundRectD(fx, fy, 30, 70, W - 30, 420, 18);
+					if (Win <= 0.f)
+					{
+						const float R = FVector2f((fx - W * 0.5f) / 150.f, (fy - 245.f) / 175.f).Size();
+						C = FMath::Lerp(Fam * 1.15f, Dark * 0.6f, FMath::Clamp(R, 0.f, 1.f)); C.A = 1.f;
+						// diagonal hatch: "art pending"
+						if (((x + y) / 14) % 2 == 0) C = C * 0.92f;
+						const FVector2f G((fx - W * 0.5f) / 120.f, (fy - 245.f) / 120.f);
+						const float GD = ZMGlyph(D.PowerId, G) * 120.f; // px
+						if (GD < 6.f) { const float k = FMath::Clamp(1.f - (GD + 6.f) / 6.f, 0.f, 1.f); C = FMath::Lerp(C, Navy, FMath::Clamp((6.f - GD) / 2.f, 0.f, 1.f) * 0.9f); C = FMath::Lerp(C, FLinearColor(1.f, 0.98f, 0.9f), FMath::Clamp(-GD / 2.f, 0.f, 1.f)); (void)k; }
+					}
+					else if (Win < 5.f) C = FLinearColor(1.f, 0.85f, 0.4f); // gold inner frame
+					// name plate band
+					if (RoundRectD(fx, fy, 30, 440, W - 30, 520, 14) <= 0.f) { C = Navy * 1.6f; C.A = 1.f; }
+					// tier pips
+					for (int32 t = 0; t < D.Tier; ++t) if (FVector2f(fx - (W * 0.5f - (D.Tier - 1) * 18.f + t * 36.f), fy - 40.f).Size() < 11.f) C = FLinearColor(1.f, 0.85f, 0.35f);
+					if (Outer > -6.f) C = Navy; // outline
+					C.A = FMath::Clamp(1.f - Outer, 0.f, 1.f);
+				}
+				Px[y * W + x] = C.ToFColor(true);
+			}
+		T = UTexture2D::CreateTransient(W, H, PF_B8G8R8A8);
+		if (T)
+		{
+			void* Mip = T->GetPlatformData()->Mips[0].BulkData.Lock(LOCK_READ_WRITE);
+			FMemory::Memcpy(Mip, Px.GetData(), Px.Num() * sizeof(FColor));
+			T->GetPlatformData()->Mips[0].BulkData.Unlock();
+			T->UpdateResource();
+		}
+		PlaceholderPowers.Add(D.PowerId);
+		bOutPlaceholder = true;
+		UE_LOG(LogZoogi, Log, TEXT("MENU power art missing: %s -> placeholder card"), *P);
+	}
+	ArtCache.Add(Key, T);
+	return T;
+}
+
+void UZoogiMenuRoot::PowerPlaceholderText(const FZoogiPowerDef& D, float X, float Y, float Wd, float Ht)
+{
+	// Name + ART COMING over the placeholder card that ImgTile fit-centred in (X,Y,Wd,Ht).
+	const float IH = Ht - 18.f / ZMK, CW = FMath::Min(Wd - 18.f / ZMK, IH * 0.6f), CH = CW / 0.6f;
+	const float CX = X + Wd * 0.5f - CW * 0.5f, CY = Y + Ht * 0.5f - CH * 0.5f;
+	const int32 NS = FMath::Clamp(FMath::RoundToInt(CW * 0.17f), 12, 30);
+	Label(D.Name.ToString().ToUpper(), CX + CW * 0.08f, CY + CH * (440.f / 600.f), CW * 0.84f, CH * (80.f / 600.f), NS, FLinearColor::White, EAnchor::Center, 0, false);
+	UBorder* Tag = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+	Tag->SetBrush(ZoogiUIStyle::RoundBrush(ZMCGold, ZoogiUIStyle::Outline, 2.f, 8.f));
+	Tag->SetHorizontalAlignment(HAlign_Center); Tag->SetVerticalAlignment(VAlign_Center);
+	Tag->SetContent(Txt(TEXT("ART COMING"), FMath::Max(10, NS - 4), ZoogiUIStyle::Outline, 0.f));
+	Tag->SetVisibility(ESlateVisibility::HitTestInvisible);
+	Place(Tag, CX + CW * 0.15f, CY + CH * (535.f / 600.f), CW * 0.7f, CH * (42.f / 600.f));
 }
