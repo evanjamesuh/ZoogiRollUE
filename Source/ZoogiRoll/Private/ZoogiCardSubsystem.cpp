@@ -1,4 +1,5 @@
 #include "ZoogiCardSubsystem.h"
+#include "ZoogiCPUBrain.h"
 #include "ZoogiRoll.h"
 #include "ZoogiGameMode.h"
 #include "ZoogiBall.h"
@@ -208,6 +209,17 @@ void UZoogiCardSubsystem::PlanCPU(AZoogiGameMode* G)
 		const int32 WA = DA ? DA->CPUWeight * 10 + DA->Cost : 0, WB = DB ? DB->CPUWeight * 10 + DB->Cost : 0;
 		return WA != WB ? WA > WB : Hand[A].InstanceId < Hand[B].InstanceId;
 	});
+	// Oct 14 CPU tiers: Normal keeps the legacy greedy order above; other tiers only change WHICH legal cards are tried
+	// (same hand, same Energy, every Select still validated by the rules). Seeded from the match seed + turn (replay-safe).
+	const EZoogiCPUTier CPUTier = ZoogiCPU::ActiveTier();
+	if (CPUTier != EZoogiCPUTier::Normal)
+	{
+		TArray<FZoogiCPUCardOption> Opts;
+		for (const FZoogiCardInstance& Ci : Hand) { const FZoogiCardDef* D = Def(Ci.CardId); Opts.Add({ Ci.CardId, D ? D->Cost : 99, D ? D->CPUWeight : 0 }); }
+		FRandomStream TierRng(HashCombine(GetTypeHash(P), GetTypeHash(S->Turn)));
+		Order = ZoogiCPU::PickCards(Opts, S->Energy, ZoogiCPU::TierRow(CPUTier), ZoogiCPU::Combos(), TierRng);
+		UE_LOG(LogZoogi, Log, TEXT("CARDS cpu tier=%s P%d tries %d of %d cards"), ZoogiProgress::TierName(CPUTier), P + 1, Order.Num(), Hand.Num());
+	}
 	const FZoogiCardContext Ctx = BuildContext(G);
 	for (int32 i : Order) if (RulesV.Select(P, Hand[i].InstanceId, Ctx) == EZoogiCardResult::Ok) CovSelected.FindOrAdd(Hand[i].CardId)++;
 	FString Choice;
