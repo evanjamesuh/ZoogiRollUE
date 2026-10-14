@@ -328,7 +328,7 @@ void AZoogiGameMode::StartMatch()
 	ShotsFired = 0;
 	TurnCounter = 0;
 	UE_LOG(LogZoogi, Log, TEXT("Match started: %d players on %s"), Balls.Num(), *ZoogiUtil::ArenaName(MenuArena));
-	PlayMusic(TEXT("MatchMusic"));
+	NotifyMatchEvent(EZoogiMatchEvent::MatchStart, 0); // arena music (falls back to MatchMusic) + announcer
 	if (!BeginStageForming(false)) BeginTurn(0);
 }
 
@@ -366,6 +366,7 @@ void AZoogiGameMode::ReturnToMenu()
 	SpawnOrbs();
 	Phase = EZoogiPhase::Menu;
 	PhaseTime = 0.f;
+	NotifyMatchEvent(EZoogiMatchEvent::ReturnToMenu);
 	PlayMusic(TEXT("MenuMusic"));
 	if (AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PC->OnMenu();
 }
@@ -499,6 +500,7 @@ void AZoogiGameMode::FinishGame()
 		UE_LOG(LogZoogi, Log, TEXT("FinalScores: %s"), *Final);
 	}
 	ZoogiUtil::PlaySfx(this, TEXT("Win"), 0.8f);
+	NotifyMatchEvent(EZoogiMatchEvent::MatchOver, WinnerIndex);
 	PlayVictoryCrowd();
 	if (AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PC->OnGameOver(GetActiveBall());
 }
@@ -551,7 +553,7 @@ void AZoogiGameMode::BeginClimax(AZoogiBall* Shooter, EZoogiArtifact A, int32 KO
 	ClimaxKOs = KOs;
 	ClimaxScores = ShooterScores;
 	ClimaxLeft = 2.55f; // ClimaxRumble length: 2.25 s rumble + 0.3 s silence
-	if (MusicComp) MusicComp->AdjustVolume(0.25f, 0.f); // the one full music drop-out of the match
+	NotifyMatchEvent(EZoogiMatchEvent::ClimaxBegin); // the one full music drop-out of the match
 	ZoogiUtil::PlaySfx(this, TEXT("ClimaxRumble"), 1.f);
 	UE_LOG(LogZoogi, Log, TEXT("CLIMAX: P%d %s match-deciding KO x%d: music out, rumble, hit in %.2f s"), Shooter ? Shooter->PlayerIndex + 1 : 0, Shooter ? *Shooter->Def.Name : TEXT("?"), KOs, ClimaxLeft);
 	TakeShotDelayed(TEXT("climax_rumble"), 1.2f);
@@ -569,7 +571,7 @@ void AZoogiGameMode::LandClimax()
 	}
 	if (bClimaxHitPending) { bClimaxHitPending = false; ZoogiUtil::PlaySfx(this, TEXT("CritBoom"), 1.f, 0.9f); }
 	// Music swells back in big.
-	if (MusicComp) MusicComp->AdjustVolume(1.6f, 1.f);
+	NotifyMatchEvent(EZoogiMatchEvent::ClimaxLand);
 	if (AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PC->OnImpact(0.6f);
 	UE_LOG(LogZoogi, Log, TEXT("CLIMAX hit: flash + boom, music swells back"));
 	TakeShotDelayed(TEXT("climax_hit"), 0.03f);
@@ -1194,7 +1196,7 @@ void AZoogiGameMode::OnRockEvent(AZoogiRock* Rock, bool bShattered, AZoogiBall* 
 
 void AZoogiGameMode::DuckMusic(float Seconds)
 {
-	if (!MusicComp) return;
+	if (NotifyMatchEvent(EZoogiMatchEvent::Duck, -1, Seconds) || !MusicComp) return;
 	MusicComp->AdjustVolume(0.05f, 0.6f); // ~-4.4 dB duck under big hits (team brief: duck 3-6 dB, never mute; full silence is saved for one climax)
 	FTimerHandle H;
 	TWeakObjectPtr<UAudioComponent> M = MusicComp;
