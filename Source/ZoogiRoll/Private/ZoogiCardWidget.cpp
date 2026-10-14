@@ -7,6 +7,7 @@
 #include "Styling/CoreStyle.h"
 #include "Fonts/SlateFontInfo.h"
 #include "ZoogiUIStyle.h"
+#include "ZoogiHudArt.h"
 
 int32 UZoogiCardWidget::NativePaint(const FPaintArgs& Args, const FGeometry& Geo, const FSlateRect& Cull, FSlateWindowElementList& Out, int32 Layer, const FWidgetStyle& Style, bool bParentEnabled) const
 {
@@ -26,6 +27,14 @@ int32 UZoogiCardWidget::NativePaint(const FPaintArgs& Args, const FGeometry& Geo
 		B.ImageSize = FVector2D(S);
 		B.DrawAs = ESlateBrushDrawType::Image;
 		FSlateDrawElement::MakeBox(Out, Layer, Geo.ToPaintGeometry(), &B, ESlateDrawEffect::None, Dim);
+		if (Tablet) ZoogiHudArt::Img(Out, Layer + 1, Geo, FVector2D(S.X - 30.f, S.Y - 40.f), FVector2D(24.f, 34.f), Tablet, Dim); // element badge
+	}
+	else if (Tablet && ZoogiHudArt::Tex(Tablet))
+	{
+		// no art file: the element tablet is the card face, name on its plate
+		ZoogiHudArt::Img(Out, Layer, Geo, FVector2D::ZeroVector, S, Tablet, Dim);
+		const FSlateFontInfo F = ZoogiUIStyle::BoldFont(12);
+		FSlateDrawElement::MakeText(Out, Layer + 1, Geo.ToPaintGeometry(FVector2f(S.X - 24.f, 30.f), FSlateLayoutTransform(FVector2f(14.f, S.Y * 0.80f))), Name.ToUpper(), F, ESlateDrawEffect::None, FLinearColor::White * Dim);
 	}
 	else
 	{

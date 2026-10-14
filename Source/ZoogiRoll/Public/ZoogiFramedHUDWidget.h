@@ -50,6 +50,13 @@ protected:
 	UFUNCTION() void OnExit();
 	UFUNCTION() void OnVolDown();
 	UFUNCTION() void OnVolUp();
+	UFUNCTION() void OnStone0();
+	UFUNCTION() void OnStone1();
+	UFUNCTION() void OnStone2();
+	UFUNCTION() void OnStone3();
+	UFUNCTION() void OnInfuse();
+	UFUNCTION() void OnGuard();
+	UFUNCTION() void OnSave();
 
 private:
 	AZoogiGameMode* GM() const;
@@ -58,6 +65,28 @@ private:
 	void SetPaused(bool bPause);
 	void RouteTray(AZoogiGameMode* G, float s);
 	FString HintText(const AZoogiGameMode* G) const;
+	// hud-v3: Awaken stones in the tray (artifact mode; replaces the old central picker popup while framed)
+	struct FTrayAwaken
+	{
+		TArray<TPair<int32, uint8>> Stones; // pick key (0 = drawn, 1.. = hand slot), EZoogiArtifact
+		TArray<FBox2D> StoneRects, BtnRects;
+		int32 Pick = 0;
+		bool bHuman = false;
+		float InfoX0 = 0.f, InfoX1 = 0.f, InfoY = 0.f;
+	};
+	bool TrayAwakenLayout(FTrayAwaken& Out) const;
+	void TickTrayAwaken();
+	void PaintTrayAwaken(const FGeometry& Geo, FSlateWindowElementList& Out, int32 Ly, float t) const;
+	void FireAwaken(FName Action, int32 Index);
+public:
+	static const TCHAR* TabletFor(uint8 Artifact);
+private:
+	UPROPERTY() TArray<TObjectPtr<UButton>> StoneBtns;
+	UPROPERTY() TArray<TObjectPtr<UButton>> ActBtns;
+	UPROPERTY() TObjectPtr<UTextBlock> MenuText;
+	TArray<int32> StoneKeys;
+	int32 TrayPick = 0;
+	float StonePop = 0.f;
 
 	UPROPERTY() TObjectPtr<UCanvasPanel> Root;
 	UPROPERTY() TObjectPtr<UZoogiFramedPainter> Painter;

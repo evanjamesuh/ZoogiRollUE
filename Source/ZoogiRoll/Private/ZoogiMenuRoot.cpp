@@ -1,5 +1,6 @@
 // menu: see ZoogiMenuRoot.h
 #include "ZoogiMenuRoot.h"
+#include "ZoogiHudArt.h"
 #include "ZoogiMenuWidget.h" // UZoogiButton (non-focusable button)
 #include "ZoogiGameMode.h"
 #include "ZoogiTypes.h"
@@ -817,6 +818,15 @@ void UZoogiMenuRoot::BuildZoogiSelect()
 }
 
 // ---- POWERS
+// hud-v3: Evan's element tablets (our own names / data) stand in for powers that have no art yet
+static UTexture2D* ZoogiPowerTablet(const FName& Type)
+{
+	const FString T = Type.ToString().ToLower();
+	const TCHAR* N = T == TEXT("void") ? TEXT("tablet_void") : T == TEXT("fire") ? TEXT("tablet_fire") : (T == TEXT("shock") || T == TEXT("storm")) ? TEXT("tablet_storm")
+		: T == TEXT("frost") ? TEXT("tablet_frost") : T == TEXT("earth") || T == TEXT("titan") ? TEXT("tablet_earth") : T == TEXT("water") ? TEXT("tablet_water")
+		: T == TEXT("nature") ? TEXT("tablet_nature") : T == TEXT("solar") ? TEXT("tablet_solar") : TEXT("tablet_arcane");
+	return ZoogiHudArt::Tex(N);
+}
 void UZoogiMenuRoot::BuildPowers()
 {
 	AZoogiGameMode* G = GM();
@@ -854,7 +864,9 @@ void UZoogiMenuRoot::BuildPowers()
 		const FName Id = D->PowerId;
 		const float X = 118.f + (i % 3) * 132.f, Y = 148.f + (i / 3) * 145.f;
 		bool bPh = false;
-		ImgTile(PowerArt(*D, bPh), FString(), [this, Id]() { PowerSel = Id; bDirty = true; }, X, Y, 124.f, 140.f, PowerSel == Id, !U->IsUnlocked(Id), ZMHex(TEXT("1A1A2E")), false, 20);
+		UTexture2D* PTex = PowerArt(*D, bPh);
+		if (bPh) if (UTexture2D* TT = ZoogiPowerTablet(D->Type)) PTex = TT;
+		ImgTile(PTex, FString(), [this, Id]() { PowerSel = Id; bDirty = true; }, X, Y, 124.f, 140.f, PowerSel == Id, !U->IsUnlocked(Id), ZMHex(TEXT("1A1A2E")), false, 20);
 		if (bPh) PowerPlaceholderText(*D, X, Y, 124.f, 140.f);
 		if (U->GetEquipped(Z.Id) == Id)
 		{
@@ -873,6 +885,7 @@ void UZoogiMenuRoot::BuildPowers()
 	Panel(528.f, 86.f, 394.f, 238.f, ZMPViolet);
 	bool bSPh = false;
 	UTexture2D* STex = PowerArt(*S, bSPh);
+	if (bSPh) if (UTexture2D* TT = ZoogiPowerTablet(S->Type)) STex = TT;
 	ImgTile(STex, bSPh ? FString() : FString(TEXT("PREVIEW")), [this]() { ShowComingSoon(TEXT("Power preview video: Animations & Powers' visuals land here.")); },
 		542.f, 98.f, 172.f, 214.f, false, !bUnlocked, ZMHex(TEXT("15122A")), false, 26);
 	if (bSPh) PowerPlaceholderText(*S, 542.f, 98.f, 172.f, 214.f);

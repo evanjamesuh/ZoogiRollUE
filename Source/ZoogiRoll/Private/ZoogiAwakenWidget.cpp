@@ -1,4 +1,5 @@
 #include "ZoogiAwakenWidget.h"
+#include "ZoogiFramedLayout.h"
 #include "ZoogiCardHandWidget.h"
 #include "ZoogiCards.h"
 #include "ZoogiMenuWidget.h"
@@ -597,7 +598,7 @@ void UZoogiAwakenWidget::Refresh(float DeltaSeconds, bool bHideAll)
 	if (G && Root && !bHideAll && G->Phase == EZoogiPhase::Aiming)
 	{
 		AZoogiBall* B = G->GetActiveBall();
-		bWantAwaken = G->Stage == EZoogiStage::Awaken && !G->bAwakenDone && B && B->Artifact && !G->CardsOn(); // v3: Canvas card panel instead
+		bWantAwaken = G->Stage == EZoogiStage::Awaken && !G->bAwakenDone && B && B->Artifact && !G->CardsOn() && !ZoogiFramed::IsActive(GetWorld()); // v3: Canvas card panel instead; hud-v3: framed = stones in the tray
 		bWantAim = G->IsHumanAiming() && G->IsAimStep();
 		bWantCards = G->CardsOn() && G->Stage == EZoogiStage::Awaken && !G->bAwakenDone && B && G->IsHumanAiming() && !UZoogiCardHandWidget::IsEnabled(G); // cardui: -ZoogiCardHandUI hand replaces this panel
 	}

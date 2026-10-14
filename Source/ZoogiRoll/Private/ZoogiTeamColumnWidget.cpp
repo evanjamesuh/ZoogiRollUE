@@ -10,6 +10,7 @@
 #include "ZoogiCombo.h"
 #include "ZoogiBattleStateMachine.h"
 #include "ZoogiFramedHUDWidget.h"
+#include "ZoogiHudArt.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "Rendering/DrawElements.h"
@@ -64,97 +65,94 @@ void UZoogiTeamColumnWidget::NativeTick(const FGeometry& Geo, float Dt)
 
 int32 UZoogiTeamColumnWidget::NativePaint(const FPaintArgs& Args, const FGeometry& Geo, const FSlateRect& Cull, FSlateWindowElementList& Out, int32 Layer, const FWidgetStyle& Style, bool bParentEnabled) const
 {
+	// hud-v3 (Evan's 3:53 PM target): per Zoogi a carved stone group = header bar (+ gem), card panel (portrait ring,
+	// name, CPU / TURN chips, score, ORBS / KOS / HAND, status chips, EPISODE rune bar), then the acting Zoogi's ACTION
+	// box or a carved emblem plate; diamond connectors between groups. Art from ZoogiHudArt, data unchanged.
 	using namespace ZoogiUIStyle;
+	namespace HA = ZoogiHudArt;
 	const AZoogiGameMode* G = GetWorld() ? GetWorld()->GetAuthGameMode<AZoogiGameMode>() : nullptr;
 	const FVector2D S = Geo.GetLocalSize();
 	if (!G || S.X < 20.f || S.Y < 20.f) return Layer;
-	const float u = UScale;
 	const int32 L = Layer;
-	const FLinearColor SC = SideColor(Side);
-	auto Font = [&](float Sz) { return BoldFont(FMath::Max(7, FMath::RoundToInt(Sz * u)), FMath::Max(1.f, 2.f * u)); };
-	auto Txt = [&](int32 Lay, float X, float Y, const FString& T, float Sz, const FLinearColor& C) { ZoogiUIStyle::SText(Out, Lay, Geo, FVector2D(X, Y), T, Font(Sz), C); };
-	auto TxtW = [&](const FString& T, float Sz) { return FSlateApplication::IsInitialized() ? (float)FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(T, Font(Sz)).X : T.Len() * Sz * u * 0.62f; };
-
-	// Column panel + header
-	ZoogiUIStyle::SPanel(Out, L, Geo, FVector2D::ZeroVector, S, FLinearColor(0.02f, 0.08f, 0.30f, 0.92f), SC, 16.f * u);
-	FString Header;
-	if (G->bComboMode) Header = AZoogiGameMode::TeamName(Side);
-	else { for (const AZoogiBall* B : G->Balls) if (B && SideOf(G, B) == Side) Header += FString::Printf(TEXT("%sP%d"), Header.IsEmpty() ? TEXT("") : TEXT(" + "), B->PlayerIndex + 1); }
-	Header = FString::Printf(TEXT("%s  %s"), Side == 0 ? TEXT("FRIENDLY") : TEXT("RIVAL"), *Header);
-	ZoogiUIStyle::SBox(Out, L + 4, Geo, FVector2D(10.f * u, 10.f * u), FVector2D(S.X - 20.f * u, 34.f * u), FLinearColor(SC.R * 0.45f, SC.G * 0.45f, SC.B * 0.45f, 0.95f), Outline, 10.f * u, 3.f * u);
-	Txt(L + 6, 22.f * u, 14.f * u, Header, 15.f, FLinearColor::White);
-
+	const float t0 = TScale;
+	const bool bOv = HA::Tex(TEXT("overlay")) != nullptr; // hud-v3 overlay: frames / plates come from the full-frame image                                  // local px per target px
+	auto FontT = [&](float Sz, float tt) { return BoldFont(FMath::Max(9, FMath::RoundToInt(Sz * tt)), FMath::Max(1.f, 1.6f * tt)); };
+	auto Txt = [&](int32 Lay, const FVector2D& P, const FString& T, float Sz, float tt, const FLinearColor& C, float Ax = 0.f, float Ay = 0.5f) { HA::Text(Out, Lay, Geo, P, T, FontT(Sz, tt), C, Ax, Ay); };
+	auto TxtW = [&](const FString& T, float Sz, float tt) { return (float)HA::Measure(T, FontT(Sz, tt)).X; };
 	const UZoogiBattleStateMachine* SM = UZoogiBattleStateMachine::Get(G);
 	const float Cap = SM ? FMath::Max(1.f, SM->GetTuning().EnergyCap) : 100.f;
 	const UZoogiCardSubsystem* Cards = G->CardsOn() ? UZoogiCardSubsystem::Get(G) : nullptr;
 	TArray<const AZoogiBall*> Mine;
 	for (const AZoogiBall* B : G->Balls) if (B && SideOf(G, B) == Side) Mine.Add(B);
-	const float Top = 54.f * u;
-	const float ComboH = G->bComboMode ? 70.f * u : 0.f;
-	// word wrap to a pixel width (measured with the real font)
-	auto Wrap = [&](const FString& T, float Sz, float MaxW, int32 MaxLines)
-	{
-		TArray<FString> Words, Lines; T.ParseIntoArrayWS(Words);
-		FString Cur;
-		for (const FString& Wd : Words)
-		{
-			const FString Try = Cur.IsEmpty() ? Wd : Cur + TEXT(" ") + Wd;
-			if (!Cur.IsEmpty() && TxtW(Try, Sz) > MaxW) { Lines.Add(Cur); Cur = Wd; } else Cur = Try;
-		}
-		if (!Cur.IsEmpty()) Lines.Add(Cur);
-		if (Lines.Num() > MaxLines) { Lines.SetNum(MaxLines); Lines.Last() += TEXT(".."); }
-		return Lines;
-	};
-	// ACTION box content for the acting Zoogi in this column (prompt / status / confirmation + Battle prompt)
+	if (Mine.Num() == 0) return L;
+	const float ComboH = G->bComboMode ? 46.f * t0 : 0.f;
+	const float Gap = 6.f * t0;
+	const float GH = (S.Y - ComboH - Gap * (Mine.Num() - 1)) / Mine.Num();
 	const AZoogiBall* ActB = nullptr;
 	if (G->Phase != EZoogiPhase::GameOver && G->Phase != EZoogiPhase::Forming) for (const AZoogiBall* B : Mine) if (B->PlayerIndex == G->ActivePlayer) ActB = B;
-	const float BoxW = S.X - 20.f * u, BoxIn = BoxW - 28.f * u;
-	TArray<FString> ALines, BLines;
-	FZoogiBattleHudPrompt BP;
-	bool bBP = false;
-	float ActionH = 0.f;
-	if (ActB)
+	const FLinearColor ScoreC = Side == 0 ? FLinearColor(0.55f, 0.85f, 1.f) : FLinearColor(1.f, 0.45f, 0.4f);
+	for (int32 gi = 0; gi < Mine.Num(); ++gi)
 	{
-		ALines = Wrap(LastPrompt, 12.5f, BoxIn, bCompact ? 3 : 4);
-		bBP = SM && SM->GetHudPrompt(BP);
-		if (bBP) BLines = Wrap(BP.Body, 11.5f, BoxIn, 2);
-		ActionH = 36.f * u + ALines.Num() * 19.f * u + 18.f * u; // header row + text + padding + 8 gap
-		if (bBP) ActionH += 34.f * u + BLines.Num() * 17.f * u + (BP.Frac >= 0.f ? 20.f * u : 0.f);
-	}
-	const float CardH = FMath::Min(bCompact ? 150.f * u : 178.f * u, (S.Y - Top - ComboH - 10.f * u - ActionH) / FMath::Max(1, Mine.Num()) - 8.f * u);
-	float Y = Top;
-	for (const AZoogiBall* B : Mine)
-	{
+		const AZoogiBall* B = Mine[gi];
+		const float t = t0 * FMath::Clamp(GH / 248.f, 0.62f, 1.f); // squeeze on short columns
+		const float Y = gi * (GH + Gap), W = S.X;
 		const bool bActive = B->PlayerIndex == G->ActivePlayer && G->Phase != EZoogiPhase::GameOver;
-		const FLinearColor PC = ZoogiUtil::PlayerColor(B->PlayerIndex);
-		const float X = 10.f * u, W = S.X - 20.f * u;
 		const float Slide = bActive ? (1.f - FMath::Square(1.f - TurnAnim)) : 1.f;
-		const float Glow = bActive ? 0.55f + 0.45f * FMath::Sin(Time * 5.f) : 0.f;
-		const float ExtraH = B == ActB ? ActionH : 0.f;
-		if (bActive) ZoogiUIStyle::SBox(Out, L + 1, Geo, FVector2D(X - 5.f * u, Y - 5.f * u), FVector2D(W + 10.f * u, CardH + ExtraH + 10.f * u), FLinearColor(Gold.R, Gold.G, Gold.B, 0.35f + 0.4f * Glow), FLinearColor::Transparent, 16.f * u, 0.f);
-		const FLinearColor Fill = B->bOut || B->bKnockedOut ? FLinearColor(0.10f, 0.13f, 0.30f, 0.95f) : FLinearColor(0.04f, 0.16f, 0.48f, 0.97f);
-		ZoogiUIStyle::SBox(Out, L + 2, Geo, FVector2D(X + (1.f - Slide) * (Side == 0 ? -30.f : 30.f) * u, Y), FVector2D(W, CardH), Fill, bActive ? Gold : Outline, 14.f * u, 3.5f * u);
-		ZoogiUIStyle::SBox(Out, L + 3, Geo, FVector2D(X + 12.f * u, Y + 4.f * u), FVector2D(W - 24.f * u, 4.f * u), FLinearColor(1.f, 1.f, 1.f, 0.15f), FLinearColor::Transparent, 2.f, 0.f);
-		ZoogiUIStyle::SBox(Out, L + 3, Geo, FVector2D(X + 3.5f * u, Y + 10.f * u), FVector2D(6.f * u, CardH - 20.f * u), SC, FLinearColor::Transparent, 3.f * u, 0.f);
-		// portrait
-		const float PS = FMath::Min(76.f * u, CardH * 0.46f);
-		const FVector2D PP(X + 16.f * u, Y + 12.f * u);
-		ZoogiUIStyle::SBox(Out, L + 3, Geo, PP - FVector2D(4.f * u, 4.f * u), FVector2D(PS + 8.f * u, PS + 8.f * u), PC, Outline, 12.f * u, 3.f * u);
+		const float X = (1.f - Slide) * (Side == 0 ? -24.f : 24.f) * t;
+		// group panel (+ active turn glow)
+		if (bActive && !bOv) ZoogiUIStyle::SBox(Out, L, Geo, FVector2D(X - 4.f * t, Y - 4.f * t), FVector2D(W + 8.f * t, GH + 8.f * t), FLinearColor(HA::Cyan.R, HA::Cyan.G, HA::Cyan.B, 0.18f + 0.14f * FMath::Sin(Time * 4.f)), FLinearColor::Transparent, 12.f * t, 0.f);
+		if (!bOv) HA::Nine(Out, L + 1, Geo, FVector2D(X, Y), FVector2D(W, GH), TEXT("group_panel"), FMargin(10.f), t);
+		// header bar: team label on the first group, a side gem at the right
+		if (!bOv) HA::Nine(Out, L + 2, Geo, FVector2D(X + 8.f * t, Y + 9.f * t), FVector2D(W - 16.f * t, 23.f * t), TEXT("header_bar"), FMargin(8.f, 6.f, 8.f, 6.f), t);
+		if (gi == 0 && !bOv)
+		{
+			FString Head = G->bComboMode ? AZoogiGameMode::TeamName(Side) : FString::Printf(TEXT("%s  P%d"), Side == 0 ? TEXT("FRIENDLY") : TEXT("RIVAL"), B->PlayerIndex + 1);
+			Txt(L + 6, FVector2D(X + 20.f * t, Y + 20.5f * t), Head.ToUpper(), 10.5f, t, FLinearColor(0.92f, 0.92f, 0.9f));
+		}
+		const TCHAR* GemN = gi == 0 ? (Side == 0 ? TEXT("gem_blue") : TEXT("gem_orange")) : (Side == 1 ? TEXT("gem_teal") : nullptr);
+		if (GemN && !bOv) HA::Img(Out, L + 3, Geo, FVector2D(X + W - 44.f * t, Y + 3.f * t), FVector2D(34.f, 31.f) * t, GemN);
+		// card panel
+		const FVector2D CP(X + 10.f * t, Y + 38.f * t), CS(W - 20.f * t, 133.f * t);
+		if (!bOv) HA::Nine(Out, L + 2, Geo, CP, CS, TEXT("card_panel"), FMargin(10.f), t);
+		// portrait in a status ring: cyan friendly, red rival, bronze when out / knocked out
+		const FVector2D PC = CP + FVector2D(36.f, 35.f) * t;
+		const float PR = 29.f * t;
+		const bool bDim = B->bOut || B->bKnockedOut;
+		if (!bOv) ZoogiUIStyle::SBox(Out, L + 3, Geo, PC - FVector2D(PR, PR) * 0.8f, FVector2D(PR, PR) * 1.6f, FLinearColor(0.05f, 0.07f, 0.1f, 1.f), FLinearColor::Transparent, PR * 0.8f, 0.f);
 		if (const FSlateBrush* Br = Portrait(B->Def.Id))
-			FSlateDrawElement::MakeBox(Out, L + 4, Geo.ToPaintGeometry(FVector2f(PS, PS), FSlateLayoutTransform(FVector2f(PP))), Br, ESlateDrawEffect::None, B->bOut ? FLinearColor(0.5f, 0.55f, 0.8f) : FLinearColor::White);
-		else ZoogiUIStyle::SBox(Out, L + 4, Geo, PP, FVector2D(PS, PS), B->Def.Color, FLinearColor::Transparent, 9.f * u, 0.f);
-		// name, tag, score
-		const float TX = PP.X + PS + 12.f * u;
-		Txt(L + 6, TX, Y + 10.f * u, FString::Printf(TEXT("P%d %s"), B->PlayerIndex + 1, *B->Def.Name.ToUpper()), 17.f, bActive ? FLinearColor(1.f, 0.95f, 0.6f) : FLinearColor::White);
-		const FString Tag = B->bCPU ? TEXT("CPU") : TEXT("HUMAN");
-		const FLinearColor TagC = B->bCPU ? FLinearColor(1.f, 0.55f, 0.25f) : Mint;
-		ZoogiUIStyle::SBox(Out, L + 5, Geo, FVector2D(TX, Y + 38.f * u), FVector2D(TxtW(Tag, 12.f) + 16.f * u, 22.f * u), FLinearColor(TagC.R * 0.5f, TagC.G * 0.5f, TagC.B * 0.5f, 1.f), Outline, 8.f * u, 2.f * u);
-		Txt(L + 6, TX + 8.f * u, Y + 40.f * u, Tag, 12.f, FLinearColor::White);
-		if (bActive) { const float TW2 = TxtW(TEXT("TURN"), 12.f) + 16.f * u; ZoogiUIStyle::SBox(Out, L + 5, Geo, FVector2D(TX + TxtW(Tag, 12.f) + 22.f * u, Y + 38.f * u), FVector2D(TW2, 22.f * u), FLinearColor(0.85f, 0.52f, 0.04f, 1.f), Outline, 8.f * u, 2.f * u); Txt(L + 6, TX + TxtW(Tag, 12.f) + 30.f * u, Y + 40.f * u, TEXT("TURN"), 12.f, FLinearColor::White); }
+		{
+			if (bOv) { const float PS = 54.f * t; FSlateBrush SB = *Br; SB.DrawAs = ESlateBrushDrawType::Image; FSlateDrawElement::MakeBox(Out, L + 4, Geo.ToPaintGeometry(FVector2f(PS, PS), FSlateLayoutTransform(FVector2f(PC - FVector2D(PS, PS) * 0.5f))), &SB, ESlateDrawEffect::None, bDim ? FLinearColor(0.45f, 0.45f, 0.5f) : FLinearColor::White); } else {
+			FSlateBrush RB = *Br; RB.DrawAs = ESlateBrushDrawType::RoundedBox; RB.OutlineSettings = FSlateBrushOutlineSettings(PR * 0.78f);
+			RB.OutlineSettings.RoundingType = ESlateBrushRoundingType::HalfHeightRadius;
+			FSlateDrawElement::MakeBox(Out, L + 4, Geo.ToPaintGeometry(FVector2f(FVector2D(PR, PR) * 1.56f), FSlateLayoutTransform(FVector2f(PC - FVector2D(PR, PR) * 0.78f))), &RB, ESlateDrawEffect::None, bDim ? FLinearColor(0.45f, 0.45f, 0.5f) : FLinearColor::White); }
+		}
+		else ZoogiUIStyle::SBox(Out, L + 4, Geo, PC - FVector2D(PR, PR) * 0.78f, FVector2D(PR, PR) * 1.56f, B->Def.Color, FLinearColor::Transparent, PR * 0.78f, 0.f);
+		const TCHAR* Ring = bDim ? TEXT("ring_bronze") : (Side == 0 ? TEXT("ring_cyan") : TEXT("ring_red"));
+		const float RP = bActive ? 1.f + 0.04f * FMath::Sin(Time * 5.f) : 1.f;
+		if (bOv) { if (bActive) HA::Img(Out, L + 5, Geo, PC - FVector2D(31.f, 31.f) * t, FVector2D(62.f, 62.f) * t, TEXT("prompt_cyanbox"), FLinearColor(1.f, 1.f, 1.f, 0.6f + 0.4f * FMath::Sin(Time * 5.f))); }
+		else HA::Img(Out, L + 5, Geo, PC - FVector2D(PR, PR) * RP, FVector2D(PR, PR) * 2.f * RP, Ring);
+		// name, chips, score, stats
+		const float TX = CP.X + 72.f * t;
+		{
+			// fit the name between the portrait and the score: shrink to 9.5, then trim with ".."
+			FString Nm = FString::Printf(TEXT("P%d %s"), B->PlayerIndex + 1, *B->Def.Name.ToUpper());
+			const float MaxW = CP.X + CS.X - 12.f * t - TxtW(FString::FromInt(B->Score), 27.f, t) - 8.f * t - TX;
+			float NS = 13.f;
+			while (NS > 9.5f && TxtW(Nm, NS, t) > MaxW) NS -= 0.5f;
+			while (Nm.Len() > 4 && TxtW(Nm, NS, t) > MaxW) Nm = Nm.LeftChop(3) + TEXT("..");
+			Txt(L + 6, FVector2D(TX, CP.Y + 17.f * t), Nm, NS, t, bActive ? FLinearColor(1.f, 0.95f, 0.75f) : FLinearColor(0.95f, 0.93f, 0.88f));
+		}
+		float CX = TX;
+		auto Chip = [&](const TCHAR* Art, const FString& Lb, float Wd)
+		{
+			HA::Nine(Out, L + 5, Geo, FVector2D(CX, CP.Y + 28.f * t), FVector2D(Wd, 16.f * t), Art, FMargin(7.f, 5.f, 7.f, 5.f), t);
+			Txt(L + 6, FVector2D(CX + Wd * 0.5f, CP.Y + 36.f * t), Lb, 8.f, t, FLinearColor::White, 0.5f);
+			CX += Wd + 5.f * t;
+		};
+		Chip(TEXT("chip_purple"), B->bCPU ? TEXT("CPU") : TEXT("YOU"), FMath::Max(34.f * t, TxtW(B->bCPU ? TEXT("CPU") : TEXT("YOU"), 8.f, t) + 14.f * t));
+		if (bActive) Chip(TEXT("chip_gold"), TEXT("TURN"), 41.f * t);
 		const float Pop = ScorePop.Contains(B->PlayerIndex) ? ScorePop[B->PlayerIndex] : 0.f;
-		const FString Sc = FString::FromInt(B->Score);
-		Txt(L + 6, X + W - 16.f * u - TxtW(Sc, 30.f + 14.f * Pop), Y + 6.f * u - 6.f * Pop * u, Sc, 30.f + 14.f * Pop, FMath::Lerp(PC + FLinearColor(0.25f, 0.25f, 0.25f, 0.f), Gold, Pop));
-		// stats line (the old scoreboard data)
+		Txt(L + 6, FVector2D(CP.X + CS.X - 12.f * t, CP.Y + 19.f * t - 4.f * Pop * t), FString::FromInt(B->Score), 27.f + 9.f * Pop, t, FMath::Lerp(ScoreC, HA::GoldText, Pop), 1.f);
 		int32 Hand = -1;
 		int32 Played = 0;
 		if (Cards) { if (const FZoogiCardPlayerState* PS2 = Cards->Rules().Player(B->PlayerIndex)) { Hand = PS2->Hand.Num(); if (PS2->bCommitted) Played = PS2->Committed.Num(); } }
@@ -162,8 +160,8 @@ int32 UZoogiTeamColumnWidget::NativePaint(const FPaintArgs& Args, const FGeometr
 		FString Stats = FString::Printf(TEXT("ORBS %d  KOS %d"), B->OrbsScored, B->KnockOuts);
 		if (Hand >= 0) Stats += FString::Printf(TEXT("  HAND %d"), Hand);
 		if (Played > 0 && B == ActB) Stats += FString::Printf(TEXT("  PLAYED %d"), Played); // Oct 14: cards committed this turn
-		Txt(L + 6, TX, Y + 66.f * u, Stats, 11.5f, FLinearColor(0.72f, 0.9f, 1.f));
-		// status effects + power indicators (chips)
+		Txt(L + 6, FVector2D(TX, CP.Y + 54.f * t), Stats, 8.5f, t, FLinearColor(0.82f, 0.88f, 0.95f));
+		// status / power chips (row under the portrait)
 		TArray<TPair<FString, FLinearColor>> Chips;
 		if (B->bKnockedOut) Chips.Add({ TEXT("KO"), LossRed }); else if (B->bOut) Chips.Add({ TEXT("OUT"), LossRed });
 		if (B->StunTurns > 0) Chips.Add({ FString::Printf(TEXT("STUN %d"), B->StunTurns), FLinearColor(0.85f, 0.6f, 1.f) });
@@ -175,109 +173,110 @@ int32 UZoogiTeamColumnWidget::NativePaint(const FPaintArgs& Args, const FGeometr
 			if (B->Artifact->Infused != EZoogiArtifact::None) Chips.Add({ TEXT("INFUSED"), Violet });
 		}
 		if (!G->bArtifactMode && !G->CardsOn()) Chips.Add({ FString::Printf(TEXT("POWER %d/3"), B->Charges), Violet });
-		float CX = X + 16.f * u;
-		const float CY = Y + PS + 22.f * u;
+		float SX = CP.X + 8.f * t;
 		for (const auto& C : Chips)
 		{
-			const float CW = TxtW(C.Key, 11.f) + 14.f * u;
-			if (CX + CW > X + W - 8.f * u) break;
-			ZoogiUIStyle::SBox(Out, L + 5, Geo, FVector2D(CX, CY), FVector2D(CW, 20.f * u), FLinearColor(C.Value.R * 0.45f, C.Value.G * 0.45f, C.Value.B * 0.45f, 1.f), Outline, 7.f * u, 2.f * u);
-			Txt(L + 6, CX + 7.f * u, CY + 2.f * u, C.Key, 11.f, FLinearColor::White);
-			CX += CW + 6.f * u;
+			const float CW = TxtW(C.Key, 7.5f, t) + 12.f * t;
+			if (SX + CW > CP.X + CS.X - 8.f * t) break;
+			ZoogiUIStyle::SBox(Out, L + 5, Geo, FVector2D(SX, CP.Y + 72.f * t), FVector2D(CW, 14.f * t), FLinearColor(C.Value.R * 0.35f, C.Value.G * 0.35f, C.Value.B * 0.35f, 0.95f), C.Value, 5.f * t, 1.f * t);
+			Txt(L + 6, FVector2D(SX + CW * 0.5f, CP.Y + 79.f * t), C.Key, 7.5f, t, FLinearColor::White, 0.5f);
+			SX += CW + 4.f * t;
 		}
 		if (G->bComboMode)
-		{
-			// Ring marks: the only "lives" stat (2v2). Real data, drawn as pips (no invented HP).
-			for (int32 m = 0; m < 2; ++m)
-			{
-				const bool bOn = m < B->RingMarks && !B->bKnockedOut;
-				ZoogiUIStyle::SBox(Out, L + 5, Geo, FVector2D(X + W - 60.f * u + m * 24.f * u, CY), FVector2D(18.f * u, 18.f * u), bOn ? Gold : Track, Outline, 5.f * u, 2.f * u);
-			}
-		}
-		// Episode Energy (real value from UZoogiBattleStateMachine), juice + READY
+			for (int32 m = 0; m < 2; ++m) HA::Img(Out, L + 5, Geo, FVector2D(CP.X + CS.X - 40.f * t + m * 17.f * t, CP.Y + 68.f * t), FVector2D(16.f, 16.f) * t, m < B->RingMarks && !B->bKnockedOut ? TEXT("mark_cyan") : TEXT("mark_cracked"));
+		// EPISODE rune bar (ui kit gauge): empty bar, the full bar revealed by UV up to the value
 		if (SM && SM->IsFlowOn())
 		{
 			const float E = SM->GetEnergy(B->PlayerIndex);
 			const bool bReady = E >= Cap - 0.01f;
-			const float BY = Y + CardH - 30.f * u;
-			const FString EL = bReady ? TEXT("EPISODE READY!") : FString::Printf(TEXT("EPISODE %.0f/%.0f"), E, Cap);
-			Txt(L + 6, X + 16.f * u, BY - 18.f * u, EL, 11.f, bReady ? FMath::Lerp(Gold, FLinearColor::White, 0.5f + 0.5f * FMath::Sin(Time * 8.f)) : EnergyA);
 			const ZoogiUIStyle::FBarJuice* J = EnergyJuice.Find(B->PlayerIndex);
-			if (bReady) ZoogiUIStyle::SBox(Out, L + 6, Geo, FVector2D(X + 10.f * u, BY - 6.f * u), FVector2D(W - 50.f * u, 26.f * u), FLinearColor(Gold.R, Gold.G, Gold.B, 0.3f + 0.3f * FMath::Sin(Time * 8.f)), FLinearColor::Transparent, 12.f * u, 0.f);
-			ZoogiUIStyle::SBar(Out, L + 7, Geo, FVector2D(X + 16.f * u, BY), FVector2D(W - 62.f * u, 14.f * u), E / Cap, bReady ? Gold : EnergyA, bReady ? FLinearColor(1.f, 0.55f, 0.1f) : EnergyB, J, 4);
-		}
-		if (B == ActB)
-		{
-			// ACTION box: attached under the acting Zoogi's card, slides in on the turn change, flashes on a new prompt
-			const float AY = Y + CardH + 4.f * u, AH = ActionH - 8.f * u;
-			const float Sl2 = 1.f - FMath::Square(1.f - PromptAnim);
-			const float AX = X + (1.f - Slide) * (Side == 0 ? -30.f : 30.f) * u;
-			ZoogiUIStyle::SBox(Out, L + 2, Geo, FVector2D(AX, AY), FVector2D(W, AH), FLinearColor(0.02f, 0.07f, 0.28f, 0.98f), FMath::Lerp(FLinearColor::White, Gold, Sl2), 12.f * u, 3.f * u);
-			ZoogiUIStyle::SBox(Out, L + 3, Geo, FVector2D(AX + 3.5f * u, AY + 8.f * u), FVector2D(5.f * u, AH - 16.f * u), SC, FLinearColor::Transparent, 2.5f * u, 0.f);
-			const FString AL = UZoogiFramedHUDWidget::ActionLabel(G);
-			const float LW = TxtW(AL, 11.f) + 18.f * u;
-			ZoogiUIStyle::SBox(Out, L + 4, Geo, FVector2D(AX + 14.f * u, AY + 8.f * u), FVector2D(LW, 22.f * u), FLinearColor(SC.R * 0.5f, SC.G * 0.5f, SC.B * 0.5f, 1.f), Outline, 8.f * u, 2.f * u);
-			Txt(L + 6, AX + 23.f * u, AY + 10.f * u, AL, 11.f, FLinearColor::White);
-			Txt(L + 6, AX + 14.f * u + LW + 8.f * u, AY + 11.f * u, B->bCPU ? TEXT("CPU") : TEXT("YOUR MOVE"), 10.f, B->bCPU ? MutedText : Mint);
-			float TY = AY + 36.f * u + (1.f - Sl2) * 6.f * u;
-			for (const FString& Ln : ALines) { Txt(L + 6, AX + 16.f * u, TY, Ln, 12.5f, FLinearColor(1.f, 1.f, 1.f, 0.4f + 0.6f * Sl2)); TY += 19.f * u; }
-			if (bBP)
+			const float F = FMath::Clamp(J ? J->Shown : E / Cap, 0.f, 1.f);
+			Txt(L + 6, FVector2D(CP.X + 9.f * t, CP.Y + 98.f * t), bReady ? FString(TEXT("EPISODE READY!")) : FString::Printf(TEXT("EPISODE %.0f/%.0f"), E, Cap), 8.f, t, bReady ? FMath::Lerp(HA::GoldText, FLinearColor::White, 0.5f + 0.5f * FMath::Sin(Time * 8.f)) : HA::Cyan);
+			const FVector2D BP(CP.X + 6.f * t, CP.Y + 106.f * t), BS(CS.X - 12.f * t, 16.f * t);
+			HA::Img(Out, L + 5, Geo, BP, BS, TEXT("rbar_empty"));
+			if (F > 0.001f)
 			{
-				TY += 6.f * u;
-				ZoogiUIStyle::SBox(Out, L + 3, Geo, FVector2D(AX + 10.f * u, TY - 4.f * u), FVector2D(W - 20.f * u, AY + AH - TY - 2.f * u), FLinearColor(BP.Accent.R * 0.25f, BP.Accent.G * 0.25f, BP.Accent.B * 0.3f, 0.95f), BP.Accent, 9.f * u, 2.f * u);
-				Txt(L + 6, AX + 18.f * u, TY, BP.Title.Left(34), 12.f, BP.Accent);
-				TY += 22.f * u;
-				for (const FString& Ln : BLines) { Txt(L + 6, AX + 18.f * u, TY, Ln, 11.5f, FLinearColor::White); TY += 17.f * u; }
-				if (BP.Frac >= 0.f)
+				const FVector2D FS = HA::SizeT(TEXT("rbar_full"));
+				HA::Part(Out, L + 6, Geo, BP, FVector2D(BS.X * F, BS.Y), TEXT("rbar_full"), FBox2D(FVector2D::ZeroVector, FVector2D(FS.X * F, FS.Y)), bReady ? FLinearColor(1.f, 0.9f, 0.5f) : FLinearColor::White);
+			}
+			if (J && J->Flash > 0.f) ZoogiUIStyle::SBox(Out, L + 7, Geo, BP, BS, FLinearColor(1.f, 1.f, 1.f, 0.4f * J->Flash), FLinearColor::Transparent, 6.f * t, 0.f);
+		}
+		// bottom of the group: the acting Zoogi's ACTION box, else the carved emblem plate
+		const float BY = CP.Y + CS.Y + 5.f * t, BH = Y + GH - 9.f * t - BY;
+		if (B == ActB && BH > 20.f * t)
+		{
+			const float Sl2 = 1.f - FMath::Square(1.f - PromptAnim);
+			const FVector2D AP(X + 10.f * t, BY), AS(W - 20.f * t, FMath::Min(BH, 64.f * t));
+			HA::Nine(Out, L + 2, Geo, AP, AS, TEXT("action_box"), FMargin(9.f, 9.f, 9.f, 9.f), t, FMath::Lerp(FLinearColor(1.4f, 1.3f, 1.f), FLinearColor::White, Sl2));
+			const FString AL = UZoogiFramedHUDWidget::ActionLabel(G);
+			const float LW = FMath::Max(59.f * t, TxtW(AL, 8.f, t) + 16.f * t);
+			HA::Nine(Out, L + 4, Geo, AP + FVector2D(10.f, 6.f) * t, FVector2D(LW, 15.f * t), TEXT("chip_blue"), FMargin(7.f, 5.f, 7.f, 5.f), t);
+			Txt(L + 6, AP + FVector2D(10.f * t + LW * 0.5f, 13.5f * t), AL, 8.f, t, FLinearColor::White, 0.5f);
+			Txt(L + 6, AP + FVector2D(16.f * t + LW, 13.5f * t), B->bCPU ? TEXT("CPU") : TEXT("YOUR MOVE"), 7.5f, t, B->bCPU ? FLinearColor(0.75f, 0.78f, 0.82f) : HA::Cyan);
+			// prompt (wrapped) + Battle prompt title / bar when there is one
+			TArray<FString> Words; LastPrompt.ParseIntoArrayWS(Words);
+			FString Line; float LY = AP.Y + 31.f * t; const float MaxW = AS.X - 20.f * t; int32 NL = 0;
+			for (const FString& Wd : Words)
+			{
+				const FString Try = Line.IsEmpty() ? Wd : Line + TEXT(" ") + Wd;
+				if (!Line.IsEmpty() && TxtW(Try, 9.f, t) > MaxW) { Txt(L + 6, FVector2D(AP.X + 10.f * t, LY), Line, 9.f, t, FLinearColor(1.f, 1.f, 1.f, 0.4f + 0.6f * Sl2)); LY += 13.f * t; Line = Wd; if (++NL >= 2) { Line += TEXT(".."); break; } }
+				else Line = Try;
+			}
+			Txt(L + 6, FVector2D(AP.X + 10.f * t, LY), Line, 9.f, t, FLinearColor(1.f, 1.f, 1.f, 0.4f + 0.6f * Sl2));
+			FZoogiBattleHudPrompt BPr;
+			if (SM && SM->GetHudPrompt(BPr) && BH > 70.f * t)
+			{
+				const float PY = AP.Y + AS.Y + 4.f * t;
+				Txt(L + 6, FVector2D(AP.X + 10.f * t, PY + 6.f * t), BPr.Title.Left(30), 8.5f, t, BPr.Accent);
+				if (BPr.Frac >= 0.f && PY + 26.f * t < Y + GH - 8.f * t)
 				{
-					const float BX0 = AX + 18.f * u, BW0 = W - 36.f * u, BH0 = 10.f * u, BY0 = TY + 3.f * u;
-					if (BP.RailEarly >= 0.f)
-					{
-						const float We = BW0 * BP.RailEarly, Wc = BW0 * FMath::Max(0.f, BP.RailCenter);
-						ZoogiUIStyle::SBox(Out, L + 6, Geo, FVector2D(BX0, BY0), FVector2D(We, BH0), FLinearColor(1.f, 0.85f, 0.2f), FLinearColor::Transparent, 2.f, 0.f);
-						ZoogiUIStyle::SBox(Out, L + 6, Geo, FVector2D(BX0 + We, BY0), FVector2D(Wc, BH0), FLinearColor(0.3f, 0.95f, 0.45f), FLinearColor::Transparent, 2.f, 0.f);
-						ZoogiUIStyle::SBox(Out, L + 6, Geo, FVector2D(BX0 + We + Wc, BY0), FVector2D(FMath::Max(0.f, BW0 - We - Wc), BH0), FLinearColor(1.f, 0.42f, 0.22f), FLinearColor::Transparent, 2.f, 0.f);
-						ZoogiUIStyle::SBox(Out, L + 7, Geo, FVector2D(BX0 + BW0 * BP.Frac - 3.f * u, BY0 - 4.f * u), FVector2D(6.f * u, BH0 + 8.f * u), FLinearColor::White, Outline, 2.f * u, 1.5f * u);
-					}
-					else ZoogiUIStyle::SBar(Out, L + 6, Geo, FVector2D(BX0, BY0), FVector2D(BW0, BH0), BP.Frac, FLinearColor(1.f, 0.85f, 0.2f), FLinearColor(1.f, 0.45f, 0.1f), nullptr, 5);
+					const FVector2D RBp(AP.X + 6.f * t, PY + 14.f * t), RBs(AS.X - 12.f * t, 12.f * t);
+					HA::Img(Out, L + 5, Geo, RBp, RBs, TEXT("rbar_empty"));
+					const FVector2D FS = HA::SizeT(TEXT("rbar_full"));
+					HA::Part(Out, L + 6, Geo, RBp, FVector2D(RBs.X * BPr.Frac, RBs.Y), TEXT("rbar_full"), FBox2D(FVector2D::ZeroVector, FVector2D(FS.X * BPr.Frac, FS.Y)), BPr.Accent);
 				}
 			}
-			Y += ActionH;
 		}
-		Y += CardH + 8.f * u;
-	}
-	// Event feed (moved out of the arena corner): left column, under the cards, newest first, fades like the old feed
-	if (Side == 0)
-	{
-		const float FeedBot = S.Y - ComboH - 8.f * u;
-		float FY = Y + 4.f * u;
-		if (FeedBot - FY > 44.f * u)
+		else if (BH > 20.f * t && Side == 0 && G->Feed.ContainsByPredicate([](const FZoogiFeedItem& F) { return F.Age < 7.5f; }))
 		{
-			bool bTitle = false;
+			// event feed (back from v2): the friendly column's free slot shows the newest events, fading like the old feed
+			const FVector2D FP(X + 10.f * t, BY), FS(W - 20.f * t, BH);
+			HA::Nine(Out, L + 2, Geo, FP, FS, TEXT("action_box"), FMargin(9.f), t, FLinearColor(0.8f, 0.8f, 0.85f));
+			Txt(L + 6, FP + FVector2D(12.f, 11.f) * t, TEXT("EVENTS"), 7.5f, t, HA::Steel);
+			float FY = FP.Y + 26.f * t;
 			for (const FZoogiFeedItem& F : G->Feed)
 			{
 				const float A = FMath::Clamp(1.f - (F.Age - 6.f) / 1.5f, 0.f, 1.f) * FMath::Clamp(F.Age * 6.f, 0.f, 1.f);
 				if (A <= 0.f) continue;
-				if (!bTitle) { Txt(L + 6, 20.f * u, FY, TEXT("EVENTS"), 11.f, MutedText); FY += 20.f * u; bTitle = true; }
-				const TArray<FString> FL = Wrap(F.Text, 11.f, S.X - 52.f * u, 2);
-				const float FH = 10.f * u + FL.Num() * 16.f * u;
-				if (FY + FH > FeedBot) break;
-				const float Sl3 = (1.f - FMath::Clamp(F.Age * 5.f, 0.f, 1.f)) * -24.f * u;
-				ZoogiUIStyle::SBox(Out, L + 2, Geo, FVector2D(10.f * u + Sl3, FY), FVector2D(S.X - 20.f * u, FH), FLinearColor(0.03f, 0.10f, 0.36f, 0.9f * A), FLinearColor(Outline.R, Outline.G, Outline.B, A), 8.f * u, 2.f * u);
-				ZoogiUIStyle::SBox(Out, L + 3, Geo, FVector2D(13.f * u + Sl3, FY + 4.f * u), FVector2D(5.f * u, FH - 8.f * u), FLinearColor(F.Color.R, F.Color.G, F.Color.B, A), FLinearColor::Transparent, 2.f * u, 0.f);
-				float LY = FY + 5.f * u;
-				for (const FString& Ln : FL) { Txt(L + 6, 24.f * u + Sl3, LY, Ln, 11.f, FLinearColor(F.Color.R * 0.4f + 0.6f, F.Color.G * 0.4f + 0.6f, F.Color.B * 0.4f + 0.6f, A)); LY += 16.f * u; }
-				FY += FH + 5.f * u;
+				if (FY > FP.Y + FS.Y - 8.f * t) break;
+				FString Ln = F.Text;
+				while (Ln.Len() > 6 && TxtW(Ln, 8.5f, t) > FS.X - 30.f * t) Ln = Ln.LeftChop(3) + TEXT("..");
+				ZoogiUIStyle::SBox(Out, L + 5, Geo, FVector2D(FP.X + 10.f * t, FY - 5.f * t), FVector2D(4.f * t, 10.f * t), FLinearColor(F.Color.R, F.Color.G, F.Color.B, A), FLinearColor::Transparent, 2.f * t, 0.f);
+				Txt(L + 6, FVector2D(FP.X + 20.f * t, FY), Ln, 8.5f, t, FLinearColor(F.Color.R * 0.4f + 0.6f, F.Color.G * 0.4f + 0.6f, F.Color.B * 0.4f + 0.6f, A));
+				FY += 14.f * t;
 			}
 		}
+		else if (BH > 20.f * t)
+		{
+			const FVector2D ES = HA::SizeT(TEXT("emblem"));
+			const float EW = W - 20.f * t, EH = FMath::Min(BH, EW * ES.Y / FMath::Max(1.f, ES.X));
+			HA::Img(Out, L + 2, Geo, FVector2D(X + 10.f * t, BY + (BH - EH) * 0.5f), FVector2D(EW, EH), TEXT("emblem"));
+		}
+		// diamond connector into the next group
+		if (gi + 1 < Mine.Num() && !bOv) HA::Img(Out, L + 7, Geo, FVector2D(W * 0.5f - 32.f * t, Y + GH - 18.f * t + Gap * 0.5f), FVector2D(64.f, 40.f) * t, TEXT("connector"));
 	}
 	if (G->bComboMode)
 	{
-		const float BY = S.Y - ComboH;
+		const float BY = S.Y - ComboH + 4.f * t0;
 		const float E = G->ComboEnergy[Side];
 		const bool bReady = E >= ZoogiComboTune::FollowUpCost;
-		Txt(L + 6, 20.f * u, BY, FString::Printf(TEXT("COMBO %.0f / %.0f%s"), E, ZoogiComboTune::GaugeMax, bReady ? TEXT("   FOLLOW-UP READY") : TEXT("")), 12.f, bReady ? Gold : FLinearColor(0.8f, 0.9f, 1.f));
-		ZoogiUIStyle::SBar(Out, L + 7, Geo, FVector2D(20.f * u, BY + 24.f * u), FVector2D(S.X - 64.f * u, 16.f * u), E / FMath::Max(1.f, ZoogiComboTune::GaugeMax), SC, FLinearColor(SC.R * 0.5f, SC.G * 0.5f, SC.B, 1.f), &ComboJuice, 10);
+		HA::Nine(Out, L + 1, Geo, FVector2D(0.f, BY), FVector2D(S.X, ComboH - 4.f * t0), TEXT("header_bar"), FMargin(8.f, 6.f, 8.f, 6.f), t0);
+		Txt(L + 6, FVector2D(12.f * t0, BY + 11.f * t0), FString::Printf(TEXT("COMBO %.0f / %.0f%s"), E, ZoogiComboTune::GaugeMax, bReady ? TEXT("  READY") : TEXT("")), 8.5f, t0, bReady ? HA::GoldText : FLinearColor(0.85f, 0.9f, 1.f));
+		const FVector2D RBp(8.f * t0, BY + 20.f * t0), RBs(S.X - 16.f * t0, 16.f * t0);
+		HA::Img(Out, L + 5, Geo, RBp, RBs, TEXT("rbar_empty"));
+		const float F = FMath::Clamp(ComboJuice.Shown, 0.f, 1.f);
+		const FVector2D FS = HA::SizeT(TEXT("rbar_full"));
+		if (F > 0.f) HA::Part(Out, L + 6, Geo, RBp, FVector2D(RBs.X * F, RBs.Y), TEXT("rbar_full"), FBox2D(FVector2D::ZeroVector, FVector2D(FS.X * F, FS.Y)));
 	}
 	return L + 10;
 }
