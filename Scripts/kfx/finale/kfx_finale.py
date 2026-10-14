@@ -193,8 +193,8 @@ def build_mis():
     # --- launch ring (Effect4 orange)
     mi('MI_ZAFX_RingDecal', 'Decal', {'Tex': T('T_ZAFX_Ring'), 'Chan': R1, 'Tint': ORANGE, 'Glow': 1.7, 'Darken': 0.85, 'EmisOpac': 1.0,
                                        'BaseTint': LC(0.025, 0.018, 0.012, 1), 'UseReveal': 1.0, 'RevealSharp': 25.0, 'Contrast': 1.2})
-    mi('MI_ZAFX_RingInner', 'DecalGlow', {'Tex': T('T_ZAFX_RingInner'), 'Chan': R1, 'Tint': LC(1.0, 0.26, 0.04, 1), 'Glow': 1.0})  # warm orange glow inside the ring
-    mi('MI_ZAFX_RingFloor', 'Decal', {'Tex': T('T_ZAFX_RingFloor'), 'Chan': R1, 'Tint': LC(1.0, 0.28, 0.04, 1), 'Glow': 1.0, 'Darken': 0.95, 'EmisOpac': 0.6,
+    mi('MI_ZAFX_RingInner', 'DecalGlow', {'Tex': T('T_ZAFX_RingInner'), 'Chan': R1, 'Tint': LC(1.0, 0.26, 0.04, 1), 'Glow': 0.6})  # warm orange glow inside the ring
+    mi('MI_ZAFX_RingFloor', 'Decal', {'Tex': T('T_ZAFX_RingFloor'), 'Chan': R1, 'Tint': LC(1.0, 0.28, 0.04, 1), 'Glow': 1.0, 'Darken': 0.95, 'EmisOpac': 0.4,
                                        'BaseTint': LC(0.012, 0.007, 0.005, 1), 'UseReveal': 0.0})
     mi('MI_ZAFX_Flame', 'Add', {'Tex': T('T_ZAFX_Noise'), 'MaskTex': T('T_ZAFX_Flame'), 'Chan': R1, 'TileU': 1.0, 'TileV': 0.6, 'PanV': 1.3,
                                  'RandOffset': 7.31, 'Contrast': 2.4, 'Bias': 0.35, 'Tint': FLAME, 'Glow': 1.9, 'CoreGlow': 0.0})
@@ -214,7 +214,7 @@ def build_mis():
     mi('MI_ZAFX_PortalGlow', 'Add', {'Tex': T('T_ZAFX_Glow'), 'Chan': R1, 'Tint': LC(0.50, 0.16, 1.0, 1), 'Glow': 0.07})
     mi('MI_ZAFX_Mote', 'Add', {'Tex': T('T_ZAFX_Dot'), 'Chan': R1, 'Tint': LC(0.8, 0.55, 1.0, 1), 'Glow': 5.0})
     # round 12: broad soft magenta-violet wash, no darkening (the old Darken/BaseTint read as a dark blob)
-    mi('MI_ZAFX_Spill', 'DecalGlow', {'Tex': T('T_ZAFX_Glow'), 'Chan': R1, 'Tint': LC(0.85, 0.22, 1.0, 1), 'Glow': 1.6, 'Contrast': 0.9, 'UseReveal': 0.0})
+    mi('MI_ZAFX_Spill', 'DecalGlow', {'Tex': T('T_ZAFX_Glow'), 'Chan': R1, 'Tint': LC(0.78, 0.12, 1.0, 1), 'Glow': 1.3, 'Contrast': 0.9, 'UseReveal': 0.0})
     mi('MI_ZAFX_Rock', 'Rock', {'Tex': T('T_ZAFX_Noise'), 'Tint': LC(0.045, 0.040, 0.050, 1), 'RimColor': LC(0.30, 0.10, 0.75, 1)})  # darker boulder
 
 # ------------------------------------------------------------ Niagara

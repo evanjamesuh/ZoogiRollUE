@@ -57,7 +57,7 @@ void AZoogiKFXPreview::BeginPlay()
 		Floor->SetStaticMesh(Plane);
 		Floor->SetWorldScale3D(FVector(400.f, 400.f, 1.f));
 		// darker grey-brown dirt like the KriptoFX demo yard (round 12; preview only), so glow / decals read against a similar ground
-		Floor->SetMaterial(0, ZoogiUtil::SurfaceMID(this, FLinearColor(0.085f, 0.068f, 0.052f), 0.95f));
+		Floor->SetMaterial(0, ZoogiUtil::SurfaceMID(this, FLinearColor(0.05f, 0.044f, 0.038f), 0.95f));
 	}
 	RT = NewObject<UTextureRenderTarget2D>(this);
 	RT->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8_SRGB;
@@ -225,6 +225,7 @@ void AZoogiKFXPreview::TickPlan(float Dt)
 	if (PlanPass == 1 && S.Times.IsValidIndex(Shot) && T >= S.Times[Shot])
 	{
 		FinishShaders(); // materials first seen in this shot (pass 0 queued them) must not render as the default material
+		if (Shot == 0) Capture->CaptureScene(); // throwaway warm-up render (first capture of a shot showed a default decal square)
 		Capture->CaptureScene();
 		const FString Name = FString::Printf(TEXT("%s_%05d.png"), *S.Name, FMath::RoundToInt(S.Times[Shot] * 1000.f));
 		UKismetRenderingLibrary::ExportRenderTarget(this, RT, ShotDir, Name);

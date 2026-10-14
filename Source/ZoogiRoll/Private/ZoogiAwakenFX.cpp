@@ -190,7 +190,7 @@ void AZoogiAwakenFX::Init()
 		// round 12: no broad pale pool under the chain; a soft bright lavender wash sits at each strike point instead
 		for (int32 k = 0; k < 4; ++k)
 		{
-			HitLights.Add(MakeLight(ShockTint, 480.f * S));
+			HitLights.Add(MakeLight(ShockTint, 300.f * S)); // it12b: tighter, so the wash stays at the strike point
 			UDecalComponent* Gw = MakeDecal(TEXT("MI_ZAFX_ShockGlow"), 150.f * S, 200.f * S);
 			Gw->SetUsingAbsoluteLocation(true);
 			Gw->SortOrder = -1; // under the dark splats
@@ -370,7 +370,7 @@ void AZoogiAwakenFX::TickRing(float Dt, float Fade)
 	const float R = S * FMath::Lerp(190.f, 325.f, Power);           // demo: ~6.5 m across around a 1.8 m character
 	const float I = FMath::Lerp(0.45f, 1.f, Power) * Fade;
 	const float Half = R / 0.86f;                                   // ring line sits at 0.86 of the texture radius
-	for (UDecalComponent* Dc : { Decal.Get(), Decal2.Get(), Decal3.Get() }) if (Dc) Dc->SetVisibility(true); // params set below this frame
+	for (UDecalComponent* Dc : { Decal.Get(), Decal2.Get(), Decal3.Get() }) if (Dc) Dc->SetVisibility(Age > 0.05f); // a few frames after spawn, params already set
 	if (Decal)
 	{
 		Decal->SetRelativeScale3D(FVector(1.f, Half / 100.f, Half / 100.f));
@@ -391,7 +391,7 @@ void AZoogiAwakenFX::TickRing(float Dt, float Fade)
 		if (UMaterialInstanceDynamic* M = Cast<UMaterialInstanceDynamic>(Decal3->GetDecalMaterial()))
 		{
 			M->SetScalarParameterValue(TEXT("Fade"), Fade * Ignite);
-			M->SetScalarParameterValue(TEXT("Glow"), (0.6f + 0.6f * Power) * (0.9f + 0.1f * FMath::Sin(Age * 13.f)));
+			M->SetScalarParameterValue(TEXT("Glow"), (0.32f + 0.38f * Power) * (0.9f + 0.1f * FMath::Sin(Age * 13.f)));
 		}
 	}
 	if (Light)
@@ -501,7 +501,7 @@ void AZoogiAwakenFX::TickShock(float Dt, float Fade)
 		if (UPointLightComponent* L = HitLights.IsValidIndex(k) ? HitLights[k].Get() : nullptr)
 		{
 			L->SetWorldLocation(Bo.End + FVector(0, 0, 45.f * S));
-			L->SetIntensity(30.f * Iv);
+			L->SetIntensity(16.f * Iv);
 		}
 	}
 	EndQuads(0);
@@ -513,7 +513,7 @@ void AZoogiAwakenFX::TickShock(float Dt, float Fade)
 		Billboard(Src, 45.f * S, 45.f * S, FLinearColor(2.f * Run, 2.f * Run, 2.f * Run, 1.f), 0.5f, false);
 	}
 	EndQuads(1);
-	if (Light) { Light->SetWorldLocation(Src); Light->SetIntensity(35.f * Run * (0.85f + 0.15f * FMath::Sin(Age * 40.f))); }
+	if (Light) { Light->SetWorldLocation(Src); Light->SetIntensity(12.f * Run * (0.85f + 0.15f * FMath::Sin(Age * 40.f))); }
 	for (int32 k = 0; k < HitGlows.Num() && k < Bolts.Num(); ++k)
 		if (UDecalComponent* Gw = HitGlows[k].Get())
 		{
@@ -583,9 +583,9 @@ void AZoogiAwakenFX::TickVoid(float Dt)
 
 	const float D = 235.f * S; // ring diameter ~2.35 m in the demo
 	// round 12: tilted, slightly irregular oval (roll about the portal normal, wider than tall, gently breathing)
-	const FRotator Rot = (FQuat(PortalN, FMath::DegreesToRadians(-22.f)) * FRotationMatrix::MakeFromZ(PortalN).ToQuat()).Rotator();
+	const FRotator Rot = (FQuat(PortalN, FMath::DegreesToRadians(-30.f)) * FRotationMatrix::MakeFromZ(PortalN).ToQuat()).Rotator();
 	const float Wob = 1.f + 0.04f * FMath::Sin(Age * 7.f);
-	const float OvY = 0.80f + 0.03f * FMath::Sin(Age * 5.3f + 1.f);
+	const float OvY = 0.72f + 0.03f * FMath::Sin(Age * 5.3f + 1.f);
 	if (Card0) { Card0->SetVisibility(K > 0.01f); Card0->SetWorldLocationAndRotation(PortalC, Rot); Card0->SetWorldScale3D(FVector(D / 0.8f / 100.f * K, D / 0.8f / 100.f * K * OvY, 1.f)); }
 	if (Card1) { Card1->SetVisibility(K > 0.01f); Card1->SetWorldLocationAndRotation(PortalC + PortalN * 2.f, Rot); Card1->SetWorldScale3D(FVector(D / 0.8f / 100.f * K * Wob, D / 0.8f / 100.f * K * OvY, 1.f)); }
 	if (Card2) { Card2->SetVisibility(K > 0.01f); Card2->SetWorldLocationAndRotation(PortalC - PortalN * 2.f, Rot); Card2->SetWorldScale3D(FVector(D * 1.9f / 100.f * K, D * 1.9f / 100.f * K * OvY, 1.f)); }
