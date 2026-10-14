@@ -1,4 +1,5 @@
 #include "ZoogiGameMode.h"
+#include "ZoogiSpawnElevator.h"
 #include "ZoogiEpisodeDirector.h"
 #include "ZoogiBattleStateMachine.h"
 #include "ZoogiEpisodeSubsystem.h"
@@ -333,7 +334,7 @@ void AZoogiGameMode::StartMatch()
 	TurnCounter = 0;
 	UE_LOG(LogZoogi, Log, TEXT("Match started: %d players on %s"), Balls.Num(), *ZoogiUtil::ArenaName(MenuArena));
 	NotifyMatchEvent(EZoogiMatchEvent::MatchStart, 0); // arena music (falls back to MatchMusic) + announcer
-	if (!BeginStageForming(false)) BeginTurn(0);
+	if (!BeginStageForming(false)) { BeginTurn(0); AZoogiSpawnElevator::PlayAll(this); } // spawn elevators: presentation only
 }
 
 bool AZoogiGameMode::BeginStageForming(bool bCombo)
@@ -1204,6 +1205,7 @@ void AZoogiGameMode::Tick(float DeltaSeconds)
 			if (bFormShots) TakeShot(TEXT("pillar_99_settled"));
 			FormCamMode = 0;
 			if (bFormingCombo) ComboBeginTeamTurn(0); else BeginTurn(0);
+			AZoogiSpawnElevator::PlayAll(this); // spawn elevators rise once the stage has formed (presentation only)
 		}
 		break;
 	case EZoogiPhase::Aiming:
