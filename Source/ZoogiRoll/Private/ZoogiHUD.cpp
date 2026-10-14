@@ -397,6 +397,7 @@ void AZoogiHUD::DrawScoreboard(AZoogiGameMode* G)
 		Text(FString::FromInt(B->Score), X + 380.f * U - TextSize(FString::FromInt(B->Score), 0.75f).X, Y + 6.f * U, PC + FLinearColor(0.2f, 0.2f, 0.2f, 0.f), 0.75f);
 		Y += RowH;
 	}
+	if (bFramed) return; // framed: the event feed is drawn in the team-column margin, never over the arena
 	// Event feed under the scoreboard: newest on top, fades out after a few seconds.
 	Y += 22.f * U;
 	for (const FZoogiFeedItem& F : G->Feed)
