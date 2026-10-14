@@ -197,6 +197,8 @@ bool UZoogiPowerUnlockSubsystem::Unlock(FName PowerId)
 
 FName UZoogiPowerUnlockSubsystem::GetEquipped(FName ZoogiId) const
 {
+	static const FName Forced = []() { FString V; return FParse::Value(FCommandLine::Get(), TEXT("ZoogiEquip="), V) ? FName(*V) : FName(NAME_None); }();
+	if (!Forced.IsNone()) return Forced;
 	const FName* P = Data ? Data->EquippedByZoogi.Find(ZoogiId) : nullptr;
 	return (P && IsUnlocked(*P)) ? *P : NAME_None;
 }

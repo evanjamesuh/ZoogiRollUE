@@ -10,10 +10,14 @@
 #include "ZoogiPowerUnlockSubsystem.generated.h"
 
 /** Stable power ids. Animations & Powers gate on these. */
+// Same guard + inline definition as the kfx-vfx-ap shim (a1d0ed6) so either header can be in a TU; this file replaces the shim.
+#ifndef ZOOGI_POWER_IDS_DEFINED
+#define ZOOGI_POWER_IDS_DEFINED 1
 namespace ZoogiPowerIds
 {
-	static const FName Void2TitanMeteor(TEXT("void_2_titan_meteor"));
+	inline const FName Void2TitanMeteor(TEXT("void_2_titan_meteor"));
 }
+#endif
 
 /** One power entry. Name / desc / art from BuildPowerDefs(); requirement / cost from Content/Data/Progression/Powers.csv. */
 USTRUCT()
@@ -45,6 +49,7 @@ public:
 };
 
 DECLARE_MULTICAST_DELEGATE(FOnZoogiUnlocksChanged);
+using FZoogiOnUnlocksChanged = FOnZoogiUnlocksChanged; // name used by the kfx-vfx-ap shim
 
 UCLASS()
 class ZOOGIROLL_API UZoogiPowerUnlockSubsystem : public UGameInstanceSubsystem
@@ -60,7 +65,9 @@ public:
 	/** Checks CanUnlock, pays (gems unless the stat requirement is met), marks unlocked and saves. */
 	bool Unlock(FName PowerId);
 	bool CanUnlock(FName PowerId, FText& Why) const;
-	/** NAME_None = the Zoogi's default power. */
+	/** Shim signature (kfx-vfx-ap a1d0ed6). */
+	bool CanUnlock(FName PowerId) const { FText Why; return CanUnlock(PowerId, Why); }
+	/** NAME_None = the Zoogi's default power. -ZoogiEquip=<PowerId> (capture / test runs, as in the shim) forces that power for every Zoogi. */
 	FName GetEquipped(FName ZoogiId) const;
 	/** Fails when PowerId is locked. NAME_None clears back to the default power. */
 	bool SetEquipped(FName ZoogiId, FName PowerId);
