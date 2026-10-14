@@ -610,7 +610,7 @@ void UZoogiMenuRoot::BuildHome()
 	if (!G || G->MenuPlayers.Num() == 0) return;
 	BuildTopBar(FString());
 	// Official logo (zoogi-roll-arena-logo.png, 419x356) at ~1.5x the old size: 180x153 design units = ~422x359 px at 1080p (native, no upscale blur).
-	Image(Art(TEXT("logo_t")), 96.f, 12.f, 180.f, 153.f);
+	Image(Art(TEXT("zoogi-roll-arena-logo")), 96.f, 12.f, 180.f, 153.f);
 
 	const TArray<FZoogiDef>& Roster = ZoogiUtil::Roster();
 	const FZoogiDef& D = Roster[G->MenuPlayers[0].ZoogiIndex % Roster.Num()];
