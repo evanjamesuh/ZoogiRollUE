@@ -7,6 +7,7 @@
 #include "ZoogiArenaPiece.h"
 #include "ZoogiTypes.h"
 #include "EngineUtils.h"
+#include "Components/SphereComponent.h"
 #include "Engine/World.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
@@ -263,6 +264,26 @@ void UZoogiCardSubsystem::ApplyPendingCollapses(AZoogiGameMode* G)
 	const FString Before = AZoogiArenaPiece::StateName(Piece->GetPieceState());
 	const bool bChanged = Piece->ApplyCardCollapse(CollapseEffectId, CollapseAt, CollapseDir);
 	if (bChanged) FxUses.FindOrAdd(FName(TEXT("crystal_collapse")))++;
+	// Oct 14 power rider (Crystal Collapse equipped): nearby breakable pieces shatter one state too, plus a shrapnel ring
+	AZoogiBall* Owner = G && G->Balls.IsValidIndex(CollapseOwner) ? G->Balls[CollapseOwner] : nullptr;
+	if (bChanged && Owner && PowerRider(Owner, FName(TEXT("crystal_collapse"))))
+	{
+		int32 Extra = 0;
+		for (TActorIterator<AZoogiArenaPiece> It(GetWorld()); It; ++It)
+		{
+			AZoogiArenaPiece* Pc = *It;
+			if (Pc == Piece || !IsCollapseEligible(Pc) || FVector::Dist2D(Pc->GetActorLocation(), CollapseAt) > 600.f) continue;
+			const FVector Dir = (Pc->GetActorLocation() - CollapseAt).GetSafeNormal2D();
+			if (Pc->ApplyCardCollapse(CollapseEffectId + 1000 + Extra, Pc->GetActorLocation(), Dir)) ++Extra;
+		}
+		for (AZoogiBall* B : G->Balls)
+		{
+			if (!B || B->bOut || !B->Sphere) continue;
+			const FVector D = FVector(B->BallLocation().X - CollapseAt.X, B->BallLocation().Y - CollapseAt.Y, 0.f);
+			if (D.Size() < 450.f && D.Size() > 1.f) B->Sphere->SetPhysicsLinearVelocity(B->GetBallVelocity() + D.GetSafeNormal() * 600.f);
+		}
+		UE_LOG(LogZoogi, Log, TEXT("CARDS power crystal_collapse P%d: %d nearby pieces shattered, shrapnel ring"), CollapseOwner + 1, Extra);
+	}
 	UE_LOG(LogZoogi, Log, TEXT("CARDS crystal_collapse effect=%lld %s: %s -> %s changed=%d (global bDestruction=%d)"), CollapseEffectId, *Piece->GetName(), *Before,
 		*AZoogiArenaPiece::StateName(Piece->GetPieceState()), bChanged ? 1 : 0, ZoogiUtil::DestructionEnabled() ? 1 : 0);
 	CollapseEffectId = 0; CollapseOwner = -1; CollapsePiece.Reset();

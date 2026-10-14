@@ -1007,6 +1007,8 @@ void AZoogiGameMode::PlanCPUShot()
 	}
 	// Imperfect aim: less control = more error (ZoogiStats.control).
 	const float ErrDeg = GameRng.FRandRange(-1.f, 1.f) * (100.f - Me->Def.Control) / 12.f * (CPUTier == EZoogiCPUTier::Normal ? 1.f : ZoogiCPU::AimNoise(ZoogiCPU::TierRow(CPUTier)));
+	// Oct 14: Precision (x0.7) / Heavy Roll (x1.2) scale the aim error in card mode (after the GameRng draw: cards-off parity unchanged)
+	if (CardsOn()) if (UZoogiCardSubsystem* CardAim = UZoogiCardSubsystem::Get(this)) BestDir = BestDir.GetRotated(ErrDeg * (CardAim->AimErrorMul(ActivePlayer) - 1.f));
 	BestDir = BestDir.GetRotated(ErrDeg);
 	BestFrac = FMath::Clamp(BestFrac * GameRng.FRandRange(0.96f, 1.04f), 0.25f, 1.f);
 	// Oct 8: Frozen aerial layer: with the battle map props up, a CPU sometimes plays a prop route (rail / halo / bumper) instead.

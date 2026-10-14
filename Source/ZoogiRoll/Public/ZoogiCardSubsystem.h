@@ -58,6 +58,8 @@ public:
 	void FxContact(AZoogiBall* Self, AActor* Other, const FVector& NormalImpulse, const FHitResult& Hit); // AZoogiBall::OnSphereHit
 	const FZoogiCardEffectCore& FxCore() const { return Fx; }
 	static bool IsEnemy(const AZoogiGameMode* G, const AZoogiBall* A, const AZoogiBall* B);
+	/** Oct 14: CPU aim error multiplier from the acting player's armed cards (Precision x0.7, Heavy Roll x1.2); 1 with cards off. */
+	float AimErrorMul(int32 Player) const;
 
 	void DumpCoverage(const FString& Tag) const;
 private:
@@ -85,6 +87,13 @@ private:
 	int32 FxCardSetups = 0, FxSetupRefused = 0;
 	FVector Prev(const AZoogiBall* B) const;
 	FZoogiCardEffectCore Fx;
+	// Oct 14: equipped power riders (the Zoogi's equipped power from the Powers screen upgrades its linked card)
+	bool PowerRider(const AZoogiBall* B, FName Card) const;
+	TSet<FIntPoint> EmberTrail;
+	int32 EmberOwner = -1, MeteorOwner = -1;
+	FVector MeteorAt = FVector::ZeroVector;
+	float MeteorT = -1.f;
+	bool bMeteorUsed = false;
 	TArray<FVector> PrevVel;
 	struct FBurst { TWeakObjectPtr<AZoogiBall> Victim; FVector Dv = FVector::ZeroVector; float At = 0.f; int64 Effect = 0; uint64 Contact = 0; int32 Owner = -1; };
 	TArray<FBurst> PendingBursts;

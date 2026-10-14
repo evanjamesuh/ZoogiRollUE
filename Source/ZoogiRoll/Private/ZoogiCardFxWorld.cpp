@@ -19,6 +19,7 @@
 #include "Components/SphereComponent.h"
 #include "Engine/World.h"
 #include "CollisionQueryParams.h"
+#include "ZoogiPowerUnlockSubsystem.h"
 
 static const FName NStorm(TEXT("storm")), NBank(TEXT("bank_strike")), NGuard(TEXT("guard")), NRelay(TEXT("orb_relay")), NHeavy(TEXT("heavy_roll")),
 	NEmber(TEXT("ember")), NTitan(TEXT("titan")), NFrost(TEXT("frost")), NPrecision(TEXT("precision")), NSteal(TEXT("momentum_steal")),
@@ -35,9 +36,39 @@ FVector UZoogiCardSubsystem::Prev(const AZoogiBall* B) const
 	return B && PrevVel.IsValidIndex(B->PlayerIndex) ? PrevVel[B->PlayerIndex] : (B ? B->GetBallVelocity() : FVector::ZeroVector);
 }
 
+// ------------------------------------------------------------------ Oct 14: equipped power riders + aim error
+// A Zoogi's equipped (and unlocked) power upgrades its linked card (Powers.csv card_id) when that card is played:
+//   Storm: stuns the rival it hits (skips its next turn)          Frost: lane twice as long
+//   Ember: burning trail; rivals that roll over it are Bound       Precision: shot snaps onto the closest rival within 25 deg
+//   Crystal Collapse: nearby breakable pieces shatter too + shrapnel push   Titan Meteor: meteor on the first rival hit
+//   (knockback ring, then a gravity pull). Cards on only; the cards-off simulation never reaches these hooks.
+bool UZoogiCardSubsystem::PowerRider(const AZoogiBall* B, FName Card) const
+{
+	if (!Tune.bCards || !B) return false;
+	const UZoogiPowerUnlockSubsystem* U = UZoogiPowerUnlockSubsystem::Get(this);
+	if (!U) return false;
+	const FName Eq = U->GetEquipped(B->Def.Id);
+	if (Eq.IsNone() || !U->IsUnlocked(Eq)) return false;
+	static const TMap<FName, FName> Link = {
+		{ FName(TEXT("shock_1_storm")), NStorm }, { FName(TEXT("frost_2_frost")), NFrost }, { FName(TEXT("fire_2_ember")), NEmber },
+		{ FName(TEXT("void_1_precision")), NPrecision }, { FName(TEXT("void_2_crystal_collapse")), NCrystal }, { FName(TEXT("void_2_titan_meteor")), NTitan } };
+	const FName* C = Link.Find(Eq);
+	return C && *C == Card;
+}
+
+float UZoogiCardSubsystem::AimErrorMul(int32 P) const
+{
+	if (!Tune.bCards) return 1.f;
+	float M = 1.f;
+	if (const FZoogiFxArmed* Pr = Fx.Find(NPrecision, P)) M *= Pr->A; // card book: initial aim error x0.7
+	if (const FZoogiFxArmed* H = Fx.Find(NHeavy, P)) M *= H->B;       // card book: aim error envelope x1.2
+	return M;
+}
+
 void UZoogiCardSubsystem::FxReset()
 {
 	Fx.Reset();
+	EmberTrail.Reset(); EmberOwner = -1; MeteorOwner = -1; MeteorT = -1.f; bMeteorUsed = false;
 	PrevVel.Reset(); PendingBursts.Reset(); OrbLife.Reset(); OrbWasOut.Reset();
 	MagnetOrb.Reset(); RelayOrb.Reset(); FxShooter = -1;
 }
@@ -83,7 +114,23 @@ void UZoogiCardSubsystem::FxModifyShot(AZoogiGameMode* G, AZoogiBall* Ball, FVec
 	{
 		// The roll itself is deterministic (no aim noise in this build), so Precision's aim error x0.7 has nothing to scale;
 		// its visible part is the forecast (first contact + one rebound, already drawn by the Standby aim forecast).
-		Pr->Uses++; FxUse(*Pr, FString::Printf(TEXT("aim error x%.2f (deterministic aim: envelope 0), forecast first contact + %d rebound"), Pr->A, (int32)Pr->B));
+		Pr->Uses++; FxUse(*Pr, FString::Printf(TEXT("aim error x%.2f (CPU aim noise scaled at planning), forecast first contact + %d rebound"), Pr->A, (int32)Pr->B));
+		if (PowerRider(Ball, NPrecision) && V.SizeSquared() > 1.f)
+		{
+			// power: snap onto the closest rival inside a 25 deg cone (speed kept)
+			const FVector2D From(Ball->BallLocation());
+			const FVector2D Dir = V.GetSafeNormal();
+			float Best = 1e9f; FVector2D BestDir = FVector2D::ZeroVector;
+			for (AZoogiBall* O : G->Balls)
+			{
+				if (!O || O->bOut || !IsEnemy(G, Ball, O)) continue;
+				const FVector2D To = FVector2D(O->BallLocation()) - From;
+				const float D = To.Size();
+				if (D < 1.f || FVector2D::DotProduct(To / D, Dir) < FMath::Cos(FMath::DegreesToRadians(25.f))) continue;
+				if (D < Best) { Best = D; BestDir = To / D; }
+			}
+			if (!BestDir.IsZero()) { V = BestDir * V.Size(); UE_LOG(LogZoogi, Log, TEXT("CARDS power precision P%d: shot snapped onto a rival %.0f cm away"), P + 1, Best); }
+		}
 	}
 	FxShotOut = V.Size();
 }
@@ -106,10 +153,15 @@ void UZoogiCardSubsystem::FxAfterShot(AZoogiGameMode* G, AZoogiBall* Ball, const
 	}
 	if (FZoogiFxArmed* F = Fx.Find(NFrost, P))
 	{
-		const int32 N = Fx.AddFrostLane(Ball->BallLocation(), FVector(V.X, V.Y, 0.f), ZoogiCardFxTune::FrostLaneCells);
+		const bool bPow = PowerRider(Ball, NFrost); // power: the freeze line is twice as long
+		const int32 N = Fx.AddFrostLane(Ball->BallLocation(), FVector(V.X, V.Y, 0.f), ZoogiCardFxTune::FrostLaneCells * (bPow ? 2 : 1));
+		if (bPow) UE_LOG(LogZoogi, Log, TEXT("CARDS power frost P%d: lane x2"), P + 1);
 		F->Uses++; FxUse(*F, FString::Printf(TEXT("lane +%d cells (shared total %d, never stacks), friction x%.2f"), N, Fx.FrostCells(), F->A));
 		F->bConsumed = true; // the lane persists until locally cleared (Ember) or match reset
 	}
+	EmberTrail.Reset();
+	EmberOwner = Fx.Find(NEmber, P) && PowerRider(Ball, NEmber) ? P : -1;
+	MeteorOwner = Fx.Find(NTitan, P) && PowerRider(Ball, NTitan) ? P : -1; MeteorT = -1.f; bMeteorUsed = false;
 	MagnetOrb.Reset();
 	if (FZoogiFxArmed* M = Fx.Find(NMagnet, P))
 	{
@@ -176,6 +228,16 @@ void UZoogiCardSubsystem::FxContact(AZoogiBall* Self, AActor* Other, const FVect
 				S->Uses++; FxUse(*S, FString::Printf(TEXT("glancing: %.0f cm/s tangential moved to P%d, damage x%.2f (display)"), (VA - VA0).Size2D(), Victim->PlayerIndex + 1, S->B));
 			}
 			else UE_LOG(LogZoogi, Log, TEXT("CARDS fx momentum_steal effect=%lld consumed by a head-on contact (no transfer)"), S->EffectId);
+		}
+		if (FZoogiFxArmed* St = Fx.Find(NStorm, Att->PlayerIndex)) if (PowerRider(Att, NStorm) && Fx.ApplyOnce(St->EffectId ^ 0x5701, Cid))
+		{
+			Victim->StunTurns = FMath::Max(Victim->StunTurns, 1); // power: the storm charge stuns what it touches
+			UE_LOG(LogZoogi, Log, TEXT("CARDS power storm P%d stunned P%d (skips a turn)"), Att->PlayerIndex + 1, Victim->PlayerIndex + 1);
+		}
+		if (MeteorOwner == Att->PlayerIndex && !bMeteorUsed)
+		{
+			bMeteorUsed = true; MeteorAt = Victim->BallLocation(); MeteorT = 0.f; // power: Titan Meteor lands on the real impact point
+			UE_LOG(LogZoogi, Log, TEXT("CARDS power titan_meteor P%d: meteor called on (%.0f, %.0f)"), Att->PlayerIndex + 1, MeteorAt.X, MeteorAt.Y);
 		}
 		if (FZoogiFxArmed* D = Fx.Find(NDouble, Att->PlayerIndex)) if (D->bArmed && Fx.ApplyOnce(D->EffectId, Cid))
 		{
@@ -288,6 +350,43 @@ void UZoogiCardSubsystem::FxTick(AZoogiGameMode* G, float Dt)
 				MagnetOrb.Reset();
 			}
 		}
+		// power: Ember's burning trail; a rival rolling over it is Bound (its next shot is weak)
+		if (EmberOwner == FxShooter && !S->bOut)
+		{
+			EmberTrail.Add(FZoogiCardEffectCore::Cell(S->BallLocation()));
+			for (AZoogiBall* O : G->Balls)
+				if (O && O != S && !O->bOut && O->BoundShots == 0 && IsEnemy(G, S, O) && EmberTrail.Contains(FZoogiCardEffectCore::Cell(O->BallLocation())))
+				{ O->BoundShots = 1; UE_LOG(LogZoogi, Log, TEXT("CARDS power ember P%d burned P%d (Bound)"), FxShooter + 1, O->PlayerIndex + 1); }
+		}
+		// power: Titan Meteor (0.5 s fall, knockback ring, then 0.8 s gravity pull)
+		if (MeteorT >= 0.f)
+		{
+			const float T0 = MeteorT; MeteorT += Dt;
+			if (T0 < 0.5f && MeteorT >= 0.5f)
+			{
+				for (AZoogiBall* O : G->Balls)
+				{
+					if (!O || O == S || O->bOut || !O->Sphere) continue;
+					const FVector D = FVector(O->BallLocation().X - MeteorAt.X, O->BallLocation().Y - MeteorAt.Y, 0.f);
+					const float Dist = D.Size();
+					if (Dist > 500.f) continue;
+					O->Sphere->SetPhysicsLinearVelocity(O->GetBallVelocity() + (Dist > 1.f ? D / Dist : FVector(1, 0, 0)) * (300.f + 900.f * (1.f - Dist / 500.f)));
+				}
+				UE_LOG(LogZoogi, Log, TEXT("CARDS power titan_meteor P%d: impact ring"), FxShooter + 1);
+			}
+			else if (MeteorT > 0.5f && MeteorT <= 1.3f)
+			{
+				for (AZoogiBall* O : G->Balls)
+				{
+					if (!O || O == S || O->bOut || !O->Sphere) continue;
+					const FVector D = FVector(MeteorAt.X - O->BallLocation().X, MeteorAt.Y - O->BallLocation().Y, 0.f);
+					const float Dist = D.Size();
+					if (Dist < 40.f || Dist > 900.f) continue;
+					O->Sphere->SetPhysicsLinearVelocity(O->GetBallVelocity() + D / Dist * (600.f * Dt));
+				}
+			}
+			else if (MeteorT > 1.3f) MeteorT = -1.f;
+		}
 		// Ember clears only Frost cells it overlaps
 		if (const FZoogiFxArmed* E = Fx.Find(NEmber, FxShooter)) if (!S->bOut)
 		{
@@ -338,6 +437,7 @@ void UZoogiCardSubsystem::FxLeadActionEnd(AZoogiGameMode* G)
 		FxNoHealOk &= G->Balls[P]->RingMarks <= FxRingMarksAtShot; // Recovery Roll (and every card) never heals Ring Marks
 	if (MagnetOrb.IsValid() && !MagnetAdded.IsZero() && !MagnetOrb->bOut) MagnetOrb->Sphere->SetPhysicsLinearVelocity(MagnetOrb->Sphere->GetPhysicsLinearVelocity() - MagnetAdded);
 	MagnetOrb.Reset(); RelayOrb.Reset(); PendingBursts.Reset();
+	EmberTrail.Reset(); EmberOwner = -1; MeteorOwner = -1; MeteorT = -1.f;
 	for (const FZoogiFxArmed& F : Fx.Expire(EZoogiCardExpiry::LeadActionEnd, P))
 		UE_LOG(LogZoogi, Log, TEXT("CARDS fx %s effect=%lld P%d expired (lead action end, uses %d)"), *F.Card.ToString(), F.EffectId, F.Owner + 1, F.Uses);
 	Fx.Active.RemoveAll([](const FZoogiFxArmed& F) { return F.bConsumed; });
