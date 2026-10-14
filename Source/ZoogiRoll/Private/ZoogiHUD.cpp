@@ -33,6 +33,7 @@
 #include "UnrealClient.h"
 #include "HAL/FileManager.h"
 #include "Misc/Paths.h"
+#include "ZoogiEpisodeDirector.h"
 
 static const FLinearColor GPanel(0.02f, 0.03f, 0.08f, 0.72f);
 static const FLinearColor GOrbBlue(0.53f, 0.81f, 0.92f, 1.f);
@@ -496,6 +497,7 @@ void AZoogiHUD::DrawMatch(AZoogiGameMode* G)
 	if (G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Awaken && G->CardsOn()) { if (!(AwakenWidget && AwakenWidget->ShowsCards())) DrawCards(G); }
 	else if (G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Awaken && !bUmgAwaken) DrawAwaken(G);
 	if (G->IsHumanAiming() && G->IsAimStep() && !bUmgAim) DrawAimControls(G);
+	DrawEpisodeP5(G);
 	if (Letterbox < 0.3f && G->bComboMode) Text(TEXT("2v2 COMBO   Awaken: card + I / G / S   Battle: Q switch Zoogi, click target / floor, A/D cut, 1 CONTROL 2 DRIVE 3 LAUNCH, SPACE confirm   Follow-Up: F accept / X skip   C camera"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.75f, 0.85f, 0.85f), 0.36f, false, false);
 	else if (Letterbox < 0.3f && G->CardsOn()) Text(TEXT("Standby: click cards (1-5) + COMMIT (Enter), Backspace clears   Aim: click target or floor, A/D cut, Up/Down force CONTROL/DRIVE/LAUNCH, SPACE confirm   C camera"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.75f, 0.85f, 0.85f), 0.36f, false, false);
 	else if (Letterbox < 0.3f) Text(TEXT("Awaken: click a card + INFUSE / GUARD / SAVE (I/G/S)   Aim: click target or floor, A/D cut, Up/Down power, SPACE confirm   RMB/Esc cancel   C camera   Ctrl+R restart"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.75f, 0.85f, 0.85f), 0.36f, false, false);
@@ -1466,4 +1468,22 @@ void AZoogiHUD::DrawCombo(AZoogiGameMode* G)
 		}
 		else Text(TEXT("CPU partner takes the follow-up..."), W * 0.5f, Y0 + 124.f * U, FLinearColor(0.75f, 0.8f, 0.9f), 0.45f, true, false);
 	}
+}
+
+// v3 P5: read-only episode playback panel (top centre). Reads the playback copy; SKIP only ends the presentation.
+void AZoogiHUD::DrawEpisodeP5(AZoogiGameMode* G)
+{
+	const UZoogiEpisodeDirector* D = UZoogiEpisodeDirector::Get(G);
+	const FZoogiEpPlayback* P = D ? D->Current() : nullptr;
+	if (!P || P->Done()) return;
+	const float W = Canvas->ClipX, PW = 900.f * U, X0 = (W - PW) * 0.5f, Y0 = 90.f * U;
+	DrawRect(FLinearColor(0.02f, 0.02f, 0.06f, 0.78f), X0, Y0, PW, 210.f * U);
+	const int32 Cur = P->PerspectiveIndex();
+	Text(FString::Printf(TEXT("EPISODE %d  -  %s  -  P%d    %.1f / %.0f s"), P->Ep.EpisodeId, ZoogiEpBranchName(P->Ep.Branch), P->Ep.Spender + 1, P->T, P->Ep.Duration), X0 + 20.f * U, Y0 + 12.f * U, FLinearColor(1.f, 0.85f, 0.4f), 0.5f, false, true);
+	for (int32 i = 0; i < P->Ep.Perspectives.Num(); ++i)
+	{
+		const FZoogiEpPerspective& V = P->Ep.Perspectives[i];
+		Text(FString::Printf(TEXT("%d  %s"), i + 1, *V.Line), X0 + 24.f * U, Y0 + (56.f + i * 36.f) * U, i == Cur ? FLinearColor::White : FLinearColor(0.55f, 0.6f, 0.7f), i == Cur ? 0.42f : 0.36f, false, false);
+	}
+	Button(TEXT("SKIP"), X0 + PW - 130.f * U, Y0 + 10.f * U, 110.f * U, 40.f * U, "EpisodeSkip", 0, FLinearColor(1.f, 0.85f, 0.4f));
 }

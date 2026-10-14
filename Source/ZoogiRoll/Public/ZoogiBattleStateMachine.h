@@ -334,5 +334,6 @@ protected:
 	void TestCheck();
 	friend class UZoogiMiniGame;
 	friend class UZoogiEpisodeLedger;
+	friend class UZoogiEpisodeDirector;
 	friend class UZoogiEpisodeAssembler;
 };

@@ -1,4 +1,5 @@
 #include "ZoogiGameMode.h"
+#include "ZoogiEpisodeDirector.h"
 #include "ZoogiBattleStateMachine.h"
 #include "ZoogiEpisodeSubsystem.h"
 #include "ZoogiKFXPreview.h"
@@ -174,6 +175,7 @@ void AZoogiGameMode::MenuAction(FName Action, int32 Index)
 	else if (Action == "CardClear") CardsClear();
 	else if (Action == "CardCommit") CardsCommit();
 	else if (Action == "CardAwaken") CardsToggleAwaken();
+	else if (Action == "EpisodeSkip") { if (UZoogiEpisodeDirector* D = UZoogiEpisodeDirector::Get(this)) D->SkipCurrent(); }
 	else if (Action == "AimNudge") NudgeAim(Index);
 	else if (Action == "AimPower") AimPowerStep = FMath::Clamp(Index, 0, 3);
 	else if (Action == "AimConfirm") CommitLock();

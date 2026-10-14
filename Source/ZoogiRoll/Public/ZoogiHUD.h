@@ -89,4 +89,5 @@ protected:
 	UPROPERTY() TObjectPtr<UZoogiAwakenWidget> AwakenWidget;
 	int32 CanvasAwakenMode = -1;
 	void UpdateAwakenWidget(AZoogiGameMode* G, bool bHide);
+	void DrawEpisodeP5(AZoogiGameMode* G);
 };
