@@ -45,10 +45,10 @@ namespace
 	}
 
 	/** "void_mastery" -> Void. */
-	bool MasteryStatElement(FName Stat, EZoogiElement& Out)
+	bool MasteryStatElement(FName Stat, EZoogiCardElement& Out)
 	{
 		FString S = Stat.ToString();
-		return S.RemoveFromEnd(TEXT("_mastery")) && ZoogiCards::ParseElement(S, Out) && Out != EZoogiElement::Neutral;
+		return S.RemoveFromEnd(TEXT("_mastery")) && ZoogiCards::ParseElement(S, Out) && Out != EZoogiCardElement::Neutral;
 	}
 }
 
@@ -134,7 +134,7 @@ int32 UZoogiPowerUnlockSubsystem::GetStat(FName Stat) const
 {
 	const UZoogiProgressionSubsystem* P = Prog();
 	if (!P) return 0;
-	EZoogiElement E;
+	EZoogiCardElement E;
 	if (MasteryStatElement(Stat, E)) return P->Core().MasteryLevel(E);
 	return P->Core().Stat(Stat);
 }

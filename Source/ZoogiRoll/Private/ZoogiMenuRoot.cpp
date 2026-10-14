@@ -1178,14 +1178,14 @@ namespace
 		}();
 		return D;
 	}
-	FLinearColor ZMElementColor(EZoogiElement E)
+	FLinearColor ZMElementColor(EZoogiCardElement E)
 	{
 		switch (E)
 		{
-		case EZoogiElement::Void: return ZMCViolet;
-		case EZoogiElement::Fire: return ZMCRed;
-		case EZoogiElement::Shock: return ZMCGold;
-		case EZoogiElement::Frost: return ZMCCyan;
+		case EZoogiCardElement::Void: return ZMCViolet;
+		case EZoogiCardElement::Fire: return ZMCRed;
+		case EZoogiCardElement::Shock: return ZMCGold;
+		case EZoogiCardElement::Frost: return ZMCCyan;
 		default: return ZMCTeal;
 		}
 	}
