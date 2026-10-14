@@ -13,6 +13,9 @@
 #include "Engine/World.h"
 #include "Rendering/DrawElements.h"
 #include "Styling/SlateBrush.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Fonts/FontMeasure.h"
+#include "Rendering/SlateRenderer.h"
 
 int32 UZoogiTeamColumnWidget::SideOf(const AZoogiGameMode* G, const AZoogiBall* B)
 {
@@ -66,7 +69,7 @@ int32 UZoogiTeamColumnWidget::NativePaint(const FPaintArgs& Args, const FGeometr
 	const FLinearColor SC = SideColor(Side);
 	auto Font = [&](float Sz) { return BoldFont(FMath::Max(7, FMath::RoundToInt(Sz * u)), FMath::Max(1.f, 2.f * u)); };
 	auto Txt = [&](int32 Lay, float X, float Y, const FString& T, float Sz, const FLinearColor& C) { ZoogiUIStyle::SText(Out, Lay, Geo, FVector2D(X, Y), T, Font(Sz), C); };
-	auto TxtW = [&](const FString& T, float Sz) { return T.Len() * Sz * u * 0.58f; };
+	auto TxtW = [&](const FString& T, float Sz) { return FSlateApplication::IsInitialized() ? (float)FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(T, Font(Sz)).X : T.Len() * Sz * u * 0.62f; };
 
 	// Column panel + header
 	ZoogiUIStyle::SPanel(Out, L, Geo, FVector2D::ZeroVector, S, FLinearColor(0.02f, 0.08f, 0.30f, 0.92f), SC, 16.f * u);
@@ -120,9 +123,8 @@ int32 UZoogiTeamColumnWidget::NativePaint(const FPaintArgs& Args, const FGeometr
 		int32 Hand = -1;
 		if (Cards) { if (const FZoogiCardPlayerState* PS2 = Cards->Rules().Player(B->PlayerIndex)) Hand = PS2->Hand.Num(); }
 		else if (G->bArtifactMode && B->Artifact) Hand = B->Artifact->Hand.Num();
-		FString Stats = FString::Printf(TEXT("ORBS %d   KOS %d"), B->OrbsScored, B->KnockOuts);
-		if (Hand >= 0) Stats += FString::Printf(TEXT("   HAND %d"), Hand);
-		if (Cards) { if (const FZoogiCardPlayerState* PS2 = Cards->Rules().Player(B->PlayerIndex)) Stats += FString::Printf(TEXT("   CE %d"), PS2->Energy); }
+		FString Stats = FString::Printf(TEXT("ORBS %d  KOS %d"), B->OrbsScored, B->KnockOuts);
+		if (Hand >= 0) Stats += FString::Printf(TEXT("  HAND %d"), Hand);
 		Txt(L + 6, TX, Y + 66.f * u, Stats, 11.5f, FLinearColor(0.72f, 0.9f, 1.f));
 		// status effects + power indicators (chips)
 		TArray<TPair<FString, FLinearColor>> Chips;

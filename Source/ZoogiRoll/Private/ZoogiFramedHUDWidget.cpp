@@ -26,6 +26,8 @@
 #include "Fonts/FontMeasure.h"
 #include "Rendering/SlateRenderer.h"
 #include "Styling/SlateTypes.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 
 namespace
 {
@@ -34,12 +36,15 @@ namespace
 		if (!FSlateApplication::IsInitialized()) return FVector2D(T.Len() * F.Size * 0.6f, F.Size * 1.2f);
 		return FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(T, F);
 	}
-	// Outline-only rounded ring (fill transparent): frames the arena without covering it.
-	void FrameRing(FSlateWindowElementList& Out, int32 L, const FGeometry& G, const FVector2D& P, const FVector2D& S, float R, float W, const FLinearColor& C)
+	// Rectangular ring made of four bands around (P, S): frames the arena without ever covering it.
+	void FillRect(FSlateWindowElementList& Out, int32 L, const FGeometry& G, const FVector2D& P, const FVector2D& S, const FLinearColor& C);
+	void FrameRing(FSlateWindowElementList& Out, int32 L, const FGeometry& G, const FVector2D& P, const FVector2D& S, float /*R*/, float W, const FLinearColor& C)
 	{
 		if (C.A <= 0.f || W <= 0.f) return;
-		const FSlateRoundedBoxBrush B(FLinearColor::Transparent, R, C, W);
-		FSlateDrawElement::MakeBox(Out, L, G.ToPaintGeometry(FVector2f(S), FSlateLayoutTransform(FVector2f(P))), &B, ESlateDrawEffect::None, FLinearColor::White);
+		FillRect(Out, L, G, P, FVector2D(S.X, W), C);
+		FillRect(Out, L, G, FVector2D(P.X, P.Y + S.Y - W), FVector2D(S.X, W), C);
+		FillRect(Out, L, G, FVector2D(P.X, P.Y + W), FVector2D(W, S.Y - 2.f * W), C);
+		FillRect(Out, L, G, FVector2D(P.X + S.X - W, P.Y + W), FVector2D(W, S.Y - 2.f * W), C);
 	}
 	void FillRect(FSlateWindowElementList& Out, int32 L, const FGeometry& G, const FVector2D& P, const FVector2D& S, const FLinearColor& C)
 	{
@@ -274,6 +279,19 @@ void UZoogiFramedHUDWidget::NativeTick(const FGeometry& Geo, float Dt)
 	if (EndAnim > 0.f) EndAnim = FMath::Min(1.f, EndAnim + Dt);
 	if (G->BigAge < LastBigAge && G->BigAge < 0.2f) ZoogiFramed::Pulse(G->BigColor); // knock-out / big callout
 	LastBigAge = G->BigAge;
+	// -ZoogiFramedNavTest: drive the real nav buttons' handlers once (pause -> settings -> resume, restart at match end)
+	static const bool bNavTest = FParse::Param(FCommandLine::Get(), TEXT("ZoogiFramedNavTest"));
+	if (bNavTest)
+	{
+		static int32 NavStep = 0;
+		static float NavT = 0.f;
+		NavT += Dt;
+		if (NavStep == 0 && G->Stage == EZoogiStage::Battle && G->RoundNumber >= 1 && G->Phase == EZoogiPhase::Aiming) { OnPause(); OnSettings(); NavStep = 1; NavT = 0.f; }
+		else if (NavStep == 1 && NavT > 0.6f) { G->TakeShot(TEXT("framed_pause_menu")); NavStep = 2; NavT = 0.f; }
+		else if (NavStep == 2 && NavT > 0.6f) { OnResume(); UE_LOG(LogZoogi, Log, TEXT("FRAMED navtest: pause/settings/resume ok (paused=%d)"), UGameplayStatics::IsGamePaused(this) ? 1 : 0); NavStep = 3; }
+		else if (NavStep == 3 && G->Phase == EZoogiPhase::GameOver && G->PhaseTime > 2.2f) { G->TakeShot(TEXT("framed_match_end")); OnRestart(); NavStep = 4; NavT = 0.f; }
+		else if (NavStep == 4 && NavT > 3.f) { UE_LOG(LogZoogi, Log, TEXT("FRAMED navtest: restart -> phase %d round %d (new match running=%d)"), (int32)G->Phase, G->RoundNumber, G->Phase != EZoogiPhase::GameOver ? 1 : 0); NavStep = 5; }
+	}
 	const FString P = PromptText(G);
 	if (P != LastPrompt) { LastPrompt = P; PromptAnim = 0.f; }
 }
@@ -443,7 +461,7 @@ int32 UZoogiFramedHUDWidget::PaintBack(const FGeometry& Geo, FSlateWindowElement
 		while (P.Len() > 8 && Measure(P, PF).X > PS.X - 40.f * u) P = P.LeftChop(4) + TEXT("..");
 		const FVector2D PSz = Measure(P, PF);
 		ZoogiUIStyle::SText(Out, Ly + 6, Geo, FVector2D(P0.X + (PS.X - PSz.X) * 0.5f, P0.Y + (PS.Y - PSz.Y) * 0.5f + (1.f - Sl) * 10.f * u), P, PF, FLinearColor(1.f, 1.f, 1.f, Sl));
-		if (L.TrayOpen > 0.6f && !L.bCompact)
+		if (L.TrayOpen > 0.6f && !L.bCompact && !G->CardsOn()) // the card hand owns the tray corners in cards mode
 		{
 			const FString H = HintText(G);
 			Txt(R0.X + 18.f * u, R0.Y + RS.Y - 26.f * u, H, 10.f, FLinearColor(MutedText.R, MutedText.G, MutedText.B, 0.8f));
