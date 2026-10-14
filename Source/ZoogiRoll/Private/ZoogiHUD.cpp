@@ -15,6 +15,7 @@
 #include "ZoogiArtifactComponent.h"
 #include "ZoogiAnimeSubsystem.h"
 #include "ZoogiCardSubsystem.h"
+#include "ZoogiCardHandWidget.h"
 #include "MediaTexture.h"
 #include "Misc/App.h"
 #include "Misc/CommandLine.h"
@@ -494,7 +495,7 @@ void AZoogiHUD::DrawMatch(AZoogiGameMode* G)
 	// Awaken panel / aim bar: UMG when it's up (AZoogiHUD::UpdateAwakenWidget), Canvas otherwise (-ZoogiCanvasAwaken).
 	const bool bUmgAwaken = AwakenWidget && AwakenWidget->ShowsAwaken();
 	const bool bUmgAim = AwakenWidget && AwakenWidget->ShowsAim();
-	if (G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Awaken && G->CardsOn()) { if (!(AwakenWidget && AwakenWidget->ShowsCards())) DrawCards(G); }
+	if (G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Awaken && G->CardsOn()) { if (!(AwakenWidget && AwakenWidget->ShowsCards()) && !UZoogiCardHandWidget::IsEnabled(G)) DrawCards(G); } // UMG card hand replaces the Canvas panel
 	else if (G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Awaken && !bUmgAwaken) DrawAwaken(G);
 	if (G->IsHumanAiming() && G->IsAimStep() && !bUmgAim) DrawAimControls(G);
 	DrawEpisodeP5(G);
