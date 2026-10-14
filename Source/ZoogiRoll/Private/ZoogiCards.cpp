@@ -138,10 +138,10 @@ void FZoogiCardTune::Load()
 
 namespace ZoogiCards
 {
-	static FZoogiCardDef Def(const TCHAR* Id, const TCHAR* Name, int32 Cost, EZoogiCardType T, EZoogiCardTarget Tg, EZoogiCardExpiry E, float A, float B, int32 W, const TCHAR* Rule)
+	static FZoogiCardDef Def(const TCHAR* Id, const TCHAR* Name, int32 Cost, EZoogiCardType T, EZoogiCardTarget Tg, EZoogiCardExpiry E, float A, float B, int32 W, const TCHAR* Rule, EZoogiCardElement El = EZoogiCardElement::Neutral)
 	{
 		FZoogiCardDef D;
-		D.Id = Id; D.Name = Name; D.Cost = Cost; D.Type = T; D.Target = Tg; D.Expiry = E; D.ParamA = A; D.ParamB = B; D.CPUWeight = W; D.Rule = Rule;
+		D.Id = Id; D.Name = Name; D.Cost = Cost; D.Type = T; D.Target = Tg; D.Expiry = E; D.ParamA = A; D.ParamB = B; D.CPUWeight = W; D.Rule = Rule; D.Element = El;
 		return D;
 	}
 
@@ -149,17 +149,17 @@ namespace ZoogiCards
 	{
 		using T = EZoogiCardType; using G = EZoogiCardTarget; using E = EZoogiCardExpiry;
 		TArray<FZoogiCardDef> O;
-		O.Add(Def(TEXT("storm"), TEXT("STORM"), 1, T::Infusion, G::ActingZoogi, E::TurnEnd, 1.25f, 0.f, 3, TEXT("Temporary multiplier on roll control; no auto-aim, no extra shot.")));
+		O.Add(Def(TEXT("storm"), TEXT("STORM"), 1, T::Infusion, G::ActingZoogi, E::TurnEnd, 1.25f, 0.f, 3, TEXT("Temporary multiplier on roll control; no auto-aim, no extra shot."), EZoogiCardElement::Shock));
 		O.Add(Def(TEXT("bank_strike"), TEXT("BANK STRIKE"), 2, T::Technique, G::BankSurface, E::LeadActionEnd, 0.f, 0.f, 2, TEXT("Mark a bank; only a real qualifying wall/bumper contact emits BankSetup.")));
 		O.Add(Def(TEXT("guard"), TEXT("GUARD"), 1, T::Defense, G::DefendingZoogi, E::NextQualifyingEnemyImpact, 12.f, 0.75f, 2, TEXT("Absorb 12 and x0.75 the next qualifying enemy impulse, once.")));
 		O.Add(Def(TEXT("orb_relay"), TEXT("ORB RELAY"), 1, T::Utility, G::NeutralOrb, E::LeadActionEnd, 30.f, 0.f, 2, TEXT("Physical Orb contact creates a relay candidate; partner + 30 Combo required.")));
 		O.Add(Def(TEXT("heavy_roll"), TEXT("HEAVY ROLL"), 2, T::Impact, G::ActingZoogi, E::LeadActionEnd, 1.25f, 1.2f, 3, TEXT("Force impulse x1.25, aim error envelope x1.2.")));
-		O.Add(Def(TEXT("ember"), TEXT("EMBER"), 2, T::Infusion, G::ActingZoogi, E::TurnEnd, 1.2f, 0.f, 2, TEXT("Enemy push x1.2; clears overlapping Frost cells only.")));
-		O.Add(Def(TEXT("titan"), TEXT("TITAN"), 2, T::Infusion, G::ActingZoogi, E::TurnEnd, 1.35f, 0.8f, 2, TEXT("Mass x1.35, received push x0.8; prior mass cached and restored.")));
-		O.Add(Def(TEXT("frost"), TEXT("FROST"), 2, T::Terrain, G::SurfaceLane, E::UntilLocallyClearedOrMatchReset, 0.35f, 0.f, 1, TEXT("Shared bounded low-friction lane; never stacks.")));
-		O.Add(Def(TEXT("precision"), TEXT("PRECISION"), 1, T::Control, G::ActingZoogi, E::LeadActionEnd, 0.7f, 1.f, 3, TEXT("Initial aim error x0.7; preview first contact + one rebound.")));
+		O.Add(Def(TEXT("ember"), TEXT("EMBER"), 2, T::Infusion, G::ActingZoogi, E::TurnEnd, 1.2f, 0.f, 2, TEXT("Enemy push x1.2; clears overlapping Frost cells only."), EZoogiCardElement::Fire));
+		O.Add(Def(TEXT("titan"), TEXT("TITAN"), 2, T::Infusion, G::ActingZoogi, E::TurnEnd, 1.35f, 0.8f, 2, TEXT("Mass x1.35, received push x0.8; prior mass cached and restored."), EZoogiCardElement::Void));
+		O.Add(Def(TEXT("frost"), TEXT("FROST"), 2, T::Terrain, G::SurfaceLane, E::UntilLocallyClearedOrMatchReset, 0.35f, 0.f, 1, TEXT("Shared bounded low-friction lane; never stacks."), EZoogiCardElement::Frost));
+		O.Add(Def(TEXT("precision"), TEXT("PRECISION"), 1, T::Control, G::ActingZoogi, E::LeadActionEnd, 0.7f, 1.f, 3, TEXT("Initial aim error x0.7; preview first contact + one rebound."), EZoogiCardElement::Void));
 		O.Add(Def(TEXT("momentum_steal"), TEXT("MOMENTUM STEAL"), 2, T::Technique, G::EnemyContact, E::FirstQualifiedContactOrLeadActionEnd, 0.25f, 0.6f, 1, TEXT("Glancing hit: <=25% tangential transfer, damage x0.6.")));
-		O.Add(Def(TEXT("crystal_collapse"), TEXT("CRYSTAL COLLAPSE"), 2, T::Terrain, G::CrystalPiece, E::PersistentTerrainState, 1.f, 0.f, 1, TEXT("Qualifying contact advances one breakable piece by one state (exempt from bDestruction=False; pillars never).")));
+		O.Add(Def(TEXT("crystal_collapse"), TEXT("CRYSTAL COLLAPSE"), 2, T::Terrain, G::CrystalPiece, E::PersistentTerrainState, 1.f, 0.f, 1, TEXT("Qualifying contact advances one breakable piece by one state (exempt from bDestruction=False; pillars never)."), EZoogiCardElement::Void));
 		O.Add(Def(TEXT("orb_magnet"), TEXT("ORB MAGNET"), 1, T::Utility, G::NeutralOrb, E::CommitPreparationThenLeadAction, 0.6f, 1.5f, 1, TEXT("0.6 s bounded pull on a neutral Orb, <=1.5 diameters, blocked by geometry.")));
 		O.Add(Def(TEXT("double_impact"), TEXT("DOUBLE IMPACT"), 2, T::Impact, G::EnemyContact, E::LeadActionEnd, 0.12f, 0.5f, 2, TEXT("Max two bursts in one contact episode; second at 50% after 0.12 s.")));
 		O.Add(Def(TEXT("anchor_guard"), TEXT("ANCHOR GUARD"), 1, T::Defense, G::ActingZoogi, E::NextQualifyingEnemyImpact, 12.f, 0.3f, 1, TEXT("Arms after settling: absorb 12, next enemy push x0.3.")));
@@ -186,6 +186,9 @@ namespace ZoogiCards
 	const TCHAR* TypeName(EZoogiCardType T) { return TypeNames[(int32)T]; }
 	const TCHAR* ExpiryName(EZoogiCardExpiry E) { return ExpiryNames[(int32)E]; }
 	const TCHAR* TargetName(EZoogiCardTarget T) { return TargetNames[(int32)T]; }
+	static const TCHAR* ElementNames[] = { TEXT("Neutral"), TEXT("Void"), TEXT("Fire"), TEXT("Shock"), TEXT("Frost") };
+	const TCHAR* ElementName(EZoogiCardElement E) { return ElementNames[(int32)E]; }
+	bool ParseElement(const FString& S, EZoogiCardElement& Out) { return ParseEnum(S.TrimStartAndEnd(), ElementNames, Out); }
 
 	static void SplitLines(const FString& Text, TArray<FString>& Lines)
 	{
@@ -198,11 +201,15 @@ namespace ZoogiCards
 		Out.Reset();
 		TArray<FString> Lines; SplitLines(Text, Lines);
 		if (Lines.Num() < 2) { OutError = TEXT("no rows"); return false; }
-		// id,name,cost,type,target,expiry,param_a,param_b,cpu_weight,requires_alive,rule (rule = rest of the line)
+		// id,name,cost,type,target,expiry,param_a,param_b,cpu_weight,requires_alive,[element,]rule (rule = rest of the line)
+		// Oct 14: optional 'element' column (header-detected, before rule); absent = Neutral, so older CSVs still parse.
+		TArray<FString> Hdr; Lines[0].ParseIntoArray(Hdr, TEXT(","), false);
+		const bool bHasElement = Hdr.Num() > 10 && Hdr[10].TrimStartAndEnd().Equals(TEXT("element"), ESearchCase::IgnoreCase);
+		const int32 RuleCol = bHasElement ? 11 : 10;
 		for (int32 L = 1; L < Lines.Num(); ++L)
 		{
 			TArray<FString> F; Lines[L].ParseIntoArray(F, TEXT(","), false);
-			if (F.Num() < 11) { OutError = FString::Printf(TEXT("line %d: %d fields"), L + 1, F.Num()); Out.Reset(); return false; }
+			if (F.Num() < RuleCol + 1) { OutError = FString::Printf(TEXT("line %d: %d fields"), L + 1, F.Num()); Out.Reset(); return false; }
 			FZoogiCardDef D;
 			D.Id = FName(*F[0].TrimStartAndEnd().ToLower());
 			D.Name = F[1].TrimStartAndEnd();
@@ -211,7 +218,8 @@ namespace ZoogiCards
 			if (!bOk || D.Id.IsNone() || D.Cost < 0 || D.Cost > 10) { OutError = FString::Printf(TEXT("line %d: bad id/cost/type/target/expiry"), L + 1); Out.Reset(); return false; }
 			D.ParamA = FCString::Atof(*F[6]); D.ParamB = FCString::Atof(*F[7]); D.CPUWeight = FCString::Atoi(*F[8]);
 			D.bRequiresAlive = !F[9].TrimStartAndEnd().Equals(TEXT("false"), ESearchCase::IgnoreCase) && F[9].TrimStartAndEnd() != TEXT("0");
-			TArray<FString> Rest; for (int32 i = 10; i < F.Num(); ++i) Rest.Add(F[i]);
+			if (bHasElement && !ParseElement(F[10], D.Element)) { OutError = FString::Printf(TEXT("line %d: bad element '%s'"), L + 1, *F[10]); Out.Reset(); return false; }
+			TArray<FString> Rest; for (int32 i = RuleCol; i < F.Num(); ++i) Rest.Add(F[i]);
 			D.Rule = FString::Join(Rest, TEXT(",")).TrimStartAndEnd().TrimQuotes();
 			for (const FZoogiCardDef& X : Out) if (X.Id == D.Id) { OutError = FString::Printf(TEXT("duplicate id %s"), *D.Id.ToString()); Out.Reset(); return false; }
 			Out.Add(D);

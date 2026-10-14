@@ -33,6 +33,7 @@
 #include "TimerManager.h"
 #include "Sound/SoundBase.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
+#include "ZoogiCPUBrain.h"
 
 AZoogiGameMode::AZoogiGameMode()
 {
@@ -879,7 +880,8 @@ void AZoogiGameMode::PlanCPUShot()
 	};
 
 	CPUPlannedCut = 0.f;
-	struct FPlan { float Cost; FVector2D Dir; float Frac; AActor* Actor; bool bStraight; float Dist; float Radius; };
+	const EZoogiCPUTier CPUTier = ZoogiCPU::ActiveTier();
+	struct FPlan { float Cost; FVector2D Dir; float Frac; AActor* Actor; bool bStraight; float Dist; float Radius; float Risk = 0.f; float Exposure = 0.f; }; // Risk/Exposure: tier lookahead inputs only (Oct 14)
 	TArray<FPlan> Plans;
 	FVector2D BestDir(-B.GetSafeNormal());
 	float BestFrac = 0.45f;
@@ -914,7 +916,7 @@ void AZoogiGameMode::PlanCPUShot()
 		const FVector2D Contact = C.P - Dir * (ZoogiConst::ZoogiRadius + C.Radius);
 		const float MyEdge = Arena->DistanceToEdge(Contact, Dir);
 		if (Coast > MyEdge - 80.f) Cost += 900.f; // would follow the target off the edge (-75 and a wasted turn)
-		Plans.Add({ Cost, Dir, Frac, C.Actor, true, Dist, C.Radius });
+		Plans.Add({ Cost, Dir, Frac, C.Actor, true, Dist, C.Radius, FMath::Clamp(Coast / FMath::Max(MyEdge, 1.f), 0.f, 1.f), 1.f - FMath::Clamp(MyEdge / 1500.f, 0.f, 1.f) });
 	}
 	// Angled (cut) shots: aim the ghost-ball contact so the target departs toward its nearest edge.
 	// The target leaves along the contact normal; a cut of c degrees transfers ~cos(c) of the head-on push.
@@ -956,7 +958,7 @@ void AZoogiGameMode::PlanCPUShot()
 			const float VHit = FMath::Sqrt(FMath::Max(0.f, FMath::Square(ZoogiConst::LaunchSpeedForPull(Frac)) - 2.f * Decel * GDist));
 			const float VAfter = VHit * FMath::Sqrt(FMath::Max(0.f, 1.f - CosCut * CosCut));
 			if (!Tang.IsNearlyZero() && VAfter * VAfter / (2.f * Decel) > Arena->DistanceToEdge(Ghost, Tang) - 80.f) Cost += 900.f;
-			Plans.Add({ Cost, Dir, Frac, C.Actor, false, GDist, C.Radius });
+			Plans.Add({ Cost, Dir, Frac, C.Actor, false, GDist, C.Radius, Tang.IsNearlyZero() ? 0.f : FMath::Clamp((VAfter * VAfter / (2.f * Decel)) / FMath::Max(Arena->DistanceToEdge(Ghost, Tang), 1.f), 0.f, 1.f), 1.f - FMath::Clamp(Arena->DistanceToEdge(Ghost, Dir) / 1500.f, 0.f, 1.f) });
 		}
 	}
 	// Pick one of the three cheapest shots so CPU players vary their targets.
@@ -964,9 +966,22 @@ void AZoogiGameMode::PlanCPUShot()
 	if (Plans.Num() > 0)
 	{
 		// Vary among the three cheapest, but never pick a clearly worse (blocked / risky) shot for variety's sake.
-		int32 NPick = 1;
-		while (NPick < FMath::Min(3, Plans.Num()) && Plans[NPick].Cost < Plans[0].Cost + 350.f) ++NPick;
-		const FPlan& Pick = Plans[GameRng.RandRange(0, NPick - 1)];
+		// Oct 14 CPU tiers (ZoogiCPUBrain, decision-making only): Normal = this legacy pick, unchanged (same GameRng draws).
+		int32 PickIdx = 0;
+		if (CPUTier == EZoogiCPUTier::Normal)
+		{
+			int32 NPick = 1;
+			while (NPick < FMath::Min(3, Plans.Num()) && Plans[NPick].Cost < Plans[0].Cost + 350.f) ++NPick;
+			PickIdx = GameRng.RandRange(0, NPick - 1);
+		}
+		else
+		{
+			TArray<FZoogiCPUShotOption> Opts;
+			for (const FPlan& Pl : Plans) Opts.Add({ Pl.Cost, Pl.Risk, Pl.Exposure });
+			PickIdx = ZoogiCPU::PickShot(Opts, ZoogiCPU::TierRow(CPUTier), GameRng);
+			UE_LOG(LogZoogi, Log, TEXT("CPU tier=%s P%d picked plan %d/%d cost=%.0f risk=%.2f"), ZoogiProgress::TierName(CPUTier), ActivePlayer + 1, PickIdx, Plans.Num(), Plans[PickIdx].Cost, Plans[PickIdx].Risk);
+		}
+		const FPlan& Pick = Plans[PickIdx];
 		BestDir = Pick.Dir;
 		BestFrac = Pick.Frac;
 		CPULock = Pick.Actor;
@@ -991,7 +1006,7 @@ void AZoogiGameMode::PlanCPUShot()
 		BestFrac = FMath::Min(BestFrac, FMath::Max(0.2f, InvertLaunch(Safe)));
 	}
 	// Imperfect aim: less control = more error (ZoogiStats.control).
-	const float ErrDeg = GameRng.FRandRange(-1.f, 1.f) * (100.f - Me->Def.Control) / 12.f;
+	const float ErrDeg = GameRng.FRandRange(-1.f, 1.f) * (100.f - Me->Def.Control) / 12.f * (CPUTier == EZoogiCPUTier::Normal ? 1.f : ZoogiCPU::AimNoise(ZoogiCPU::TierRow(CPUTier)));
 	BestDir = BestDir.GetRotated(ErrDeg);
 	BestFrac = FMath::Clamp(BestFrac * GameRng.FRandRange(0.96f, 1.04f), 0.25f, 1.f);
 	// Oct 8: Frozen aerial layer: with the battle map props up, a CPU sometimes plays a prop route (rail / halo / bumper) instead.

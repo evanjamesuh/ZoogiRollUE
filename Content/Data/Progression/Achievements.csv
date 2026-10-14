@@ -1,0 +1,16 @@
+# One-time achievements. Gems here are NOT capped by the daily match cap (Evan Q13). stat = lifetime stat key; target = count.
+# reward_title / reward_cosmetic = ids in Titles.csv / Cosmetics.csv. Awakening feeds achievements only (Evan Q7): no gems for it.
+id,name,stat,target,gems,reward_title,reward_cosmetic
+A_FIRST_MATCH,First Roll,matches_completed,1,10,arena_rookie,
+A_FIRST_WIN,First Victory,wins,1,15,,
+A_FIRST_KO,First KO,kos,1,10,,
+A_WINS_10,Ten Wins,wins,10,40,rolling_challenger,
+A_WINS_50,Fifty Wins,wins,50,100,arena_champion,
+A_TRICKS_25,Trickster,tricks,25,40,,trail_spark
+A_EPISODE_1,Episode!,episodes,1,20,,
+A_AWAKEN_1,Awakened,awakenings,1,0,,entry_awaken_flash
+A_AWAKEN_25,Awakening Adept,awakenings,25,0,,border_awaken
+A_MASTERY_5,Marble Master,max_mastery_level,5,50,marble_master,
+A_MASTERY_ALL5,Elemental Specialist,min_core_mastery_level,5,150,elemental_specialist,lighting_elemental
+A_EXPERT_WINS_10,Master Strategist,expert_wins,10,100,master_strategist,
+A_AFFINITY_MAX,Zoogi Legend,max_affinity_level,5,100,zoogi_legend,victory_legend

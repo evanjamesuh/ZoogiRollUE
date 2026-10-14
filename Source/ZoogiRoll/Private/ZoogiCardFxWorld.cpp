@@ -8,6 +8,7 @@
 // (Prev + (Post - Prev) * K), never invent a direction. HP / damage numbers (Guard 12, Anchor 12, Momentum Steal x0.6)
 // are display / log only (no HP system in Phase 3; PROPOSED).
 #include "ZoogiCardSubsystem.h"
+#include "ZoogiProgression.h"
 #include "ZoogiRoll.h"
 #include "ZoogiGameMode.h"
 #include "ZoogiBall.h"
@@ -44,6 +45,7 @@ void UZoogiCardSubsystem::FxReset()
 void UZoogiCardSubsystem::FxUse(const FZoogiFxArmed& F, const FString& What)
 {
 	FxUses.FindOrAdd(F.Card)++;
+	ZoogiProgressHooks::CardEffectUsed().Broadcast(F.Owner, F.Card); // read-only (progression award hooks)
 	UE_LOG(LogZoogi, Log, TEXT("CARDS fx %s effect=%lld P%d: %s"), *F.Card.ToString(), F.EffectId, F.Owner + 1, *What);
 }
 

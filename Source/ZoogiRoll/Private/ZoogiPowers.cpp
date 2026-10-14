@@ -11,6 +11,7 @@
 #include "Engine/StaticMesh.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "ZoogiProgression.h"
 
 namespace
 {
@@ -109,6 +110,7 @@ void AZoogiGameMode::FireInstantPower(AZoogiBall* Ball)
 	const FLinearColor C = PowerColor(P);
 	const FVector L = Ball->BallLocation();
 	Ball->Charges = FMath::Max(0, Ball->Charges - 1);
+	ZoogiProgressHooks::PowerUsed().Broadcast(Ball->PlayerIndex); // read-only (progression award hooks)
 	bPowerUsed = true;
 	AddPopup(Ball->Def.Ability.ToUpper() + TEXT("!"), L + FVector(0, 0, 140.f), C);
 	ZoogiUtil::PlaySfx(this, P == EZoogiPower::Explosion ? TEXT("Explosion") : TEXT("Zap"), 0.9f, P == EZoogiPower::ShadowStun ? 0.7f : (P == EZoogiPower::RuneSeal ? 1.25f : 1.f));
@@ -253,6 +255,7 @@ void AZoogiGameMode::OnArmedShot(AZoogiBall* Ball)
 	if (!bPowerArmed || !Ball) return;
 	const EZoogiPower P = Ball->Def.PowerKind;
 	Ball->Charges = FMath::Max(0, Ball->Charges - 1);
+	ZoogiProgressHooks::PowerUsed().Broadcast(Ball->PlayerIndex); // read-only (progression award hooks)
 	bPowerArmed = false;
 	bPowerUsed = true;
 	PowerTouched.Reset();

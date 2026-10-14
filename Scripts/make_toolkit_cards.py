@@ -8,10 +8,11 @@ proj = unreal.Paths.project_dir()
 rows = []
 with open(os.path.join(proj, 'Content', 'Data', 'Cards.csv'), newline='') as f:
     lines = [l for l in f if not l.lstrip().startswith('#')]
+rc = 11 if [h.strip() for h in next(csv.reader(lines[:1]))][10:11] == ['element'] else 10  # Oct 14: optional element column
 for r in csv.reader(lines[1:]):
     if len(r) < 11: continue
     cid, name, cost, ctype = r[0].strip(), r[1].strip(), int(r[2]), r[3].strip()
-    rule = ','.join(r[10:]).strip()
+    rule = ','.join(r[rc:]).strip()
     rows.append({
         'Name': cid,
         'CardName': 'NSLOCTEXT("ZoogiCards", "%s_Name", "%s")' % (cid, name.title()),

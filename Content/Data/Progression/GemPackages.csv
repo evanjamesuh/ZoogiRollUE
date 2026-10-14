@@ -1,0 +1,7 @@
+# Gem shop packages (Evan Q2). product ids must match the store consoles exactly (App Store Connect / Play Console / Steam / EOS offers).
+# PLACEHOLDER product ids and prices until Evan creates the products; price_usd is display fallback only (real price comes from the store).
+package_id,gems,bonus_gems,price_usd,apple_product_id,google_product_id,steam_item_id,epic_offer_id
+gems_small,100,0,0.99,com.zoogiroll.gems.small,gems_small,1001,EPIC_OFFER_ID_SMALL
+gems_medium,550,50,4.99,com.zoogiroll.gems.medium,gems_medium,1002,EPIC_OFFER_ID_MEDIUM
+gems_large,1200,200,9.99,com.zoogiroll.gems.large,gems_large,1003,EPIC_OFFER_ID_LARGE
+gems_huge,2600,600,19.99,com.zoogiroll.gems.huge,gems_huge,1004,EPIC_OFFER_ID_HUGE
