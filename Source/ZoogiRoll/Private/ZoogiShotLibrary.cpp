@@ -127,8 +127,8 @@ FZoogiShotSpec UZoogiShotLibrary::MakeDefault(EZoogiShotType Type)
 		// Extreme close-up on the eyes, almost square-on, tiny drift.
 		S.Duration = 1.5f; S.EaseIn = 0.15f; S.EaseOut = 0.3f; S.Ease = EZoogiShotEase::CubicInOut;
 		S.Heading = EZoogiShotHeading::FocusFacing; S.YawOffset = 10.f; S.OrbitDegrees = 4.f;
-		S.Pitch = 4.f; S.PitchEnd = 3.f; S.Distance = 165.f; S.DistanceEnd = 140.f;
-		S.FOV = 24.f; S.FOVEnd = 21.f; S.PivotOffset = FVector(0, 0, 6.f); S.LookOffset = FVector(0, 0, 4.f);
+		S.Pitch = 4.f; S.PitchEnd = 3.f; S.Distance = 250.f; S.DistanceEnd = 215.f;
+		S.FOV = 27.f; S.FOVEnd = 24.f; S.PivotOffset = FVector(0, 0, 6.f); S.LookOffset = FVector(0, 0, 4.f);
 		S.SubjectRadius = 30.f; S.VignetteAdd = 0.22f; S.SaturationMul = 1.06f; S.ContrastMul = 1.05f;
 		break;
 	case EZoogiShotType::ReactionSurprise:
