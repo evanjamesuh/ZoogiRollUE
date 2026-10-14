@@ -169,6 +169,9 @@ void AZoogiGameMode::MenuAction(FName Action, int32 Index)
 	else if (Action == "Infuse") AwakenInfuse(Index >= 0 ? Index : AwakenPick);
 	else if (Action == "Guard") AwakenGuard(Index >= 0 ? Index : AwakenPick);
 	else if (Action == "Save") AwakenSave();
+	else if (Action == "CardToggle") CardsToggle(Index);
+	else if (Action == "CardClear") CardsClear();
+	else if (Action == "CardCommit") CardsCommit();
 	else if (Action == "AimNudge") NudgeAim(Index);
 	else if (Action == "AimPower") AimPowerStep = FMath::Clamp(Index, 0, 3);
 	else if (Action == "AimConfirm") CommitLock();
@@ -181,7 +184,7 @@ void AZoogiGameMode::MenuAction(FName Action, int32 Index)
 	else if (Action == "Rematch") StartMatch();
 	else if (Action == "Quit") UKismetSystemLibrary::QuitGame(this, GetWorld()->GetFirstPlayerController(), EQuitPreference::Quit, false);
 	// UI sounds (team brief: short, soft, rounded, never harsh when repeated): confirm / cancel / click.
-	if (Action == "Start" || Action == "Rematch" || Action == "Infuse" || Action == "Guard" || Action == "Save" || Action == "AimConfirm" || Action == "FollowUp")
+	if (Action == "Start" || Action == "Rematch" || Action == "Infuse" || Action == "Guard" || Action == "Save" || Action == "CardCommit" || Action == "AimConfirm" || Action == "FollowUp")
 		ZoogiUtil::PlaySfx(this, TEXT("UiConfirm"), 0.4f);
 	else if (Action == "AimCancel" || Action == "Menu" || Action == "Quit")
 		ZoogiUtil::PlaySfx(this, TEXT("UiCancel"), 0.4f);

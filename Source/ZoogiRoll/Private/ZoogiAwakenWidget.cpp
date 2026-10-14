@@ -1,4 +1,5 @@
 #include "ZoogiAwakenWidget.h"
+#include "ZoogiCards.h"
 #include "ZoogiMenuWidget.h"
 #include "ZoogiGameMode.h"
 #include "ZoogiBall.h"
@@ -569,8 +570,7 @@ void UZoogiAwakenWidget::BuildAim(AZoogiGameMode* G)
 	}
 	else
 	{
-	static const TCHAR* PowerNames[4] = { TEXT("AUTO"), TEXT("SOFT"), TEXT("MED"), TEXT("FULL") };
-	for (int32 i = 0; i < 4; ++i) { MakeButton(P, PowerNames[i], FVector2D(X, BY), FVector2D(96.f, BH), TEXT("AimPower"), i, FLinearColor(1.f, 0.8f, 0.3f), G->AimPowerStep == i); X += 102.f; }
+	for (int32 i = 0; i < 4; ++i) { MakeButton(P, ZoogiCards::ForceLabel(i, G->CardsOn()), FVector2D(X, BY), FVector2D(96.f, BH), TEXT("AimPower"), i, FLinearColor(1.f, 0.8f, 0.3f), G->AimPowerStep == i); X += 102.f; }
 	X += 18.f;
 	MakeButton(P, TEXT("NEXT"), FVector2D(X, BY), FVector2D(110.f, BH), TEXT("AimNext"), 0, Acc, false); X += 118.f;
 	}
@@ -592,7 +592,7 @@ void UZoogiAwakenWidget::Refresh(float DeltaSeconds, bool bHideAll)
 	if (G && Root && !bHideAll && G->Phase == EZoogiPhase::Aiming)
 	{
 		AZoogiBall* B = G->GetActiveBall();
-		bWantAwaken = G->Stage == EZoogiStage::Awaken && !G->bAwakenDone && B && B->Artifact;
+		bWantAwaken = G->Stage == EZoogiStage::Awaken && !G->bAwakenDone && B && B->Artifact && !G->CardsOn(); // v3: Canvas card panel instead
 		bWantAim = G->IsHumanAiming() && G->IsAimStep();
 	}
 	if (bWantAwaken)

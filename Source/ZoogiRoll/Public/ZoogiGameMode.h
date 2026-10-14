@@ -318,6 +318,13 @@ public:
 	bool AwakenInfuse(int32 Pick);
 	bool AwakenGuard(int32 Pick);
 	bool AwakenSave();
+	// ---- v3 cards (ZoogiCardGlue.cpp): with [ZoogiRoll.Cards] bCards / -ZoogiCards the Awaken stage is the card STANDBY
+	bool CardsOn() const;
+	void CardsBeginStandby();
+	void CardsToggle(int32 HandSlot);
+	void CardsClear();
+	bool CardsCommit();
+	void CardsPlanCPU();
 	void DoDraw();
 	void PlanCPUAwaken();
 	/** Infused shooter's first contact: apply the artifact effect (computed now = authoritative). */

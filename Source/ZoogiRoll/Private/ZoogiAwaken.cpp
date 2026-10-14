@@ -148,6 +148,7 @@ EZoogiArtifact AZoogiGameMode::PickedArtifact() const
 
 bool AZoogiGameMode::AwakenInfuse(int32 Pick)
 {
+	if (CardsOn()) return false; // v3: cards replace the artifact hand
 	AZoogiBall* B = GetActiveBall();
 	if (!B || !B->Artifact || Phase != EZoogiPhase::Aiming || Stage != EZoogiStage::Awaken || bAwakenDone) return false;
 	const EZoogiArtifact A = TakePicked(B->Artifact, Pick);
@@ -172,6 +173,7 @@ bool AZoogiGameMode::AwakenInfuse(int32 Pick)
 
 bool AZoogiGameMode::AwakenGuard(int32 Pick)
 {
+	if (CardsOn()) return false; // v3: cards replace the artifact hand
 	AZoogiBall* B = GetActiveBall();
 	if (!B || !B->Artifact || Phase != EZoogiPhase::Aiming || Stage != EZoogiStage::Awaken || bAwakenDone) return false;
 	const EZoogiArtifact A = TakePicked(B->Artifact, Pick);
@@ -191,6 +193,7 @@ bool AZoogiGameMode::AwakenGuard(int32 Pick)
 
 bool AZoogiGameMode::AwakenSave()
 {
+	if (CardsOn()) return false; // v3: cards replace the artifact hand
 	AZoogiBall* B = GetActiveBall();
 	if (!B || !B->Artifact || Phase != EZoogiPhase::Aiming || Stage != EZoogiStage::Awaken || bAwakenDone) return false;
 	UZoogiArtifactComponent* AC = B->Artifact;
@@ -212,6 +215,7 @@ bool AZoogiGameMode::AwakenSave()
 
 void AZoogiGameMode::PlanCPUAwaken()
 {
+	if (CardsOn()) { CardsPlanCPU(); return; }
 	AZoogiBall* B = GetActiveBall();
 	if (!B || !B->Artifact || bAwakenDone) return;
 	UZoogiArtifactComponent* AC = B->Artifact;

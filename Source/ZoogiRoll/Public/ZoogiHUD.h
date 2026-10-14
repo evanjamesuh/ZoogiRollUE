@@ -45,6 +45,7 @@ protected:
 	void DrawStages(AZoogiGameMode* G);
 	// Milestone "Awaken" (Canvas, like the rest of the in-match HUD)
 	void DrawAwaken(AZoogiGameMode* G);
+	void DrawCards(AZoogiGameMode* G); // v3 card Standby panel (mouse / touch buttons; keys 1-5, Enter, Backspace)
 	void DrawAimControls(AZoogiGameMode* G);
 	void DrawPreview(AZoogiGameMode* G);
 	void DrawArtifacts(AZoogiGameMode* G);
