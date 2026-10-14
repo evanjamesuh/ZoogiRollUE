@@ -10,6 +10,7 @@
 #include "Engine/Texture.h"
 #include "Engine/Engine.h"
 #include "Engine/Font.h"
+#include "ZoogiUIStyle.h"
 
 namespace
 {
@@ -19,6 +20,7 @@ namespace
 		FSlateFontInfo Fi = F->GetLegacySlateFontInfo();
 		Fi.Size = Size;
 		if (bBold) Fi.TypefaceFontName = FName(TEXT("Bold"));
+		ZoogiUIStyle::AddOutline(Fi, Size >= 30.f ? 3.f : 2.f); // uistyle: navy text outline
 		return Fi;
 	}
 
@@ -71,7 +73,7 @@ TSharedRef<SWidget> UZoogiEpisodeCalloutWidget::RebuildWidget()
 	Anchor(Root, CalloutSub, FAnchors(0.5f, 0.2f), FVector2D(0.5f, 0.5f), FMargin(0.f, 48.f, 0.f, 0.f), true);
 
 	BannerBox = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("Banner"));
-	BannerBox->SetBrush(EpSolid(FLinearColor(0.02f, 0.03f, 0.08f, 0.78f), FLinearColor::White, 2.f, 8.f));
+	BannerBox->SetBrush(EpSolid(ZoogiUIStyle::PanelNavy, ZoogiUIStyle::Outline, 4.f, 14.f)); // uistyle: saturated navy, navy outline
 	BannerBox->SetPadding(FMargin(36.f, 10.f));
 	BannerBox->SetHorizontalAlignment(HAlign_Center);
 	BannerText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("BannerText"));
@@ -136,7 +138,7 @@ void UZoogiEpisodeCalloutWidget::ShowBanner(const FString& Text, const FString& 
 	BannerText->SetText(FText::FromString(Text));
 	BannerText->SetColorAndOpacity(FSlateColor(Color));
 	BannerSub->SetText(FText::FromString(Sub));
-	BannerBox->SetBrush(EpSolid(FLinearColor(0.02f, 0.03f, 0.08f, 0.8f), Color, 2.f, 8.f));
+	BannerBox->SetBrush(EpSolid(FLinearColor(Color.R * 0.25f + 0.02f, Color.G * 0.25f + 0.08f, Color.B * 0.25f + 0.3f, 0.88f), ZoogiUIStyle::Outline, 4.f, 14.f)); // uistyle
 	BannerAge = 0.f;
 	BannerLife = Seconds;
 	BannerBox->SetVisibility(ESlateVisibility::HitTestInvisible);
