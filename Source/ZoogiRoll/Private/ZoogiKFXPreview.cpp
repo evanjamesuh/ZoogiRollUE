@@ -22,6 +22,7 @@
 #include "EngineUtils.h"
 #if WITH_EDITOR
 #include "ShaderCompiler.h"
+#include "ContentStreaming.h"
 #endif
 
 static FVector KFXBase(30000.f, 0.f, 0.f); // -ZoogiKFXBase=x,y,z moves the stage (e.g. up into open sky, away from the arena hills)
@@ -55,8 +56,8 @@ void AZoogiKFXPreview::BeginPlay()
 	{
 		Floor->SetStaticMesh(Plane);
 		Floor->SetWorldScale3D(FVector(400.f, 400.f, 1.f));
-		// grey-beige packed dirt like the KriptoFX demo yard, so glow / decals read against a similar ground
-		Floor->SetMaterial(0, ZoogiUtil::SurfaceMID(this, FLinearColor(0.20f, 0.18f, 0.16f), 0.9f));
+		// darker grey-brown dirt like the KriptoFX demo yard (round 12; preview only), so glow / decals read against a similar ground
+		Floor->SetMaterial(0, ZoogiUtil::SurfaceMID(this, FLinearColor(0.085f, 0.068f, 0.052f), 0.95f));
 	}
 	RT = NewObject<UTextureRenderTarget2D>(this);
 	RT->RenderTargetFormat = ETextureRenderTargetFormat::RTF_RGBA8_SRGB;
@@ -144,6 +145,7 @@ void AZoogiKFXPreview::FinishShaders()
 #if WITH_EDITOR
 	if (GShaderCompilingManager) GShaderCompilingManager->FinishAllCompilation();
 #endif
+	IStreamingManager::Get().StreamAllResources(2.0f); // decal textures fully resident before a capture (no low-mip / default squares)
 }
 
 void AZoogiKFXPreview::NextPlan()

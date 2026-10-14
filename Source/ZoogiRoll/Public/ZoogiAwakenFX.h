@@ -70,6 +70,7 @@ protected:
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Chunks;
 	UPROPERTY() TArray<TObjectPtr<UDecalComponent>> Splats;
 	UPROPERTY() TArray<TObjectPtr<UPointLightComponent>> HitLights;
+	UPROPERTY() TArray<TObjectPtr<UDecalComponent>> HitGlows; // soft lavender wash under each Shock strike point
 	UPROPERTY() TArray<TObjectPtr<UMaterialInstanceDynamic>> MIDs;
 
 	// shock
