@@ -232,4 +232,29 @@ bool FZoogiCardCommitOnceTest::RunTest(const FString&)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiCardToolkitTest, "ZoogiRoll.Cards.ToolkitBackend", ZoogiCardFlags)
+bool FZoogiCardToolkitTest::RunTest(const FString&)
+{
+	FString Why;
+	const TArray<FZoogiCardDef> Native = ZoogiCards::BuiltInDefs();
+	TSharedPtr<FZoogiToolkitCardBackend> T = FZoogiToolkitCardBackend::TryLoad(Native, Why);
+	if (!TestTrue(*FString::Printf(TEXT("toolkit DT_ZoogiCards loads on FCard (%s)"), *Why), T.IsValid())) return true;
+	TestEqual(TEXT("15 toolkit rows"), T->AllDefs().Num(), 15);
+	for (const FZoogiCardDef& N : Native)
+	{
+		const FZoogiCardDef* D = T->FindDef(N.Id);
+		if (!TestNotNull(*N.Id.ToString(), D)) continue;
+		TestEqual(*FString::Printf(TEXT("%s toolkit StatCost == card book"), *N.Id.ToString()), D->Cost, N.Cost);
+		TestFalse(TEXT("name read"), D->Name.IsEmpty());
+	}
+	// the same rules run on either backend: identical decks + seed -> identical state
+	FZoogiCardRules A, B; FString L;
+	TArray<TArray<FName>> Decks; Decks.Init(ZoogiCards::BuiltInDeck(), 2);
+	A.Init(MakeShared<FZoogiNativeCardBackend>(Native), Tune(), 5, Decks, ZoogiCards::BuiltInDeck(), L);
+	B.Init(T, Tune(), 5, Decks, ZoogiCards::BuiltInDeck(), L);
+	A.BeginStandby(0, 1); B.BeginStandby(0, 1);
+	TestTrue(TEXT("backend-independent rules"), A.StateHash() == B.StateHash());
+	return true;
+}
+
 #endif

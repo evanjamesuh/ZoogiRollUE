@@ -2,6 +2,8 @@
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "Engine/DataTable.h"
+#include "UObject/UnrealType.h"
 
 const TCHAR* ZoogiCardResultName(EZoogiCardResult R)
 {
@@ -36,6 +38,73 @@ void FZoogiNativeCardBackend::Shuffle(TArray<FZoogiCardInstance>& Cards, FRandom
 	for (int32 i = Cards.Num() - 1; i > 0; --i) Cards.Swap(i, Rng.RandRange(0, i)); // Fisher-Yates on the seeded stream
 }
 
+// ------------------------------------------------------------------ toolkit backend (reflection on the BP struct FCard)
+
+namespace
+{
+	FProperty* FindAuthored(const UStruct* S, const TCHAR* Name)
+	{
+		for (TFieldIterator<FProperty> It(S); It; ++It) if (It->GetAuthoredName() == Name) return *It;
+		return nullptr;
+	}
+	bool ReadUseCost(const FProperty* UseRules, const void* Row, int32& OutCost)
+	{
+		const FArrayProperty* Arr = CastField<FArrayProperty>(UseRules);
+		const FStructProperty* Inner = Arr ? CastField<FStructProperty>(Arr->Inner) : nullptr;
+		if (!Inner) return false;
+		FScriptArrayHelper H(Arr, Arr->ContainerPtrToValuePtr<void>(Row));
+		const FProperty* RuleP = FindAuthored(Inner->Struct, TEXT("Rule"));
+		const FNumericProperty* CostP = CastField<FNumericProperty>(FindAuthored(Inner->Struct, TEXT("Cost")));
+		if (!CostP) return false;
+		for (int32 i = 0; i < H.Num(); ++i)
+		{
+			const uint8* E = H.GetRawPtr(i);
+			FString RuleName;
+			if (const FObjectPropertyBase* OP = CastField<FObjectPropertyBase>(RuleP)) RuleName = GetNameSafe(OP->GetObjectPropertyValue_InContainer(E));
+			if (!RuleName.Contains(TEXT("StatCost"))) continue;
+			const void* V = CostP->ContainerPtrToValuePtr<void>(E);
+			OutCost = CostP->IsFloatingPoint() ? FMath::RoundToInt(CostP->GetFloatingPointPropertyValue(V)) : (int32)CostP->GetSignedIntPropertyValue(V);
+			return true;
+		}
+		return false;
+	}
+}
+
+TSharedPtr<FZoogiToolkitCardBackend> FZoogiToolkitCardBackend::TryLoad(const TArray<FZoogiCardDef>& NativeDefs, FString& OutWhy)
+{
+	const UDataTable* DT = LoadObject<UDataTable>(nullptr, TablePath);
+	if (!DT) { OutWhy = TEXT("DT_ZoogiCards not found"); return nullptr; }
+	const UScriptStruct* RS = DT->GetRowStruct();
+	if (!RS || RS->GetPathName() != RowStructPath) { OutWhy = FString::Printf(TEXT("row struct %s is not the toolkit FCard"), RS ? *RS->GetPathName() : TEXT("none")); return nullptr; }
+	const FProperty* NameP = FindAuthored(RS, TEXT("CardName"));
+	const FProperty* DescP = FindAuthored(RS, TEXT("Description"));
+	const FProperty* UseP = FindAuthored(RS, TEXT("UseRules"));
+	if (!NameP || !UseP) { OutWhy = TEXT("FCard fields CardName/UseRules not found"); return nullptr; }
+	TSharedPtr<FZoogiToolkitCardBackend> B = MakeShared<FZoogiToolkitCardBackend>();
+	for (const FZoogiCardDef& N : NativeDefs)
+	{
+		const uint8* const* Row = DT->GetRowMap().Find(N.Id);
+		if (!Row) { OutWhy = FString::Printf(TEXT("row %s missing"), *N.Id.ToString()); return nullptr; }
+		FZoogiCardDef D = N;
+		if (!ReadUseCost(UseP, *Row, D.Cost)) { OutWhy = FString::Printf(TEXT("row %s has no BP_UseRule_StatCost cost"), *N.Id.ToString()); return nullptr; }
+		if (const FTextProperty* TP = CastField<FTextProperty>(NameP)) D.Name = TP->GetPropertyValue_InContainer(*Row).ToString().ToUpper();
+		if (const FTextProperty* TP = CastField<FTextProperty>(DescP)) D.Rule = TP->GetPropertyValue_InContainer(*Row).ToString();
+		B->Defs.Add(D);
+	}
+	return B;
+}
+
+const FZoogiCardDef* FZoogiToolkitCardBackend::FindDef(FName Id) const
+{
+	for (const FZoogiCardDef& D : Defs) if (D.Id == Id) return &D;
+	return nullptr;
+}
+
+void FZoogiToolkitCardBackend::Shuffle(TArray<FZoogiCardInstance>& Cards, FRandomStream& Rng) const
+{
+	for (int32 i = Cards.Num() - 1; i > 0; --i) Cards.Swap(i, Rng.RandRange(0, i));
+}
+
 // ------------------------------------------------------------------ tune
 
 void FZoogiCardTune::Load()
@@ -50,12 +119,14 @@ void FZoogiCardTune::Load()
 		GConfig->GetInt(S, TEXT("MaxCopies"), MaxCopies, GGameIni);
 		GConfig->GetInt(S, TEXT("MaxCardsPerCommit"), MaxCardsPerCommit, GGameIni);
 		GConfig->GetString(S, TEXT("DefaultDeck"), DefaultDeck, GGameIni);
+		GConfig->GetString(S, TEXT("Backend"), Backend, GGameIni);
 	}
 	const TCHAR* Cmd = FCommandLine::Get();
 	FString V;
 	if (FParse::Value(Cmd, TEXT("ZoogiCards="), V)) bCards = !(V.Equals(TEXT("Off"), ESearchCase::IgnoreCase) || V == TEXT("0") || V.Equals(TEXT("False"), ESearchCase::IgnoreCase));
 	else if (FParse::Param(Cmd, TEXT("ZoogiCards"))) bCards = true;
 	FParse::Value(Cmd, TEXT("ZoogiCardDeck="), DefaultDeck);
+	FParse::Value(Cmd, TEXT("ZoogiCardBackend="), Backend);
 	HandSize = FMath::Clamp(HandSize, 1, 10);
 	EnergyPerTurn = FMath::Clamp(EnergyPerTurn, 0, 20);
 	DeckSize = FMath::Clamp(DeckSize, 1, 60);

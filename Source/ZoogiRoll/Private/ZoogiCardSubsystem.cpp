@@ -11,6 +11,9 @@
 #include "Misc/Paths.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
 
 void UZoogiCardSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -64,7 +67,10 @@ void UZoogiCardSubsystem::EnsureMatch(AZoogiGameMode* G)
 	for (AZoogiBall* B : G->Balls) MatchBalls.Add(B);
 	TArray<FZoogiCardDef> Defs; TArray<FName> Deck;
 	LoadData(Defs, Deck);
-	TSharedPtr<IZoogiCardBackend> Backend = MakeShared<FZoogiNativeCardBackend>(Defs);
+	TSharedPtr<IZoogiCardBackend> Backend;
+	FString Why = TEXT("Backend=native");
+	if (!Tune.Backend.Equals(TEXT("native"), ESearchCase::IgnoreCase)) Backend = FZoogiToolkitCardBackend::TryLoad(Defs, Why);
+	if (!Backend.IsValid()) { Backend = MakeShared<FZoogiNativeCardBackend>(Defs); UE_LOG(LogZoogi, Log, TEXT("CARDS backend native (%s)"), *Why); }
 	TArray<TArray<FName>> Decks; Decks.Init(Deck, G->Balls.Num());
 	const int32 Seed = G->GameSeed ^ 0x5EEDCA4D; // own stream: card draws never consume GameRng numbers
 	FString LogS;
@@ -238,6 +244,7 @@ void UZoogiCardSubsystem::Tick(float Dt)
 	AZoogiGameMode* G = GetWorld() ? GetWorld()->GetAuthGameMode<AZoogiGameMode>() : nullptr;
 	if (!G || !Tune.bCards) return;
 	ObservePhase(G);
+	TickForecast(G, Dt);
 	if (!TestCase.IsEmpty() && !bTestDone)
 	{
 		if (TestCase == TEXT("crystal_collapse") && !bCrystalTested && TestStandbys >= 1) TestCrystal(G);
@@ -349,4 +356,55 @@ void UZoogiCardSubsystem::TestFinish(AZoogiGameMode* G)
 	TestCheck(TestStandbys > 0, TEXT("at least one standby"));
 	UE_LOG(LogZoogi, Log, TEXT("CARD_TEST case=%s result=%s checks=%d fails=%d standbys=%d resolved=%d commits=%d rejects=%d events=%d hash=%08x first_fail=\"%s\""),
 		*TestCase, TestFails == 0 ? TEXT("PASS") : TEXT("FAIL"), TestChecks, TestFails, TestStandbys, TestResolved, Commits, Rejects, RulesV.Events().Num(), RulesV.StateHash(), *TestFirstFail);
+}
+
+// ------------------------------------------------------------------ Standby aim forecast (ArrowTrail pack, visual only)
+// A Niagara ribbon (NS_ArrowTrail_Basic) runs along the existing aim preview path (first contact + one rebound) while the
+// shooter is in Aim / Force; an aim-point marker (NS_ArrowTrail_Magic) sits on the preview end / contact ghost. They read
+// FZoogiAimPreview only (Rule Zero: never touch physics) and are hidden outside AIM_FORCE.
+
+void UZoogiCardSubsystem::TickForecast(AZoogiGameMode* G, float Dt)
+{
+	const bool bShow = G->IsAimStep() && G->Preview.bValid && G->Preview.Path.Num() >= 2 && !bNoForecast;
+	auto Make = [this](TObjectPtr<UNiagaraComponent>& C, const TCHAR* Path)
+	{
+		if (C) return;
+		if (UNiagaraSystem* Sys = LoadObject<UNiagaraSystem>(nullptr, Path))
+		{
+			C = UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), Sys, FVector::ZeroVector, FRotator::ZeroRotator, FVector(0.6f), false, false);
+			if (C) UE_LOG(LogZoogi, Log, TEXT("CARDS forecast fx %s"), Path);
+		}
+		else { bNoForecast = true; UE_LOG(LogZoogi, Warning, TEXT("CARDS forecast fx missing: %s"), Path); }
+	};
+	if (!bShow)
+	{
+		if (Trail && Trail->IsActive()) Trail->Deactivate();
+		if (AimPoint && AimPoint->IsActive()) AimPoint->Deactivate();
+		ForecastS = 0.f;
+		return;
+	}
+	Make(Trail, TEXT("/Game/ArrowTrail/FX/NS_ArrowTrail_Basic.NS_ArrowTrail_Basic"));
+	Make(AimPoint, TEXT("/Game/ArrowTrail/FX/NS_ArrowTrail_Magic.NS_ArrowTrail_Magic"));
+	const TArray<FVector>& Path = G->Preview.Path;
+	float Len = 0.f;
+	for (int32 i = 1; i < Path.Num(); ++i) Len += FVector::Dist(Path[i - 1], Path[i]);
+	const FVector Lift(0, 0, 25.f);
+	if (AimPoint)
+	{
+		AimPoint->SetWorldLocation((G->Preview.bContact ? G->Preview.Ghost : Path.Last()) + Lift);
+		if (!AimPoint->IsActive()) AimPoint->Activate(true);
+	}
+	if (!Trail || Len < 1.f) return;
+	const bool bWrap = ForecastS <= 0.f || ForecastS > Len;
+	ForecastS = bWrap ? 0.f : ForecastS + Dt * 1400.f; // runner speed cm/s (frame-rate independent)
+	float S = ForecastS; FVector P = Path[0];
+	for (int32 i = 1; i < Path.Num(); ++i)
+	{
+		const float L = FVector::Dist(Path[i - 1], Path[i]);
+		if (S <= L) { P = FMath::Lerp(Path[i - 1], Path[i], L > 0.f ? S / L : 0.f); break; }
+		S -= L; P = Path[i];
+	}
+	Trail->SetWorldLocation(P + Lift);
+	if (bWrap) { Trail->ResetSystem(); ForecastS = 0.01f; }
+	else if (!Trail->IsActive()) Trail->Activate(true);
 }

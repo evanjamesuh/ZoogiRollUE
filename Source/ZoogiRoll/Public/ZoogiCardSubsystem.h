@@ -47,6 +47,8 @@ public:
 	const FZoogiCardDef* Def(FName Id) const { return RulesV.Backend() ? RulesV.Backend()->FindDef(Id) : nullptr; }
 	int32 ActivePlayer(AZoogiGameMode* G) const;
 	FString DataSource;
+	/** Backend in use this match (rldb_toolkit or native). */
+	FName BackendName() const { return RulesV.Backend() ? RulesV.Backend()->BackendName() : NAME_None; }
 
 private:
 	void EnsureMatch(AZoogiGameMode* G);
@@ -59,6 +61,11 @@ private:
 	void TestCrystal(AZoogiGameMode* G);
 	void TestCheck(bool bOk, const FString& What);
 	void TestFinish(AZoogiGameMode* G);
+	void TickForecast(AZoogiGameMode* G, float Dt);
+	UPROPERTY() TObjectPtr<class UNiagaraComponent> Trail;
+	UPROPERTY() TObjectPtr<class UNiagaraComponent> AimPoint;
+	float ForecastS = 0.f;
+	bool bNoForecast = false;
 
 	FZoogiCardTune Tune;
 	FZoogiCardRules RulesV;

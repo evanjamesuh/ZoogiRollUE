@@ -136,6 +136,27 @@ private:
 	TArray<FZoogiCardDef> Defs;
 };
 
+/** The Roguelike Deckbuilder Toolkit backend (Fab sample project, Blueprint-only, UE 5.6; content migrated to /Game/RLDB).
+ *  Card definitions come from /Game/Cards/DT_ZoogiCards, a DataTable on the toolkit's row struct
+ *  /Game/RLDB/Blueprints/Structs/FCard (built by Scripts/make_toolkit_cards.py): CardName, Description and the
+ *  BP_UseRule_StatCost Cost (paid in the toolkit's Mana stat = our Card Energy) are read by reflection. Gameplay fields the
+ *  toolkit has no slot for (target, expiry, physics params, CPU weight) come from the native table by the same row id.
+ *  Shuffling stays on our seeded stream: the toolkit's BP_PileComponent shuffle is not seedable (replay safety). */
+class ZOOGIROLL_API FZoogiToolkitCardBackend : public IZoogiCardBackend
+{
+public:
+	static constexpr const TCHAR* TablePath = TEXT("/Game/Cards/DT_ZoogiCards.DT_ZoogiCards");
+	static constexpr const TCHAR* RowStructPath = TEXT("/Game/RLDB/Blueprints/Structs/FCard.FCard");
+	/** Returns null (OutWhy says why) unless the table loads, uses FCard and covers every native id with a readable cost. */
+	static TSharedPtr<FZoogiToolkitCardBackend> TryLoad(const TArray<FZoogiCardDef>& NativeDefs, FString& OutWhy);
+	virtual FName BackendName() const override { return TEXT("rldb_toolkit"); }
+	virtual const FZoogiCardDef* FindDef(FName Id) const override;
+	virtual const TArray<FZoogiCardDef>& AllDefs() const override { return Defs; }
+	virtual void Shuffle(TArray<FZoogiCardInstance>& Cards, FRandomStream& Rng) const override;
+private:
+	TArray<FZoogiCardDef> Defs;
+};
+
 struct FZoogiCardTune
 {
 	bool bCards = false;        // [ZoogiRoll.Cards] bCards (default False) / -ZoogiCards / -ZoogiCards=Off
@@ -145,6 +166,7 @@ struct FZoogiCardTune
 	int32 MaxCopies = 2;        // PROPOSED (Evan, Oct 13)
 	int32 MaxCardsPerCommit = 5;
 	FString DefaultDeck;        // deck id in Decks.csv
+	FString Backend = TEXT("toolkit"); // toolkit (RLDB DataTable, falls back to native) | native
 	void Load();                // ini + command line
 };
 
