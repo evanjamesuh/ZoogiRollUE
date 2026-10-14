@@ -44,37 +44,45 @@ namespace ZoogiFramed
 
 	FLayout Compute(const FVector2D& V, const FMargin& S, float TrayOpen)
 	{
+		// hud-v3 (Evan's 3:53 PM target): every piece sits where it sits in the 1376x768 target, scaled by T; the arena
+		// takes whatever is left between the columns (16:9 at 16:9, wider on phones up to 20:9), columns widen a little on
+		// ultra-wide screens and shrink on narrow ones. One layout for PC and phones; the tray is always open.
 		FLayout L;
 		L.Viewport = V;
 		L.Safe = S;
 		const float W = V.X, H = V.Y;
-		const float U = H / 1080.f;
-		L.U = U;
+		L.U = H / 1080.f;
 		const float A = W / FMath::Max(H, 1.f);
 		L.bCompact = A > 2.0f || A < 1.5f || H < 700.f;
-		L.TrayOpen = L.bCompact ? FMath::Clamp(TrayOpen, 0.f, 1.f) : 1.f;
-		const float Gap = 14.f * U;
-		const float TopH = (L.bCompact ? 58.f : 70.f) * U;
-		// Side columns: 300 units at 16:9, shrink on narrow and ultra-wide (mobile landscape) screens; the arena always keeps >= 52% of the width.
-		float ColW = (A < 1.5f ? 220.f : (A > 2.0f ? 250.f : 300.f)) * U;
-		const float Avail = W - S.Left - S.Right;
-		ColW = FMath::Min(ColW, (Avail - 4.f * Gap) * 0.24f);
-		// v2 (Evan, Oct 14 9:49): the player prompt lives in the active Zoogi's team-column action box, so the tray is all
-		// card hand / Awaken controls (taller, cards fully visible); collapsed it is a thin strip for system text only.
-		const float PromptH = 30.f * U;
-		const float TrayFull = 272.f * U, TrayMin = PromptH + 6.f * U;
-		const float TrayH = FMath::Lerp(TrayMin, TrayFull, L.TrayOpen);
+		L.TrayOpen = 1.f;
 		const float X0 = S.Left, X1 = W - S.Right, Y0 = S.Top, Y1 = H - S.Bottom;
-		L.Top = FBox2D(FVector2D(X0 + Gap, Y0 + Gap * 0.5f), FVector2D(X1 - Gap, Y0 + Gap * 0.5f + TopH));
-		const float AY0 = L.Top.Max.Y + Gap, AY1 = Y1 - TrayH - Gap * 0.5f;
-		L.Left = FBox2D(FVector2D(X0 + Gap, AY0), FVector2D(X0 + Gap + ColW, AY1));
-		L.Right = FBox2D(FVector2D(X1 - Gap - ColW, AY0), FVector2D(X1 - Gap, AY1));
-		L.Arena = FBox2D(FVector2D(FMath::RoundToFloat(L.Left.Max.X + Gap), FMath::RoundToFloat(AY0)), FVector2D(FMath::RoundToFloat(L.Right.Min.X - Gap), FMath::RoundToFloat(AY1)));
-		L.Tray = FBox2D(FVector2D(X0 + Gap, AY1 + Gap * 0.5f), FVector2D(X1 - Gap, Y1 - Gap * 0.4f));
-		L.Prompt = FBox2D(FVector2D(L.Arena.Min.X, L.Tray.Min.Y + 3.f * U), FVector2D(L.Arena.Max.X, L.Tray.Min.Y + 3.f * U + PromptH)); // system text only (forming / match over)
+		float T = FMath::Max(0.1f, (Y1 - Y0) / 768.f);
+		if ((X1 - X0) / T < 1180.f) T = (X1 - X0) / 1180.f; // narrower than ~14:9: width-limited, the arena gets taller
+		L.T = T;
+		const float WT = (X1 - X0) / T;
+		const float ColT = WT >= 1376.f ? FMath::Min(270.f, 220.f + (WT - 1376.f) * 0.2f) : FMath::Max(170.f, 220.f - (1376.f - WT) * 0.35f);
+		L.ColT = ColT;
+		const float TrayTop = Y1 - 202.f * T;
+		L.Top = FBox2D(FVector2D(X0, Y0), FVector2D(X1, Y0 + 56.f * T));
+		L.Left = FBox2D(FVector2D(X0 + 8.f * T, Y0 + 62.f * T), FVector2D(X0 + (8.f + ColT) * T, TrayTop));
+		L.Right = FBox2D(FVector2D(X1 - (8.f + ColT) * T, Y0 + 62.f * T), FVector2D(X1 - 8.f * T, TrayTop));
+		L.Arena = FBox2D(FVector2D(FMath::RoundToFloat(L.Left.Max.X + 14.f * T), FMath::RoundToFloat(Y0 + 68.f * T)),
+			FVector2D(FMath::RoundToFloat(L.Right.Min.X - 14.f * T), FMath::RoundToFloat(TrayTop - 6.f * T)));
+		L.Tray = FBox2D(FVector2D(X0, TrayTop), FVector2D(X1, Y1));
+		L.TrayLeftX1 = X0 + 362.f * T;
+		L.TrayRightX0 = X1 - 398.f * T;
+		L.Hand = FBox2D(FVector2D(L.TrayLeftX1 + 20.f * T, TrayTop + 22.f * T), FVector2D(L.TrayRightX0 - 30.f * T, Y1));
+		L.Deck = FVector2D(X0 + 97.f * T, TrayTop + 102.f * T);
+		L.Discard = FVector2D(X1 - 326.f * T, TrayTop + 102.f * T);
+		L.Energy = FVector2D(X1 - 70.f * T, TrayTop + 135.f * T);
+		L.Prompt = FBox2D(FVector2D(L.Hand.Min.X + 20.f * T, L.Hand.Min.Y + 70.f * T), FVector2D(L.Hand.Max.X - 20.f * T, L.Hand.Min.Y + 100.f * T)); // system text only (forming / match over)
 		L.bValid = true;
 		return L;
 	}
+
+	static FTrayInfo GTray;
+	void SetTrayInfo(const FTrayInfo& I) { GTray = I; }
+	const FTrayInfo& TrayInfo() { return GTray; }
 
 	const FLayout& Current() { return GCur; }
 	void SetCurrent(const FLayout& L) { GCur = L; }

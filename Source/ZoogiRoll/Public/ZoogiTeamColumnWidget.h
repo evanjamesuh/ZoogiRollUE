@@ -24,6 +24,7 @@ public:
 	int32 Side = 0;          // 0 left, 1 right
 	float UScale = 1.f;      // local units per 1080p unit
 	bool bCompact = false;
+	float TScale = 1.f;      // hud-v3: local px per target px (ZoogiFramed::FLayout::T)
 	/** Which balls sit in this column: team in 2v2, else even / odd player index. */
 	static int32 SideOf(const AZoogiGameMode* G, const AZoogiBall* B);
 	static FLinearColor SideColor(int32 Side);
