@@ -552,11 +552,11 @@ void AZoogiArena::SetupSky(EZoogiArena InTheme)
 		Fog->SetFogDensity(0.005f);
 		Fog->SetFogInscatteringColor(FLinearColor(0.6f, 0.75f, 1.f));
 		Fog->SetStartDistance(2500.f);
-		P.AutoExposureBias = -0.5f;
+		P.AutoExposureBias = -0.75f; // Oct 14 contrast pass: was -0.5 (read washed out vs 08 previews)
 		P.BloomIntensity = 1.0f;
 		P.bOverride_BloomThreshold = true; P.BloomThreshold = 0.72f;
 		P.ColorSaturation = FVector4(1.10f, 1.10f, 1.10f, 1.f);
-		P.ColorContrast = FVector4(1.04f, 1.04f, 1.04f, 1.f);
+		P.ColorContrast = FVector4(1.08f, 1.08f, 1.08f, 1.f); // was 1.04
 		P.VignetteIntensity = 0.25f;
 		break;
 	default:
@@ -732,7 +732,7 @@ void AZoogiArena::BuildCosmic()
 	// old static star shell if the /Game/Env/Cosmic assets are missing (or with -ZoogiNoSpaceBackdrop, for A/B tests).
 	FRandomStream Rng(42);
 	// Oct 14: the pack's painted dark-navy void (T_CosmicSky x0.6) frames the board; the streak backdrop is the fallback.
-	if (!AddPanoramaSky(TEXT("Cosmic"), 0.22f, 0.f, FLinearColor::Black) && (FParse::Param(FCommandLine::Get(), TEXT("ZoogiNoSpaceBackdrop")) || !AddSpaceBackdrop()))
+	if (!AddPanoramaSky(TEXT("Cosmic"), 0.5f, /* Oct 14: was 0.22 (galaxy band invisible); IMPORT.md x0.6 */ 0.f, FLinearColor::Black) && (FParse::Param(FCommandLine::Get(), TEXT("ZoogiNoSpaceBackdrop")) || !AddSpaceBackdrop()))
 	{
 		UStaticMesh* SphereMesh = ZoogiUtil::BasicShape(TEXT("Sphere"));
 		UInstancedStaticMeshComponent* Stars = NewObject<UInstancedStaticMeshComponent>(this);
