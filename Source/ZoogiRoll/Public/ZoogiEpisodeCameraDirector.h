@@ -190,6 +190,10 @@ struct FZoogiActiveShot
 	bool bStopping = false;
 	float StopAge = 0.f;
 	float StopWeight = 1.f;
+	/** Ring-out safety: last in-play focus position (pivots freeze here once the focus leaves play) and how long ago it left (-1 = in play). */
+	FVector CourtFocus = FVector::ZeroVector;
+	bool bHaveCourtFocus = false;
+	float LeftPlayAge = -1.f;
 	// Framing state.
 	bool bInit = false;
 	float BaseYaw = 0.f;

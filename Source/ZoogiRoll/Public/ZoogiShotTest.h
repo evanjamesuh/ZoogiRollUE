@@ -23,7 +23,7 @@ class UTextureRenderTarget2D;
 
 namespace ZoogiShotTest
 {
-	enum class ECaseKind : uint8 { Shot, Cancel, StopEased, Overlap, FocusDestroyed, TimeScaleRefused, TimeScale, TimeScaleCancel, AirborneSlowMoCancel, AirborneSlowMoRefused, AvoidParticles, AvoidOcclusion, LevelEnd };
+	enum class ECaseKind : uint8 { Shot, Cancel, StopEased, Overlap, FocusDestroyed, TimeScaleRefused, TimeScale, TimeScaleCancel, AirborneSlowMoCancel, AirborneSlowMoRefused, AvoidParticles, AvoidOcclusion, RingOutSimLegacy, RingOutSimFixed, RingOutDirector, LevelEnd };
 	enum class EStep : uint8 { StartMatch, WaitLive, WaitSettle, Run, WaitEnd, Verify, Restored, Done, Summary };
 	struct FCase
 	{
@@ -67,6 +67,17 @@ private:
 	AStaticMeshActor* SpawnProp(const FVector& At, float Scale);
 	/** Plays one library shot the way the case's family needs it (props, secondary, event point). */
 	void CheckTrickLookup();
+	// Ring-out fall (Frozen Ring): a Zoogi-sized prop rolls off the rim and falls; the gameplay Tactical follow is
+	// simulated with the controller's own rule (legacy or fixed) on a temp camera, or a director shot is played on it.
+	FVector FallPos(float T) const;
+	void StartRingOut(EZoogiShotType Type, bool bSim);
+	void TickRingOut(float Dt);
+	void CheckRingOutView(const FMinimalViewInfo& V, float Dt);
+	bool bRingOut = false, bRingOutSim = false, bRingOutLegacy = false, bRingOutDone = false, bLateShot = false;
+	float FallT = 0.f, FallEdgeT = 0.f, SimCourtZ = 50.f, RingLossNow = 0.f, RingLossMax = 0.f, RingMinCamZ = 1e9f, RingSeconds = 0.f;
+	int32 RingFrames = 0, RingOutFrames = 0;
+	FVector FallStart = FVector::ZeroVector, FallDir = FVector::ZeroVector, SimPivot = FVector::ZeroVector;
+	UPROPERTY() TObjectPtr<class ACameraActor> SimCam = nullptr;
 	bool bBankMove = false; bool bBankHitLogged = false; float BankT = 0.f, BankTc = 0.f, BankSpeed = 0.f; FVector BankE = FVector::ZeroVector, BankIn = FVector::ZeroVector, BankOut = FVector::ZeroVector;
 	void TintProp(class AStaticMeshActor* A, const FLinearColor& C);
 	FZoogiShotHandle PlayCaseShot(EZoogiShotType Type, EZoogiShotOutput Output, FString& OutSetup);
