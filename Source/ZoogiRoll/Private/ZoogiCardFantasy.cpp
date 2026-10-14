@@ -38,14 +38,14 @@ namespace
 		if (Len < 30.f) return;
 		const FVector Dir = FVector(D.X, D.Y, 0.f) / Len;
 		const FVector Tip = B - Dir * (ZoogiConst::ZoogiRadius * 0.9f);
-		const int32 N = FMath::Clamp(FMath::CeilToInt(Len / 40.f), 3, 60);
-		for (int32 i = 0; i <= N; ++i) AZoogiFX::SpawnTrail(W, FMath::Lerp(A, Tip, (float)i / N), CArrow, 20.f, T.ChainArrowTime, 6.f);
+		const int32 N = FMath::Clamp(FMath::CeilToInt(Len / 30.f), 3, 80);
+		for (int32 i = 0; i <= N; ++i) AZoogiFX::SpawnTrail(W, FMath::Lerp(A, Tip, (float)i / N), CArrow, 34.f, T.ChainArrowTime, 12.f);
 		for (const float Ang : { 152.f, -152.f })
 		{
 			const FVector Back = Dir.RotateAngleAxis(Ang, FVector::UpVector);
-			for (int32 i = 1; i <= 4; ++i) AZoogiFX::SpawnTrail(W, Tip + Back * (22.f * i), CArrow, 22.f, T.ChainArrowTime, 6.f);
+			for (int32 i = 1; i <= 4; ++i) AZoogiFX::SpawnTrail(W, Tip + Back * (26.f * i), CArrow, 36.f, T.ChainArrowTime, 12.f);
 		}
-		AZoogiFX::Spawn(W, B - FVector(0, 0, 35.f), CArrow, ZoogiConst::ZoogiRadius * 1.6f, T.ChainArrowTime, true, 6.f);
+		AZoogiFX::Spawn(W, B - FVector(0, 0, 35.f), CArrow, ZoogiConst::ZoogiRadius * 1.8f, T.ChainArrowTime, true, 12.f);
 		if (!T.ChainArrowFX.IsEmpty()) AZoogiFX::Niagara(W, *T.ChainArrowFX, Tip, Dir.Rotation());
 	}
 	void Beam(UWorld* W, const FVector& A, const FVector& B, const FLinearColor& C, int32 N = 8, float R = 38.f)
@@ -85,7 +85,14 @@ float UZoogiCardSubsystem::FanAmp(const AZoogiBall* B, FName Card) const { retur
 
 void UZoogiCardSubsystem::FanShot(AZoogiGameMode* G, FName Card, const TCHAR* Suffix)
 {
-	if (G) G->TakeShotDelayed(FString::Printf(TEXT("cardfx_%s%s"), *Card.ToString(), Suffix), 0.12f);
+	// stagger requests: two shots asked for in the same frame would share one capture slot and the first would be lost
+	static float NextShotT = -1.f;
+	if (!G || !GetWorld()) return;
+	const float Now = GetWorld()->GetTimeSeconds();
+	if (NextShotT > Now + 5.f) NextShotT = -1.f; // new world / match
+	const float Delay = FMath::Max(0.12f, NextShotT - Now);
+	NextShotT = Now + Delay + 0.3f;
+	G->TakeShotDelayed(FString::Printf(TEXT("cardfx_%s%s"), *Card.ToString(), Suffix), Delay);
 }
 
 int32 UZoogiCardSubsystem::CPUCardIntent(int32 P) const
@@ -210,8 +217,9 @@ void UZoogiCardSubsystem::FanOnShot(AZoogiGameMode* G, AZoogiBall* Ball, const F
 		AZoogiFX::Spawn(W, Fan.MeteorAt + FVector(0, 0, 900.f), FLinearColor(1.f, 0.5f, 0.15f), 140.f, FanTune.TitanDelay, false, 8.f);
 		UE_LOG(LogZoogi, Log, TEXT("CARDS fantasy titan P%d: meteor called on the aim point (%.0f, %.0f), ring %.0f cm"), P + 1, Fan.MeteorAt.X, Fan.MeteorAt.Y, Fan.MeteorR);
 	}
-	if (Fx.Find(KCFrost, P))
+	if (Fx.Find(KCFrost, P) || FanFrostP == P) // the frost lane (FxAfterShot) consumes the entry before this runs
 	{
+		FanFrostP = -1;
 		float D = 0.f;
 		AZoogiBall* T = NearestRival(FanTune.FrostRange, FanTune.FrostConeDeg, D);
 		if (!T) T = NearestRival(FanTune.FrostRange, 360.f, D);

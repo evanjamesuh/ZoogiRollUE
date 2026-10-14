@@ -102,7 +102,7 @@ private:
 	FZoogiCardEffectCore Fx;
 	// Oct 14 fantasy layer (ZoogiCardFantasy.cpp)
 	FZoogiCardFantasyTune FanTune;
-	FZoogiCardFantasyState Fan;
+	FZoogiCardFantasyState Fan; int32 FanFrostP = -1;
 	bool FanOn() const;
 	float FanAmp(const AZoogiBall* B, FName Card) const;
 	void FanShot(AZoogiGameMode* G, FName Card, const TCHAR* Suffix = TEXT(""));

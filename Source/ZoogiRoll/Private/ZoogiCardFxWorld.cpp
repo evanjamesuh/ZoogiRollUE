@@ -168,6 +168,7 @@ void UZoogiCardSubsystem::FxAfterShot(AZoogiGameMode* G, AZoogiBall* Ball, const
 		const int32 N = Fx.AddFrostLane(Ball->BallLocation(), FVector(V.X, V.Y, 0.f), ZoogiCardFxTune::FrostLaneCells * (bPow ? 2 : 1));
 		if (bPow) UE_LOG(LogZoogi, Log, TEXT("CARDS power frost P%d: lane x2"), P + 1);
 		F->Uses++; FxUse(*F, FString::Printf(TEXT("lane +%d cells (shared total %d, never stacks), friction x%.2f"), N, Fx.FrostCells(), F->A));
+		FanFrostP = P; // fantasy ice beam (FanOnShot) still fires for this shot
 		F->bConsumed = true; // the lane persists until locally cleared (Ember) or match reset
 	}
 	EmberTrail.Reset();
