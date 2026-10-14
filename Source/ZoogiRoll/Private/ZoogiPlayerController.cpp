@@ -22,6 +22,7 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Engine/GameViewportClient.h"
+#include "ZoogiFramedLayout.h"
 
 // ============================================================================
 // Camera director tuning: every number for the per-stage cameras lives here.
@@ -1097,9 +1098,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 			const float CamToTarget = FVector::Dist2D(SL, TL) + Profiles[PBattle].Dist;
 			WantFov = FMath::Clamp(2.f * FMath::RadiansToDegrees(FMath::Atan2(BattleFovFrame, CamToTarget)), BattleFovMin, Profiles[PBattle].Fov);
 			// Widen if the shooter (bottom) and the target (top) can't both fit inside the HUD-safe band.
-			int32 VX = 16, VY = 9;
-			GetViewportSize(VX, VY);
-			const float Aspect = VY > 0 ? (float)VX / (float)VY : 16.f / 9.f;
+			const float Aspect = ZoogiFramed::ViewAspect(this); // framed HUD: the arena window's real view-rect aspect (full viewport otherwise)
 			const FVector CL = Cam->GetActorLocation();
 			const float SP = (SL - FVector(0, 0, ZoogiConst::ZoogiRadius) - CL).Rotation().Pitch;
 			const float TP = (TL + FVector(0, 0, 2.f * ZoogiConst::ZoogiRadius) - CL).Rotation().Pitch;
@@ -1225,9 +1224,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		float Want = 0.f;
 		if (PIdx == PBattle && Shooter)
 		{
-			int32 VX = 16, VY = 9;
-			GetViewportSize(VX, VY);
-			const float Aspect = VY > 0 ? (float)VX / (float)VY : 16.f / 9.f;
+			const float Aspect = ZoogiFramed::ViewAspect(this); // framed HUD: the arena window's real view-rect aspect (full viewport otherwise)
 			const float VHalf = FMath::RadiansToDegrees(FMath::Atan(FMath::Tan(FMath::DegreesToRadians(Fov * 0.5f)) / Aspect));
 			const float ShooterLow = (SL - FVector(0, 0, ZoogiConst::ZoogiRadius) - Loc).Rotation().Pitch;
 			const float Rel = ShooterLow - Rot.Pitch; // negative = below the centre line
