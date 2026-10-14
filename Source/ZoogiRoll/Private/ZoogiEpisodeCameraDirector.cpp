@@ -500,10 +500,11 @@ static void CamDirApplyAccent(FPostProcessSettings& PP, const FZoogiActiveShot& 
 	const float A = S.Spec.AccentStrength * Weight;
 	if (A <= 0.f) return;
 	PP.bOverride_SceneColorTint = true;
-	PP.SceneColorTint = FMath::Lerp(FLinearColor::White, S.Accent, A);
+	PP.SceneColorTint = FMath::Lerp(FLinearColor::White, S.Accent, FMath::Min(A, 0.3f));
 	const float BaseBloom = PP.bOverride_BloomIntensity ? PP.BloomIntensity : 0.675f;
 	PP.bOverride_BloomIntensity = true;
-	PP.BloomIntensity = BaseBloom * (1.f + 0.8f * A);
+	// capped: the accent may lift bloom a little but never wash the frame out
+	PP.BloomIntensity = FMath::Min(BaseBloom * (1.f + 0.6f * A), FMath::Max(BaseBloom, 0.9f));
 }
 
 void UZoogiEpisodeCameraDirector::FillTrickParams(EZoogiShotType Type, const FZoogiGameplayTruthRecord& Truth, FZoogiShotPlayParams& P)
