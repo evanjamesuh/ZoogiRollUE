@@ -10,7 +10,7 @@
 
 namespace ZoogiProgTest
 {
-	constexpr EAutomationTestFlags Flags = EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::ProductFilter;
+	constexpr EAutomationTestFlags ZoogiProgTestFlags = EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::ProductFilter;
 	static FZoogiProgressionConfig Cfg()
 	{
 		FZoogiProgressionConfig C = FZoogiProgressionConfig::BuiltIn(); FString L;
@@ -35,7 +35,7 @@ namespace ZoogiProgTest
 }
 using namespace ZoogiProgTest;
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiProgConfigTest, "ZoogiRoll.Progression.Config", ZoogiProgTest::Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiProgConfigTest, "ZoogiRoll.Progression.Config", ZoogiProgTest::ZoogiProgTestFlags)
 bool FZoogiProgConfigTest::RunTest(const FString&)
 {
 	FZoogiProgressionConfig C = FZoogiProgressionConfig::BuiltIn(); FString L, E;
@@ -58,7 +58,7 @@ bool FZoogiProgConfigTest::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiProgCurrencyTest, "ZoogiRoll.Progression.Currency", ZoogiProgTest::Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiProgCurrencyTest, "ZoogiRoll.Progression.Currency", ZoogiProgTest::ZoogiProgTestFlags)
 bool FZoogiProgCurrencyTest::RunTest(const FString&)
 {
 	FZoogiWallet W; const FDateTime T = At(14, 12);
@@ -88,7 +88,7 @@ bool FZoogiProgCurrencyTest::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiProgPersistTest, "ZoogiRoll.Progression.Persistence", ZoogiProgTest::Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiProgPersistTest, "ZoogiRoll.Progression.Persistence", ZoogiProgTest::ZoogiProgTestFlags)
 bool FZoogiProgPersistTest::RunTest(const FString&)
 {
 	FZoogiProgression A; A.Init(Cfg()); const FDateTime T = At(14, 12);
@@ -117,7 +117,7 @@ bool FZoogiProgPersistTest::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiProgMasteryTest, "ZoogiRoll.Progression.Mastery", ZoogiProgTest::Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiProgMasteryTest, "ZoogiRoll.Progression.Mastery", ZoogiProgTest::ZoogiProgTestFlags)
 bool FZoogiProgMasteryTest::RunTest(const FString&)
 {
 	FZoogiProgression P; P.Init(Cfg()); const FZoogiProgressionConfig& C = P.Config(); const FDateTime T = At(14, 12);
@@ -158,7 +158,7 @@ bool FZoogiProgMasteryTest::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiProgAwakeningTest, "ZoogiRoll.Progression.AwakeningAchievementsOnly", ZoogiProgTest::Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiProgAwakeningTest, "ZoogiRoll.Progression.AwakeningAchievementsOnly", ZoogiProgTest::ZoogiProgTestFlags)
 bool FZoogiProgAwakeningTest::RunTest(const FString&)
 {
 	FZoogiProgression A, B; A.Init(Cfg()); B.Init(Cfg());
@@ -174,7 +174,7 @@ bool FZoogiProgAwakeningTest::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiProgMatchTest, "ZoogiRoll.Progression.MatchRewards", ZoogiProgTest::Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiProgMatchTest, "ZoogiRoll.Progression.MatchRewards", ZoogiProgTest::ZoogiProgTestFlags)
 bool FZoogiProgMatchTest::RunTest(const FString&)
 {
 	const FZoogiProgressionConfig C = Cfg();
@@ -207,7 +207,7 @@ bool FZoogiProgMatchTest::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiProgDailyTest, "ZoogiRoll.Progression.DailyCapAndReset", ZoogiProgTest::Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiProgDailyTest, "ZoogiRoll.Progression.DailyCapAndReset", ZoogiProgTest::ZoogiProgTestFlags)
 bool FZoogiProgDailyTest::RunTest(const FString&)
 {
 	FZoogiProgression P; P.Init(Cfg()); const int32 Cap = P.Config().DailyMatchGemCap;
@@ -244,7 +244,7 @@ bool FZoogiProgDailyTest::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiProgPowersTest, "ZoogiRoll.Progression.PowerUnlocks", ZoogiProgTest::Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiProgPowersTest, "ZoogiRoll.Progression.PowerUnlocks", ZoogiProgTest::ZoogiProgTestFlags)
 bool FZoogiProgPowersTest::RunTest(const FString&)
 {
 	FZoogiProgression P; P.Init(Cfg()); const FDateTime T = At(14, 12); FString Why; bool bM = false;
@@ -267,7 +267,7 @@ bool FZoogiProgPowersTest::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiProgMetaTest, "ZoogiRoll.Progression.AffinityAchievementsTitlesCosmetics", ZoogiProgTest::Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiProgMetaTest, "ZoogiRoll.Progression.AffinityAchievementsTitlesCosmetics", ZoogiProgTest::ZoogiProgTestFlags)
 bool FZoogiProgMetaTest::RunTest(const FString&)
 {
 	FZoogiProgression P; P.Init(Cfg()); const FDateTime T = At(14, 12); FString R, Why;
@@ -305,7 +305,7 @@ bool FZoogiProgMetaTest::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiCPUTierTest, "ZoogiRoll.CPU.Tiers", ZoogiProgTest::Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiCPUTierTest, "ZoogiRoll.CPU.Tiers", ZoogiProgTest::ZoogiProgTestFlags)
 bool FZoogiCPUTierTest::RunTest(const FString&)
 {
 	const FZoogiProgressionConfig C = Cfg();
@@ -342,7 +342,7 @@ bool FZoogiCPUTierTest::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiStorePipelineTest, "ZoogiRoll.Store.PurchasePipeline_TestBackendOnly", ZoogiProgTest::Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiStorePipelineTest, "ZoogiRoll.Store.PurchasePipeline_TestBackendOnly", ZoogiProgTest::ZoogiProgTestFlags)
 bool FZoogiStorePipelineTest::RunTest(const FString&)
 {
 	AddInfo(TEXT("AUTOMATION TEST BACKEND ONLY - no real store, no real payment."));
@@ -371,7 +371,7 @@ bool FZoogiStorePipelineTest::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiStoreAppleJwsTest, "ZoogiRoll.Store.AppleJwsClaims", ZoogiProgTest::Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiStoreAppleJwsTest, "ZoogiRoll.Store.AppleJwsClaims", ZoogiProgTest::ZoogiProgTestFlags)
 bool FZoogiStoreAppleJwsTest::RunTest(const FString&)
 {
 	auto B64 = [](const FString& S) { FTCHARToUTF8 U(*S); return FBase64::Encode((const uint8*)U.Get(), U.Length()).Replace(TEXT("+"), TEXT("-")).Replace(TEXT("/"), TEXT("_")).Replace(TEXT("="), TEXT("")); };

@@ -20,7 +20,9 @@ void UZoogiProgressionSubsystem::Initialize(FSubsystemCollectionBase& Collection
 	if (!Cfg.Validate(Err)) { UE_LOG(LogZoogi, Warning, TEXT("PROGRESSION config invalid (%s): built-in defaults used"), *Err); Cfg = FZoogiProgressionConfig::BuiltIn(); }
 	FString Json;
 	if (FFileHelper::LoadFileToString(Json, *ProfilePath()) && Prog.Load(Cfg, Json, Err))
+	{
 		UE_LOG(LogZoogi, Log, TEXT("PROGRESSION profile loaded %s gems=%d (earned %d / purchased %d) data=%s [%s]"), *Prog.Get().ProfileId.ToString(), Prog.Get().Wallet.Total(), Prog.Get().Wallet.Earned(), Prog.Get().Wallet.Purchased(), *Cfg.Source, *Log);
+	}
 	else
 	{
 		if (!Json.IsEmpty()) { UE_LOG(LogZoogi, Warning, TEXT("PROGRESSION profile rejected (%s): kept as .rejected, new profile"), *Err); IFileManager::Get().Move(*(ProfilePath() + TEXT(".rejected")), *ProfilePath()); }
