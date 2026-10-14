@@ -35,8 +35,9 @@
 #include "HAL/FileManager.h"
 #include "Misc/Paths.h"
 #include "ZoogiEpisodeDirector.h"
+#include "ZoogiUIStyle.h"
 
-static const FLinearColor GPanel(0.02f, 0.03f, 0.08f, 0.72f);
+static const FLinearColor GPanel = ZoogiUIStyle::PanelNavy; // uistyle: saturated navy (was near-black 0.02/0.03/0.08 @ 0.72)
 static const FLinearColor GOrbBlue(0.53f, 0.81f, 0.92f, 1.f);
 // Engine fonts are small at 1080p; scale everything up so labels read at a glance.
 static constexpr float FlyTime = 0.65f; // orb pickup flight to the scoreboard
@@ -44,6 +45,8 @@ static float TextMul(bool bBig) { return bBig ? 1.75f : 2.3f; }
 
 void AZoogiHUD::Panel(float X, float Y, float W, float H, const FLinearColor& C)
 {
+	// uistyle: the standard HUD panel colour draws as a rounded navy-outlined cartoon panel; thin bars / overlays stay flat
+	if (C.Equals(GPanel) && W > 40.f * U && H > 30.f * U) { ZoogiUIStyle::CPanel(Canvas, X, Y, W, H, U, C); return; }
 	DrawRect(C, X, Y, W, H);
 }
 
@@ -55,6 +58,7 @@ static FSlateFontInfo HudFont(float FinalScale, bool bBig)
 	FSlateFontInfo Fi = F->GetLegacySlateFontInfo();
 	Fi.Size = FMath::Max(6.f, FMath::RoundToFloat(Fi.Size * FinalScale));
 	if (bBig) Fi.TypefaceFontName = FName(TEXT("Bold"));
+	ZoogiUIStyle::AddOutline(Fi, FMath::Max(1.5f, Fi.Size * 0.07f)); // uistyle: navy text outline
 	return Fi;
 }
 
@@ -74,7 +78,7 @@ void AZoogiHUD::Text(const FString& S, float X, float Y, const FLinearColor& C, 
 {
 	if (bCenter) X -= TextSize(S, Scale, bBig).X * 0.5f;
 	FCanvasTextItem Item(FVector2D(X, Y), FText::FromString(S), HudFont(Scale * U * TextMul(bBig), bBig), C);
-	Item.EnableShadow(FLinearColor(0, 0, 0, 0.85f * C.A), FVector2D(2.f * U, 2.f * U));
+	Item.EnableShadow(FLinearColor(0.f, 0.f, 0.06f, 0.75f * C.A), FVector2D(2.f * U, 3.f * U)); // uistyle: navy drop shadow
 	Canvas->DrawItem(Item);
 }
 
@@ -82,11 +86,16 @@ bool AZoogiHUD::Button(const FString& Label, float X, float Y, float W, float H,
 {
 	float MX = 0.f, MY = 0.f;
 	const bool bHover = PlayerOwner && PlayerOwner->GetMousePosition(MX, MY) && MX >= X && MX <= X + W && MY >= Y && MY <= Y + H;
-	FLinearColor Bg = bSelected ? Accent * 0.75f : FLinearColor(0.08f, 0.1f, 0.18f, 0.9f);
-	if (bHover) Bg = Bg + FLinearColor(0.12f, 0.12f, 0.12f, 0.f);
-	Bg.A = 0.92f;
-	Panel(X, Y, W, H, Bg);
-	Panel(X, Y + H - 4.f * U, W, 4.f * U, Accent);
+	// uistyle: chunky rounded plate (saturated navy idle, accent when selected), navy outline, gloss + accent strip
+	FLinearColor Bg = bSelected ? Accent * 0.8f : ZoogiUIStyle::ButtonNavy;
+	if (bHover) Bg = bSelected ? Accent * 0.95f : FLinearColor(0.08f, 0.26f, 0.72f, 1.f);
+	Bg.A = 0.95f;
+	const float BR = FMath::Min(12.f * U, H * 0.5f), BO = 3.5f * U;
+	ZoogiUIStyle::CRoundRect(Canvas, X + 2.f * U, Y + 4.f * U, W, H, BR, FLinearColor(0.f, 0.f, 0.05f, 0.35f));
+	ZoogiUIStyle::CRoundRect(Canvas, X, Y, W, H, BR, ZoogiUIStyle::Outline);
+	ZoogiUIStyle::CRoundRect(Canvas, X + BO, Y + BO, W - 2.f * BO, H - 2.f * BO, FMath::Max(0.f, BR - BO), Bg);
+	ZoogiUIStyle::CRect(Canvas, X + BR, Y + BO + 2.f * U, W - 2.f * BR, 4.f * U, FLinearColor(1.f, 1.f, 1.f, 0.28f));
+	ZoogiUIStyle::CRect(Canvas, X + BR, Y + H - BO - 4.f * U, W - 2.f * BR, 4.f * U, Accent);
 	const FVector2D TS = TextSize(Label, 0.55f, true);
 	Text(Label, X + W * 0.5f, Y + (H - TS.Y) * 0.5f, FLinearColor::White, 0.55f, true, true);
 	FZoogiButton B;
@@ -370,7 +379,7 @@ void AZoogiHUD::DrawScoreboard(AZoogiGameMode* G)
 		else if (B->bOut) Status += TEXT("  OUT");
 		if (B->StunTurns > 0) Status += TEXT("  STUNNED");
 		if (B->BoundShots > 0) Status += TEXT("  BOUND");
-		Text(Status, X + 26.f * U, Y + 32.f * U, (B->StunTurns > 0 || B->BoundShots > 0) ? FLinearColor(0.85f, 0.7f, 1.f) : FLinearColor(0.65f, 0.72f, 0.85f), 0.38f, false, false);
+		Text(Status, X + 26.f * U, Y + 32.f * U, (B->StunTurns > 0 || B->BoundShots > 0) ? FLinearColor(0.85f, 0.7f, 1.f) : FLinearColor(0.7f, 0.88f, 1.f), 0.38f, false, false);
 		if (G->bArtifactMode && B->Artifact)
 		{
 			// Hand gems next to the score.
@@ -389,7 +398,7 @@ void AZoogiHUD::DrawScoreboard(AZoogiGameMode* G)
 		if (A <= 0.f) continue;
 		const float Slide = (1.f - FMath::Clamp(F.Age * 5.f, 0.f, 1.f)) * -40.f * U;
 		const float W = TextSize(F.Text, 0.42f, false).X + 30.f * U;
-		Panel(X + Slide, Y, W, 34.f * U, FLinearColor(0.02f, 0.03f, 0.08f, 0.72f * A));
+		Panel(X + Slide, Y, W, 34.f * U, FLinearColor(GPanel.R, GPanel.G, GPanel.B, GPanel.A * A));
 		Panel(X + Slide, Y, 5.f * U, 34.f * U, FLinearColor(F.Color.R, F.Color.G, F.Color.B, A));
 		Text(F.Text, X + Slide + 16.f * U, Y + 6.f * U, FLinearColor(F.Color.R * 0.4f + 0.6f, F.Color.G * 0.4f + 0.6f, F.Color.B * 0.4f + 0.6f, A), 0.42f, false, false);
 		Y += 40.f * U;
@@ -499,9 +508,9 @@ void AZoogiHUD::DrawMatch(AZoogiGameMode* G)
 	else if (G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Awaken && !bUmgAwaken) DrawAwaken(G);
 	if (G->IsHumanAiming() && G->IsAimStep() && !bUmgAim) DrawAimControls(G);
 	DrawEpisodeP5(G);
-	if (Letterbox < 0.3f && G->bComboMode) Text(TEXT("2v2 COMBO   Awaken: card + I / G / S   Battle: Q switch Zoogi, click target / floor, A/D cut, 1 CONTROL 2 DRIVE 3 LAUNCH, SPACE confirm   Follow-Up: F accept / X skip   C camera"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.75f, 0.85f, 0.85f), 0.36f, false, false);
-	else if (Letterbox < 0.3f && G->CardsOn()) Text(TEXT("Standby: click cards (1-5) + COMMIT (Enter), Backspace clears   Aim: click target or floor, A/D cut, Up/Down force CONTROL/DRIVE/LAUNCH, SPACE confirm   C camera"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.75f, 0.85f, 0.85f), 0.36f, false, false);
-	else if (Letterbox < 0.3f) Text(TEXT("Awaken: click a card + INFUSE / GUARD / SAVE (I/G/S)   Aim: click target or floor, A/D cut, Up/Down power, SPACE confirm   RMB/Esc cancel   C camera   Ctrl+R restart"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.75f, 0.85f, 0.85f), 0.36f, false, false);
+	if (Letterbox < 0.3f && G->bComboMode) Text(TEXT("2v2 COMBO   Awaken: card + I / G / S   Battle: Q switch Zoogi, click target / floor, A/D cut, 1 CONTROL 2 DRIVE 3 LAUNCH, SPACE confirm   Follow-Up: F accept / X skip   C camera"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.88f, 1.f, 0.9f), 0.36f, false, false);
+	else if (Letterbox < 0.3f && G->CardsOn()) Text(TEXT("Standby: click cards (1-5) + COMMIT (Enter), Backspace clears   Aim: click target or floor, A/D cut, Up/Down force CONTROL/DRIVE/LAUNCH, SPACE confirm   C camera"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.88f, 1.f, 0.9f), 0.36f, false, false);
+	else if (Letterbox < 0.3f) Text(TEXT("Awaken: click a card + INFUSE / GUARD / SAVE (I/G/S)   Aim: click target or floor, A/D cut, Up/Down power, SPACE confirm   RMB/Esc cancel   C camera   Ctrl+R restart"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.88f, 1.f, 0.9f), 0.36f, false, false);
 	Button(TEXT("MENU"), W - 150.f * U, 24.f * U, 126.f * U, 46.f * U, "Menu", 0, GOrbBlue);
 	Button(G->bCinematicCam ? TEXT("CAM: CINE") : TEXT("CAM: TACT"), W - 340.f * U, 24.f * U, 176.f * U, 46.f * U, "CamStyle", 0, FLinearColor(0.6f, 0.9f, 0.6f), G->bCinematicCam);
 	DrawAnime(G);
@@ -604,7 +613,7 @@ void AZoogiHUD::DrawPower(AZoogiGameMode* G)
 	const float X = W - PW - 24.f * U, Y = H - PH - 70.f * U;
 	const bool bCan = G->CanUsePower();
 	const bool bArmed = G->bPowerArmed;
-	const FLinearColor Accent = bArmed ? FLinearColor(1.f, 0.8f, 0.2f) : (bCan ? GOrbBlue : FLinearColor(0.35f, 0.38f, 0.45f));
+	const FLinearColor Accent = bArmed ? FLinearColor(1.f, 0.8f, 0.2f) : (bCan ? GOrbBlue : ZoogiUIStyle::Muted);
 	Panel(X, Y, PW, PH, GPanel);
 	Panel(X, Y, 8.f * U, PH, Accent);
 	Text(B->Def.Ability.ToUpper(), X + 24.f * U, Y + 10.f * U, Accent + FLinearColor(0.15f, 0.15f, 0.15f, 0.f), 0.6f);
@@ -622,7 +631,7 @@ void AZoogiHUD::DrawPower(AZoogiGameMode* G)
 	{
 		Button(bArmed ? TEXT("DISARM") : TEXT("POWER"), X + 24.f * U, Y + PH - 46.f * U, 160.f * U, 38.f * U, "Power", 0, Accent, bArmed);
 	}
-	Text(B->Def.AbilityDesc, X + 200.f * U, Y + PH - 40.f * U, FLinearColor(0.6f, 0.65f, 0.75f), 0.3f, false, false);
+	Text(B->Def.AbilityDesc, X + 200.f * U, Y + PH - 40.f * U, FLinearColor(0.65f, 0.85f, 1.f), 0.3f, false, false);
 }
 
 void AZoogiHUD::DrawFlyers(AZoogiGameMode* G)
@@ -776,12 +785,14 @@ void AZoogiHUD::DrawStages(AZoogiGameMode* G)
 	{
 		const float X = X0 + i * (BW + Gap);
 		const bool bNow = i == Cur, bDone = i < Cur;
-		const FLinearColor Bg = bNow ? FLinearColor(PC.R * 0.75f, PC.G * 0.75f, PC.B * 0.75f, 0.92f) : FLinearColor(0.03f, 0.04f, 0.1f, bDone ? 0.75f : 0.55f);
-		Panel(X, Y, BW, BH, Bg);
-		if (bNow) Panel(X, Y + BH - 3.f * U, BW, 3.f * U, FLinearColor::White);
+		// uistyle: saturated navy chips with a navy outline (was dim gray-black 0.03/0.04/0.1)
+		const FLinearColor Bg = bNow ? FLinearColor(PC.R * 0.8f, PC.G * 0.8f, PC.B * 0.8f, 0.95f) : FLinearColor(0.04f, 0.14f, 0.46f, bDone ? 0.88f : 0.7f);
+		ZoogiUIStyle::CRoundRect(Canvas, X, Y, BW, BH, 9.f * U, ZoogiUIStyle::Outline);
+		ZoogiUIStyle::CRoundRect(Canvas, X + 3.f * U, Y + 3.f * U, BW - 6.f * U, BH - 6.f * U, 6.f * U, Bg);
+		if (bNow) Panel(X + 9.f * U, Y + BH - 6.f * U, BW - 18.f * U, 3.f * U, FLinearColor::White);
 		FString L = AZoogiGameMode::StageName((EZoogiStage)i);
 		if (bNow && G->Stage == EZoogiStage::Battle) L = FString::Printf(TEXT("%s: %s"), *L, AZoogiGameMode::StepName(G->BattleStep));
-		Text(L, X + BW * 0.5f, Y + 4.f * U, bNow ? FLinearColor::White : FLinearColor(0.6f, 0.66f, 0.8f, bDone ? 0.9f : 0.6f), 0.38f, true, false);
+		Text(L, X + BW * 0.5f, Y + 4.f * U, bNow ? FLinearColor::White : FLinearColor(0.7f, 0.88f, 1.f, bDone ? 0.95f : 0.75f), 0.38f, true, false);
 	}
 
 	// Big phase banner on every stage change.
@@ -1114,7 +1125,7 @@ void AZoogiHUD::DrawCards(AZoogiGameMode* G)
 	const float PanelW = FMath::Max(N, 1) * (CW + Gap) + 420.f * U;
 	float X = (W - PanelW) * 0.5f;
 	const float Y = H - CH - 120.f * U;
-	Panel(X - 16.f * U, Y - 64.f * U, PanelW + 32.f * U, CH + 96.f * U, FLinearColor(0.02f, 0.03f, 0.08f, 0.82f));
+	Panel(X - 16.f * U, Y - 64.f * U, PanelW + 32.f * U, CH + 96.f * U, GPanel);
 	int32 SelCost = 0;
 	for (int32 Id : S->Selected) for (const FZoogiCardInstance& C : S->Hand) if (C.InstanceId == Id) if (const FZoogiCardDef* D = Cards->Def(C.CardId)) SelCost += D->Cost;
 	Text(FString::Printf(TEXT("STANDBY  P%d %s   CARD ENERGY %d / %d   selected %d"), B->PlayerIndex + 1, *B->Def.Name, S->Energy - SelCost, S->Energy, SelCost), X, Y - 54.f * U, FLinearColor(0.75f, 0.9f, 1.f), 0.6f, false);
@@ -1124,11 +1135,11 @@ void AZoogiHUD::DrawCards(AZoogiGameMode* G)
 		const FZoogiCardDef* D = Cards->Def(S->Hand[i].CardId);
 		const bool bSel = S->Selected.Contains(S->Hand[i].InstanceId);
 		const FString L = D ? FString::Printf(TEXT("%d  %s  (%d)"), i + 1, *D->Name, D->Cost) : S->Hand[i].CardId.ToString();
-		const FLinearColor Acc = !D ? FLinearColor::Gray : (D->Type == EZoogiCardType::Defense ? FLinearColor(0.3f, 0.9f, 1.f) : D->Type == EZoogiCardType::Impact ? FLinearColor(1.f, 0.45f, 0.3f)
+		const FLinearColor Acc = !D ? ZoogiUIStyle::Muted : (D->Type == EZoogiCardType::Defense ? FLinearColor(0.3f, 0.9f, 1.f) : D->Type == EZoogiCardType::Impact ? FLinearColor(1.f, 0.45f, 0.3f)
 			: D->Type == EZoogiCardType::Terrain ? FLinearColor(0.7f, 0.6f, 1.f) : FLinearColor(1.f, 0.85f, 0.35f));
 		if (bHuman) Button(L, X, Y, CW, CH * 0.55f, "CardToggle", i, Acc, bSel);
-		else { Panel(X, Y, CW, CH * 0.55f, bSel ? Acc * 0.6f : FLinearColor(0.08f, 0.1f, 0.18f, 0.9f)); Text(L, X + CW * 0.5f, Y + 18.f * U, FLinearColor::White, 0.55f, true); }
-		if (D) Text(ZoogiCards::TypeName(D->Type), X + 8.f * U, Y + CH * 0.6f, FLinearColor(0.7f, 0.75f, 0.85f), 0.42f, false, false);
+		else { Panel(X, Y, CW, CH * 0.55f, bSel ? Acc * 0.6f : ZoogiUIStyle::ButtonNavy); Text(L, X + CW * 0.5f, Y + 18.f * U, FLinearColor::White, 0.55f, true); }
+		if (D) Text(ZoogiCards::TypeName(D->Type), X + 8.f * U, Y + CH * 0.6f, FLinearColor(0.7f, 0.88f, 1.f), 0.42f, false, false);
 		X += CW + Gap;
 	}
 	if (bHuman)
@@ -1220,10 +1231,10 @@ void AZoogiHUD::DrawAwaken(AZoogiGameMode* G)
 	// Empty hand slots (hand of 2 + the drawn card), so the hand limit reads at a glance.
 	for (int32 e = Cards.Num(); e < 3; ++e)
 	{
-		Panel(X, Y0, CW, CH, FLinearColor(0.04f, 0.05f, 0.1f, 0.55f));
-		Panel(X + 10.f * U, Y0 + 10.f * U, CW - 20.f * U, 2.f * U, FLinearColor(0.3f, 0.35f, 0.45f, 0.5f));
-		Text(TEXT("HAND SLOT"), X + CW * 0.5f, Y0 + CH * 0.42f, FLinearColor(0.5f, 0.55f, 0.65f, 0.8f), 0.38f, true, false);
-		Text(TEXT("empty"), X + CW * 0.5f, Y0 + CH * 0.42f + 32.f * U, FLinearColor(0.45f, 0.5f, 0.6f, 0.7f), 0.32f, true, false);
+		ZoogiUIStyle::CPanel(Canvas, X, Y0, CW, CH, U, FLinearColor(0.0f, 0.24f, 0.34f, 0.6f));
+		Panel(X + 14.f * U, Y0 + 12.f * U, CW - 28.f * U, 3.f * U, FLinearColor(0.3f, 0.9f, 1.f, 0.6f));
+		Text(TEXT("HAND SLOT"), X + CW * 0.5f, Y0 + CH * 0.42f, FLinearColor(0.6f, 0.9f, 1.f, 0.9f), 0.38f, true, false);
+		Text(TEXT("empty"), X + CW * 0.5f, Y0 + CH * 0.42f + 32.f * U, FLinearColor(0.55f, 0.8f, 1.f, 0.8f), 0.32f, true, false);
 		X += CW + Gap;
 	}
 	// Right column: picked artifact's texts + INFUSE / GUARD / SAVE.
@@ -1274,7 +1285,7 @@ void AZoogiHUD::DrawArtifacts(AZoogiGameMode* G)
 	const float PW = 440.f * U, PH = 150.f * U;
 	const float X = W - PW - 24.f * U, Y = H - PH - (G->IsHumanAiming() && G->IsAimStep() ? 230.f : 70.f) * U;
 	const EZoogiArtifact Inf = AC->Infused;
-	const FLinearColor Acc = Inf != EZoogiArtifact::None ? ZoogiArtifacts::Color(Inf) : (AC->Guard != EZoogiArtifact::None ? ZoogiArtifacts::Color(AC->Guard) : FLinearColor(0.35f, 0.38f, 0.45f));
+	const FLinearColor Acc = Inf != EZoogiArtifact::None ? ZoogiArtifacts::Color(Inf) : (AC->Guard != EZoogiArtifact::None ? ZoogiArtifacts::Color(AC->Guard) : ZoogiUIStyle::Muted);
 	Panel(X, Y, PW, PH, GPanel);
 	Panel(X, Y, 8.f * U, PH, Acc);
 	if (Inf != EZoogiArtifact::None)
@@ -1291,10 +1302,10 @@ void AZoogiHUD::DrawArtifacts(AZoogiGameMode* G)
 	}
 	else
 	{
-		Text(TEXT("NO ARTIFACT ACTIVE"), X + 28.f * U, Y + 12.f * U, FLinearColor(0.7f, 0.74f, 0.85f), 0.48f);
-		Text(TEXT("plain shot this turn"), X + 28.f * U, Y + 52.f * U, FLinearColor(0.65f, 0.7f, 0.8f), 0.34f, false, false);
+		Text(TEXT("NO ARTIFACT ACTIVE"), X + 28.f * U, Y + 12.f * U, FLinearColor(0.7f, 0.88f, 1.f), 0.48f);
+		Text(TEXT("plain shot this turn"), X + 28.f * U, Y + 52.f * U, FLinearColor(0.65f, 0.85f, 1.f), 0.34f, false, false);
 	}
-	Text(TEXT("HAND"), X + 28.f * U, Y + PH - 44.f * U, FLinearColor(0.6f, 0.66f, 0.8f), 0.34f, false, false);
+	Text(TEXT("HAND"), X + 28.f * U, Y + PH - 44.f * U, FLinearColor(0.6f, 0.85f, 1.f), 0.34f, false, false);
 	float GX = X + 110.f * U;
 	for (EZoogiArtifact A : AC->Hand) { Gem((uint8)A, GX, Y + PH - 30.f * U, 14.f * U); GX += 40.f * U; }
 	if (AC->Status != EZoogiStatus::None) Text(ZoogiArtifacts::StatusName(AC->Status), X + PW - 24.f * U - TextSize(ZoogiArtifacts::StatusName(AC->Status), 0.4f).X, Y + PH - 46.f * U, FLinearColor(1.f, 0.6f, 0.4f), 0.4f);
@@ -1312,8 +1323,8 @@ void AZoogiHUD::DrawResolve(AZoogiGameMode* G)
 	const float NW = bNotes ? (float)TextSize(G->ResolveNotes, 0.42f, false).X : 0.f;
 	const float PW = FMath::Max3(520.f * U, (float)TS.X + 80.f * U, NW + 80.f * U);
 	const float PH = bNotes ? 150.f * U : 110.f * U;
-	Panel((W - PW) * 0.5f, Y, PW, PH, FLinearColor(0.02f, 0.03f, 0.08f, 0.8f * A));
-	Text(TEXT("RESOLVE"), W * 0.5f, Y + 8.f * U, FLinearColor(0.7f, 0.78f, 0.95f, A), 0.42f, true, false);
+	ZoogiUIStyle::CPanel(Canvas, (W - PW) * 0.5f, Y, PW, PH, U, FLinearColor(GPanel.R, GPanel.G, GPanel.B, GPanel.A * A), FLinearColor(1.f, 0.82f, 0.25f, A)); // uistyle: was flat near-black
+	Text(TEXT("RESOLVE"), W * 0.5f, Y + 8.f * U, FLinearColor(0.7f, 0.9f, 1.f, A), 0.42f, true, false);
 	Text(G->ResolveSummary, W * 0.5f, Y + 42.f * U, FLinearColor(1.f, 0.95f, 0.8f, A), 0.7f, true);
 	if (bNotes) Text(G->ResolveNotes, W * 0.5f, Y + 110.f * U, G->bLastHitCrit ? FLinearColor(1.f, 0.85f, 0.4f, A) : FLinearColor(0.75f, 0.85f, 1.f, A), 0.42f, true, false);
 }
@@ -1367,8 +1378,7 @@ void AZoogiHUD::DrawAnime(AZoogiGameMode* G)
 	if (bAnimeDebugCaption) Text(Anime->SubCaption, W * 0.5f, H * 0.17f + 120.f * U, FLinearColor(0.85f, 0.9f, 1.f, 0.8f * A), 0.36f, true, false);
 	// Progress + skip hint.
 	const float BW = 360.f * U;
-	Panel((W - BW) * 0.5f, H * 0.9f, BW, 6.f * U, FLinearColor(0.1f, 0.1f, 0.15f, 0.8f * A));
-	Panel((W - BW) * 0.5f, H * 0.9f, BW * FMath::Clamp(Age / Len, 0.f, 1.f), 6.f * U, FLinearColor(C.R, C.G, C.B, A));
+	if (A > 0.05f) ZoogiUIStyle::CBar(Canvas, (W - BW) * 0.5f, H * 0.9f, BW, 8.f * U, U, FMath::Clamp(Age / Len, 0.f, 1.f), FLinearColor(C.R, C.G, C.B, A), FLinearColor(C.R * 0.6f + 0.1f, C.G * 0.6f + 0.2f, FMath::Min(1.f, C.B + 0.4f), A), nullptr, 4); // uistyle
 	if (Age > 0.3f) Button(TEXT("SKIP"), W - 190.f * U, H * 0.9f - 10.f * U, 150.f * U, 52.f * U, "AnimeSkip", 0, FLinearColor(0.8f, 0.85f, 0.95f));
 	if (Age > 0.3f) Text(TEXT("tap / click / SPACE to skip"), W * 0.5f, H * 0.9f + 14.f * U, FLinearColor(0.8f, 0.85f, 0.95f, 0.7f * A), 0.32f, true, false);
 }
@@ -1381,9 +1391,9 @@ void AZoogiHUD::RingMarks(int32 Marks, float X, float Y, float S, bool bKO)
 	{
 		const float MX = X + i * (S + 8.f * U);
 		const bool bOn = i < Marks && !bKO;
-		const FLinearColor C = bOn ? FLinearColor(1.f, 0.85f, 0.3f) : FLinearColor(0.45f, 0.45f, 0.5f, 0.9f);
+		const FLinearColor C = bOn ? FLinearColor(1.f, 0.85f, 0.3f) : ZoogiUIStyle::Muted;
 		Panel(MX, Y, S, S, C);
-		if (!bOn) Panel(MX + 3.f * U, Y + 3.f * U, S - 6.f * U, S - 6.f * U, FLinearColor(0.05f, 0.06f, 0.1f, 0.95f));
+		if (!bOn) Panel(MX + 3.f * U, Y + 3.f * U, S - 6.f * U, S - 6.f * U, ZoogiUIStyle::Track);
 	}
 }
 
@@ -1478,13 +1488,13 @@ void AZoogiHUD::DrawEpisodeP5(AZoogiGameMode* G)
 	const FZoogiEpPlayback* P = D ? D->Current() : nullptr;
 	if (!P || P->Done()) return;
 	const float W = Canvas->ClipX, PW = 900.f * U, X0 = (W - PW) * 0.5f, Y0 = 90.f * U;
-	DrawRect(FLinearColor(0.02f, 0.02f, 0.06f, 0.78f), X0, Y0, PW, 210.f * U);
+	Panel(X0, Y0, PW, 210.f * U, GPanel); // uistyle: was a flat near-black DrawRect
 	const int32 Cur = P->PerspectiveIndex();
 	Text(FString::Printf(TEXT("EPISODE %d  -  %s  -  P%d    %.1f / %.0f s"), P->Ep.EpisodeId, ZoogiEpBranchName(P->Ep.Branch), P->Ep.Spender + 1, P->T, P->Ep.Duration), X0 + 20.f * U, Y0 + 12.f * U, FLinearColor(1.f, 0.85f, 0.4f), 0.5f, false, true);
 	for (int32 i = 0; i < P->Ep.Perspectives.Num(); ++i)
 	{
 		const FZoogiEpPerspective& V = P->Ep.Perspectives[i];
-		Text(FString::Printf(TEXT("%d  %s"), i + 1, *V.Line), X0 + 24.f * U, Y0 + (56.f + i * 36.f) * U, i == Cur ? FLinearColor::White : FLinearColor(0.55f, 0.6f, 0.7f), i == Cur ? 0.42f : 0.36f, false, false);
+		Text(FString::Printf(TEXT("%d  %s"), i + 1, *V.Line), X0 + 24.f * U, Y0 + (56.f + i * 36.f) * U, i == Cur ? FLinearColor::White : ZoogiUIStyle::MutedText, i == Cur ? 0.42f : 0.36f, false, false);
 	}
 	Button(TEXT("SKIP"), X0 + PW - 130.f * U, Y0 + 10.f * U, 110.f * U, 40.f * U, "EpisodeSkip", 0, FLinearColor(1.f, 0.85f, 0.4f));
 }

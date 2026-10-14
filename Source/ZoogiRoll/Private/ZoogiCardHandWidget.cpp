@@ -28,6 +28,7 @@
 #include "Rendering/DrawElements.h"
 #include "Brushes/SlateRoundedBoxBrush.h"
 #include "Styling/CoreStyle.h"
+#include "ZoogiUIStyle.h"
 
 namespace
 {
@@ -51,12 +52,14 @@ namespace
 	int32 CHLines(const FString& S) { int32 N = 1; for (TCHAR C : S) if (C == '\n') ++N; return N; }
 	void CHBox(FSlateWindowElementList& Out, int32 L, const FGeometry& G, const FVector2D& P, const FVector2D& S, const FLinearColor& Fill, const FLinearColor& Edge, float R = 10.f, float W = 2.f)
 	{
-		const FSlateRoundedBoxBrush B(Fill, R, Edge, W);
-		FSlateDrawElement::MakeBox(Out, L, G.ToPaintGeometry(FVector2f(S), FSlateLayoutTransform(FVector2f(P))), &B);
+		ZoogiUIStyle::SBox(Out, L, G, P, S, Fill, Edge, R, W);
 	}
 	void CHText(FSlateWindowElementList& Out, int32 L, const FGeometry& G, const FVector2D& P, const FString& T, int32 Size, const FLinearColor& C, bool bBold = false)
 	{
-		FSlateDrawElement::MakeText(Out, L, G.ToPaintGeometry(FVector2f(800.f, 400.f), FSlateLayoutTransform(FVector2f(P))), T, FCoreStyle::GetDefaultFontStyle(bBold ? "Bold" : "Regular", Size), ESlateDrawEffect::None, C);
+		// uistyle: bold outlined text with a drop shadow
+		FSlateFontInfo F = FCoreStyle::GetDefaultFontStyle(bBold ? "Bold" : "Regular", Size);
+		ZoogiUIStyle::AddOutline(F, Size >= 18 ? 2.5f : 1.5f);
+		ZoogiUIStyle::SText(Out, L, G, P, T, F, C);
 	}
 	// Default ON whenever cards mode is on: [ZoogiRoll.Cards] bCardHandUI (default True) or -ZoogiCardHandUI; -ZoogiNoCardHandUI turns it off.
 	bool CHFlagOn()
@@ -97,11 +100,13 @@ TSharedRef<SWidget> UZoogiCardHandWidget::RebuildWidget()
 		auto MakeBtn = [&](const TCHAR* Label, const FLinearColor& C, UTextBlock*& OutText) -> UButton*
 		{
 			UButton* B = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass());
-			B->SetBackgroundColor(C);
+				B->SetStyle(ZoogiUIStyle::ButtonStyle(C, true)); // uistyle: chunky saturated plate + navy outline (was the default gray UButton)
 			UTextBlock* T = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
 			T->SetText(FText::FromString(Label));
-			FSlateFontInfo F = FCoreStyle::GetDefaultFontStyle("Bold", 16); T->SetFont(F);
-			T->SetColorAndOpacity(FSlateColor(FLinearColor(0.02f, 0.03f, 0.06f)));
+			T->SetFont(ZoogiUIStyle::BoldFont(17, 2.f));
+			T->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+			T->SetShadowOffset(FVector2D(2.f, 3.f));
+			T->SetShadowColorAndOpacity(FLinearColor(0.f, 0.f, 0.06f, 0.6f));
 			B->SetContent(T);
 			B->SetVisibility(ESlateVisibility::Collapsed);
 			OutText = T;
@@ -291,6 +296,7 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 			EnergyShown = KS->Energy - (KS->bCommitted ? 0 : SelCost);
 			EnergyMax = Cards->Rules().Tune().EnergyPerTurn;
 			DrawCount = KS->DrawPile.Num(); DiscardCount = KS->Discard.Num();
+			EnergyJuice.Update(EnergyMax > 0 ? FMath::Clamp((float)EnergyShown / EnergyMax, 0.f, 1.f) : 0.f, Dt);
 			if (EnergyShown != LastLoggedEnergy) { UE_LOG(LogZoogi, Log, TEXT("CARDUI energy P%d %d/%d"), (bShow ? B->PlayerIndex : KeyPlayer) + 1, EnergyShown, EnergyMax); LastLoggedEnergy = EnergyShown; }
 		}
 	}
@@ -459,17 +465,25 @@ int32 UZoogiCardHandWidget::NativePaint(const FPaintArgs& Args, const FGeometry&
 	{
 		// deck (bottom left) and discard pile (bottom right) with counts
 		const FVector2D CS(70.f, 104.f);
-		for (int32 i = 2; i >= 0; --i) CHBox(Out, L, Geo, FVector2D(55.f + i * 4.f, V.Y - 128.f - i * 4.f), CS, FLinearColor(0.08f, 0.12f, 0.3f, 0.95f), FLinearColor(1.f, 0.82f, 0.35f), 8.f, 2.f);
-		CHText(Out, L + 1, Geo, FVector2D(70.f, V.Y - 92.f), FString::FromInt(DrawCount), 22, FLinearColor::White, true);
-		CHText(Out, L + 1, Geo, FVector2D(52.f, V.Y - 20.f), TEXT("DECK"), 11, FLinearColor(0.75f, 0.85f, 1.f), true);
-		CHBox(Out, L, Geo, FVector2D(V.X - 365.f, V.Y - 128.f), CS, FLinearColor(0.15f, 0.06f, 0.08f, 0.9f), FLinearColor(0.75f, 0.5f, 0.45f), 8.f, 2.f);
-		CHText(Out, L + 1, Geo, FVector2D(V.X - 343.f, V.Y - 92.f), FString::FromInt(DiscardCount), 22, FLinearColor::White, true);
-		CHText(Out, L + 1, Geo, FVector2D(V.X - 372.f, V.Y - 20.f), TEXT("DISCARD"), 11, FLinearColor(1.f, 0.8f, 0.75f), true);
-		// total energy counter (bottom right)
-		const float R = 54.f; const FVector2D C(V.X - 100.f, V.Y - 84.f);
-		CHBox(Out, L, Geo, C - FVector2D(R, R), FVector2D(R * 2.f, R * 2.f), FLinearColor(0.03f, 0.12f, 0.35f, 0.95f), FLinearColor(0.45f, 0.85f, 1.f), R, 4.f);
-		CHText(Out, L + 1, Geo, C + FVector2D(-34.f, -30.f), FString::Printf(TEXT("%d/%d"), EnergyShown, EnergyMax), 26, EnergyShown >= 0 ? FLinearColor::White : FLinearColor(1.f, 0.4f, 0.35f), true);
-		CHText(Out, L + 1, Geo, C + FVector2D(-28.f, 8.f), TEXT("ENERGY"), 11, FLinearColor(0.6f, 0.9f, 1.f), true);
+		// uistyle: saturated outlined pile plates (navy deck, magenta discard)
+		for (int32 i = 2; i >= 0; --i) CHBox(Out, L, Geo, FVector2D(55.f + i * 4.f, V.Y - 128.f - i * 4.f), CS, FLinearColor(0.05f, 0.16f, 0.55f, 0.95f), ZoogiUIStyle::Outline, 10.f, 3.5f);
+		CHBox(Out, L, Geo, FVector2D(63.f, V.Y - 132.f), FVector2D(CS.X - 16.f, 5.f), FLinearColor(1.f, 1.f, 1.f, 0.35f), FLinearColor::Transparent, 2.5f, 0.f);
+		CHText(Out, L + 1, Geo, FVector2D(76.f, V.Y - 96.f), FString::FromInt(DrawCount), 24, FLinearColor::White, true);
+		CHText(Out, L + 1, Geo, FVector2D(52.f, V.Y - 22.f), TEXT("DECK"), 12, FLinearColor(0.7f, 0.9f, 1.f), true);
+		CHBox(Out, L, Geo, FVector2D(V.X - 365.f, V.Y - 128.f), CS, FLinearColor(0.55f, 0.06f, 0.35f, 0.92f), ZoogiUIStyle::Outline, 10.f, 3.5f);
+		CHText(Out, L + 1, Geo, FVector2D(V.X - 343.f, V.Y - 96.f), FString::FromInt(DiscardCount), 24, FLinearColor::White, true);
+		CHText(Out, L + 1, Geo, FVector2D(V.X - 376.f, V.Y - 22.f), TEXT("DISCARD"), 12, FLinearColor(1.f, 0.8f, 0.95f), true);
+		// total Card Energy counter (bottom right): chunky violet disc + gloss, segmented violet bar, juice (flash on gain, shake + red trail on loss)
+		const float R = 54.f;
+		const FVector2D C = FVector2D(V.X - 100.f, V.Y - 96.f) + EnergyJuice.ShakeOffset(5.f, Time);
+		CHBox(Out, L, Geo, C - FVector2D(R, R) + FVector2D(3.f, 5.f), FVector2D(R * 2.f, R * 2.f), FLinearColor(0.f, 0.f, 0.05f, 0.35f), FLinearColor::Transparent, R, 0.f);
+		CHBox(Out, L, Geo, C - FVector2D(R, R), FVector2D(R * 2.f, R * 2.f), ZoogiUIStyle::CardEnergyB, ZoogiUIStyle::Outline, R, 4.f);
+		CHBox(Out, L, Geo, C - FVector2D(R - 9.f, R - 9.f), FVector2D(R * 2.f - 18.f, R * 2.f - 18.f), ZoogiUIStyle::CardEnergyA * FLinearColor(1.f, 1.f, 1.f, 0.55f), FLinearColor(1.f, 1.f, 1.f, 0.25f), R - 9.f, 2.f);
+		CHBox(Out, L, Geo, C + FVector2D(-R * 0.55f, -R + 9.f), FVector2D(R * 1.1f, 10.f), FLinearColor(1.f, 1.f, 1.f, 0.5f), FLinearColor::Transparent, 5.f, 0.f);
+		if (EnergyJuice.Flash > 0.f) CHBox(Out, L, Geo, C - FVector2D(R, R), FVector2D(R * 2.f, R * 2.f), FLinearColor(1.f, 1.f, 1.f, 0.6f * EnergyJuice.Flash), FLinearColor::Transparent, R, 0.f);
+		CHText(Out, L + 1, Geo, C + FVector2D(-36.f, -32.f), FString::Printf(TEXT("%d/%d"), EnergyShown, EnergyMax), 28, EnergyShown >= 0 ? FLinearColor::White : FLinearColor(1.f, 0.45f, 0.4f), true);
+		CHText(Out, L + 1, Geo, C + FVector2D(-30.f, 8.f), TEXT("ENERGY"), 12, FLinearColor(1.f, 0.9f, 1.f), true);
+		ZoogiUIStyle::SBar(Out, L + 1, Geo, FVector2D(V.X - 170.f, V.Y - 30.f), FVector2D(130.f, 14.f), 0.f, ZoogiUIStyle::CardEnergyA, ZoogiUIStyle::CardEnergyB, &EnergyJuice, FMath::Clamp(EnergyMax, 1, 10));
 	}
 	// hover tooltip with the card description
 	if (!HoverTitle.IsEmpty() && !Dragging.IsValid())
@@ -477,7 +491,7 @@ int32 UZoogiCardHandWidget::NativePaint(const FPaintArgs& Args, const FGeometry&
 		const int32 NL = CHLines(HoverTip);
 		const FVector2D Sz(400.f, 46.f + NL * 20.f);
 		const FVector2D P(FMath::Clamp(V.X * 0.5f - Sz.X * 0.5f, 10.f, V.X - Sz.X - 10.f), V.Y - UZoogiCardWidget::CardH * CHHoverScale - Sz.Y - 24.f);
-		CHBox(Out, L + 2, Geo, P, Sz, FLinearColor(0.02f, 0.03f, 0.08f, 0.92f), FLinearColor(1.f, 0.82f, 0.35f), 10.f, 2.f);
+		ZoogiUIStyle::SPanel(Out, L + 2, Geo, P, Sz, ZoogiUIStyle::PanelNavy, ZoogiUIStyle::Gold, 12.f);
 		CHText(Out, L + 3, Geo, P + FVector2D(14.f, 8.f), HoverTitle, 14, FLinearColor(1.f, 0.9f, 0.6f), true);
 		CHText(Out, L + 3, Geo, P + FVector2D(14.f, 34.f), HoverTip, 12, FLinearColor(0.9f, 0.92f, 1.f));
 	}
@@ -497,7 +511,7 @@ int32 UZoogiCardHandWidget::NativePaint(const FPaintArgs& Args, const FGeometry&
 			{
 				const FVector2D P = TargetPos + FVector2D(TargetR + 24.f, -40.f);
 				const FVector2D Sz(330.f, 30.f + CHLines(DragPreview) * 19.f);
-				CHBox(Out, L + 3, Geo, P, Sz, FLinearColor(0.02f, 0.03f, 0.08f, 0.88f), C, 8.f, 2.f);
+				ZoogiUIStyle::SPanel(Out, L + 3, Geo, P, Sz, ZoogiUIStyle::PanelTeal, C, 10.f);
 				CHText(Out, L + 4, Geo, P + FVector2D(12.f, 8.f), DragPreview, 12, FLinearColor::White, true);
 			}
 		}
