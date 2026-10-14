@@ -13,6 +13,7 @@
 #include "ZoogiBall.h"
 #include "ZoogiOrb.h"
 #include "ZoogiCombo.h"
+#include "ZoogiBattleStateMachine.h"
 #include "ZoogiTypes.h"
 #include "Components/SphereComponent.h"
 #include "Engine/World.h"
@@ -119,6 +120,7 @@ void UZoogiCardSubsystem::FxAfterShot(AZoogiGameMode* G, AZoogiBall* Ball, const
 	}
 	RelayOrb.Reset();
 	if (TestCase == TEXT("effects") && !bTestDone) { TestEffectsOnShot(G, Ball); TestStageContact(G, Ball, V); }
+	if (TestCase == TEXT("followup") && !bTestDone && !G->bInFollowUp) TestStageContact(G, Ball, V);
 }
 
 // ------------------------------------------------------------------ contacts
@@ -179,23 +181,20 @@ void UZoogiCardSubsystem::FxContact(AZoogiBall* Self, AActor* Other, const FVect
 	{
 		const int32 Oi = G->Orbs.IndexOfByKey(O);
 		const int32 Life = OrbLife.IsValidIndex(Oi) ? OrbLife[Oi] : 0;
+		// Orb Relay (card book: "physical Orb contact creates a relay candidate; partner + 30 Combo required"): the acting
+		// Zoogi's REAL orb contact earns the Orb Relay setup once per orb life. It grants no Combo: the follow-up offer still
+		// validates the partner and charges the 30 Combo once (AZoogiGameMode::ComboResolve / ComboAcceptFollowUp).
 		if (Self->PlayerIndex == Shooter)
-		{
 			if (FZoogiFxArmed* R = Fx.Find(NRelay, Shooter)) if (!RelayOrb.IsValid())
 			{
 				RelayOrb = O; RelayLife = Life;
-				UE_LOG(LogZoogi, Log, TEXT("CARDS fx orb_relay effect=%lld P%d: relay candidate orb %d life %d (needs partner contact)"), R->EffectId, Shooter + 1, Oi, Life);
+				if (CardSetup(G, ZoogiComboTrigger::OrbRelay, O->OrbLocation(), Oi, Life))
+				{
+					R->Uses++; R->bConsumed = true;
+					FxUse(*R, FString::Printf(TEXT("real orb contact (orb %d life %d) -> ORB RELAY setup (partner + %.0f Combo still required)"), Oi, Life, R->A));
+				}
+				else UE_LOG(LogZoogi, Log, TEXT("CARDS fx orb_relay effect=%lld P%d: orb %d life %d contact gives no setup (follow-up / scored / not 2v2)"), R->EffectId, Shooter + 1, Oi, Life);
 			}
-		}
-		else if (G->bComboMode && RelayOrb.Get() == O && RelayLife == Life && G->Balls.IsValidIndex(Shooter) && G->PartnerOf(G->Balls[Shooter]) == Self)
-		{
-			if (FZoogiFxArmed* R = Fx.Find(NRelay, Shooter)) if (Fx.ScoreOrbOnce(Oi, Life))
-			{
-				R->Uses++; R->bConsumed = true;
-				G->ComboAddEnergy(Self->TeamIndex, R->A, TEXT("ORB RELAY card"));
-				FxUse(*R, FString::Printf(TEXT("partner P%d touched orb %d (life %d): +%.0f Combo, scored once per orb life"), Self->PlayerIndex + 1, Oi, Life, R->A));
-			}
-		}
 		return;
 	}
 	// static geometry: Bank Strike needs a real wall / bumper contact (not the floor)
@@ -204,7 +203,24 @@ void UZoogiCardSubsystem::FxContact(AZoogiBall* Self, AActor* Other, const FVect
 		{
 			B->bBankSetup = true;
 			FxUse(*B, FString::Printf(TEXT("BankSetup: real bank contact with %s"), *GetNameSafe(Other)));
+			CardSetup(G, ZoogiComboTrigger::BankSetup, Hit.ImpactPoint, -1, 0);
 		}
+}
+
+// ------------------------------------------------------------------ Phase 4: card setups feed the combo system
+
+bool UZoogiCardSubsystem::CardSetup(AZoogiGameMode* G, uint32 Flag, const FVector& Where, int32 Orb, int32 Life)
+{
+	// Only from a real event of the lead action, never during the partner follow-up (no setup farming / third action),
+	// once per orb life for orbs, and through ComboTrigger (one flag per shot). No Combo is granted here.
+	if (!G || !G->bComboMode) return false;
+	if (G->bInFollowUp) { ++FxSetupRefused; UE_LOG(LogZoogi, Log, TEXT("CARDS setup %u refused: partner follow-up in progress"), Flag); return false; }
+	if (Orb >= 0 && !Fx.ScoreOrbOnce(Orb, Life)) { ++FxSetupRefused; return false; }
+	const bool bNew = (G->ShotTriggers & Flag) == 0;
+	G->ComboTrigger(Flag, 0.f, Where);
+	++FxCardSetups;
+	UE_LOG(LogZoogi, Log, TEXT("CARDS setup %s from a real contact (%s)"), Flag == ZoogiComboTrigger::BankSetup ? TEXT("BANK SETUP") : TEXT("ORB RELAY"), bNew ? TEXT("new") : TEXT("already earned this shot"));
+	return true;
 }
 
 // ------------------------------------------------------------------ tick
@@ -422,4 +438,42 @@ void UZoogiCardSubsystem::TestStageContact(AZoogiGameMode* G, AZoogiBall* Ball, 
 	const FVector At = Ball->BallLocation() + D * 250.f + Side * Lateral;
 	Pick->PlaceAt(FVector(At.X, At.Y, Z), 0.f);
 	UE_LOG(LogZoogi, Log, TEXT("CARD_TEST effects: staged P%d on P%d's launch line at (%.0f, %.0f)"), Pick->PlayerIndex + 1, Ball->PlayerIndex + 1, At.X, At.Y);
+}
+
+// Phase 4 follow-up test: watches the real combo flow (offer -> continue / pass -> one follow-up -> end of team turn).
+void UZoogiCardSubsystem::TestFollowUpTick(AZoogiGameMode* G)
+{
+	if (!G->bComboMode) { TestCheck(false, TEXT("followup runs in combo mode (-ZoogiCombo)")); TestFinish(G); return; }
+	const int32 T = G->ComboTeam;
+	if (T != FuPrevTeam) { FuPrevTeam = T; FuThisTeamTurn = 0; }
+	if (G->bInFollowUp && G->bFollowUpOffered) TestCheck(false, TEXT("offer during a follow-up (third action)"));
+	if (G->bFollowUpOffered && !bFuPrevOffered)
+	{
+		++FuOffers;
+		AZoogiBall* S = G->GetActiveBall();
+		AZoogiBall* P = S ? G->PartnerOf(S) : nullptr;
+		TestCheck(P && !P->bOut && !P->bKnockedOut, TEXT("offer only with an eligible partner"));
+		TestCheck(!G->bInFollowUp && !G->bFollowUpUsed, TEXT("offer only for the lead action, once per team turn"));
+		TestCheck(G->ShotTriggers != 0, TEXT("offer only after a real setup"));
+		TestCheck(P && UZoogiBattleStateMachine::CanAffordFollowUp(G, P->PlayerIndex, G->ComboEnergy[T], ZoogiComboTune::FollowUpCost), TEXT("offer only when the 30 Combo is affordable"));
+		if (FuOffers % 2 == 0)
+		{
+			const float Before = G->ComboEnergy[T];
+			const bool bPass = G->ComboDeclineFollowUp(); // PASS (the human button / timeout path)
+			++FuDeclines;
+			TestCheck(bPass && G->ComboEnergy[T] == Before && !G->bInFollowUp, FString::Printf(TEXT("pass charges nothing (%.0f -> %.0f)"), Before, G->ComboEnergy[T]));
+			UE_LOG(LogZoogi, Log, TEXT("CARD_TEST followup: offer %d PASSED (gauge %.0f kept)"), FuOffers, G->ComboEnergy[T]);
+		}
+	}
+	if (G->bInFollowUp && !bFuPrevIn)
+	{
+		++FuAccepts; ++FuThisTeamTurn;
+		const float Paid = FuPrevGauge[T] - G->ComboEnergy[T];
+		TestCheck(FuThisTeamTurn == 1, FString::Printf(TEXT("exactly one follow-up per team turn (%d)"), FuThisTeamTurn));
+		TestCheck(FMath::IsNearlyEqual(Paid, ZoogiComboTune::FollowUpCost, 0.5f) || FMath::IsNearlyZero(Paid, 0.5f), FString::Printf(TEXT("follow-up charged once: gauge -%.0f (30 Combo, or Episode Energy when that is the cost source)"), Paid));
+		UE_LOG(LogZoogi, Log, TEXT("CARD_TEST followup: CONTINUE accepted, gauge %.0f -> %.0f"), FuPrevGauge[T], G->ComboEnergy[T]);
+	}
+	bFuPrevOffered = G->bFollowUpOffered; bFuPrevIn = G->bInFollowUp;
+	FuPrevGauge[0] = G->ComboEnergy[0]; FuPrevGauge[1] = G->ComboEnergy[1];
+	if (G->Phase == EZoogiPhase::GameOver) TestFinish(G);
 }

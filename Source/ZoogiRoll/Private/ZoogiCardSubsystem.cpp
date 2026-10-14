@@ -153,12 +153,26 @@ EZoogiCardResult UZoogiCardSubsystem::Commit(AZoogiGameMode* G, FString& OutChoi
 		if (K.Card.CardId == FName(TEXT("crystal_collapse"))) { CollapseEffectId = K.EffectId; CollapseOwner = P; CollapsePiece.Reset(); }
 		FxArm(G, P, K.Card.CardId, K.EffectId);
 	}
+	if (TestCase == TEXT("followup") && !bTestDone)
+	{
+		// follow-up test: every lead action carries the two setup cards (real contacts decide whether they fire)
+		FxArm(G, P, FName(TEXT("bank_strike")), 9100000 + FxForceIdx++);
+		FxArm(G, P, FName(TEXT("orb_relay")), 9100000 + FxForceIdx++);
+		// TEST FIXTURE (test only, logged): the CPU earns ~10 Combo per action, so a short match rarely reaches the 30 cost.
+		// Every other commit the team gauge is topped up to 40 so both the affordable (offer -> continue / pass) and the
+		// unaffordable (no offer) paths are exercised. The real game never does this; charging is still checked on accept.
+		if ((FxForceIdx / 2) % 2 == 1)
+		{
+			const int32 T = AZoogiGameMode::TeamOfIndex(P);
+			if (G->ComboEnergy[T] < 40.f) { UE_LOG(LogZoogi, Log, TEXT("CARD_TEST followup: TEST FIXTURE team %d gauge %.0f -> 40"), T, G->ComboEnergy[T]); G->ComboEnergy[T] = 40.f; }
+		}
+	}
 	if (TestCase == TEXT("effects") && !bTestDone)
 	{
 		// effect test: additionally arm one card per turn in a fixed rotation (every card gets exercised in the real roll)
 		static const TCHAR* Rot[] = { TEXT("titan"), TEXT("guard"), TEXT("storm"), TEXT("double_impact"), TEXT("heavy_roll"), TEXT("frost"), TEXT("ember"),
 			TEXT("momentum_steal"), TEXT("anchor_guard"), TEXT("bank_strike"), TEXT("orb_magnet"), TEXT("orb_relay"), TEXT("precision"), TEXT("recovery_roll") };
-		for (int32 k = 0; k < 2; ++k) // two per turn: the whole rotation fits in 7 turns
+		for (int32 k = 0; k < 5; ++k) // five per turn: the whole rotation fits in 3 turns (Phase 4 real follow-ups can end a seed early)
 		{
 			FxArm(G, P, FName(Rot[FxForceIdx % UE_ARRAY_COUNT(Rot)]), 9000000 + FxForceIdx);
 			++FxForceIdx;
@@ -260,12 +274,33 @@ void UZoogiCardSubsystem::Tick(float Dt)
 	if (!G || !Tune.bCards) return;
 	ObservePhase(G);
 	FxTick(G, Dt);
+	if (TestCase == TEXT("followup") && !bTestDone) TestFollowUpTick(G);
+	if (TestCase == TEXT("hand_ui") && !bTestDone) { TestHandUiTick(G); return; }
 	TickForecast(G, Dt);
 	if (!TestCase.IsEmpty() && !bTestDone)
 	{
 		if (TestCase == TEXT("crystal_collapse") && !bCrystalTested && TestStandbys >= 1) TestCrystal(G);
+		if (TestCase == TEXT("ui_probe") && !bTestDone)
+		{
+			bTestDone = true;
+			UClass* C = LoadClass<UObject>(nullptr, TEXT("/Game/RLDB/Widgets/WBP_CardVisual.WBP_CardVisual_C"));
+			UE_LOG(LogZoogi, Log, TEXT("UIPROBE class=%s super=%s"), *GetNameSafe(C), C ? *GetNameSafe(C->GetSuperClass()) : TEXT("-"));
+			if (C)
+			{
+				for (TFieldIterator<FProperty> It(C, EFieldIteratorFlags::ExcludeSuper); It; ++It)
+					UE_LOG(LogZoogi, Log, TEXT("UIPROBE prop %s : %s flags=%llx"), *It->GetName(), *It->GetCPPType(), (uint64)It->PropertyFlags);
+				for (TFieldIterator<UFunction> It(C, EFieldIteratorFlags::ExcludeSuper); It; ++It)
+				{
+					FString Ps;
+					for (TFieldIterator<FProperty> P(*It); P; ++P) Ps += FString::Printf(TEXT("%s %s%s, "), *P->GetCPPType(), *P->GetName(), P->HasAnyPropertyFlags(CPF_ReturnParm | CPF_OutParm) ? TEXT("(out)") : TEXT(""));
+					UE_LOG(LogZoogi, Log, TEXT("UIPROBE func %s(%s) flags=%x"), *It->GetName(), *Ps, (uint32)It->FunctionFlags);
+				}
+				for (const FImplementedInterface& I : C->Interfaces) UE_LOG(LogZoogi, Log, TEXT("UIPROBE iface %s"), *GetNameSafe(I.Class));
+			}
+			UE_LOG(LogZoogi, Log, TEXT("CARD_TEST case=ui_probe result=PASS checks=0 fails=0"));
+		}
 		if (TestCase == TEXT("mutual_ko") && !bMutualTested && TestStandbys >= 1) { TestMutualKO(G); TestFinish(G); return; }
-		const int32 Need = TestCase == TEXT("crystal_collapse") ? 1 : TestCase == TEXT("effects") ? 28 : 8;
+		const int32 Need = TestCase == TEXT("crystal_collapse") ? 1 : TestCase == TEXT("effects") ? 28 : TestCase == TEXT("followup") ? 20 : 8;
 		if (TestResolved >= Need || G->Phase == EZoogiPhase::GameOver) TestFinish(G);
 	}
 }
@@ -282,6 +317,7 @@ void UZoogiCardSubsystem::TestOnStandby(AZoogiGameMode* G, int32 P)
 {
 	if (TestCase.IsEmpty() || bTestDone) return;
 	++TestStandbys;
+	if (TestCase == TEXT("hand_ui") && !HandUiBall.IsValid()) if (AZoogiBall* Hb = G->GetActiveBall()) { Hb->bCPU = false; HandUiBall = Hb; UE_LOG(LogZoogi, Log, TEXT("CARDS hand_ui: P%d human for this Standby"), Hb->PlayerIndex + 1); }
 	const FZoogiCardPlayerState* S = RulesV.Player(P);
 	const int32 E0 = S->Energy, Sp0 = RulesV.TotalSpent(P), H0 = S->Hand.Num();
 	const int32 Avail = S->Hand.Num() + S->DrawPile.Num() + S->Discard.Num();
@@ -372,6 +408,12 @@ void UZoogiCardSubsystem::TestFinish(AZoogiGameMode* G)
 	TestCheck(bUnique, TEXT("ledger event ids unique"));
 	TestCheck(TestStandbys > 0, TEXT("at least one standby"));
 	FString Uses;
+	if (TestCase == TEXT("followup"))
+	{
+		TestCheck(FuOffers > 0, FString::Printf(TEXT("at least one follow-up offer (%d)"), FuOffers));
+		TestCheck(FuAccepts > 0 && FuDeclines > 0, FString::Printf(TEXT("continue and pass both exercised (accept %d, pass %d)"), FuAccepts, FuDeclines));
+		Uses = FString::Printf(TEXT("offers:%d,accepts:%d,passes:%d,card_setups:%d,refused:%d,"), FuOffers, FuAccepts, FuDeclines, FxCardSetups, FxSetupRefused);
+	}
 	if (TestCase == TEXT("effects"))
 	{
 		TestCheck(FxTitanRestoreOk, TEXT("titan mass restored to the actual previous value"));

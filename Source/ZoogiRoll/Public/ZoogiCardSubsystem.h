@@ -79,6 +79,8 @@ private:
 	void FxTurnEnd(AZoogiGameMode* G);
 	void FxReset();
 	void FxUse(const FZoogiFxArmed& F, const FString& What);
+	bool CardSetup(AZoogiGameMode* G, uint32 Flag, const FVector& Where, int32 Orb, int32 Life);
+	int32 FxCardSetups = 0, FxSetupRefused = 0;
 	FVector Prev(const AZoogiBall* B) const;
 	FZoogiCardEffectCore Fx;
 	TArray<FVector> PrevVel;
@@ -98,6 +100,13 @@ private:
 	bool FxTitanRestoreOk = true, FxNoHealOk = true, bMutualTested = false;
 	void TestEffectsOnShot(AZoogiGameMode* G, AZoogiBall* Ball);
 	void TestMutualKO(AZoogiGameMode* G);
+	void TestFollowUpTick(AZoogiGameMode* G);
+	void TestHandUiTick(AZoogiGameMode* G);
+	TWeakObjectPtr<class AZoogiBall> HandUiBall;
+	int32 HandUiStep = 0, HandUiWait = 0, HandUiCost = 0, HandUiEnergy = 0, HandUiShowWait = 0;
+	bool bFuPrevOffered = false, bFuPrevIn = false;
+	float FuPrevGauge[2] = { 0.f, 0.f };
+	int32 FuPrevTeam = -1, FuThisTeamTurn = 0, FuOffers = 0, FuAccepts = 0, FuDeclines = 0;
 	void TestStageContact(AZoogiGameMode* G, AZoogiBall* Ball, const FVector2D& V);
 	UPROPERTY() TObjectPtr<class UNiagaraComponent> Trail;
 	UPROPERTY() TObjectPtr<class UNiagaraComponent> AimPoint;

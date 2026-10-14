@@ -409,16 +409,20 @@ void UZoogiBattleStateMachine::OnAwakenObserved()
 	if (!bFlow || !G->bAwakenDone || AwakenSeenTurn == G->TurnCounter) return;
 	AwakenSeenTurn = G->TurnCounter;
 	const int32 P = G->ActivePlayer;
-	const bool bInfuse = G->AwakenChoiceText.StartsWith(TEXT("INFUSE"));
-	const bool bGuard = G->AwakenChoiceText.StartsWith(TEXT("GUARD"));
+	const bool bCardsMode = G->CardsOn();
+	const bool bInfuse = !bCardsMode && G->AwakenChoiceText.StartsWith(TEXT("INFUSE"));
+	const bool bGuard = !bCardsMode && G->AwakenChoiceText.StartsWith(TEXT("GUARD"));
 	const FString& Rule = Tune.ActivationRule;
 	bool bOn = false;
 	if (Rule.Equals(TEXT("Infuse"), ESearchCase::IgnoreCase)) bOn = bInfuse;
 	else if (Rule.Equals(TEXT("Guard"), ESearchCase::IgnoreCase)) bOn = bGuard;
 	else if (Rule.Equals(TEXT("InfuseOrGuard"), ESearchCase::IgnoreCase)) bOn = bInfuse || bGuard;
+	// v3 cards mode: the Awaken hand is gone; Awakening comes from its own Standby toggle, never from a card choice.
+	const bool bRuleOn = Rule.Equals(TEXT("Infuse"), ESearchCase::IgnoreCase) || Rule.Equals(TEXT("Guard"), ESearchCase::IgnoreCase) || Rule.Equals(TEXT("InfuseOrGuard"), ESearchCase::IgnoreCase);
+	if (bCardsMode) bOn = bRuleOn && G->bStandbyAwaken;
 	UE_LOG(LogZoogi, Log, TEXT("BATTLE awaken choice P%d \"%s\" rule=%s -> awakened=%d (energy %.0f is not a factor)"), P + 1, *G->AwakenChoiceText, *Rule, bOn ? 1 : 0, GetEnergy(P));
 	if (bOn)
-		if (UZoogiReactionComponent* R = Reaction(P)) R->BeginAwakening(bInfuse ? TEXT("infuse") : TEXT("guard"), Players.IsValidIndex(P) ? Players[P].Turns : 0, Tune.AwakenTurns, Tune.ReactionsPerAwakening);
+		if (UZoogiReactionComponent* R = Reaction(P)) R->BeginAwakening(bCardsMode ? TEXT("standby") : bInfuse ? TEXT("infuse") : TEXT("guard"), Players.IsValidIndex(P) ? Players[P].Turns : 0, Tune.AwakenTurns, Tune.ReactionsPerAwakening);
 }
 
 // =====================================================================================================================

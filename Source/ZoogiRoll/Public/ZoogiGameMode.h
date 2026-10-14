@@ -311,6 +311,7 @@ public:
 	/** Awaken selection: 0 = the drawn artifact, 1.. = saved hand slots. */
 	int32 AwakenPick = 0;
 	bool bAwakenDone = false;
+	bool bStandbyAwaken = false;        // v3 cards: Episode Awakening requested at Standby (independent of the cards chosen)
 	float AwakenDoneAt = 0.f;
 	FString AwakenChoiceText;
 	int32 TurnCounter = 0;
@@ -324,6 +325,7 @@ public:
 	void CardsToggle(int32 HandSlot);
 	void CardsClear();
 	bool CardsCommit();
+	void CardsToggleAwaken();
 	void CardsPlanCPU();
 	void DoDraw();
 	void PlanCPUAwaken();

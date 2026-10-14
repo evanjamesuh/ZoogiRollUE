@@ -17,6 +17,7 @@ void AZoogiGameMode::CardsBeginStandby()
 	if (!C) return;
 	C->BeginStandby(this);
 	AwakenChoiceText.Reset();
+	bStandbyAwaken = false;
 	if (AZoogiBall* B = GetActiveBall())
 		if (const FZoogiCardPlayerState* S = C->Rules().Player(B->PlayerIndex))
 			AddPopup(FString::Printf(TEXT("STANDBY  %d CARDS  %d ENERGY"), S->Hand.Num(), S->Energy), B->BallLocation() + FVector(0, 0, 150.f), FLinearColor(0.6f, 0.85f, 1.f));
@@ -29,6 +30,14 @@ void AZoogiGameMode::CardsToggle(int32 Slot)
 	const EZoogiCardResult R = C->ToggleSlot(this, Slot);
 	if (R != EZoogiCardResult::Ok && R != EZoogiCardResult::NotSelected)
 		if (AZoogiBall* B = GetActiveBall()) AddPopup(FString(ZoogiCardResultName(R)).Replace(TEXT("_"), TEXT(" ")).ToUpper(), B->BallLocation() + FVector(0, 0, 200.f), FLinearColor(1.f, 0.45f, 0.35f));
+}
+
+void AZoogiGameMode::CardsToggleAwaken()
+{
+	// Episode Awakening (Air Reaction entitlement) stays independent of the cards: its own toggle, no Card Energy, no card.
+	if (!CardsOn() || Stage != EZoogiStage::Awaken || bAwakenDone || !IsHumanAiming()) return;
+	bStandbyAwaken = !bStandbyAwaken;
+	UE_LOG(LogZoogi, Log, TEXT("CARDS standby awakening request %s"), bStandbyAwaken ? TEXT("ON") : TEXT("off"));
 }
 
 void AZoogiGameMode::CardsClear()
