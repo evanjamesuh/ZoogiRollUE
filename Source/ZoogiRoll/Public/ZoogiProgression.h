@@ -240,6 +240,7 @@ struct ZOOGIROLL_API FZoogiProfile
 	TSet<FName> OwnedCosmetics;
 	TMap<FName, FName> EquippedCosmetics; // slot -> cosmetic id
 	TArray<FZoogiPurchaseRecord> Purchases;
+	TArray<FName> Deck;              // player's saved card deck (menu Deck screen); empty = default deck (Decks.csv starter)
 
 	FString ToJsonString() const;
 	bool FromJsonString(const FString& S, FString& OutError);

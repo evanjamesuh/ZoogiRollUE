@@ -107,11 +107,22 @@ void UZoogiPowerUnlockSubsystem::Initialize(FSubsystemCollectionBase& Collection
 	// Deck building asks the unlock state through ZoogiCards (2acd98e). No card -> power links are set here (RequiredPower stays empty).
 	TWeakObjectPtr<UZoogiPowerUnlockSubsystem> Weak(this);
 	ZoogiCards::SetPowerUnlockQuery([Weak](FName PowerId) { const UZoogiPowerUnlockSubsystem* S = Weak.Get(); return !S || S->IsUnlocked(PowerId); });
+	// Saved deck (menu Deck screen) for human players; never in test / capture runs.
+	if (!IsTestRun())
+		ZoogiCards::SetSavedDeckQuery([Weak]() { const UZoogiPowerUnlockSubsystem* S = Weak.Get(); const UZoogiProgressionSubsystem* P = S ? S->Prog() : nullptr; return P ? P->SavedDeck() : TArray<FName>(); });
+}
+
+bool UZoogiPowerUnlockSubsystem::IsTestRun()
+{
+	const TCHAR* C = FCommandLine::Get();
+	FString V;
+	return FParse::Param(C, TEXT("ZoogiAuto")) || FParse::Value(C, TEXT("ZoogiBattleTest="), V) || FParse::Value(C, TEXT("ZoogiEpisodeP5Test="), V) || GIsAutomationTesting;
 }
 
 void UZoogiPowerUnlockSubsystem::Deinitialize()
 {
 	ZoogiCards::SetPowerUnlockQuery(nullptr); // back to "no query = everything unlocked"
+	ZoogiCards::SetSavedDeckQuery(nullptr);
 	if (UZoogiProgressionSubsystem* P = Prog()) P->OnChanged.Remove(ProgHandle);
 	Super::Deinitialize();
 }

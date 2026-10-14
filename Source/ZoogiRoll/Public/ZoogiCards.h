@@ -193,6 +193,10 @@ namespace ZoogiCards
 	using FPowerUnlockQuery = TFunction<bool(FName /*PowerId*/)>;
 	ZOOGIROLL_API void SetPowerUnlockQuery(FPowerUnlockQuery Query);
 	ZOOGIROLL_API const FPowerUnlockQuery& GetPowerUnlockQuery();
+	/** Oct 14: the human player's saved deck (menu Deck screen). Not registered (or empty / illegal result) = the default deck. */
+	using FSavedDeckQuery = TFunction<TArray<FName>()>;
+	ZOOGIROLL_API void SetSavedDeckQuery(FSavedDeckQuery Query);
+	ZOOGIROLL_API const FSavedDeckQuery& GetSavedDeckQuery();
 	/** Deck-building hook: cards whose RequiredPower is locked never enter the deck; the deck is refilled to DeckSize with other
 	 *  eligible cards (definition order, round-robin, <= MaxCopies each). No query = Deck returned unchanged. Deterministic. */
 	ZOOGIROLL_API TArray<FName> FilterDeckByUnlocks(const TArray<FName>& Deck, const IZoogiCardBackend& Backend, int32 DeckSize, int32 MaxCopies, const FPowerUnlockQuery& IsUnlocked, FString& OutLog);

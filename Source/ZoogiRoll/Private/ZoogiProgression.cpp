@@ -395,6 +395,7 @@ FString FZoogiProfile::ToJsonString() const
 	J->SetArrayField(TEXT("cosmetics"), NameSet(OwnedCosmetics));
 	TSharedRef<FJsonObject> Eq = MakeShared<FJsonObject>(); for (const auto& P : EquippedCosmetics) Eq->SetStringField(P.Key.ToString(), P.Value.ToString());
 	J->SetObjectField(TEXT("equipped_cosmetics"), Eq);
+	{ TArray<TSharedPtr<FJsonValue>> Dk; for (const FName& N : Deck) Dk.Add(MakeShared<FJsonValueString>(N.ToString())); J->SetArrayField(TEXT("deck"), Dk); }
 	TArray<TSharedPtr<FJsonValue>> Pu;
 	for (const FZoogiPurchaseRecord& P : Purchases)
 	{
@@ -447,6 +448,7 @@ bool FZoogiProfile::FromJsonString(const FString& S, FString& OutError)
 	{ const FString E = J->GetStringField(TEXT("equipped_title")); P.EquippedTitle = E.IsEmpty() ? NAME_None : FName(*E); }
 	if (J->TryGetArrayField(TEXT("cosmetics"), A)) for (const auto& V : *A) P.OwnedCosmetics.Add(FName(*V->AsString()));
 	if (const TSharedPtr<FJsonObject>* O = nullptr; J->TryGetObjectField(TEXT("equipped_cosmetics"), O)) for (const auto& KV : (*O)->Values) P.EquippedCosmetics.Add(FName(*KV.Key), FName(*KV.Value->AsString()));
+	if (J->TryGetArrayField(TEXT("deck"), A)) for (const auto& V : *A) P.Deck.Add(FName(*V->AsString()));
 	if (J->TryGetArrayField(TEXT("purchases"), A))
 		for (const auto& V : *A)
 		{

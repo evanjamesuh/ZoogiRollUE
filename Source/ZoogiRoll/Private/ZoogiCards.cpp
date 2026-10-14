@@ -255,6 +255,9 @@ namespace ZoogiCards
 	static FPowerUnlockQuery& UnlockQueryRef() { static FPowerUnlockQuery Q; return Q; }
 	void SetPowerUnlockQuery(FPowerUnlockQuery Query) { UnlockQueryRef() = MoveTemp(Query); }
 	const FPowerUnlockQuery& GetPowerUnlockQuery() { return UnlockQueryRef(); }
+	static FSavedDeckQuery& SavedDeckRef() { static FSavedDeckQuery Q; return Q; }
+	void SetSavedDeckQuery(FSavedDeckQuery Query) { SavedDeckRef() = MoveTemp(Query); }
+	const FSavedDeckQuery& GetSavedDeckQuery() { return SavedDeckRef(); }
 
 	TArray<FName> FilterDeckByUnlocks(const TArray<FName>& Deck, const IZoogiCardBackend& Backend, int32 DeckSize, int32 MaxCopies, const FPowerUnlockQuery& IsUnlocked, FString& OutLog)
 	{

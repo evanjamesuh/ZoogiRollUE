@@ -75,12 +75,26 @@ void UZoogiCardSubsystem::EnsureMatch(AZoogiGameMode* G)
 	FString LogS;
 	// Oct 14 (Evan): power unlocks. No registered unlock query (the default) = everything unlocked, decks untouched.
 	TArray<FName> Fallback = ZoogiCards::BuiltInDeck();
+	// Oct 14: human players use the saved deck (menu Deck screen) when it is legal; CPUs keep the default deck.
+	TArray<FName> HumanDeck = Deck;
+	if (const ZoogiCards::FSavedDeckQuery& SQ = ZoogiCards::GetSavedDeckQuery())
+	{
+		const TArray<FName> Saved = SQ();
+		FString DeckErr;
+		if (Saved.Num() > 0)
+		{
+			if (ZoogiCards::ValidateDeck(Saved, *Backend, Tune.DeckSize, Tune.MaxCopies, DeckErr)) { HumanDeck = Saved; LogS += TEXT(" human deck = saved deck;"); }
+			else LogS += FString::Printf(TEXT(" saved deck not legal (%s): default deck;"), *DeckErr);
+		}
+	}
 	if (const ZoogiCards::FPowerUnlockQuery& Q = ZoogiCards::GetPowerUnlockQuery())
 	{
 		Deck = ZoogiCards::FilterDeckByUnlocks(Deck, *Backend, Tune.DeckSize, Tune.MaxCopies, Q, LogS);
+		HumanDeck = ZoogiCards::FilterDeckByUnlocks(HumanDeck, *Backend, Tune.DeckSize, Tune.MaxCopies, Q, LogS);
 		Fallback = ZoogiCards::FilterDeckByUnlocks(Fallback, *Backend, Tune.DeckSize, Tune.MaxCopies, Q, LogS);
 	}
-	TArray<TArray<FName>> Decks; Decks.Init(Deck, G->Balls.Num());
+	TArray<TArray<FName>> Decks;
+	for (const AZoogiBall* B : G->Balls) Decks.Add(B && !B->bCPU ? HumanDeck : Deck);
 	const int32 Seed = G->GameSeed ^ 0x5EEDCA4D; // own stream: card draws never consume GameRng numbers
 	const bool bOk = RulesV.Init(Backend, Tune, Seed, Decks, Fallback, LogS);
 	LastStandbyTurn = -1;

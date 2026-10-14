@@ -73,6 +73,8 @@ public:
 	int32 GetGems() const;
 	/** -ZoogiUnlockAll dev cheat: everything reads as unlocked (not written to the save). */
 	bool IsUnlockAllCheat() const { return bUnlockAll; }
+	/** -ZoogiAuto / -ZoogiBattleTest / -ZoogiEpisodeP5Test / automation: the player's profile never shapes decks (parity). */
+	static bool IsTestRun();
 
 	FOnZoogiUnlocksChanged OnUnlocksChanged;
 

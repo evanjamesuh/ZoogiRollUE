@@ -1206,7 +1206,11 @@ void UZoogiMenuRoot::BuildDeck()
 	const ZMDeckData& DD = ZMDeck();
 	const UZoogiPowerUnlockSubsystem* U = UZoogiPowerUnlockSubsystem::Get(this);
 	auto IsOwned = [&](const FZoogiCardDef& C) { const FName P = DeckCardPower(C.Id, &C); return P.IsNone() || !U || U->IsUnlocked(P); };
-	auto InDeck = [&](FName Id) { int32 N = 0; for (const FName& D : DD.Deck) if (D == Id) ++N; return N; };
+	UZoogiProgressionSubsystem* PSv = UZoogiProgressionSubsystem::Get(this);
+	// Working deck = the saved deck (profile), else the default starter deck.
+	const TArray<FName> CurDeck = (PSv && PSv->SavedDeck().Num() > 0) ? PSv->SavedDeck() : DD.Deck;
+	const int32 DeckMax = 15, CopyMax = 2;
+	auto InDeck = [&](FName Id) { int32 N = 0; for (const FName& D : CurDeck) if (D == Id) ++N; return N; };
 	int32 Owned = 0, Locked = 0;
 	for (const FZoogiCardDef& C : DD.Defs) { if (IsOwned(C)) ++Owned; else ++Locked; }
 	TArray<FString> F = { TEXT("ALL"), TEXT("OWNED"), TEXT("IN DECK"), TEXT("LOCKED") };
@@ -1239,8 +1243,10 @@ void UZoogiMenuRoot::BuildDeck()
 	// counts strip
 	Panel(106.f, 386.f, 606.f, 54.f, ZMPTeal);
 	Label(FString::Printf(TEXT("OWNED %d/%d"), Owned, DD.Defs.Num()), 118.f, 398.f, 180.f, 30.f, 30, FLinearColor::White, EAnchor::Center, 0);
-	Label(FString::Printf(TEXT("IN DECK %d"), DD.Deck.Num()), 310.f, 398.f, 180.f, 30.f, 30, FLinearColor::White, EAnchor::Center, 0);
-	Label(FString::Printf(TEXT("LOCKED %d"), Locked), 500.f, 398.f, 180.f, 30.f, 30, ZMCGold, EAnchor::Center, 0);
+	Label(FString::Printf(TEXT("IN DECK %d/%d"), CurDeck.Num(), DeckMax), 270.f, 398.f, 180.f, 30.f, 30, CurDeck.Num() == DeckMax ? FLinearColor::White : ZMCGold, EAnchor::Center, 0);
+	Label(FString::Printf(TEXT("LOCKED %d"), Locked), 446.f, 398.f, 130.f, 30.f, 30, ZMCGold, EAnchor::Center, 0);
+	if (PSv) Btn(TEXT("RESET"), ZMCViolet, [this, PSv]() { PSv->SetSavedDeck(TArray<FName>()); bDirty = true; }, 590.f, 390.f, 114.f, 46.f, 26);
+	if (CurDeck.Num() != DeckMax) Label(TEXT("Matches use the starter deck until yours has 15 cards."), 106.f, 444.f, 600.f, 16.f, 18, ZMCGold, EAnchor::Center, 0);
 	// selected card side panel
 	const FZoogiCardDef* S = DD.Defs.FindByPredicate([this](const FZoogiCardDef& C) { return C.Id == DeckSel; });
 	if (!S && DD.Defs.Num() > 0) S = &DD.Defs[0];
@@ -1257,7 +1263,14 @@ void UZoogiMenuRoot::BuildDeck()
 			: FString::Printf(TEXT("Locked - %s"), U ? *U->RequirementText(P).ToString() : TEXT("needs its power"));
 		Label(St, 738.f, 268.f, 170.f, 48.f, 18, bOwn ? ZMTSoft : ZMCGold, EAnchor::Center, 0, true);
 		const FName Sel = S->Id;
-		Btn(TEXT("PREVIEW"), ZMCGold, [this, Sel]() { DeckPreview = Sel; bDirty = true; }, 726.f, 340.f, 194.f, 100.f, 56);
+		const int32 Have = InDeck(Sel);
+		const bool bCanAdd = PSv && bOwn && CurDeck.Num() < DeckMax && Have < CopyMax;
+		const bool bCanRemove = PSv && Have > 0;
+		Btn(TEXT("ADD"), ZMCGold, [this, PSv, CurDeck, Sel]() { TArray<FName> D = CurDeck; D.Add(Sel); PSv->SetSavedDeck(D); bDirty = true; },
+			726.f, 340.f, 95.f, 100.f, 40, false, !bCanAdd, EAnchor::Center, bOwn ? FString() : FString(TEXT("icon_lock")),
+			!bOwn ? FString(TEXT("LOCKED")) : CurDeck.Num() >= DeckMax ? FString(TEXT("DECK FULL")) : Have >= CopyMax ? FString(TEXT("MAX 2")) : FString());
+		Btn(TEXT("REMOVE"), ZMCTeal, [this, PSv, CurDeck, Sel]() { TArray<FName> D = CurDeck; D.RemoveSingle(Sel); PSv->SetSavedDeck(D); bDirty = true; },
+			825.f, 340.f, 95.f, 100.f, 32, false, !bCanRemove);
 	}
 	// large preview (tap anywhere to close)
 	if (const FZoogiCardDef* PV = DeckPreview.IsNone() ? nullptr : DD.Defs.FindByPredicate([this](const FZoogiCardDef& C) { return C.Id == DeckPreview; }))

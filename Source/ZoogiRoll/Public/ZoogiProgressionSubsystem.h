@@ -35,6 +35,9 @@ public:
 	const FZoogiMatchRewardResult& LastResult() const { return Last; }
 	bool SetFocusElement(EZoogiCardElement E, EZoogiPlayContext Ctx, FString& OutWhy);
 	bool UnlockPower(FName PowerId, FString& OutWhy);
+	/** Saved deck (menu Deck screen). Stored as-is (may be < 15 while editing); matches only use it when it is a legal deck. */
+	const TArray<FName>& SavedDeck() const { return Prog.Get().Deck; }
+	void SetSavedDeck(const TArray<FName>& D) { Prog.Mutable().Deck = D; SaveProfile(); }
 
 	FOnZoogiProgressionChanged OnChanged;
 private:
