@@ -12,7 +12,9 @@
 #include "ZoogiFrozenLayout.h"
 #include "ZoogiMeshKit.h"
 #include "ZoogiPhysics.h"
-#include "ZoogiUtil.h"
+#include "ZoogiTypes.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Components/StaticMeshComponent.h"
 #include "ZoogiRoll.h"
 #include "ProceduralMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -28,7 +30,7 @@ namespace ZoogiRing2
 	constexpr float PocketYaw[6] = { 22.5f, 90.f, 157.5f, 202.5f, 270.f, 337.5f };
 	constexpr float BumperYaw[6] = { 78.f, 102.f, 258.f, 282.f, 191.25f, 348.75f };
 	constexpr float PocketR = 2150.f, PocketBackR = 112.f;
-	bool Enabled() { FString V; return !(FParse::Value(FCommandLine::Get(), TEXT("ZoogiFrozenRing2="), V) && V.Equals(TEXT("Off"), ESearchCase::IgnoreCase)); }
+	bool Enabled() { FString V; return FParse::Value(FCommandLine::Get(), TEXT("ZoogiFrozenRing2="), V) && V.Equals(TEXT("On"), ESearchCase::IgnoreCase); } // Oct 14 11:38 (Evan): Ring 2 moves to the next build; OFF unless -ZoogiFrozenRing2=On (layout moves / Ring 1 wall gaps / lip removal not applied yet)
 	FVector P(float R, float Yaw, float Z) { const float A = FMath::DegreesToRadians(Yaw); return FVector(FMath::Cos(A) * R, FMath::Sin(A) * R, Z); }
 	bool NearAny(float A, const float* Ys, int32 N, float Tol) { for (int32 i = 0; i < N; ++i) if (FMath::Abs(FMath::FindDeltaAngleDegrees(A, Ys[i])) < Tol) return true; return false; }
 	// Oriented box hull (8 corners) in world cm.
@@ -132,12 +134,12 @@ void AZoogiArena::BuildFrozenRing2()
 	{
 		O->BuildCollider(FloorH, 1.f, FloorPMr);
 		// ice slide arcs (IceRollingDecel 115) and the inner-half far arc
-		auto Ice = [&](float A0, float A1, float R0, float R1)
+		auto AddIce = [&](float A0, float A1, float R0, float R1)
 		{
 			FZoogiObsTrigger& T = O->Triggers.AddDefaulted_GetRef();
 			T.Kind = 4; T.Shape = 4; T.E = FVector(R0, R1, R2Z + 20.f); T.D = FVector2D(A0, A1); T.P[0] = 115.f;
 		};
-		Ice(335.f, 385.f, R2In, R2Out); Ice(155.f, 205.f, R2In, R2Out); Ice(240.f, 300.f, R2In + 15.f, 1905.f);
+		AddIce(335.f, 385.f, R2In, R2Out); AddIce(155.f, 205.f, R2In, R2Out); AddIce(240.f, 300.f, R2In + 15.f, 1905.f);
 	}
 	if (AZoogiObstacle* O = Spawn(TEXT("Ring2_Curb"))) O->BuildCollider(CurbH_, 1.f, FloorPMr);
 	if (AZoogiObstacle* O = Spawn(TEXT("Ring2_BankWalls"))) O->BuildCollider(WallH_, 1.f, WallPMr);

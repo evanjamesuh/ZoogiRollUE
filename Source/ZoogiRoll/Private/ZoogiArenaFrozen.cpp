@@ -125,7 +125,6 @@ UProceduralMeshComponent* AZoogiArena::AddFrozenProc(const FZoogiMeshBuilder& M,
 
 void AZoogiArena::BuildFrozen()
 {
-	FString R2V; const bool bRing2 = !(FParse::Value(FCommandLine::Get(), TEXT("ZoogiFrozenRing2="), R2V) && R2V.Equals(TEXT("Off"), ESearchCase::IgnoreCase));
 	FRandomStream Rng(88);
 	FRandomStream PRng(2026); // polish r1 additions draw from their own stream: the r3c random layout stays bit-identical
 	ExtraOrbSpots.Reset();
@@ -211,7 +210,8 @@ void AZoogiArena::BuildFrozen()
 			CliffM.Quad(T0, T1, M1, M0, Out);
 			CliffM.Quad(M0, M1, D1, D0, Out - FVector(0, 0, 0.3f));
 		}
-		if (!bRing2) { AddFrozenProc(SnowM, Snow, nullptr, true); AddFrozenProc(CliffM, Cliff, nullptr, true); } // Ring 2: r1550-1750 is the crevasse
+		AddFrozenProc(SnowM, Snow, nullptr, true);
+		AddFrozenProc(CliffM, Cliff, nullptr, true);
 		// Faceted ice underside chunks + icicles hanging from the rim.
 		FZoogiMeshBuilder Under, Icicles;
 		for (int32 i = 0; i < 34; ++i)
@@ -239,7 +239,7 @@ void AZoogiArena::BuildFrozen()
 			if (NearIsletYaw(A, 6.f)) continue;
 			Drapes.Chunk(Pol(1790.f, A, -60.f - Rng.FRandRange(0.f, 60.f)), FVector(Rng.FRandRange(25.f, 40.f), Rng.FRandRange(70.f, 140.f), Rng.FRandRange(60.f, 130.f)), Rng, 0.15f, A);
 		}
-		if (!bRing2) AddFrozenProc(Drapes, Snow, nullptr, true);
+		AddFrozenProc(Drapes, Snow, nullptr, true);
 		AddFrozenProc(Under, IceUnder, nullptr, true);
 		AddFrozenProc(Icicles, IcePane, nullptr, false);
 		// Round 2: lumpy snow mounds along the lip (the art's thick snow rim), no collision.
@@ -251,7 +251,7 @@ void AZoogiArena::BuildFrozen()
 			const float R = Rng.FRandRange(1645.f, 1715.f);
 			Mounds.Chunk(Pol(R, A, Rng.FRandRange(18.f, 30.f)), FVector(Rng.FRandRange(55.f, 85.f), Rng.FRandRange(80.f, 130.f), Rng.FRandRange(22.f, 40.f)), Rng, 0.18f, A);
 		}
-		if (!bRing2) AddFrozenProc(Mounds, Snow, nullptr, true);
+		AddFrozenProc(Mounds, Snow, nullptr, true);
 		// Polish r1: deep icy cliff underside (frozen_zones_aerial): a ridged inverted glacier cone of vertical ice columns
 		// under the rim cliff, tapering to a jagged point far below (visual only, no collision, no shadow).
 		{
