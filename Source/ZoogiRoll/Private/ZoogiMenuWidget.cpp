@@ -26,6 +26,7 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
+#include "Misc/ConfigCacheIni.h"
 #include "ZoogiRoll.h"
 #include "Engine/World.h"
 #include "Styling/CoreStyle.h"
@@ -416,6 +417,12 @@ bool UZoogiMenuWidget::EnsureBackdrop()
 	if (BackdropState != 0) return BackdropState > 0;
 	BackdropState = -1;
 	if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiMenuArena"))) return false;
+	// Oct 8 (Evan 9:21 PM): no video behind the main menu; the live arena of the selected map shows instead (the look
+	// before the video). [ZoogiRoll.Menu] bMenuVideo=True (or -ZoogiMenuVideo for one run) brings the video back.
+	bool bVideo = false;
+	if (GConfig) GConfig->GetBool(TEXT("ZoogiRoll.Menu"), TEXT("bMenuVideo"), bVideo, GGameIni);
+	if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiMenuVideo"))) bVideo = true;
+	if (!bVideo) return false;
 	const FString Path = FPaths::Combine(FPaths::ProjectContentDir(), TEXT("Anime/Movies/Menu_Background.mp4"));
 	if (!FPaths::FileExists(Path)) { UE_LOG(LogZoogi, Log, TEXT("Menu backdrop video missing (%s)"), *Path); return false; }
 	BackdropPlayer = NewObject<UMediaPlayer>(this);

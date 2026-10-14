@@ -242,7 +242,7 @@ void UZoogiArtifactComponent::ApplyLook()
 	for (int32 i = 0; i < Orbiters.Num(); ++i)
 	{
 		UStaticMeshComponent* O = Orbiters[i];
-		const bool bVis = bOn && i < NOrb;
+		const bool bVis = bOn && i < NOrb && ZoogiUtil::ShowZoogiSparkles(); // Oct 8: round orbiters off with ZoogiSparkles=False
 		O->SetVisibility(bVis);
 		if (!bVis) continue;
 		const bool bRing = A == EZoogiArtifact::Void;
@@ -451,7 +451,7 @@ void UZoogiArtifactComponent::TickVisuals(float Dt)
 		// Aura particles (Niagara) and the movement trail.
 		AuraClock += Dt;
 		const FZoogiArtifactRow& R = ZoogiArtifacts::Get(A);
-		if (AuraClock > (Spd > 300.f ? 0.12f : 0.32f) && !R.AuraNiagara.IsNone())
+		if (AuraClock > (Spd > 300.f ? 0.12f : 0.32f) && !R.AuraNiagara.IsNone() && ZoogiUtil::ShowZoogiSparkles()) // Oct 8: aura sparkle bursts off
 		{
 			AuraClock = 0.f;
 			const FVector Jit = FVector(FMath::FRandRange(-40.f, 40.f), FMath::FRandRange(-40.f, 40.f), A == EZoogiArtifact::Frost || A == EZoogiArtifact::Titan ? -35.f : FMath::FRandRange(0.f, 50.f));

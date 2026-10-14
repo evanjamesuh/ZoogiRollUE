@@ -4,6 +4,7 @@
 #include "GameFramework/GameModeBase.h"
 #include "ZoogiTypes.h"
 #include "ZoogiArtifacts.h"
+#include "ZoogiMatchEvents.h"
 #include "ZoogiGameMode.generated.h"
 
 class AZoogiBall;
@@ -311,6 +312,8 @@ public:
 	/** Awaken selection: 0 = the drawn artifact, 1.. = saved hand slots. */
 	int32 AwakenPick = 0;
 	bool bAwakenDone = false;
+	bool bStandbyAwaken = false;        // v3 cards: Episode Awakening requested at Standby (independent of the cards chosen)
+	FName LastGameplayAction; int32 LastGameplayIndex = -1; uint64 LastGameplayFrame = 0; int32 DuplicateInputsIgnored = 0; // v3 P6 duplicate-input guard
 	float AwakenDoneAt = 0.f;
 	FString AwakenChoiceText;
 	int32 TurnCounter = 0;
@@ -318,6 +321,19 @@ public:
 	bool AwakenInfuse(int32 Pick);
 	bool AwakenGuard(int32 Pick);
 	bool AwakenSave();
+	// ---- v3 cards (ZoogiCardGlue.cpp): with [ZoogiRoll.Cards] bCards / -ZoogiCards the Awaken stage is the card STANDBY
+	bool CardsOn() const;
+	void CardsBeginStandby();
+	void CardsToggle(int32 HandSlot);
+	void CardsClear();
+	bool CardsCommit();
+	void CardsToggleAwaken();
+	void CardsPlanCPU();
+	float CardsComboGainMul() const;
+	float CardsEpisodeGainMul() const;
+	float CardsComboStartGauge() const;  // v3 P6 PROPOSED
+	/** v3 P5: CPU Standby Awakening request in cards mode, same decision inputs as the classic Infuse/Guard choice. */
+	void CardsPlanCPUAwaken();
 	void DoDraw();
 	void PlanCPUAwaken();
 	/** Infused shooter's first contact: apply the artifact effect (computed now = authoritative). */
@@ -334,6 +350,11 @@ public:
 	float ContactImpactSpeed = 0.f;
 	bool bLastHitCrit = false;
 	float CPUPlannedCut = 0.f;
+	/** Gameplay randomness (artifact draws, CPU planning) on its own host-owned stream, so cosmetic FX/SFX
+	 * that use the global FMath::Rand can never shift a draw or a CPU shot. Seed: -ZoogiMatchSeed=, else
+	 * -ZoogiEpisodeSeed=, else a fresh seed per match (logged as "GAME rng seed="). */
+	FRandomStream GameRng;
+	int32 GameSeed = 0;
 	FVector PullCenter = FVector::ZeroVector;
 	float PullLeft = 0.f, PullAccel = 0.f, PullRadius = 0.f;
 	int32 PullCredit = -1;
@@ -359,6 +380,9 @@ public:
 	TArray<AActor*> TargetCandidates() const;
 	void LockOn(AActor* Target, bool bSoft);
 	void ClearLock();
+	/** Battle map props (Oct 8): re-plan the active CPU's shot before its Battle step (the map layout / a test placement
+	 *  arrived after the turn-start plan). No-op for humans or once the CPU is in its Battle step. */
+	void ReplanCPUShot();
 	void CycleLock(bool bSoft);
 	/** Space / click on the locked target during Main: start the Battle stage. */
 	bool CommitLock();
@@ -507,6 +531,8 @@ public:
 	void TakeShot(const FString& Name);
 	void TakeShotDelayed(const FString& Name, float Delay);
 	TMap<FString, float> DelayedShots;
+	FOnZoogiMatchEvent OnMatchEvent; void NotifyAnimeEvent(const FString& Ev);
+	bool NotifyMatchEvent(EZoogiMatchEvent E, int32 Who = -1, float Mag = 0.f); // music + announcer (ZoogiMusicSubsystem.cpp); true while arena music drives the score
 
 protected:
 	void BeginTurn(int32 PlayerIdx);

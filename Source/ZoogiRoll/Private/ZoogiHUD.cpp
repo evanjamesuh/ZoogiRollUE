@@ -14,6 +14,7 @@
 #include "ZoogiArtifacts.h"
 #include "ZoogiArtifactComponent.h"
 #include "ZoogiAnimeSubsystem.h"
+#include "ZoogiCardSubsystem.h"
 #include "MediaTexture.h"
 #include "Misc/App.h"
 #include "Misc/CommandLine.h"
@@ -32,6 +33,7 @@
 #include "UnrealClient.h"
 #include "HAL/FileManager.h"
 #include "Misc/Paths.h"
+#include "ZoogiEpisodeDirector.h"
 
 static const FLinearColor GPanel(0.02f, 0.03f, 0.08f, 0.72f);
 static const FLinearColor GOrbBlue(0.53f, 0.81f, 0.92f, 1.f);
@@ -492,9 +494,12 @@ void AZoogiHUD::DrawMatch(AZoogiGameMode* G)
 	// Awaken panel / aim bar: UMG when it's up (AZoogiHUD::UpdateAwakenWidget), Canvas otherwise (-ZoogiCanvasAwaken).
 	const bool bUmgAwaken = AwakenWidget && AwakenWidget->ShowsAwaken();
 	const bool bUmgAim = AwakenWidget && AwakenWidget->ShowsAim();
-	if (G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Awaken && !bUmgAwaken) DrawAwaken(G);
+	if (G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Awaken && G->CardsOn()) { if (!(AwakenWidget && AwakenWidget->ShowsCards())) DrawCards(G); }
+	else if (G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Awaken && !bUmgAwaken) DrawAwaken(G);
 	if (G->IsHumanAiming() && G->IsAimStep() && !bUmgAim) DrawAimControls(G);
+	DrawEpisodeP5(G);
 	if (Letterbox < 0.3f && G->bComboMode) Text(TEXT("2v2 COMBO   Awaken: card + I / G / S   Battle: Q switch Zoogi, click target / floor, A/D cut, 1 CONTROL 2 DRIVE 3 LAUNCH, SPACE confirm   Follow-Up: F accept / X skip   C camera"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.75f, 0.85f, 0.85f), 0.36f, false, false);
+	else if (Letterbox < 0.3f && G->CardsOn()) Text(TEXT("Standby: click cards (1-5) + COMMIT (Enter), Backspace clears   Aim: click target or floor, A/D cut, Up/Down force CONTROL/DRIVE/LAUNCH, SPACE confirm   C camera"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.75f, 0.85f, 0.85f), 0.36f, false, false);
 	else if (Letterbox < 0.3f) Text(TEXT("Awaken: click a card + INFUSE / GUARD / SAVE (I/G/S)   Aim: click target or floor, A/D cut, Up/Down power, SPACE confirm   RMB/Esc cancel   C camera   Ctrl+R restart"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.75f, 0.85f, 0.85f), 0.36f, false, false);
 	Button(TEXT("MENU"), W - 150.f * U, 24.f * U, 126.f * U, 46.f * U, "Menu", 0, GOrbBlue);
 	Button(G->bCinematicCam ? TEXT("CAM: CINE") : TEXT("CAM: TACT"), W - 340.f * U, 24.f * U, 176.f * U, 46.f * U, "CamStyle", 0, FLinearColor(0.6f, 0.9f, 0.6f), G->bCinematicCam);
@@ -1088,12 +1093,49 @@ void AZoogiHUD::DrawAimControls(AZoogiGameMode* G)
 	Button(TEXT("<"), X, BY, 56.f * U, BH, "AimNudge", -1, Acc); X += 62.f * U;
 	Button(TEXT(">"), X, BY, 56.f * U, BH, "AimNudge", 1, Acc); X += 62.f * U;
 	Button(TEXT(">>"), X, BY, 62.f * U, BH, "AimNudge", 5, Acc); X += 84.f * U;
-	static const TCHAR* PowerNames[4] = { TEXT("AUTO"), TEXT("SOFT"), TEXT("MED"), TEXT("FULL") };
-	for (int32 i = 0; i < 4; ++i) { Button(PowerNames[i], X, BY, 96.f * U, BH, "AimPower", i, FLinearColor(1.f, 0.8f, 0.3f), G->AimPowerStep == i); X += 102.f * U; }
+	for (int32 i = 0; i < 4; ++i) { Button(ZoogiCards::ForceLabel(i, G->CardsOn()), X, BY, 96.f * U, BH, "AimPower", i, FLinearColor(1.f, 0.8f, 0.3f), G->AimPowerStep == i); X += 102.f * U; }
 	X += 18.f * U;
 	Button(TEXT("NEXT"), X, BY, 110.f * U, BH, "AimNext", 0, Acc); X += 118.f * U;
 	Button(TEXT("CONFIRM"), X, BY, 170.f * U, BH, "AimConfirm", 0, FLinearColor(0.35f, 1.f, 0.45f), G->HasAim()); X += 178.f * U;
 	Button(TEXT("CANCEL"), X, BY, 150.f * U, BH, "AimCancel", 0, FLinearColor(1.f, 0.4f, 0.35f));
+}
+
+void AZoogiHUD::DrawCards(AZoogiGameMode* G)
+{
+	UZoogiCardSubsystem* Cards = UZoogiCardSubsystem::Get(G);
+	AZoogiBall* B = G->GetActiveBall();
+	if (!Cards || !B) return;
+	const FZoogiCardPlayerState* S = Cards->Rules().Player(B->PlayerIndex);
+	if (!S) return;
+	const float W = Canvas->ClipX, H = Canvas->ClipY;
+	const float CW = 230.f * U, CH = 120.f * U, Gap = 14.f * U;
+	const int32 N = S->Hand.Num();
+	const float PanelW = FMath::Max(N, 1) * (CW + Gap) + 420.f * U;
+	float X = (W - PanelW) * 0.5f;
+	const float Y = H - CH - 120.f * U;
+	Panel(X - 16.f * U, Y - 64.f * U, PanelW + 32.f * U, CH + 96.f * U, FLinearColor(0.02f, 0.03f, 0.08f, 0.82f));
+	int32 SelCost = 0;
+	for (int32 Id : S->Selected) for (const FZoogiCardInstance& C : S->Hand) if (C.InstanceId == Id) if (const FZoogiCardDef* D = Cards->Def(C.CardId)) SelCost += D->Cost;
+	Text(FString::Printf(TEXT("STANDBY  P%d %s   CARD ENERGY %d / %d   selected %d"), B->PlayerIndex + 1, *B->Def.Name, S->Energy - SelCost, S->Energy, SelCost), X, Y - 54.f * U, FLinearColor(0.75f, 0.9f, 1.f), 0.6f, false);
+	const bool bHuman = !B->bCPU && !G->bAwakenDone;
+	for (int32 i = 0; i < N; ++i)
+	{
+		const FZoogiCardDef* D = Cards->Def(S->Hand[i].CardId);
+		const bool bSel = S->Selected.Contains(S->Hand[i].InstanceId);
+		const FString L = D ? FString::Printf(TEXT("%d  %s  (%d)"), i + 1, *D->Name, D->Cost) : S->Hand[i].CardId.ToString();
+		const FLinearColor Acc = !D ? FLinearColor::Gray : (D->Type == EZoogiCardType::Defense ? FLinearColor(0.3f, 0.9f, 1.f) : D->Type == EZoogiCardType::Impact ? FLinearColor(1.f, 0.45f, 0.3f)
+			: D->Type == EZoogiCardType::Terrain ? FLinearColor(0.7f, 0.6f, 1.f) : FLinearColor(1.f, 0.85f, 0.35f));
+		if (bHuman) Button(L, X, Y, CW, CH * 0.55f, "CardToggle", i, Acc, bSel);
+		else { Panel(X, Y, CW, CH * 0.55f, bSel ? Acc * 0.6f : FLinearColor(0.08f, 0.1f, 0.18f, 0.9f)); Text(L, X + CW * 0.5f, Y + 18.f * U, FLinearColor::White, 0.55f, true); }
+		if (D) Text(ZoogiCards::TypeName(D->Type), X + 8.f * U, Y + CH * 0.6f, FLinearColor(0.7f, 0.75f, 0.85f), 0.42f, false, false);
+		X += CW + Gap;
+	}
+	if (bHuman)
+	{
+		Button(TEXT("COMMIT"), X, Y, 190.f * U, CH * 0.55f, "CardCommit", 0, FLinearColor(0.35f, 1.f, 0.45f), true); X += 200.f * U;
+		Button(TEXT("CLEAR"), X, Y, 150.f * U, CH * 0.55f, "CardClear", 0, FLinearColor(1.f, 0.4f, 0.35f));
+	}
+	else if (!G->AwakenChoiceText.IsEmpty()) Text(G->AwakenChoiceText, X, Y + 18.f * U, FLinearColor(0.6f, 1.f, 0.7f), 0.55f, false);
 }
 
 void AZoogiHUD::DrawAwaken(AZoogiGameMode* G)
@@ -1426,4 +1468,22 @@ void AZoogiHUD::DrawCombo(AZoogiGameMode* G)
 		}
 		else Text(TEXT("CPU partner takes the follow-up..."), W * 0.5f, Y0 + 124.f * U, FLinearColor(0.75f, 0.8f, 0.9f), 0.45f, true, false);
 	}
+}
+
+// v3 P5: read-only episode playback panel (top centre). Reads the playback copy; SKIP only ends the presentation.
+void AZoogiHUD::DrawEpisodeP5(AZoogiGameMode* G)
+{
+	const UZoogiEpisodeDirector* D = UZoogiEpisodeDirector::Get(G);
+	const FZoogiEpPlayback* P = D ? D->Current() : nullptr;
+	if (!P || P->Done()) return;
+	const float W = Canvas->ClipX, PW = 900.f * U, X0 = (W - PW) * 0.5f, Y0 = 90.f * U;
+	DrawRect(FLinearColor(0.02f, 0.02f, 0.06f, 0.78f), X0, Y0, PW, 210.f * U);
+	const int32 Cur = P->PerspectiveIndex();
+	Text(FString::Printf(TEXT("EPISODE %d  -  %s  -  P%d    %.1f / %.0f s"), P->Ep.EpisodeId, ZoogiEpBranchName(P->Ep.Branch), P->Ep.Spender + 1, P->T, P->Ep.Duration), X0 + 20.f * U, Y0 + 12.f * U, FLinearColor(1.f, 0.85f, 0.4f), 0.5f, false, true);
+	for (int32 i = 0; i < P->Ep.Perspectives.Num(); ++i)
+	{
+		const FZoogiEpPerspective& V = P->Ep.Perspectives[i];
+		Text(FString::Printf(TEXT("%d  %s"), i + 1, *V.Line), X0 + 24.f * U, Y0 + (56.f + i * 36.f) * U, i == Cur ? FLinearColor::White : FLinearColor(0.55f, 0.6f, 0.7f), i == Cur ? 0.42f : 0.36f, false, false);
+	}
+	Button(TEXT("SKIP"), X0 + PW - 130.f * U, Y0 + 10.f * U, 110.f * U, 40.f * U, "EpisodeSkip", 0, FLinearColor(1.f, 0.85f, 0.4f));
 }

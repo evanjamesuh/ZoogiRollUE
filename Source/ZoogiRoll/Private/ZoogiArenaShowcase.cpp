@@ -64,17 +64,18 @@ void AZoogiArenaShowcase::MaybeStart(UWorld* World, const FString& ArenaSlug)
 	if (ArenaSlug.Contains(TEXT("ice")) || ArenaSlug.Contains(TEXT("frozen")))
 	{
 		// Buzzy Frozen Ring compositions (screen up = -Y, the art orientation): top-down, 3/4, hero, hub, plus a damaged top.
+		S->Poses.Insert(FPose{ TEXT("ref_aerial"),  FVector(0, 150, 1235),  270.f, 12.f, 7000.f, 62.f }, 0); // polish r6: frozen_zones_aerial framing (flatter ellipse like the art, horizon + sky band in frame; r1 was pitch 30)
 		S->Poses.Insert(FPose{ TEXT("buzzy_hub"),   FVector(0, -40, 110),   270.f, 22.f, 1900.f, 75.f }, 0);
 		S->Poses.Insert(FPose{ TEXT("buzzy_hero"),  FVector(0, -250, -250), 270.f, 16.f, 5300.f, 70.f }, 0);
 		S->Poses.Insert(FPose{ TEXT("buzzy_34"),    FVector(0, 0, 0),       270.f, 50.f, 6000.f, 62.f }, 0);
 		S->Poses.Insert(FPose{ TEXT("buzzy_top"),   FVector(0, 0, 0),       270.f, 64.f, 5800.f, 62.f }, 0);
-		// Stands / bleachers review (islets: W 186 deg d2750, E 354 d2890, S-W 140 d2530, S-E 36 d2690).
+		// Stands / bleachers review (symmetric layout: islets at 0/45/135/180/225/315, all d2750).
 		auto IsletLook = [](float Yaw, float D, float Z) { const float R = FMath::DegreesToRadians(Yaw); return FVector(FMath::Cos(R) * D, FMath::Sin(R) * D, Z); };
-		S->Poses.Insert(FPose{ TEXT("stands_side_W"),  IsletLook(186.f, 2750.f, 120.f), 276.f, 20.f, 1700.f, 70.f }, 0);
-		S->Poses.Insert(FPose{ TEXT("stands_mid_SW"),  IsletLook(140.f, 2530.f, 120.f), 140.f, 28.f, 2300.f, 70.f }, 0);
-		S->Poses.Insert(FPose{ TEXT("stands_mid_SE"),  IsletLook(36.f, 2690.f, 120.f),   36.f, 28.f, 2300.f, 70.f }, 0);
-		S->Poses.Insert(FPose{ TEXT("stands_close_E"), IsletLook(354.f, 2890.f, 140.f), 354.f, 16.f, 1250.f, 70.f }, 0);
-		S->Poses.Insert(FPose{ TEXT("stands_close_W"), IsletLook(186.f, 2750.f, 140.f), 186.f, 16.f, 1250.f, 70.f }, 0);
+		S->Poses.Insert(FPose{ TEXT("stands_side_W"),  IsletLook(180.f, 2750.f, 120.f), 270.f, 20.f, 1700.f, 70.f }, 0);
+		S->Poses.Insert(FPose{ TEXT("stands_mid_SW"),  IsletLook(135.f, 2750.f, 120.f), 135.f, 28.f, 2300.f, 70.f }, 0);
+		S->Poses.Insert(FPose{ TEXT("stands_mid_SE"),  IsletLook(45.f, 2750.f, 120.f),   45.f, 28.f, 2300.f, 70.f }, 0);
+		S->Poses.Insert(FPose{ TEXT("stands_close_E"), IsletLook(0.f, 2750.f, 140.f),   0.f, 16.f, 1250.f, 70.f }, 0);
+		S->Poses.Insert(FPose{ TEXT("stands_close_W"), IsletLook(180.f, 2750.f, 140.f), 180.f, 16.f, 1250.f, 70.f }, 0);
 	}
 	if (ArenaSlug.Contains(TEXT("meadow")))
 		for (FPose& P : S->Poses) { P.Look *= 1.3f; P.Dist *= 1.3f; } // r19: Meadow is built 1.3x larger

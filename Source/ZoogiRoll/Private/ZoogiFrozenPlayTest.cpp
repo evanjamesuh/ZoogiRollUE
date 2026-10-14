@@ -19,6 +19,7 @@ namespace
 {
 	FVector TPol(float R, float YawDeg, float Z) { const float A = FMath::DegreesToRadians(YawDeg); return FVector(FMath::Cos(A) * R, FMath::Sin(A) * R, Z); }
 	constexpr float NormalShot = 0.55f * ZoogiConst::FullLaunchSpeed; // ~1980 cm/s
+	constexpr float BridgeShot = NormalShot;                           // bridge_k: a normal shot must carry a Zoogi to the islet orb
 }
 
 AZoogiFrozenPlayTest::AZoogiFrozenPlayTest()
@@ -65,7 +66,7 @@ void AZoogiFrozenPlayTest::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	using namespace ZoogiFrozen;
 	UWorld* W = GetWorld();
-	if (!W || !Arena.IsValid() || Step > 5) return;
+	if (!W || !Arena.IsValid() || Step > 11) return;
 	const double Now = W->GetTimeSeconds();
 	if (Step == 0)
 	{
@@ -173,8 +174,52 @@ void AZoogiFrozenPlayTest::Tick(float DeltaSeconds)
 			const FVector L = B->BallLocation();
 			const bool bOk = B->bOut || L.Z < IsletTopZ - 300.f;
 			Next(FString::Printf(TEXT("ringout: full-power %.0f cm/s roll across the islet -> Z %.0f, out=%d %s"), ZoogiConst::FullLaunchSpeed, L.Z, B->bOut ? 1 : 0, bOk ? TEXT("PASS") : TEXT("FAIL")));
-			UE_LOG(LogZoogi, Log, TEXT("PLAYTEST SUMMARY: %s"), *FString::Join(Results, TEXT(" | ")));
-			if (APlayerController* PC = W->GetFirstPlayerController()) if (APawn* Pw = PC->GetPawn()) PC->SetViewTarget(Pw);
+		}
+		break;
+	}
+	case 6: case 7: case 8: case 9: case 10: case 11: // bridge_k (Evan 10:50 PM; 6 bridges since the Oct 9 symmetric layout): straight down each bridge centreline -> through its arch -> the islet orb
+	{
+		const int32 k = Step - 6;
+		const float Yaw = IsletYaw[k];
+		// The islet's orb spot (ExtraOrbSpots holds one per bridged islet; take the one on this islet).
+		FVector Spot = TPol(IsletDist[k], Yaw, IsletTopZ);
+		float Best = 1e9f;
+		for (const FVector& S : Arena->ExtraOrbSpots)
+		{
+			const float D = FVector::Dist2D(S, TPol(IsletDist[k], Yaw, 0.f));
+			if (D < Best) { Best = D; Spot = S; }
+		}
+		if (Before < 0)
+		{
+			Before = 0;
+			BridgeMin = 1e9f;
+			BridgeMaxR = -1.f;
+			B->PlaceAt(TPol(1150.f, Yaw, R), Yaw);
+			B->Launch(FVector2D(TPol(1.f, Yaw, 0.f)) * BridgeShot);
+			View(TPol(ArchR + 150.f, Yaw, 0.f), Yaw + 90.f, 38.f, 2100.f);
+		}
+		// Judged the moment it happens (auto battle flow may move the Zoogi again afterwards): the Zoogi reaches the orb
+		// spot (touching distance) while still in play and on the islet surface.
+		const FVector L = B->BallLocation();
+		const float Dn = FVector::Dist2D(L, Spot);
+		BridgeMin = FMath::Min(BridgeMin, Dn);
+		if (BridgeMaxR < 0.f && Dn < ZoogiConst::ZoogiRadius + ZoogiConst::OrbRadius + 10.f && !B->bOut && L.Z > IsletTopZ - 100.f)
+		{
+			BridgeMaxR = (float)T; // reach time
+			BridgeAt = L;
+		}
+		if (!bShot && (BridgeMaxR >= 0.f || T > 1.6)) { bShot = true; Shot(*FString::Printf(TEXT("bridge_%d"), FMath::RoundToInt(Yaw))); }
+		if ((BridgeMaxR >= 0.f && T > BridgeMaxR + 0.3) || T > 4.0)
+		{
+			const bool bOk = BridgeMaxR >= 0.f;
+			Next(FString::Printf(TEXT("bridge_%d: %.0f cm/s roll along the bridge centreline from r1150 -> %s the islet orb spot (%.0f, %.0f) (closest %.0f cm%s) %s"),
+				FMath::RoundToInt(Yaw), BridgeShot, bOk ? TEXT("reached") : TEXT("did NOT reach"), Spot.X, Spot.Y, BridgeMin,
+				bOk ? *FString::Printf(TEXT(", at t=%.2f s, Z %.0f"), BridgeMaxR, BridgeAt.Z) : TEXT(""), bOk ? TEXT("PASS") : TEXT("FAIL")));
+			if (Step > 11)
+			{
+				UE_LOG(LogZoogi, Log, TEXT("PLAYTEST SUMMARY: %s"), *FString::Join(Results, TEXT(" | ")));
+				if (APlayerController* PC = W->GetFirstPlayerController()) if (APawn* Pw = PC->GetPawn()) PC->SetViewTarget(Pw);
+			}
 		}
 		break;
 	}

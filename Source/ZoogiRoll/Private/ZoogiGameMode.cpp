@@ -1,4 +1,7 @@
 #include "ZoogiGameMode.h"
+#include "ZoogiEpisodeDirector.h"
+#include "ZoogiBattleStateMachine.h"
+#include "ZoogiEpisodeSubsystem.h"
 #include "ZoogiKFXPreview.h"
 #include "ZoogiRoll.h"
 #include "ZoogiBall.h"
@@ -15,6 +18,8 @@
 #include "ZoogiCombo.h"
 #include "ZoogiStageForming.h"
 #include "ZoogiArenaPiece.h"
+#include "ZoogiCardSubsystem.h"
+#include "ZoogiCardHandWidget.h"
 #include "Engine/World.h"
 #include "Components/SphereComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -73,6 +78,15 @@ void AZoogiGameMode::BeginPlay()
 	FParse::Value(Cmd, TEXT("ZoogiShots="), ShotDir);
 	if (FParse::Param(Cmd, TEXT("ZoogiKFXPreview"))) GetWorld()->SpawnActor<AZoogiKFXPreview>(); // review captures of the KriptoFX ports
 	FParse::Value(Cmd, TEXT("ZoogiQuit="), QuitAfter);
+	{
+		// Gameplay random stream (host only: the GameMode exists on the server).
+		const TCHAR* Src = TEXT("fresh");
+		if (FParse::Value(Cmd, TEXT("ZoogiMatchSeed="), GameSeed)) Src = TEXT("ZoogiMatchSeed");
+		else if (FParse::Value(Cmd, TEXT("ZoogiEpisodeSeed="), GameSeed)) Src = TEXT("ZoogiEpisodeSeed");
+		else GameSeed = (int32)(FPlatformTime::Cycles() ^ (uint32)FMath::Rand());
+		GameRng.Initialize(GameSeed);
+		UE_LOG(LogZoogi, Log, TEXT("GAME rng seed=%d source=%s"), GameSeed, Src);
+	}
 	int32 NumPlayers = 0;
 	if (FParse::Value(Cmd, TEXT("ZoogiPlayers="), NumPlayers)) MenuNumPlayers = FMath::Clamp(NumPlayers, 2, 4);
 	int32 ArenaIdx = 0;
@@ -94,6 +108,7 @@ void AZoogiGameMode::BeginPlay()
 	SpawnOrbs();
 	Phase = EZoogiPhase::Menu;
 	PlayMusic(TEXT("MenuMusic"));
+	UZoogiCardHandWidget::Spawn(this); // cardui: opt-in -ZoogiCardHandUI drag-to-assign hand (no-op without the flag; shows only with cards on)
 
 	// 2v2 Competitive Combo: -ZoogiCombo (mode), -ZoogiComboDemo=1|2|3 (scripted verification runs, implies -ZoogiCombo).
 	FParse::Value(Cmd, TEXT("ZoogiComboDemo="), ComboDemo);
@@ -132,6 +147,21 @@ bool AZoogiGameMode::IsHumanAiming() const
 
 void AZoogiGameMode::MenuAction(FName Action, int32 Index)
 {
+	// v3 P6: one physical input can arrive twice in the same frame (touch + its emulated mouse click, a key repeat plus a
+	// button). Gameplay decisions (cards, follow-up, episode skip) are accepted once per (action, index, frame).
+	{
+		const FString A = Action.ToString();
+		if (A.StartsWith(TEXT("Card")) || A.StartsWith(TEXT("Follow")) || A.StartsWith(TEXT("Episode")))
+		{
+			if (Action == LastGameplayAction && Index == LastGameplayIndex && GFrameCounter == LastGameplayFrame)
+			{
+				++DuplicateInputsIgnored;
+				UE_LOG(LogZoogi, Log, TEXT("INPUT duplicate %s %d in frame %llu ignored"), *A, Index, (uint64)GFrameCounter);
+				return;
+			}
+			LastGameplayAction = Action; LastGameplayIndex = Index; LastGameplayFrame = GFrameCounter;
+		}
+	}
 	const int32 RosterNum = ZoogiUtil::Roster().Num();
 	if (Action == "Players") MenuNumPlayers = bComboMode ? 4 : FMath::Clamp(Index, 2, 4);
 	else if (Action == "Mode") ComboSetMode(Index == 1);
@@ -158,6 +188,11 @@ void AZoogiGameMode::MenuAction(FName Action, int32 Index)
 	else if (Action == "Infuse") AwakenInfuse(Index >= 0 ? Index : AwakenPick);
 	else if (Action == "Guard") AwakenGuard(Index >= 0 ? Index : AwakenPick);
 	else if (Action == "Save") AwakenSave();
+	else if (Action == "CardToggle") CardsToggle(Index);
+	else if (Action == "CardClear") CardsClear();
+	else if (Action == "CardCommit") CardsCommit();
+	else if (Action == "CardAwaken") CardsToggleAwaken();
+	else if (Action == "EpisodeSkip") { if (UZoogiEpisodeDirector* D = UZoogiEpisodeDirector::Get(this)) D->SkipCurrent(); }
 	else if (Action == "AimNudge") NudgeAim(Index);
 	else if (Action == "AimPower") AimPowerStep = FMath::Clamp(Index, 0, 3);
 	else if (Action == "AimConfirm") CommitLock();
@@ -170,7 +205,7 @@ void AZoogiGameMode::MenuAction(FName Action, int32 Index)
 	else if (Action == "Rematch") StartMatch();
 	else if (Action == "Quit") UKismetSystemLibrary::QuitGame(this, GetWorld()->GetFirstPlayerController(), EQuitPreference::Quit, false);
 	// UI sounds (team brief: short, soft, rounded, never harsh when repeated): confirm / cancel / click.
-	if (Action == "Start" || Action == "Rematch" || Action == "Infuse" || Action == "Guard" || Action == "Save" || Action == "AimConfirm" || Action == "FollowUp")
+	if (Action == "Start" || Action == "Rematch" || Action == "Infuse" || Action == "Guard" || Action == "Save" || Action == "CardCommit" || Action == "AimConfirm" || Action == "FollowUp")
 		ZoogiUtil::PlaySfx(this, TEXT("UiConfirm"), 0.4f);
 	else if (Action == "AimCancel" || Action == "Menu" || Action == "Quit")
 		ZoogiUtil::PlaySfx(this, TEXT("UiCancel"), 0.4f);
@@ -264,6 +299,7 @@ void AZoogiGameMode::SpawnOrbs()
 				O->InitOrb(OrbPM, Decel);
 				Orbs.Add(O);
 			}
+	for (AZoogiOrb* O : Orbs) ZoogiUtil::ApplyOrbStyle(O); // Oct 8: [ZoogiRoll.Characters] OrbStyle
 }
 
 void AZoogiGameMode::StartMatch()
@@ -294,7 +330,7 @@ void AZoogiGameMode::StartMatch()
 	ShotsFired = 0;
 	TurnCounter = 0;
 	UE_LOG(LogZoogi, Log, TEXT("Match started: %d players on %s"), Balls.Num(), *ZoogiUtil::ArenaName(MenuArena));
-	PlayMusic(TEXT("MatchMusic"));
+	NotifyMatchEvent(EZoogiMatchEvent::MatchStart, 0); // arena music (falls back to MatchMusic) + announcer
 	if (!BeginStageForming(false)) BeginTurn(0);
 }
 
@@ -332,6 +368,7 @@ void AZoogiGameMode::ReturnToMenu()
 	SpawnOrbs();
 	Phase = EZoogiPhase::Menu;
 	PhaseTime = 0.f;
+	NotifyMatchEvent(EZoogiMatchEvent::ReturnToMenu);
 	PlayMusic(TEXT("MenuMusic"));
 	if (AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PC->OnMenu();
 }
@@ -465,6 +502,7 @@ void AZoogiGameMode::FinishGame()
 		UE_LOG(LogZoogi, Log, TEXT("FinalScores: %s"), *Final);
 	}
 	ZoogiUtil::PlaySfx(this, TEXT("Win"), 0.8f);
+	NotifyMatchEvent(EZoogiMatchEvent::MatchOver, WinnerIndex);
 	PlayVictoryCrowd();
 	if (AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PC->OnGameOver(GetActiveBall());
 }
@@ -517,7 +555,7 @@ void AZoogiGameMode::BeginClimax(AZoogiBall* Shooter, EZoogiArtifact A, int32 KO
 	ClimaxKOs = KOs;
 	ClimaxScores = ShooterScores;
 	ClimaxLeft = 2.55f; // ClimaxRumble length: 2.25 s rumble + 0.3 s silence
-	if (MusicComp) MusicComp->AdjustVolume(0.25f, 0.f); // the one full music drop-out of the match
+	NotifyMatchEvent(EZoogiMatchEvent::ClimaxBegin); // the one full music drop-out of the match
 	ZoogiUtil::PlaySfx(this, TEXT("ClimaxRumble"), 1.f);
 	UE_LOG(LogZoogi, Log, TEXT("CLIMAX: P%d %s match-deciding KO x%d: music out, rumble, hit in %.2f s"), Shooter ? Shooter->PlayerIndex + 1 : 0, Shooter ? *Shooter->Def.Name : TEXT("?"), KOs, ClimaxLeft);
 	TakeShotDelayed(TEXT("climax_rumble"), 1.2f);
@@ -535,7 +573,7 @@ void AZoogiGameMode::LandClimax()
 	}
 	if (bClimaxHitPending) { bClimaxHitPending = false; ZoogiUtil::PlaySfx(this, TEXT("CritBoom"), 1.f, 0.9f); }
 	// Music swells back in big.
-	if (MusicComp) MusicComp->AdjustVolume(1.6f, 1.f);
+	NotifyMatchEvent(EZoogiMatchEvent::ClimaxLand);
 	if (AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PC->OnImpact(0.6f);
 	UE_LOG(LogZoogi, Log, TEXT("CLIMAX hit: flash + boom, music swells back"));
 	TakeShotDelayed(TEXT("climax_hit"), 0.03f);
@@ -755,7 +793,10 @@ bool AZoogiGameMode::ReleaseAim()
 	}
 	if (Ball) ApplyStatusOnShot(Ball, V);
 	if (bComboMode && Ball) ComboModifyShot(Ball, V);
+	UZoogiCardSubsystem* CardFx = CardsOn() ? UZoogiCardSubsystem::Get(this) : nullptr; // v3 Phase 3: card shot modifiers (cards on only)
+	if (CardFx && Ball) CardFx->FxModifyShot(this, Ball, V);
 	FireShot(V);
+	if (CardFx && Ball) CardFx->FxAfterShot(this, Ball, V);
 	SetBattleStep(EZoogiBattleStep::Rolling);
 	return true;
 }
@@ -780,6 +821,7 @@ void AZoogiGameMode::FireShot(const FVector2D& Velocity)
 	UE_LOG(LogZoogi, Log, TEXT("P%d %s shot at %.0f cm/s from (%.0f, %.0f) dir %.0f deg, expected roll %.0f cm"), ActivePlayer + 1, *Ball->Def.Name, Velocity.Size(),
 		ShotStart.X, ShotStart.Y, FMath::RadiansToDegrees(FMath::Atan2(Velocity.Y, Velocity.X)), Velocity.SizeSquared() / (2.f * Arena->GetRollingDecel()));
 	if (AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PC->OnShotFired(Ball);
+	if (UZoogiEpisodeSubsystem* Ep = GetWorld()->GetSubsystem<UZoogiEpisodeSubsystem>()) Ep->OnShotFired(Ball); // Episode Engine: truth capture (read-only)
 }
 
 static float InvertLaunch(float Speed)
@@ -791,6 +833,14 @@ static float InvertLaunch(float Speed)
 		if (ZoogiConst::LaunchSpeedForPull(Mid) < Speed) Lo = Mid; else Hi = Mid;
 	}
 	return 0.5f * (Lo + Hi);
+}
+
+void AZoogiGameMode::ReplanCPUShot()
+{
+	AZoogiBall* Me = GetActiveBall();
+	if (!Me || !Me->bCPU || Phase != EZoogiPhase::Aiming || Stage == EZoogiStage::Battle || bComboMode) return;
+	ClearLock();
+	PlanCPUShot();
 }
 
 void AZoogiGameMode::PlanCPUShot()
@@ -805,7 +855,7 @@ void AZoogiGameMode::PlanCPUShot()
 	for (AZoogiOrb* O : Orbs) if (O && !O->bOut) Cands.Add({ FVector2D(O->OrbLocation()), 50.f, ZoogiConst::OrbMassRatio, ZoogiConst::OrbRadius, O });
 	// Decide on the power first: rival-hunting powers make rivals more attractive targets.
 	// More charges banked = more willing to spend one.
-	bCPUUsePower = !bArtifactMode && Me->Charges > 0 && (bPowerTest || FMath::FRand() < (Me->Charges >= 2 ? 0.8f : 0.5f));
+	bCPUUsePower = !bArtifactMode && Me->Charges > 0 && (bPowerTest || GameRng.FRand() < (Me->Charges >= 2 ? 0.8f : 0.5f));
 	const EZoogiPower MyPower = Me->Def.PowerKind;
 	const bool bHuntRivals = bCPUUsePower && (MyPower == EZoogiPower::ShadowStun || MyPower == EZoogiPower::StaticShock || MyPower == EZoogiPower::BandageBind || MyPower == EZoogiPower::RuneSeal);
 	for (AZoogiBall* Other : Balls) if (Other && Other != Me && !Other->bOut && !IsAlly(Me, Other)) Cands.Add({ FVector2D(Other->BallLocation()), bHuntRivals ? 100.f : 40.f, Other->Def.MassRatio(), ZoogiConst::ZoogiRadius, Other });
@@ -916,7 +966,7 @@ void AZoogiGameMode::PlanCPUShot()
 		// Vary among the three cheapest, but never pick a clearly worse (blocked / risky) shot for variety's sake.
 		int32 NPick = 1;
 		while (NPick < FMath::Min(3, Plans.Num()) && Plans[NPick].Cost < Plans[0].Cost + 350.f) ++NPick;
-		const FPlan& Pick = Plans[FMath::RandRange(0, NPick - 1)];
+		const FPlan& Pick = Plans[GameRng.RandRange(0, NPick - 1)];
 		BestDir = Pick.Dir;
 		BestFrac = Pick.Frac;
 		CPULock = Pick.Actor;
@@ -924,9 +974,9 @@ void AZoogiGameMode::PlanCPUShot()
 		if (bHuntRivals && !bPowerTest && !Cast<AZoogiBall>(Pick.Actor)) bCPUUsePower = false;
 		// Cut variety (Oct 4): about half of the straight shots are played slightly off-centre (6-20 deg contact cut),
 		// so CPUs aren't always head-on (and don't crit every powered hit). Aim offset a: Dist * sin(a) = (R1 + R2) * sin(cut).
-		if (bArtifactMode && Pick.bStraight && Pick.Dist > 250.f && FMath::FRand() < 0.5f)
+		if (bArtifactMode && Pick.bStraight && Pick.Dist > 250.f && GameRng.FRand() < 0.5f)
 		{
-			const float CutDeg = FMath::FRandRange(6.f, 20.f) * (FMath::RandBool() ? 1.f : -1.f);
+			const float CutDeg = GameRng.FRandRange(6.f, 20.f) * (GameRng.RandRange(0, 1) == 1 ? 1.f : -1.f);
 			const float SinA = FMath::Clamp((ZoogiConst::ZoogiRadius + Pick.Radius) * FMath::Sin(FMath::DegreesToRadians(CutDeg)) / Pick.Dist, -0.5f, 0.5f);
 			BestDir = BestDir.GetRotated(FMath::RadiansToDegrees(FMath::Asin(SinA)));
 			BestFrac = FMath::Min(0.97f, BestFrac / FMath::Sqrt(FMath::Max(0.5f, FMath::Cos(FMath::DegreesToRadians(CutDeg)))));
@@ -941,9 +991,13 @@ void AZoogiGameMode::PlanCPUShot()
 		BestFrac = FMath::Min(BestFrac, FMath::Max(0.2f, InvertLaunch(Safe)));
 	}
 	// Imperfect aim: less control = more error (ZoogiStats.control).
-	const float ErrDeg = FMath::FRandRange(-1.f, 1.f) * (100.f - Me->Def.Control) / 12.f;
+	const float ErrDeg = GameRng.FRandRange(-1.f, 1.f) * (100.f - Me->Def.Control) / 12.f;
 	BestDir = BestDir.GetRotated(ErrDeg);
-	BestFrac = FMath::Clamp(BestFrac * FMath::FRandRange(0.96f, 1.04f), 0.25f, 1.f);
+	BestFrac = FMath::Clamp(BestFrac * GameRng.FRandRange(0.96f, 1.04f), 0.25f, 1.f);
+	// Oct 8: Frozen aerial layer: with the battle map props up, a CPU sometimes plays a prop route (rail / halo / bumper) instead.
+	// No-op (and no GameRng draw) without the map layout, so every existing mode and test plans exactly as before.
+	if (UZoogiBattleStateMachine* BSM = GetWorld()->GetSubsystem<UZoogiBattleStateMachine>())
+		if (BSM->PlanCPUProp(ActivePlayer, BestDir, BestFrac, CPULock)) { bCPUUsePower = false; CPUPlannedCut = 0.f; } // a clean prop route, no power
 	// -ZoogiRockTest: hard straight shot at the nearest standing rock (screenshots of cracking / shattering).
 	if (bRockTest && Arena)
 	{
@@ -1144,7 +1198,7 @@ void AZoogiGameMode::OnRockEvent(AZoogiRock* Rock, bool bShattered, AZoogiBall* 
 
 void AZoogiGameMode::DuckMusic(float Seconds)
 {
-	if (!MusicComp) return;
+	if (NotifyMatchEvent(EZoogiMatchEvent::Duck, -1, Seconds) || !MusicComp) return;
 	MusicComp->AdjustVolume(0.05f, 0.6f); // ~-4.4 dB duck under big hits (team brief: duck 3-6 dB, never mute; full silence is saved for one climax)
 	FTimerHandle H;
 	TWeakObjectPtr<UAudioComponent> M = MusicComp;

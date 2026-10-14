@@ -2,6 +2,7 @@
 // Rules approved by Evan (Oct 4): one Zoogi per player, no HP (damage = knockback / status / score), deterministic crits,
 // Guard covers only the next opponent attack, affinity map in ZoogiArtifacts::Affinity.
 #include "ZoogiGameMode.h"
+#include "Misc/Crc.h"
 #include "ZoogiRoll.h"
 #include "ZoogiBall.h"
 #include "ZoogiOrb.h"
@@ -13,6 +14,7 @@
 #include "ZoogiPlayerController.h"
 #include "Components/SphereComponent.h"
 #include "Engine/World.h"
+#include "ZoogiBattleStateMachine.h"
 
 namespace
 {
@@ -119,11 +121,11 @@ void AZoogiGameMode::DoDraw()
 	if (!B || !B->Artifact) return;
 	UZoogiArtifactComponent* AC = B->Artifact;
 	if (AC->Drawn != EZoogiArtifact::None) { AddToHand(AC, AC->Drawn); AC->Drawn = EZoogiArtifact::None; }
-	AC->Drawn = ZoogiArtifacts::Random();
+	AC->Drawn = ZoogiArtifacts::Random(&GameRng);
 	FString Extra;
 	for (int32 i = 0; i < AC->BonusDraws; ++i)
 	{
-		const EZoogiArtifact X = ZoogiArtifacts::Random();
+		const EZoogiArtifact X = ZoogiArtifacts::Random(&GameRng);
 		AddToHand(AC, X);
 		Extra += FString::Printf(TEXT(" +%s"), *ZoogiArtifacts::Name(X));
 	}
@@ -147,6 +149,7 @@ EZoogiArtifact AZoogiGameMode::PickedArtifact() const
 
 bool AZoogiGameMode::AwakenInfuse(int32 Pick)
 {
+	if (CardsOn()) return false; // v3: cards replace the artifact hand
 	AZoogiBall* B = GetActiveBall();
 	if (!B || !B->Artifact || Phase != EZoogiPhase::Aiming || Stage != EZoogiStage::Awaken || bAwakenDone) return false;
 	const EZoogiArtifact A = TakePicked(B->Artifact, Pick);
@@ -162,7 +165,7 @@ bool AZoogiGameMode::AwakenInfuse(int32 Pick)
 	AddFeed(FString::Printf(TEXT("P%d %s  infused %s%s"), B->PlayerIndex + 1, *B->Def.Name, *ZoogiArtifacts::Name(A), bAff ? TEXT("  (affinity!)") : TEXT("")), C);
 	AZoogiFX::Spawn(GetWorld(), B->BallLocation(), C, 200.f, 0.6f, false, 10.f, B);
 	AZoogiFX::Spawn(GetWorld(), B->BallLocation() - FVector(0, 0, ZoogiConst::ZoogiRadius - 3.f), C, 260.f, 0.7f, true, 8.f);
-	AZoogiFX::Niagara(GetWorld(), *ZoogiArtifacts::Get(A).AuraNiagara.ToString(), B->BallLocation(), FRotator::ZeroRotator, 0.9f);
+	if (ZoogiUtil::ShowZoogiSparkles()) AZoogiFX::Niagara(GetWorld(), *ZoogiArtifacts::Get(A).AuraNiagara.ToString(), B->BallLocation(), FRotator::ZeroRotator, 0.9f); // Oct 8: ZoogiSparkles
 	AZoogiAwakenFX::OnInfuse(GetWorld(), B, A); // launch-power fire ring (+ Shock chain lightning / Void portal for those artifacts)
 	UE_LOG(LogZoogi, Log, TEXT("Awaken: P%d %s INFUSES %s%s"), B->PlayerIndex + 1, *B->Def.Name, *ZoogiArtifacts::Name(A), bAff ? TEXT(" (affinity)") : TEXT(""));
 	EmitAnime(TEXT("Infuse"), B, A, B, B->BallLocation(), 1.f, false);
@@ -171,6 +174,7 @@ bool AZoogiGameMode::AwakenInfuse(int32 Pick)
 
 bool AZoogiGameMode::AwakenGuard(int32 Pick)
 {
+	if (CardsOn()) return false; // v3: cards replace the artifact hand
 	AZoogiBall* B = GetActiveBall();
 	if (!B || !B->Artifact || Phase != EZoogiPhase::Aiming || Stage != EZoogiStage::Awaken || bAwakenDone) return false;
 	const EZoogiArtifact A = TakePicked(B->Artifact, Pick);
@@ -190,6 +194,7 @@ bool AZoogiGameMode::AwakenGuard(int32 Pick)
 
 bool AZoogiGameMode::AwakenSave()
 {
+	if (CardsOn()) return false; // v3: cards replace the artifact hand
 	AZoogiBall* B = GetActiveBall();
 	if (!B || !B->Artifact || Phase != EZoogiPhase::Aiming || Stage != EZoogiStage::Awaken || bAwakenDone) return false;
 	UZoogiArtifactComponent* AC = B->Artifact;
@@ -211,6 +216,7 @@ bool AZoogiGameMode::AwakenSave()
 
 void AZoogiGameMode::PlanCPUAwaken()
 {
+	if (CardsOn()) { CardsPlanCPU(); return; }
 	AZoogiBall* B = GetActiveBall();
 	if (!B || !B->Artifact || bAwakenDone) return;
 	UZoogiArtifactComponent* AC = B->Artifact;
@@ -229,7 +235,7 @@ void AZoogiGameMode::PlanCPUAwaken()
 	for (const AZoogiBall* O : Balls) if (O && O != B && O->Score >= B->Score) bLeader = false;
 	const TCHAR* Why = TEXT("");
 	if (bPowerTest || bRival || bAff) { Why = bPowerTest ? TEXT("test") : bAff ? TEXT("affinity") : TEXT("rival target"); AwakenInfuse(Pick); }
-	else if (AC->Guard == EZoogiArtifact::None && (Edge < 450.f || (bLeader && FMath::FRand() < 0.5f) || FMath::FRand() < 0.2f))
+	else if (AC->Guard == EZoogiArtifact::None && (Edge < 450.f || (bLeader && GameRng.FRand() < 0.5f) || GameRng.FRand() < 0.2f))
 	{
 		Why = Edge < 450.f ? TEXT("near the edge") : bLeader ? TEXT("protecting the lead") : TEXT("playing safe");
 		AwakenGuard(Pick);
@@ -487,7 +493,7 @@ void AZoogiGameMode::TickArtifacts(float Dt)
 		AC->GuardFlash();
 		++TurnGuardBlocks;
 		AZoogiFX::Spawn(GetWorld(), V->BallLocation(), R.RimColor, 120.f, 0.35f, false, 12.f, V);
-		AZoogiFX::Niagara(GetWorld(), *R.AuraNiagara.ToString(), V->BallLocation(), FRotator::ZeroRotator, 0.8f);
+		if (ZoogiUtil::ShowZoogiSparkles()) AZoogiFX::Niagara(GetWorld(), *R.AuraNiagara.ToString(), V->BallLocation(), FRotator::ZeroRotator, 0.8f); // Oct 8: ZoogiSparkles
 		AddPopup(FString::Printf(TEXT("GUARD  -%d%%"), FMath::RoundToInt((1.f - R.GuardKnockbackMul) * 100.f)), V->BallLocation() + FVector(0, 0, 150.f), R.CoreColor);
 		AddFeed(FString::Printf(TEXT("P%d %s  blocked with %s"), V->PlayerIndex + 1, *V->Def.Name, *ZoogiArtifacts::Name(G)), R.CoreColor);
 		ZoogiUtil::PlaySfx(this, TEXT("HitClick"), 0.9f, 0.6f);
@@ -535,7 +541,7 @@ void AZoogiGameMode::CommitLedger(int32& ShooterScores, int32& KOs)
 		ResolveDeltas[E.Player] += B->Score - Before;
 		if (E.bKO) { B->KnockOuts++; ++KOs; }
 		if (!E.bKO && !E.bFall) B->OrbsScored++;
-		if (E.bStar)
+		if (E.bStar && UZoogiBattleStateMachine::AllowStarOrbDraw(this)) // battle flow flag [ZoogiRoll.EpisodeEnergy] bStarOrbDraws
 		{
 			if (bArtifactMode && B->Artifact) B->Artifact->BonusDraws = FMath::Min(2, B->Artifact->BonusDraws + 1);
 			else B->Charges = FMath::Min(3, B->Charges + 1);
@@ -604,8 +610,29 @@ void AZoogiGameMode::DoResolve()
 		if (IsClimaxMoment(Shooter, KOs)) BeginClimax(Shooter, ShotArtifact, KOs, ShooterScores); // once per match: hit lands after the rumble
 		else if (ShooterScores >= 2) EmitAnime(TEXT("Combo"), Shooter, ShotArtifact, Shooter, Shooter->BallLocation(), ShooterScores, false);
 		else if (KOs > 0) EmitAnime(TEXT("KO"), Shooter, ShotArtifact, Shooter, Shooter->BallLocation(), KOs, false);
-		else if (ShotArtifact != EZoogiArtifact::None && !bInfusedContact) EmitAnime(TEXT("Miss"), Shooter, ShotArtifact, Shooter, Shooter->BallLocation(), 1.f, false);
+		else if (ShotArtifact != EZoogiArtifact::None && !bInfusedContact && UZoogiBattleStateMachine::AllowMissCard(this)) EmitAnime(TEXT("Miss"), Shooter, ShotArtifact, Shooter, Shooter->BallLocation(), 1.f, false); // battle flow: no consolation card
 	}
 	UE_LOG(LogZoogi, Log, TEXT("Resolve (turn %d, P%d): %s (%d scoring, %d KO)%s"), TurnCounter, ActivePlayer + 1, *ResolveSummary, ShooterScores, KOs,
 		bLastHitCrit ? TEXT(", crit") : TEXT(""));
+}
+
+void AZoogiGameMode::CardsPlanCPUAwaken()
+{
+	// Same decision inputs as the classic CPU (PlanCPUAwaken): a rival target, near the edge, protecting the lead,
+	// playing safe, or a stocked artifact hand all lead to Infuse / Guard there, i.e. an Awakening under the
+	// InfuseOrGuard rule. In cards mode that becomes the independent Standby request; OnAwakenObserved still applies
+	// the configured ActivationRule exactly as for a human. The coin flips use a hash of (turn, player) instead of
+	// GameRng so the cards-mode RNG stream (shots, cards) is not shifted by this decision.
+	AZoogiBall* B = GetActiveBall();
+	if (!B || bAwakenDone || !B->bCPU || bStandbyAwaken) return;
+	const uint32 H = FCrc::MemCrc32(&TurnCounter, sizeof(TurnCounter), (uint32)B->PlayerIndex * 2654435761u);
+	const float U1 = (H & 0xffff) / 65536.f, U2 = ((H >> 16) & 0xffff) / 65536.f;
+	const bool bRival = Cast<AZoogiBall>(CPULock.Get()) != nullptr;
+	const float Edge = EdgeDistance(Arena, B->BallLocation());
+	bool bLeader = B->Score > 0;
+	for (const AZoogiBall* O : Balls) if (O && O != B && O->Score >= B->Score) bLeader = false;
+	const bool bStocked = B->Artifact && B->Artifact->Hand.Num() >= 1;
+	const TCHAR* Why = bRival ? TEXT("rival target") : Edge < 450.f ? TEXT("near the edge") : (bLeader && U1 < 0.5f) ? TEXT("protecting the lead") : U2 < 0.2f ? TEXT("playing safe") : bStocked ? TEXT("hand stocked") : nullptr;
+	if (Why && Stage == EZoogiStage::Awaken) { bStandbyAwaken = true; UE_LOG(LogZoogi, Log, TEXT("CARDS standby awakening request ON (CPU)")); }
+	UE_LOG(LogZoogi, Log, TEXT("CPU P%d Standby Awakening: %s (%s, edge %.0f cm)"), B->PlayerIndex + 1, Why ? TEXT("REQUEST") : TEXT("no"), Why ? Why : TEXT("orb target, saving"), Edge);
 }

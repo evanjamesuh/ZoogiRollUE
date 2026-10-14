@@ -22,6 +22,7 @@
 #include "CollisionQueryParams.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "ZoogiBattleStateMachine.h"
 
 namespace
 {
@@ -112,6 +113,7 @@ void AZoogiGameMode::ComboAddEnergy(int32 Team, float Amount, const FString& Why
 	if (Team < 0 || Team > 1 || Amount == 0.f) return;
 	const float Before = ComboEnergy[Team];
 	ComboEnergy[Team] = FMath::Clamp(ComboEnergy[Team] + Amount, 0.f, ZoogiComboTune::GaugeMax);
+	NotifyMatchEvent(EZoogiMatchEvent::GaugeChanged, Team, ComboEnergy[Team]);
 	UE_LOG(LogZoogi, Log, TEXT("COMBO gauge %s %+.0f (%s): %.0f -> %.0f"), *TeamName(Team), Amount, *Why, Before, ComboEnergy[Team]);
 }
 
@@ -120,6 +122,7 @@ void AZoogiGameMode::ComboTrigger(uint32 Flag, float Energy, const FVector& Wher
 	if (ShotTriggers & Flag) return;
 	ShotTriggers |= Flag;
 	const FString L = TriggerNames(Flag);
+	Energy *= CardsComboGainMul(); // v3 P6 PROPOSED earning tune (cards on only; 1.0 otherwise)
 	ComboAddEnergy(ComboTeam, Energy, L);
 	const FLinearColor C(1.f, 0.85f, 0.3f);
 	ComboCallout(FString::Printf(TEXT("%s!  +%.0f COMBO"), *L, Energy), C);
@@ -178,6 +181,7 @@ void AZoogiGameMode::ComboSpawnOrbs()
 				Orbs.Add(O);
 				ComboOrbHome.Add(L);
 			}
+	for (AZoogiOrb* O : Orbs) ZoogiUtil::ApplyOrbStyle(O); // Oct 8: [ZoogiRoll.Characters] OrbStyle
 }
 
 void AZoogiGameMode::ComboStartMatch()
@@ -221,6 +225,7 @@ void AZoogiGameMode::ComboStartMatch()
 		Balls.Add(B);
 	}
 	for (int32 t = 0; t < 2; ++t) { ComboEnergy[t] = 0.f; ComboResonance[t] = 0; ArenaControl[t] = 0.f; ComboOrbOuts[t] = 0; ComboNextPick[t] = 0; }
+	if (CardsOn()) { const float S0 = CardsComboStartGauge(); ComboEnergy[0] = ComboEnergy[1] = S0; UE_LOG(LogZoogi, Log, TEXT("CARDS combo start gauge %.0f per team (PROPOSED)"), S0); }
 	bComboMatchOver = false;
 	ComboWinner = -1;
 	ComboOverReason.Reset();
@@ -236,7 +241,7 @@ void AZoogiGameMode::ComboStartMatch()
 	UE_LOG(LogZoogi, Log, TEXT("Match started: 2v2 COMBO on %s  TEAM A: %s + %s   TEAM B: %s + %s"), *ZoogiUtil::ArenaName(MenuArena),
 		Balls.IsValidIndex(0) ? *Balls[0]->Def.Name : TEXT("?"), Balls.IsValidIndex(1) ? *Balls[1]->Def.Name : TEXT("?"),
 		Balls.IsValidIndex(2) ? *Balls[2]->Def.Name : TEXT("?"), Balls.IsValidIndex(3) ? *Balls[3]->Def.Name : TEXT("?"));
-	PlayMusic(TEXT("MatchMusic"));
+	NotifyMatchEvent(EZoogiMatchEvent::MatchStart, 1); // arena music (falls back to MatchMusic) + announcer
 	if (ComboDemo > 0) DemoStage();
 	if (!BeginStageForming(true)) ComboBeginTeamTurn(0);
 }
@@ -438,7 +443,8 @@ bool AZoogiGameMode::ComboAcceptFollowUp()
 	if (!P || P->bKnockedOut || P->bOut) { bFollowUpOffered = false; return false; }
 	bFollowUpOffered = false;
 	bFollowUpUsed = true;
-	ComboEnergy[ComboTeam] = FMath::Max(0.f, ComboEnergy[ComboTeam] - ZoogiComboTune::FollowUpCost);
+	if (!UZoogiBattleStateMachine::PayFollowUpFromEnergy(this, P->PlayerIndex, ZoogiComboTune::FollowUpCost)) // battle flow: FollowUpCostSource=EpisodeEnergy
+		ComboEnergy[ComboTeam] = FMath::Max(0.f, ComboEnergy[ComboTeam] - ZoogiComboTune::FollowUpCost);
 	FollowRelayOrb = (OfferTriggers & ZoogiComboTrigger::OrbRelay) ? RelayOrb : nullptr;
 	UE_LOG(LogZoogi, Log, TEXT("COMBO PARTNER FOLLOW-UP: P%d %s acts (setup %s, -%.0f gauge -> %.0f)"), P->PlayerIndex + 1, *P->Def.Name, *TriggerNames(OfferTriggers), ZoogiComboTune::FollowUpCost, ComboEnergy[ComboTeam]);
 	ComboCallout(FString::Printf(TEXT("PARTNER FOLLOW-UP!  %s"), *P->Def.Name.ToUpper()), TeamColor(ComboTeam));
@@ -448,6 +454,7 @@ bool AZoogiGameMode::ComboAcceptFollowUp()
 	AZoogiFX::Spawn(GetWorld(), P->BallLocation(), TeamColor(ComboTeam), 240.f, 0.6f, true, 12.f);
 	ComboBeginShot(P->PlayerIndex);
 	bInFollowUp = true;
+	NotifyMatchEvent(EZoogiMatchEvent::FollowUpStart, ComboTeam);
 	ComboShot(TEXT("followup_start"), 0.35f);
 	return true;
 }
@@ -517,6 +524,7 @@ void AZoogiGameMode::ComboFinish(int32 WinTeam, const FString& Why)
 	UE_LOG(LogZoogi, Log, TEXT("FinalScores: TEAM A=%d TEAM B=%d"), TeamScore(0), TeamScore(1));
 	ZoogiUtil::PlaySfx(this, TEXT("Win"), 0.8f);
 	PlayVictoryCrowd();
+	NotifyMatchEvent(EZoogiMatchEvent::MatchOver, WinTeam);
 	ComboShot(TEXT("match_over"), 1.4f);
 	if (AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PC->OnGameOver(Balls.IsValidIndex(WinnerIndex) ? Balls[WinnerIndex].Get() : nullptr);
 }
@@ -617,6 +625,7 @@ void AZoogiGameMode::ComboOnFloorChanged(AZoogiBall* By)
 	AddPopup(S == EZoogiFloorState::Damaged ? TEXT("DAMAGED!") : TEXT("CRACKED!"), C + FVector(0, 0, 150.f), FLinearColor(1.f, 0.6f, 0.25f));
 	AddFeed(FString::Printf(TEXT("%s  heavy impact: floor section %s"), By ? *By->Def.Name : TEXT("?"), *AZoogiComboArena::FloorStateName(S)), FLinearColor(1.f, 0.6f, 0.25f));
 	if (By && By == GetActiveBall() && Phase == EZoogiPhase::Rolling) ComboTrigger(ZoogiComboTrigger::TerrainSetup, ZoogiComboTune::ETerrain, C);
+	NotifyMatchEvent(EZoogiMatchEvent::FloorChanged, -1, (float)(uint8)S);
 	ComboShot(S == EZoogiFloorState::Damaged ? TEXT("floor_damaged") : TEXT("floor_cracked"), 0.7f);
 }
 
@@ -752,6 +761,7 @@ void AZoogiGameMode::ComboCheckKnockoffs()
 		ComboResonance[Team]++;
 		ArenaControl[Team] += ZoogiComboTune::ControlOrbOut;
 		ComboOrbOuts[Team]++;
+		NotifyMatchEvent(EZoogiMatchEvent::OrbOut, Team, ArenaControl[Team]);
 		ComboAddEnergy(Team, ZoogiComboTune::EOrbOut, TEXT("ORB OUT"));
 		ZoogiUtil::PlaySfx(this, TEXT("Score"), 1.f, O->bStar ? 1.25f : 1.f);
 		AddPopup(FString::Printf(TEXT("ORB OUT  +%d"), Pts), Edge(L), TeamColor(Team));
@@ -801,6 +811,12 @@ void AZoogiGameMode::ComboCheckKnockoffs()
 				ComboWinner = 1 - B->TeamIndex;
 				ComboOverReason = FString::Printf(TEXT("both %s Zoogis knocked out"), *TeamName(B->TeamIndex));
 			}
+			else if (TeamAlive(B->TeamIndex) == 0 && bComboMatchOver && ComboWinner == B->TeamIndex && CardsOn())
+			{
+				// v3 cards rules: the last Zoogis of both teams knocked out in the same action = draw (cards on only)
+				ComboWinner = -1;
+				ComboOverReason = TEXT("mutual final KO: both teams' last Zoogis knocked out");
+			}
 		}
 		BigColor = Att >= 0 ? ZoogiUtil::PlayerColor(Att) : FLinearColor(1.f, 0.4f, 0.35f);
 		BigAge = 0.f;
@@ -808,6 +824,7 @@ void AZoogiGameMode::ComboCheckKnockoffs()
 		AddFeed(FString::Printf(TEXT("%s  rung out%s  - %d Ring Mark%s left"), *Who, Att >= 0 ? *FString::Printf(TEXT(" by P%d"), Att + 1) : TEXT(""), B->RingMarks, B->RingMarks == 1 ? TEXT("") : TEXT("s")), FLinearColor(1.f, 0.45f, 0.35f));
 		UE_LOG(LogZoogi, Log, TEXT("RING OUT: %s (%s) by %s -> Ring Marks %d %s"), *Who, *TeamName(B->TeamIndex), Att >= 0 ? *FString::Printf(TEXT("P%d"), Att + 1) : TEXT("self / ally"), B->RingMarks,
 			B->RingMarks > 0 ? TEXT("(Recovery Gate returns it at Resolve)") : TEXT("KNOCKED OUT for the round"));
+		NotifyMatchEvent(B->RingMarks > 0 ? EZoogiMatchEvent::RingOut : EZoogiMatchEvent::KnockedOut, B->TeamIndex, (float)B->PlayerIndex);
 		ComboShot(FString::Printf(TEXT("ringout_p%d_marks%d"), B->PlayerIndex + 1, B->RingMarks), 0.3f);
 	}
 }
@@ -843,6 +860,7 @@ void AZoogiGameMode::ComboResolve()
 		AddPopup(TEXT("RECOVERY GATE"), P + FVector(0, 0, 150.f), FLinearColor(0.4f, 1.f, 0.65f));
 		ComboCallout(FString::Printf(TEXT("RECOVERY GATE RETURNS %s  (1 RING MARK)"), *B->Def.Name.ToUpper()), FLinearColor(0.4f, 1.f, 0.65f));
 		UE_LOG(LogZoogi, Log, TEXT("Recovery Gate: P%d %s returned at (%.0f, %.0f) with %d Ring Mark"), B->PlayerIndex + 1, *B->Def.Name, P.X, P.Y, B->RingMarks);
+		NotifyMatchEvent(EZoogiMatchEvent::RecoveryGate, B->TeamIndex);
 		ComboShot(FString::Printf(TEXT("recovery_gate_p%d"), B->PlayerIndex + 1), 0.6f);
 	}
 	// Neutral Arena Orbs respawn (never destroyed).
@@ -861,12 +879,13 @@ void AZoogiGameMode::ComboResolve()
 	for (int32 t = 0; t < 2; ++t)
 	{
 		// Resonance Energy: every 3 -> +1 artifact draw for the team (Awaken integration).
-		while (ComboResonance[t] >= ZoogiComboTune::ResonanceSurge)
+		while (ComboResonance[t] >= ZoogiComboTune::ResonanceSurge && UZoogiBattleStateMachine::AllowResonanceDraws(this))
 		{
 			ComboResonance[t] -= ZoogiComboTune::ResonanceSurge;
 			for (AZoogiBall* B : Balls) if (B && B->TeamIndex == t && !B->bKnockedOut && B->Artifact) B->Artifact->BonusDraws = FMath::Min(2, B->Artifact->BonusDraws + 1);
 			ComboCallout(FString::Printf(TEXT("%s RESONANCE SURGE: +1 ARTIFACT DRAW"), *TeamName(t)), FLinearColor(0.75f, 0.6f, 1.f));
 			UE_LOG(LogZoogi, Log, TEXT("Resonance surge: %s +1 artifact draw"), *TeamName(t));
+			NotifyMatchEvent(EZoogiMatchEvent::ResonanceSurge, t);
 		}
 		// Resonance Shift: the arena changes once a team reaches 50 Arena Control.
 		if (ArenaControl[t] >= ZoogiComboTune::ShiftAtControl && ComboArena && !ComboArena->IsShifted())
@@ -877,9 +896,10 @@ void AZoogiGameMode::ComboResolve()
 			BigAge = 0.f;
 			ComboCallout(TEXT("RESONANCE SHIFT: BUMPERS SWELL + KICK HARDER"), FLinearColor(0.65f, 0.4f, 1.f));
 			AddFeed(FString::Printf(TEXT("%s reached %.0f Arena Control: RESONANCE SHIFT"), *TeamName(t), ArenaControl[t]), FLinearColor(0.65f, 0.4f, 1.f));
+			NotifyMatchEvent(EZoogiMatchEvent::ResonanceShift, t, ArenaControl[t]);
 			ComboShot(TEXT("resonance_shift"), 1.0f);
 		}
-		if (ArenaControl[t] >= 100.f)
+		if (ArenaControl[t] >= 100.f && UZoogiBattleStateMachine::AllowArenaControlGauge(this))
 		{
 			ArenaControl[t] -= 100.f;
 			ComboAddEnergy(t, 30.f, TEXT("ARENA CONTROL"));
@@ -893,10 +913,11 @@ void AZoogiGameMode::ComboResolve()
 	{
 		AZoogiBall* P = PartnerOf(Shooter);
 		const bool bPartnerOk = P && !P->bKnockedOut && !P->bOut && P->StunTurns <= 0;
-		if (bPartnerOk && ComboEnergy[ComboTeam] >= ZoogiComboTune::FollowUpCost)
+		if (bPartnerOk && UZoogiBattleStateMachine::CanAffordFollowUp(this, P->PlayerIndex, ComboEnergy[ComboTeam], ZoogiComboTune::FollowUpCost))
 		{
 			bFollowUpOffered = true;
 			FollowUpOfferAt = Clock;
+			NotifyMatchEvent(EZoogiMatchEvent::FollowUpOffered, ComboTeam, ComboEnergy[ComboTeam]);
 			ComboCallout(FString::Printf(TEXT("PARTNER FOLLOW-UP READY  (%s)"), *TriggerNames(ShotTriggers)), FLinearColor(1.f, 0.85f, 0.3f));
 		}
 		UE_LOG(LogZoogi, Log, TEXT("COMBO resolve: setup %s, %s gauge %.0f / cost %.0f, partner %s -> follow-up %s"), *TriggerNames(ShotTriggers), *TeamName(ComboTeam), ComboEnergy[ComboTeam], ZoogiComboTune::FollowUpCost,
@@ -929,6 +950,7 @@ bool AZoogiGameMode::ComboHoldResolve()
 		AZoogiBall* P = PartnerOf(GetActiveBall());
 		if (ComboDemo > 0) return true; // the demo director decides
 		if (P && P->bCPU && StageTime >= 1.1f && !bBusy) ComboAcceptFollowUp();
+		else if (P && !P->bCPU && UZoogiBattleStateMachine::FollowUpOfferTimedOut(this, Clock - FollowUpOfferAt)) { ComboDeclineFollowUp(); return false; } // battle flow: human offer timeout
 		return true;
 	}
 	return false;
@@ -946,6 +968,7 @@ bool AZoogiGameMode::ComboGuardBreak(AZoogiBall* Victim, AZoogiBall* Attacker)
 	AZoogiFX::Spawn(GetWorld(), Victim->BallLocation(), FLinearColor(1.f, 0.35f, 0.2f), 200.f, 0.45f, false, 14.f, Victim);
 	AddPopup(TEXT("GUARD BREAK!"), Victim->BallLocation() + FVector(0, 0, 160.f), FLinearColor(1.f, 0.4f, 0.25f));
 	UE_LOG(LogZoogi, Log, TEXT("GUARD BREAK: P%d %s's %s guard shattered by P%d (%s%s)"), Victim->PlayerIndex + 1, *Victim->Def.Name, *ZoogiArtifacts::Name(G), Attacker->PlayerIndex + 1, ForceName(ComboShotForce), bLastHitCrit ? TEXT(", crit") : TEXT(""));
+	NotifyMatchEvent(EZoogiMatchEvent::GuardBreak, Attacker->TeamIndex);
 	ComboTrigger(ZoogiComboTrigger::GuardBreak, ZoogiComboTune::EGuardBreak, Victim->BallLocation());
 	return true;
 }
@@ -1320,4 +1343,29 @@ void AZoogiGameMode::TickComboDemo(float Dt)
 			CommitLock();
 		}
 	}
+}
+
+// v3 P6 PROPOSED: cards-mode earning so normal CPU matches reach follow-ups and episodes without test top-ups.
+// -ZoogiComboGainMul= / -ZoogiEpisodeGainMul= override for tuning runs. Cards off: always 1.0 (parity).
+float AZoogiGameMode::CardsComboGainMul() const
+{
+	if (!CardsOn()) return 1.f;
+	static float M = -1.f;
+	if (M < 0.f) { M = 1.5f; FParse::Value(FCommandLine::Get(), TEXT("ZoogiComboGainMul="), M); }
+	return M;
+}
+float AZoogiGameMode::CardsEpisodeGainMul() const
+{
+	if (!CardsOn()) return 1.f;
+	static float M = -1.f;
+	if (M < 0.f) { M = 3.5f; FParse::Value(FCommandLine::Get(), TEXT("ZoogiEpisodeGainMul="), M); }
+	return M;
+}
+float AZoogiGameMode::CardsComboStartGauge() const
+{
+	// v3 P6 PROPOSED: each team starts a cards match with one Partner Follow-Up worth of Combo gauge (cost 30), so the
+	// early setups the CPU builds can actually be followed up. -ZoogiComboStart=<n> overrides; cards off: 0.
+	if (!CardsOn()) return 0.f;
+	float S = 30.f; FParse::Value(FCommandLine::Get(), TEXT("ZoogiComboStart="), S);
+	return FMath::Clamp(S, 0.f, 100.f);
 }

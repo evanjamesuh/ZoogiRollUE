@@ -1340,7 +1340,10 @@ void AZoogiRock::OnBallHit(AZoogiBall* Ball, const FVector& NormalImpulse, const
 	const FVector V = Ball->PrevVelocity.SizeSquared() > 1.f ? Ball->PrevVelocity : Ball->GetBallVelocity();
 	const float Vn = FMath::Max(0.f, FVector::DotProduct(FVector(V.X, V.Y, 0.f), N2));
 	const float CutDeg = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(Vn / FMath::Max(1.f, V.Size2D()), -1.f, 1.f)));
-	if (Vn < CrackSpeed) return;
+	const float Tough = ZoogiUtil::BreakToughness(); // Oct 8: [ZoogiRoll.Arena] BreakToughness scales both speeds
+	const float CrackV = CrackSpeed * Tough, ShatterV = ShatterSpeed * Tough;
+	if (Vn < CrackV) return;
+	if (!ZoogiUtil::DestructionEnabled()) return; // Oct 8 (Evan 11:15 PM): [ZoogiRoll.Arena] bDestruction
 	LastHitTime = Now;
 	AZoogiGameMode* G = W ? W->GetAuthGameMode<AZoogiGameMode>() : nullptr;
 	// Strong hit: the active shooter while Awakened (infused), or crit-grade contact (>= 90% of its launch speed, the crit rule).
@@ -1349,13 +1352,13 @@ void AZoogiRock::OnBallHit(AZoogiBall* Ball, const FVector& NormalImpulse, const
 	{
 		const bool bAwakened = Ball->Artifact && Ball->Artifact->Infused != EZoogiArtifact::None;
 		// Crit-grade = the crit rule (>= 90% of its launch speed at contact, <= 5 deg cut) on a hard hit; a soft straight tap only cracks.
-		const bool bCritGrade = G->GetShotSpeed() > 1.f && V.Size2D() >= 0.9f * G->GetShotSpeed() && CutDeg <= 5.f && Vn >= ShatterSpeed;
+		const bool bCritGrade = G->GetShotSpeed() > 1.f && V.Size2D() >= 0.9f * G->GetShotSpeed() && CutDeg <= 5.f && Vn >= ShatterV;
 		bStrong = bAwakened || bCritGrade;
 	}
 	FVector Dir = -NormalImpulse.GetSafeNormal2D(); // impulse pushes the ball away from the rock: debris flies the other way
 	if (Dir.IsNearlyZero()) Dir = (GetActorLocation() - Ball->BallLocation()).GetSafeNormal2D();
 	UE_LOG(LogZoogi, Log, TEXT("Rock %s hit by P%d %s at %.0f cm/s normal (%.0f cm/s, cut %.0f deg)%s (state %d)"), *GetName(), Ball->PlayerIndex + 1, *Ball->Def.Name, Vn, V.Size2D(), CutDeg, bStrong ? TEXT(" STRONG") : TEXT(""), (int32)State);
-	if (bStrong || (State == EZoogiRockState::Cracked && Vn >= ShatterSpeed)) Shatter(ImpactPoint, Dir, Ball);
+	if (bStrong || (State == EZoogiRockState::Cracked && Vn >= ShatterV)) Shatter(ImpactPoint, Dir, Ball);
 	else if (State == EZoogiRockState::Intact && bFourStage && !bDamagedStage) MarkDamaged(ImpactPoint);
 	else if (State == EZoogiRockState::Intact) Crack(ImpactPoint, Dir, Ball);
 }
@@ -1372,7 +1375,7 @@ void AZoogiRock::MarkDamaged(const FVector& P)
 void AZoogiRock::Escalate(const FVector& P, const FVector& Dir)
 {
 	const FVector D = Dir.IsNearlyZero() ? (GetActorLocation() - P).GetSafeNormal2D() : Dir;
-	if (State == EZoogiRockState::Shattered) return;
+	if (State == EZoogiRockState::Shattered || !ZoogiUtil::DestructionEnabled()) return; // Oct 8: bDestruction
 	if (State == EZoogiRockState::Cracked) { Shatter(P, D, nullptr); return; }
 	if (bFourStage && !bDamagedStage) { MarkDamaged(P); return; }
 	Crack(P, D, nullptr);

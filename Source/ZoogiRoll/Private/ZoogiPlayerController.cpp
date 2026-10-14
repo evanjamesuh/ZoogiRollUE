@@ -712,7 +712,16 @@ void AZoogiPlayerController::HandleInput(float Dt)
 	}
 
 	// Awaken keys: 1-3 pick the card, I / G / S = Infuse / Guard / Save.
-	if (bAwaken)
+	if (bAwaken && G->CardsOn())
+	{
+		// v3 Standby: 1-5 toggle cards, Enter / Space commit, Backspace clear
+		static const FKey CardKeys[5] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five };
+		for (int32 i = 0; i < 5; ++i) if (WasInputKeyJustPressed(CardKeys[i])) G->MenuAction(TEXT("CardToggle"), i);
+		if (WasInputKeyJustPressed(EKeys::Enter) || WasInputKeyJustPressed(EKeys::SpaceBar)) G->MenuAction(TEXT("CardCommit"), 0);
+		if (WasInputKeyJustPressed(EKeys::BackSpace)) G->MenuAction(TEXT("CardClear"), 0);
+		if (WasInputKeyJustPressed(EKeys::A)) G->MenuAction(TEXT("CardAwaken"), 0);
+	}
+	else if (bAwaken)
 	{
 		if (WasInputKeyJustPressed(EKeys::One)) G->MenuAction(TEXT("AwakenPick"), 0);
 		if (WasInputKeyJustPressed(EKeys::Two)) G->MenuAction(TEXT("AwakenPick"), 1);
