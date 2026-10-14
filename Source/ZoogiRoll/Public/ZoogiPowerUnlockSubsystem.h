@@ -1,4 +1,6 @@
-// menu (Oct 14, Evan approved mockups 8:45 AM CT): power unlocks + per-Zoogi equipped power, saved in slot "ZoogiUnlocks".
+// menu (Oct 14, Evan approved mockups 8:45 AM CT): power unlocks + per-Zoogi equipped power.
+// menu-progression: gems, mastery and unlocks are read from / written to UZoogiProgressionSubsystem (ZoogiProgression.json);
+// slot "ZoogiUnlocks" only keeps EquippedByZoogi (old UnlockedPowers are migrated once, the placeholder gems are not).
 // Animations & Powers read this from their ability code (IsUnlocked / GetEquipped); this file never touches ability code.
 #pragma once
 
@@ -13,7 +15,7 @@ namespace ZoogiPowerIds
 	static const FName Void2TitanMeteor(TEXT("void_2_titan_meteor"));
 }
 
-/** One power entry. ALL requirement / cost numbers live in ZoogiPowerUnlockSubsystem.cpp::BuildPowerDefs() (placeholders). */
+/** One power entry. Name / desc / art from BuildPowerDefs(); requirement / cost from Content/Data/Progression/Powers.csv. */
 USTRUCT()
 struct FZoogiPowerDef
 {
@@ -35,10 +37,10 @@ class ZOOGIROLL_API UZoogiUnlockSave : public USaveGame
 {
 	GENERATED_BODY()
 public:
-	UPROPERTY() TSet<FName> UnlockedPowers;
+	UPROPERTY() TSet<FName> UnlockedPowers;             // legacy: migrated into progression on load, then emptied
 	UPROPERTY() TMap<FName, FName> EquippedByZoogi;   // ZoogiId -> PowerId
-	UPROPERTY() TMap<FName, int32> Stats;             // placeholder progression stats (void_mastery ...)
-	UPROPERTY() int32 Gems = 340;                     // placeholder currency until the economy exists
+	UPROPERTY() TMap<FName, int32> Stats;             // legacy placeholder, unused
+	UPROPERTY() int32 Gems = 0;                       // legacy placeholder, unused (gems: progression wallet)
 	UPROPERTY() int32 Version = 1;
 };
 
@@ -77,6 +79,8 @@ public:
 	static UZoogiPowerUnlockSubsystem* Get(const UObject* WorldContext);
 
 private:
+	class UZoogiProgressionSubsystem* Prog() const;
+	FDelegateHandle ProgHandle;
 	void Save();
 	UPROPERTY() TObjectPtr<UZoogiUnlockSave> Data;
 	TArray<FZoogiPowerDef> Defs;

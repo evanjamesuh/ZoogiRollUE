@@ -6,6 +6,7 @@
 #include "ZoogiUIStyle.h"
 #include "ZoogiAnimeSubsystem.h"
 #include "ZoogiPowerUnlockSubsystem.h"
+#include "ZoogiProgressionSubsystem.h"
 #include "ZoogiRoll.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
@@ -599,7 +600,7 @@ void UZoogiMenuRoot::BuildTopBar(const FString& Title)
 		Label(Val, X + 34.f, 31.f, W - 40.f, 26.f, 30, FLinearColor::White, EAnchor::Right);
 	};
 	Pill(670.f, 90.f, TEXT("icon_coin"), TEXT("12,480")); // placeholder coins
-	Pill(812.f, 70.f, TEXT("icon_gem"), FString::FromInt(U ? U->GetGems() : 340)); // placeholder gems
+	Pill(812.f, 70.f, TEXT("icon_gem"), FString::FromInt(U ? U->GetGems() : 0)); // progression wallet (earned + purchased)
 	Btn(FString(), ZMCNavy, [this]() { if (Top() != EZoogiScreen::Settings) Push(EZoogiScreen::Settings); }, 898.f, 20.f, 72.f, 52.f, 30, false, false, EAnchor::Right, TEXT("icon_gear"));
 }
 
@@ -1112,7 +1113,14 @@ void UZoogiMenuRoot::BuildShop()
 	ImgTile(nullptr, FString(), [this]() { ShopSel = 4; bDirty = true; }, 714.f, 146.f, 206.f, 176.f, ShopSel == 4, false, ZMPViolet);
 	Label(TEXT("BUNDLE"), 728.f, 156.f, 100.f, 16.f, 24, FLinearColor::White);
 	Image(Art(TEXT("lars")), 770.f, 180.f, 96.f, 90.f, FLinearColor::White, EAnchor::Center, 48.f);
-	Btn(TEXT("BUY"), ZMCGold, [this]() { ShowComingSoon(TEXT("Purchases need the economy backend (coins and gems are placeholders).")); }, 726.f, 340.f, 194.f, 100.f, 60, false, false, EAnchor::Center, TEXT("icon_gem"));
+	Btn(TEXT("BUY"), ZMCGold, [this]() { ShowComingSoon(TEXT("Purchases need the store verification server (coins are placeholders).")); }, 726.f, 340.f, 194.f, 100.f, 60, false, false, EAnchor::Center, TEXT("icon_gem"));
+	if (const UZoogiProgressionSubsystem* PS = UZoogiProgressionSubsystem::Get(this))
+	{
+		const FZoogiProgression& C = PS->Core();
+		const FZoogiWallet& Wl = C.Get().Wallet;
+		Label(FString::Printf(TEXT("GEMS %d  (earned %d / purchased %d)"), Wl.Total(), Wl.Earned(), Wl.Purchased()), 106.f, 392.f, 600.f, 20.f, 20, FLinearColor::White, EAnchor::Left);
+		Label(FString::Printf(TEXT("Today %d - %d left - resets %s"), C.EarnedToday(), C.RemainingToday(), *C.NextResetLocal().ToString(TEXT("%H:%M"))), 106.f, 414.f, 600.f, 20.f, 20, ZMTSoft, EAnchor::Left);
+	}
 }
 
 // ---- SOCIAL
