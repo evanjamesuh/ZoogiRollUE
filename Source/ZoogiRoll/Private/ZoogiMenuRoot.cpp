@@ -823,22 +823,21 @@ void UZoogiMenuRoot::BuildPowers()
 	UZoogiPowerUnlockSubsystem* U = UZoogiPowerUnlockSubsystem::Get(this);
 	if (!G || !U || G->MenuPlayers.Num() == 0) return;
 	BuildTopBar(TEXT("POWERS"));
-	// Focus Element (Neutral XP goes here). The data decides where it may change (Economy.csv focus_change_context).
+	// Focus Element (Neutral XP goes here): one full-height (52 = ~48dp) top-bar button; tap cycles Void -> Fire -> Shock -> Frost.
+	// The data decides where it may change (Economy.csv focus_change_context); a refusal explains itself in a modal (no hover info).
 	if (UZoogiProgressionSubsystem* FPS = UZoogiProgressionSubsystem::Get(this))
 	{
-		Label(FString::Printf(TEXT("FOCUS: %s"), *FString(ZoogiCards::ElementName(FPS->Core().Focus())).ToUpper()), 118.f, 444.f, 150.f, 16.f, 20, FLinearColor::White, EAnchor::Center, 0);
+		const EZoogiCardElement Cur = FPS->Core().Focus();
 		const EZoogiCardElement Els[] = { EZoogiCardElement::Void, EZoogiCardElement::Fire, EZoogiCardElement::Shock, EZoogiCardElement::Frost };
-		const FLinearColor ElC[] = { ZMCViolet, ZMCRed, ZMCGold, ZMCCyan };
-		for (int32 e = 0; e < 4; ++e)
+		const FLinearColor ElC[] = { ZMCViolet, ZMCRed, ZMHex(TEXT("E89A00")), ZMHex(TEXT("1E8FE0")) };
+		int32 Ci = 0; for (int32 e = 0; e < 4; ++e) if (Els[e] == Cur) Ci = e;
+		const EZoogiCardElement Next = Els[(Ci + 1) % 4];
+		Btn(FString::Printf(TEXT("FOCUS: %s"), *FString(ZoogiCards::ElementName(Cur)).ToUpper()), ElC[Ci], [this, FPS, Next]()
 		{
-			const EZoogiCardElement E = Els[e];
-			Btn(FString(ZoogiCards::ElementName(E)).ToUpper(), ElC[e], [this, FPS, E]()
-			{
-				FString W;
-				if (!FPS->SetFocusElement(E, EZoogiPlayContext::Menu, W)) { bModal = true; bModalQuit = false; ModalTitle = TEXT("FOCUS"); ModalBody = W.IsEmpty() ? FString(TEXT("Focus changes in Standby.")) : W; }
-				bDirty = true;
-			}, 270.f + e * 62.f, 440.f, 58.f, 24.f, 16, FPS->Core().Focus() == E);
-		}
+			FString W;
+			if (!FPS->SetFocusElement(Next, EZoogiPlayContext::Menu, W)) { bModal = true; bModalQuit = false; ModalTitle = TEXT("FOCUS ELEMENT"); ModalBody = (W.IsEmpty() ? FString(TEXT("Focus changes in Standby.")) : W) + TEXT("\nNeutral XP goes to your Focus Element."); }
+			bDirty = true;
+		}, 420.f, 20.f, 200.f, 52.f, 26);
 	}
 	const TArray<FZoogiDef>& Roster = ZoogiUtil::Roster();
 	const FZoogiDef& Z = Roster[G->MenuPlayers[0].ZoogiIndex % Roster.Num()];
@@ -1182,7 +1181,7 @@ void UZoogiMenuRoot::BuildShop()
 				if (M) { M->bModal = true; M->bModalQuit = false; M->ModalTitle = TEXT("PURCHASE"); M->ModalBody = FString::Printf(TEXT("%s %s"), FZoogiPurchaseService::OutcomeName(O), *Out); M->bDirty = true; }
 			});
 		}, 726.f, 340.f, 194.f, 100.f, 60, false, false, EAnchor::Center, TEXT("icon_gem"));
-		Label(TEXT("Real purchases need Evan's store accounts + verification server."), 726.f, 300.f, 194.f, 34.f, 16, ZMTSoft, EAnchor::Center, 0, true);
+		Label(TEXT("Real purchases need the store accounts + verification server."), 726.f, 292.f, 194.f, 44.f, 18, ZMTSoft, EAnchor::Center, 0, true);
 		return;
 	}
 
@@ -1197,7 +1196,7 @@ void UZoogiMenuRoot::BuildShop()
 			const bool bEq = C.EquippedCosmetic(Co.Slot) == Co.Id;
 			ImgTile(nullptr, FString(), [this, i]() { ShopSel = i; bDirty = true; }, X, Y, 114.f, 124.f, ShopSel == i, !bOwned, bEq ? ZMCTeal : bOwned ? ZMCViolet : ZMCNavy);
 			Label(Co.Name.ToUpper(), X + 6.f, Y + 12.f, 102.f, 48.f, 20, FLinearColor::White, EAnchor::Center, 1, true);
-			Label(Co.Slot.ToString().Replace(TEXT("_"), TEXT(" ")), X + 6.f, Y + 64.f, 102.f, 16.f, 15, ZMTSoft, EAnchor::Center, 1);
+			Label(Co.Slot.ToString().Replace(TEXT("_"), TEXT(" ")), X + 6.f, Y + 64.f, 102.f, 18.f, 18, ZMTSoft, EAnchor::Center, 1);
 			Label(bEq ? FString(TEXT("EQUIPPED")) : bOwned ? FString(TEXT("OWNED")) : Co.Source.StartsWith(TEXT("gems:")) ? Co.Source.RightChop(5) + TEXT(" GEMS") : FString(TEXT("EARN")),
 				X + 6.f, Y + 92.f, 102.f, 18.f, 18, bEq || bOwned ? FLinearColor::White : ZMCGold, EAnchor::Center, 1);
 		}
@@ -1210,7 +1209,7 @@ void UZoogiMenuRoot::BuildShop()
 		Label(Co.Name.ToUpper(), 738.f, 138.f, 170.f, 50.f, 30, FLinearColor::White, EAnchor::Center, 0, true);
 		Label(bOwned ? FString(TEXT("Owned")) : Co.Source.StartsWith(TEXT("gems:")) ? FString::Printf(TEXT("Costs %s gems"), *Co.Source.RightChop(5)) : FString::Printf(TEXT("Earned from %s"), *Co.Source),
 			738.f, 196.f, 170.f, 40.f, 18, FLinearColor::White, EAnchor::Center, 0, true);
-		if (!Co.bDisplayed) Label(TEXT("Visual not wired yet (needs art)"), 738.f, 246.f, 170.f, 30.f, 16, ZMCGold, EAnchor::Center, 0, true);
+		if (!Co.bDisplayed) Label(TEXT("Visual not wired yet (needs art)"), 738.f, 246.f, 170.f, 40.f, 18, ZMCGold, EAnchor::Center, 0, true);
 		if (bOwned)
 			Btn(bEq ? TEXT("EQUIPPED") : TEXT("EQUIP"), ZMCTeal, [this, PS, Co, Now]() { if (PS->Core().EquipCosmetic(Co.Id, Now)) PS->SaveProfile(); bDirty = true; },
 				726.f, 340.f, 194.f, 100.f, 50, false, bEq, EAnchor::Center, bEq ? TEXT("icon_check") : FString());
@@ -1230,7 +1229,7 @@ void UZoogiMenuRoot::BuildShop()
 		const bool bEq = C.Get().EquippedTitle == Ti.Id;
 		ImgTile(nullptr, FString(), [this, i]() { ShopSel = i; bDirty = true; }, X, Y, 144.f, 80.f, ShopSel == i, !bOwned, bEq ? ZMCTeal : bOwned ? ZMCViolet : ZMCNavy);
 		Label(Ti.Name.ToUpper(), X + 8.f, Y + 10.f, 128.f, 40.f, 22, FLinearColor::White, EAnchor::Center, 1, true);
-		Label(bEq ? FString(TEXT("EQUIPPED")) : bOwned ? FString(TEXT("OWNED")) : FString(TEXT("LOCKED")), X + 8.f, Y + 54.f, 128.f, 16.f, 16, bOwned ? FLinearColor::White : ZMCGold, EAnchor::Center, 1);
+		Label(bEq ? FString(TEXT("EQUIPPED")) : bOwned ? FString(TEXT("OWNED")) : FString(TEXT("LOCKED")), X + 8.f, Y + 54.f, 128.f, 18.f, 18, bOwned ? FLinearColor::White : ZMCGold, EAnchor::Center, 1);
 	}
 	const int32 Sel = FMath::Clamp(ShopSel, 0, FMath::Max(0, Ts.Num() - 1));
 	if (!Ts.IsValidIndex(Sel)) return;
@@ -1353,7 +1352,7 @@ void UZoogiMenuRoot::BuildDeck()
 			UBorder* B = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
 			B->SetBrush(ZoogiUIStyle::RoundBrush(ZMCGold, ZoogiUIStyle::Outline, 3.f, 12.f));
 			B->SetHorizontalAlignment(HAlign_Center); B->SetVerticalAlignment(VAlign_Center);
-			B->SetContent(Txt(FString::Printf(TEXT("x%d"), N), 16, FLinearColor::White, 2.f));
+			B->SetContent(Txt(FString::Printf(TEXT("x%d"), N), 18, FLinearColor::White, 2.f));
 			B->SetVisibility(ESlateVisibility::HitTestInvisible);
 			Place(B, X + CW - 26.f, Y - 6.f, 30.f, 16.f);
 		}
@@ -1363,7 +1362,7 @@ void UZoogiMenuRoot::BuildDeck()
 	Label(FString::Printf(TEXT("OWNED %d/%d"), Owned, DD.Defs.Num()), 118.f, 398.f, 180.f, 30.f, 30, FLinearColor::White, EAnchor::Center, 0);
 	Label(FString::Printf(TEXT("IN DECK %d/%d"), CurDeck.Num(), DeckMax), 270.f, 398.f, 180.f, 30.f, 30, CurDeck.Num() == DeckMax ? FLinearColor::White : ZMCGold, EAnchor::Center, 0);
 	Label(FString::Printf(TEXT("LOCKED %d"), Locked), 446.f, 398.f, 130.f, 30.f, 30, ZMCGold, EAnchor::Center, 0);
-	if (PSv) Btn(TEXT("RESET"), ZMCViolet, [this, PSv]() { PSv->SetSavedDeck(TArray<FName>()); bDirty = true; }, 590.f, 390.f, 114.f, 46.f, 26);
+	if (PSv) Btn(TEXT("RESET"), ZMCViolet, [this, PSv]() { PSv->SetSavedDeck(TArray<FName>()); bDirty = true; }, 590.f, 387.f, 114.f, 52.f, 26);
 	if (CurDeck.Num() != DeckMax) Label(TEXT("Matches use the starter deck until yours has 15 cards."), 106.f, 444.f, 600.f, 16.f, 18, ZMCGold, EAnchor::Center, 0);
 	// selected card side panel
 	const FZoogiCardDef* S = DD.Defs.FindByPredicate([this](const FZoogiCardDef& C) { return C.Id == DeckSel; });
@@ -1388,7 +1387,7 @@ void UZoogiMenuRoot::BuildDeck()
 			726.f, 340.f, 95.f, 100.f, 40, false, !bCanAdd, EAnchor::Center, bOwn ? FString() : FString(TEXT("icon_lock")),
 			!bOwn ? FString(TEXT("LOCKED")) : CurDeck.Num() >= DeckMax ? FString(TEXT("DECK FULL")) : Have >= CopyMax ? FString(TEXT("MAX 2")) : FString());
 		Btn(TEXT("REMOVE"), ZMCTeal, [this, PSv, CurDeck, Sel]() { TArray<FName> D = CurDeck; D.RemoveSingle(Sel); PSv->SetSavedDeck(D); bDirty = true; },
-			825.f, 340.f, 95.f, 100.f, 32, false, !bCanRemove);
+			825.f, 340.f, 95.f, 100.f, 28, false, !bCanRemove);
 	}
 	// large preview (tap anywhere to close)
 	if (const FZoogiCardDef* PV = DeckPreview.IsNone() ? nullptr : DD.Defs.FindByPredicate([this](const FZoogiCardDef& C) { return C.Id == DeckPreview; }))
@@ -1467,11 +1466,11 @@ void UZoogiMenuRoot::TickTour(float Dt)
 	const bool bUnlockedRun = U && U->IsUnlockAllCheat();
 	const FString Tag = bUnlockedRun ? TEXT("_unlockall") : TEXT("");
 	static const TCHAR* Names[] = { TEXT("01_home"), TEXT("02_play_setup"), TEXT("03_zoogi_select"), TEXT("04_powers"), TEXT("05_powers_after_equip"), TEXT("06_settings"), TEXT("06b_settings_about"),
-		TEXT("07_collection"), TEXT("08_story_comics"), TEXT("09_events"), TEXT("10_shop"), TEXT("11_social"), TEXT("12_deck"), TEXT("13_home_back_quit_modal"), TEXT("14_play_before_start"), TEXT("16_home_after_tour") };
+		TEXT("07_collection"), TEXT("08_story_comics"), TEXT("09_events"), TEXT("10_shop"), TEXT("11_social"), TEXT("12_deck"), TEXT("12b_deck_preview"), TEXT("10b_shop_gems"), TEXT("10c_shop_cosmetics"), TEXT("10d_shop_titles"), TEXT("13_home_back_quit_modal"), TEXT("14_play_before_start"), TEXT("16_home_after_tour") };
 	const int32 NumShots = UE_ARRAY_COUNT(Names);
 	if (bTourSetupDone)
 	{
-		if (TourClock < T0 + 1.5f) return;
+		if (TourClock < T0 + 1.5f || (AnyButtonEntering() && TourClock < T0 + 2.4f)) return;
 		if (TourStep < NumShots)
 		{
 			const FString P = FPaths::Combine(TourDir, FString::Printf(TEXT("menu_%s%s.png"), Names[TourStep], *Tag));
@@ -1510,10 +1509,14 @@ void UZoogiMenuRoot::TickTour(float Dt)
 	case 10: PopToHome(); Push(EZoogiScreen::Shop); break;
 	case 11: PopToHome(); Push(EZoogiScreen::Social); break;
 	case 12: PopToHome(); DeckPreview = NAME_None; Push(EZoogiScreen::Deck); break;
-	case 13: HandleBack(); HandleBack(); break; // BACK -> HOME, BACK on HOME -> quit modal
-	case 14: HandleBack(); Push(EZoogiScreen::Play); break; // close the modal, open PLAY
-	case 15: PopToHome(); break;
-	case 16:
+	case 13: DeckSel = DeckPreview = FName(TEXT("titan")); bDirty = true; break; // large preview of a locked card
+	case 14: DeckPreview = NAME_None; PopToHome(); ShopTab = 3; ShopSel = 1; Push(EZoogiScreen::Shop); break;
+	case 15: ShopTab = 2; ShopSel = 2; bDirty = true; break;
+	case 16: ShopTab = 4; ShopSel = 0; bDirty = true; break;
+	case 17: PopToHome(); HandleBack(); break; // BACK on HOME -> quit modal
+	case 18: HandleBack(); Push(EZoogiScreen::Play); break; // close the modal, open PLAY
+	case 19: PopToHome(); break;
+	case 20:
 		bTourSetupDone = false;
 		if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiMenuTourStart")))
 		{
@@ -1575,10 +1578,17 @@ void UZoogiMenuRoot::AddAnim(UButton* B, UWidget* Gloss, bool bPrimary, bool bDi
 	E.A.bPrimary = bPrimary; E.A.bDisabled = bDisabled;
 	E.A.bEnter = bAnimEnter && !bDisabled;
 	E.A.Delay = FMath::Min(AnimBtns.Num() - 1, 14) * 0.045f; // 45 ms stagger
+	E.Start = Time;
 	B->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
 	E.A.Tick(false, false, 0.f, Time);
 	B->SetRenderScale(FVector2D(E.A.OutScale));
 	B->SetRenderOpacity(E.A.OutOpacity);
+}
+
+bool UZoogiMenuRoot::AnyButtonEntering() const
+{
+	for (const FZoogiMenuAnimBtn& E : AnimBtns) if (E.B.IsValid() && E.A.bEnter && Time - E.Start < E.A.Delay + 0.2f) return true;
+	return false;
 }
 
 void UZoogiMenuRoot::TickAnims(float Dt)
@@ -1588,6 +1598,8 @@ void UZoogiMenuRoot::TickAnims(float Dt)
 		UButton* B = E.B.Get();
 		if (!B) continue;
 		const bool bScripted = E.A.bPrimary && ClipFrame >= 0;
+		// Enter pop-in follows wall time (Tick adds the clamped Dt): a slow / hitching frame can no longer leave buttons half-faded.
+		if (E.A.bEnter) E.A.Age = FMath::Max(0.f, Time - E.Start - FMath::Min(Dt, 1.f / 20.f));
 		E.A.Tick(B->IsHovered() || B->HasKeyboardFocus() || (bScripted && ClipHover), B->IsPressed() || (bScripted && ClipPress), Dt, Time);
 		B->SetRenderScale(FVector2D(E.A.OutScale));
 		B->SetRenderOpacity(E.A.OutOpacity);
