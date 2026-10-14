@@ -30,13 +30,13 @@
 
 namespace
 {
-	constexpr float DrawDur = 0.32f, DrawStagger = 0.1f;  // 5 cards ~0.72 s
-	constexpr float DiscardDur = 0.38f, DiscardStagger = 0.03f; // whole hand <= 0.5 s
-	constexpr float AssignDur = 0.28f, HoverScale = 1.3f;
+	constexpr float CHDrawDur = 0.32f, CHDrawStagger = 0.1f;  // 5 cards ~0.72 s
+	constexpr float CHDiscardDur = 0.38f, CHDiscardStagger = 0.03f; // whole hand <= 0.5 s
+	constexpr float CHAssignDur = 0.28f, CHHoverScale = 1.3f;
 
-	float EaseOut(float A) { const float U = 1.f - FMath::Clamp(A, 0.f, 1.f); return 1.f - U * U * U; }
-	FVector2D Bez(const FVector2D& A, const FVector2D& C, const FVector2D& B, float T) { const float U = 1.f - T; return A * (U * U) + C * (2.f * U * T) + B * (T * T); }
-	FString Wrap(const FString& S, int32 Max)
+	float CHEaseOut(float A) { const float U = 1.f - FMath::Clamp(A, 0.f, 1.f); return 1.f - U * U * U; }
+	FVector2D CHBez(const FVector2D& A, const FVector2D& C, const FVector2D& B, float T) { const float U = 1.f - T; return A * (U * U) + C * (2.f * U * T) + B * (T * T); }
+	FString CHWrap(const FString& S, int32 Max)
 	{
 		TArray<FString> Words; S.ParseIntoArray(Words, TEXT(" "));
 		FString Out, Line;
@@ -47,24 +47,24 @@ namespace
 		}
 		return Out + Line;
 	}
-	int32 Lines(const FString& S) { int32 N = 1; for (TCHAR C : S) if (C == '\n') ++N; return N; }
-	void Box(FSlateWindowElementList& Out, int32 L, const FGeometry& G, const FVector2D& P, const FVector2D& S, const FLinearColor& Fill, const FLinearColor& Edge, float R = 10.f, float W = 2.f)
+	int32 CHLines(const FString& S) { int32 N = 1; for (TCHAR C : S) if (C == '\n') ++N; return N; }
+	void CHBox(FSlateWindowElementList& Out, int32 L, const FGeometry& G, const FVector2D& P, const FVector2D& S, const FLinearColor& Fill, const FLinearColor& Edge, float R = 10.f, float W = 2.f)
 	{
 		const FSlateRoundedBoxBrush B(Fill, R, Edge, W);
 		FSlateDrawElement::MakeBox(Out, L, G.ToPaintGeometry(FVector2f(S), FSlateLayoutTransform(FVector2f(P))), &B);
 	}
-	void Text(FSlateWindowElementList& Out, int32 L, const FGeometry& G, const FVector2D& P, const FString& T, int32 Size, const FLinearColor& C, bool bBold = false)
+	void CHText(FSlateWindowElementList& Out, int32 L, const FGeometry& G, const FVector2D& P, const FString& T, int32 Size, const FLinearColor& C, bool bBold = false)
 	{
 		FSlateDrawElement::MakeText(Out, L, G.ToPaintGeometry(FVector2f(800.f, 400.f), FSlateLayoutTransform(FVector2f(P))), T, FCoreStyle::GetDefaultFontStyle(bBold ? "Bold" : "Regular", Size), ESlateDrawEffect::None, C);
 	}
-	bool FlagOn() { static const bool b = FParse::Param(FCommandLine::Get(), TEXT("ZoogiCardHandUI")); return b; }
+	bool CHFlagOn() { static const bool b = FParse::Param(FCommandLine::Get(), TEXT("ZoogiCardHandUI")); return b; }
 }
 
-bool UZoogiCardHandWidget::IsEnabled(const AZoogiGameMode* G) { return FlagOn() && G && G->CardsOn(); }
+bool UZoogiCardHandWidget::IsEnabled(const AZoogiGameMode* G) { return CHFlagOn() && G && G->CardsOn(); }
 
 void UZoogiCardHandWidget::Spawn(AZoogiGameMode* G)
 {
-	if (!G || !G->GetWorld() || !FlagOn()) return;
+	if (!G || !G->GetWorld() || !CHFlagOn()) return;
 	TSharedRef<FTimerHandle> H = MakeShared<FTimerHandle>();
 	TWeakObjectPtr<AZoogiGameMode> WG(G);
 	G->GetWorldTimerManager().SetTimer(*H, FTimerDelegate::CreateLambda([WG, H]()
@@ -100,8 +100,8 @@ TSharedRef<SWidget> UZoogiCardHandWidget::RebuildWidget()
 			OutText = T;
 			return B;
 		};
-		UTextBlock* Dummy = nullptr;
-		ConfirmBtn = MakeBtn(TEXT("CONFIRM"), FLinearColor(0.35f, 1.f, 0.45f), ConfirmText);
+		UTextBlock* Dummy = nullptr; UTextBlock* CText = nullptr;
+		ConfirmBtn = MakeBtn(TEXT("CONFIRM"), FLinearColor(0.35f, 1.f, 0.45f), CText); ConfirmText = CText;
 		ClearBtn = MakeBtn(TEXT("CLEAR"), FLinearColor(1.f, 0.45f, 0.38f), Dummy);
 		ConfirmBtn->OnClicked.AddDynamic(this, &UZoogiCardHandWidget::OnConfirm);
 		ClearBtn->OnClicked.AddDynamic(this, &UZoogiCardHandWidget::OnClear);
@@ -185,8 +185,8 @@ void UZoogiCardHandWidget::DiscardAll(const FZoogiCardPlayerState* S)
 		FVis& V = P.Value;
 		bool bCommitted = false;
 		if (S) for (const FZoogiCardCommitted& K : S->Committed) if (K.Card.InstanceId == P.Key) bCommitted = true;
-		if (V.State == EVis::Hand && bCommitted) { V.State = EVis::ToTarget; Fly(V, TargetPos, AssignDur, 0.f, 0.3f, 0.f, 60.f, false); ++Gone; }
-		else if (V.State == EVis::Hand) { V.State = EVis::ToDiscard; Fly(V, Pile, DiscardDur, N * DiscardStagger, 0.45f, 25.f, 140.f, false); ++N; }
+		if (V.State == EVis::Hand && bCommitted) { V.State = EVis::ToTarget; Fly(V, TargetPos, CHAssignDur, 0.f, 0.3f, 0.f, 60.f, false); ++Gone; }
+		else if (V.State == EVis::Hand) { V.State = EVis::ToDiscard; Fly(V, Pile, CHDiscardDur, N * CHDiscardStagger, 0.45f, 25.f, 140.f, false); ++N; }
 		else if (V.State == EVis::Assigned) { V.State = EVis::ToDiscard; V.bFly = false; V.T = 1.f; V.Opacity = 0.f; }
 	}
 	HandOrder.Reset();
@@ -254,13 +254,13 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 			{
 				FVis NV; NV.W = MakeCard(I.InstanceId, I.CardId); NV.Pos = Deck; NV.Scale = 0.55f; NV.Angle = -20.f; NV.Opacity = 0.f;
 				V = &Vis.Add(I.InstanceId, NV);
-				Fly(*V, Deck, DrawDur, NewN * DrawStagger, 1.f, 0.f, 180.f, true);
+				Fly(*V, Deck, CHDrawDur, NewN * CHDrawStagger, 1.f, 0.f, 180.f, true);
 				++NewN; Drawn += FString::Printf(TEXT(" %s#%d"), *I.CardId.ToString(), I.InstanceId);
 			}
 			if (bSel && V->State == EVis::Hand)
 			{
 				// selected without a drag (CPU plan, keys 1-5): same flight to the acting Zoogi
-				V->State = EVis::ToTarget; Fly(*V, TargetPos, AssignDur, 0.f, 0.3f, 0.f, 60.f, false);
+				V->State = EVis::ToTarget; Fly(*V, TargetPos, CHAssignDur, 0.f, 0.3f, 0.f, 60.f, false);
 				UE_LOG(LogZoogi, Log, TEXT("CARDUI assign %s#%d -> %s (selected outside drag)"), *I.CardId.ToString(), I.InstanceId, *TargetName);
 			}
 			else if (!bSel && (V->State == EVis::Assigned || V->State == EVis::ToTarget))
@@ -301,7 +301,7 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 		if (HoverIdx != INDEX_NONE)
 		{
 			const int32 D = i - HoverIdx;
-			if (D == 0) { A = 0.f; Sc = HoverScale; Y = ViewSize.Y - 8.f; }
+			if (D == 0) { A = 0.f; Sc = CHHoverScale; Y = ViewSize.Y - 8.f; }
 			else X += FMath::Sign((float)D) * (FMath::Abs(D) == 1 ? 58.f : 28.f);
 		}
 		Layout.Add(HandOrder[i], FVector4(X, Y, A, Sc));
@@ -326,9 +326,9 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 			{
 				const FVector2D To = V.bToLayout ? Goal : V.To;
 				const float ToA = V.bToLayout ? GoalA : V.ToAngle, ToS = V.bToLayout ? GoalS : V.ToScale;
-				const float E = EaseOut(A);
+				const float E = CHEaseOut(A);
 				const FVector2D Ctrl = (V.From + To) * 0.5f + FVector2D(0.f, -V.Lift);
-				V.Pos = Bez(V.From, Ctrl, To, E);
+				V.Pos = CHBez(V.From, Ctrl, To, E);
 				V.Angle = FMath::Lerp(V.FromAngle, ToA, E);
 				V.Scale = FMath::Lerp(V.FromScale, ToS, E);
 				V.Opacity = V.State == EVis::Hand ? FMath::Min(1.f, A * 3.f) : (A > 0.7f ? FMath::Lerp(1.f, 0.f, (A - 0.7f) / 0.3f) : 1.f);
@@ -366,7 +366,7 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 	{
 		const FZoogiCardDef* D = Cards->Def(H->CardId);
 		HoverTitle = FString::Printf(TEXT("%s   %s   cost %d"), *H->Name, D ? ZoogiCards::TypeName(D->Type) : TEXT(""), H->Cost);
-		HoverTip = Wrap(H->Rule, 46);
+		HoverTip = CHWrap(H->Rule, 46);
 		const EZoogiCardResult R = Cards->Rules().CanSelect(B->PlayerIndex, H->InstanceId, Ctx);
 		if (R != EZoogiCardResult::Ok) HoverTip += FString::Printf(TEXT("\n[can't play: %s]"), ZoogiCardResultName(R));
 	}
@@ -376,7 +376,7 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 		const EZoogiCardResult R = Cards ? Cards->Rules().CanSelect(B->PlayerIndex, Dg->InstanceId, Ctx) : EZoogiCardResult::UnknownPlayer;
 		bDragValid = R == EZoogiCardResult::Ok;
 		DragPreview = bDragValid
-			? FString::Printf(TEXT("%s -> %s\n%s\nenergy %d -> %d"), *Dg->Name, *TargetName, *Wrap(Dg->Rule, 40), EnergyShown, EnergyShown - Dg->Cost)
+			? FString::Printf(TEXT("%s -> %s\n%s\nenergy %d -> %d"), *Dg->Name, *TargetName, *CHWrap(Dg->Rule, 40), EnergyShown, EnergyShown - Dg->Cost)
 			: FString::Printf(TEXT("%s: %s"), *Dg->Name, ZoogiCardResultName(R));
 	}
 	for (FReact& R : Reacts) R.T += Dt;
@@ -420,16 +420,16 @@ void UZoogiCardHandWidget::CardRelease(UZoogiCardWidget* C, const FPointerEvent&
 	UZoogiCardSubsystem* Cards = UZoogiCardSubsystem::Get(this);
 	AZoogiBall* B = G ? G->GetActiveBall() : nullptr;
 	const FZoogiCardPlayerState* S = Cards && B ? Cards->Rules().Player(B->PlayerIndex) : nullptr;
-	const int32 Slot = S ? S->Hand.IndexOfByPredicate([C](const FZoogiCardInstance& I) { return I.InstanceId == C->InstanceId; }) : INDEX_NONE;
-	if (Slot == INDEX_NONE) { CancelDrag(TEXT("not_in_hand")); return; }
+	const int32 HandSlot = S ? S->Hand.IndexOfByPredicate([C](const FZoogiCardInstance& I) { return I.InstanceId == C->InstanceId; }) : INDEX_NONE;
+	if (HandSlot == INDEX_NONE) { CancelDrag(TEXT("not_in_hand")); return; }
 	// the one select path (same as the Phase 4 panel / keys 1-5): the card system validates, nothing is spent here
-	G->MenuAction(TEXT("CardToggle"), Slot);
+	G->MenuAction(TEXT("CardToggle"), HandSlot);
 	const bool bOk = S->Selected.Contains(C->InstanceId);
-	UE_LOG(LogZoogi, Log, TEXT("CARDUI drop %s#%d slot=%d on %s -> %s (selected %d, energy left %d)"), *C->CardId.ToString(), C->InstanceId, Slot, *TargetName, bOk ? TEXT("assigned") : TEXT("rejected"), S->Selected.Num(), S->Energy);
+	UE_LOG(LogZoogi, Log, TEXT("CARDUI drop %s#%d slot=%d on %s -> %s (selected %d, energy left %d)"), *C->CardId.ToString(), C->InstanceId, HandSlot, *TargetName, bOk ? TEXT("assigned") : TEXT("rejected"), S->Selected.Num(), S->Energy);
 	Dragging.Reset(); Hovered.Reset();
 	if (bOk)
 	{
-		if (FVis* V = Vis.Find(C->InstanceId)) { V->State = EVis::ToTarget; Fly(*V, TargetPos, AssignDur, 0.f, 0.3f, 0.f, 60.f, false); }
+		if (FVis* V = Vis.Find(C->InstanceId)) { V->State = EVis::ToTarget; Fly(*V, TargetPos, CHAssignDur, 0.f, 0.3f, 0.f, 60.f, false); }
 		Reacts.Add({ TargetPos, 0.f, C->Color, C->Name });
 	}
 }
@@ -452,27 +452,27 @@ int32 UZoogiCardHandWidget::NativePaint(const FPaintArgs& Args, const FGeometry&
 	{
 		// deck (bottom left) and discard pile (bottom right) with counts
 		const FVector2D CS(70.f, 104.f);
-		for (int32 i = 2; i >= 0; --i) Box(Out, L, Geo, FVector2D(55.f + i * 4.f, V.Y - 128.f - i * 4.f), CS, FLinearColor(0.08f, 0.12f, 0.3f, 0.95f), FLinearColor(1.f, 0.82f, 0.35f), 8.f, 2.f);
-		Text(Out, L + 1, Geo, FVector2D(70.f, V.Y - 92.f), FString::FromInt(DrawCount), 22, FLinearColor::White, true);
-		Text(Out, L + 1, Geo, FVector2D(52.f, V.Y - 20.f), TEXT("DECK"), 11, FLinearColor(0.75f, 0.85f, 1.f), true);
-		Box(Out, L, Geo, FVector2D(V.X - 365.f, V.Y - 128.f), CS, FLinearColor(0.15f, 0.06f, 0.08f, 0.9f), FLinearColor(0.75f, 0.5f, 0.45f), 8.f, 2.f);
-		Text(Out, L + 1, Geo, FVector2D(V.X - 343.f, V.Y - 92.f), FString::FromInt(DiscardCount), 22, FLinearColor::White, true);
-		Text(Out, L + 1, Geo, FVector2D(V.X - 372.f, V.Y - 20.f), TEXT("DISCARD"), 11, FLinearColor(1.f, 0.8f, 0.75f), true);
+		for (int32 i = 2; i >= 0; --i) CHBox(Out, L, Geo, FVector2D(55.f + i * 4.f, V.Y - 128.f - i * 4.f), CS, FLinearColor(0.08f, 0.12f, 0.3f, 0.95f), FLinearColor(1.f, 0.82f, 0.35f), 8.f, 2.f);
+		CHText(Out, L + 1, Geo, FVector2D(70.f, V.Y - 92.f), FString::FromInt(DrawCount), 22, FLinearColor::White, true);
+		CHText(Out, L + 1, Geo, FVector2D(52.f, V.Y - 20.f), TEXT("DECK"), 11, FLinearColor(0.75f, 0.85f, 1.f), true);
+		CHBox(Out, L, Geo, FVector2D(V.X - 365.f, V.Y - 128.f), CS, FLinearColor(0.15f, 0.06f, 0.08f, 0.9f), FLinearColor(0.75f, 0.5f, 0.45f), 8.f, 2.f);
+		CHText(Out, L + 1, Geo, FVector2D(V.X - 343.f, V.Y - 92.f), FString::FromInt(DiscardCount), 22, FLinearColor::White, true);
+		CHText(Out, L + 1, Geo, FVector2D(V.X - 372.f, V.Y - 20.f), TEXT("DISCARD"), 11, FLinearColor(1.f, 0.8f, 0.75f), true);
 		// total energy counter (bottom right)
 		const float R = 54.f; const FVector2D C(V.X - 100.f, V.Y - 84.f);
-		Box(Out, L, Geo, C - FVector2D(R, R), FVector2D(R * 2.f, R * 2.f), FLinearColor(0.03f, 0.12f, 0.35f, 0.95f), FLinearColor(0.45f, 0.85f, 1.f), R, 4.f);
-		Text(Out, L + 1, Geo, C + FVector2D(-34.f, -30.f), FString::Printf(TEXT("%d/%d"), EnergyShown, EnergyMax), 26, EnergyShown >= 0 ? FLinearColor::White : FLinearColor(1.f, 0.4f, 0.35f), true);
-		Text(Out, L + 1, Geo, C + FVector2D(-28.f, 8.f), TEXT("ENERGY"), 11, FLinearColor(0.6f, 0.9f, 1.f), true);
+		CHBox(Out, L, Geo, C - FVector2D(R, R), FVector2D(R * 2.f, R * 2.f), FLinearColor(0.03f, 0.12f, 0.35f, 0.95f), FLinearColor(0.45f, 0.85f, 1.f), R, 4.f);
+		CHText(Out, L + 1, Geo, C + FVector2D(-34.f, -30.f), FString::Printf(TEXT("%d/%d"), EnergyShown, EnergyMax), 26, EnergyShown >= 0 ? FLinearColor::White : FLinearColor(1.f, 0.4f, 0.35f), true);
+		CHText(Out, L + 1, Geo, C + FVector2D(-28.f, 8.f), TEXT("ENERGY"), 11, FLinearColor(0.6f, 0.9f, 1.f), true);
 	}
 	// hover tooltip with the card description
 	if (!HoverTitle.IsEmpty() && !Dragging.IsValid())
 	{
-		const int32 NL = Lines(HoverTip);
+		const int32 NL = CHLines(HoverTip);
 		const FVector2D Sz(400.f, 46.f + NL * 20.f);
-		const FVector2D P(FMath::Clamp(V.X * 0.5f - Sz.X * 0.5f, 10.f, V.X - Sz.X - 10.f), V.Y - UZoogiCardWidget::CardH * HoverScale - Sz.Y - 24.f);
-		Box(Out, L + 2, Geo, P, Sz, FLinearColor(0.02f, 0.03f, 0.08f, 0.92f), FLinearColor(1.f, 0.82f, 0.35f), 10.f, 2.f);
-		Text(Out, L + 3, Geo, P + FVector2D(14.f, 8.f), HoverTitle, 14, FLinearColor(1.f, 0.9f, 0.6f), true);
-		Text(Out, L + 3, Geo, P + FVector2D(14.f, 34.f), HoverTip, 12, FLinearColor(0.9f, 0.92f, 1.f));
+		const FVector2D P(FMath::Clamp(V.X * 0.5f - Sz.X * 0.5f, 10.f, V.X - Sz.X - 10.f), V.Y - UZoogiCardWidget::CardH * CHHoverScale - Sz.Y - 24.f);
+		CHBox(Out, L + 2, Geo, P, Sz, FLinearColor(0.02f, 0.03f, 0.08f, 0.92f), FLinearColor(1.f, 0.82f, 0.35f), 10.f, 2.f);
+		CHText(Out, L + 3, Geo, P + FVector2D(14.f, 8.f), HoverTitle, 14, FLinearColor(1.f, 0.9f, 0.6f), true);
+		CHText(Out, L + 3, Geo, P + FVector2D(14.f, 34.f), HoverTip, 12, FLinearColor(0.9f, 0.92f, 1.f));
 	}
 	// drag: target glow in the card color + effect preview + segmented arrow from the hand to the cursor
 	if (const UZoogiCardWidget* Dg = Dragging.Get())
@@ -489,9 +489,9 @@ int32 UZoogiCardHandWidget::NativePaint(const FPaintArgs& Args, const FGeometry&
 			if (bOver || !bDragValid)
 			{
 				const FVector2D P = TargetPos + FVector2D(TargetR + 24.f, -40.f);
-				const FVector2D Sz(330.f, 30.f + Lines(DragPreview) * 19.f);
-				Box(Out, L + 3, Geo, P, Sz, FLinearColor(0.02f, 0.03f, 0.08f, 0.88f), C, 8.f, 2.f);
-				Text(Out, L + 4, Geo, P + FVector2D(12.f, 8.f), DragPreview, 12, FLinearColor::White, true);
+				const FVector2D Sz(330.f, 30.f + CHLines(DragPreview) * 19.f);
+				CHBox(Out, L + 3, Geo, P, Sz, FLinearColor(0.02f, 0.03f, 0.08f, 0.88f), C, 8.f, 2.f);
+				CHText(Out, L + 4, Geo, P + FVector2D(12.f, 8.f), DragPreview, 12, FLinearColor::White, true);
 			}
 		}
 		const FVis* DV = Vis.Find(Dg->InstanceId);
@@ -503,8 +503,8 @@ int32 UZoogiCardHandWidget::NativePaint(const FPaintArgs& Args, const FGeometry&
 	{
 		const float A = R.T / 0.6f;
 		FLinearColor C = R.Color; C.A = 1.f - A;
-		ZoogiCardTargetArrow::Ring(Out, L + 6, Geo, R.Pos, TargetR * (0.6f + 1.4f * EaseOut(A)), C, 8.f * (1.f - A) + 1.f);
-		Text(Out, L + 7, Geo, R.Pos + FVector2D(-50.f, -TargetR - 40.f - 40.f * A), R.Label, 20, C, true);
+		ZoogiCardTargetArrow::Ring(Out, L + 6, Geo, R.Pos, TargetR * (0.6f + 1.4f * CHEaseOut(A)), C, 8.f * (1.f - A) + 1.f);
+		CHText(Out, L + 7, Geo, R.Pos + FVector2D(-50.f, -TargetR - 40.f - 40.f * A), R.Label, 20, C, true);
 	}
 	return L + 8;
 }
