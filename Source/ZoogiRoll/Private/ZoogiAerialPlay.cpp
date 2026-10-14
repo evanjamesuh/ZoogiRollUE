@@ -11,6 +11,7 @@
 #include "ZoogiBall.h"
 #include "ZoogiArena.h"
 #include "ZoogiArenaPiece.h"
+#include "ZoogiStageForming.h"
 #include "ZoogiRock.h"
 #include "ZoogiOrb.h"
 #include "ZoogiFrozenLayout.h"
@@ -317,6 +318,7 @@ void UZoogiBattleStateMachine::ClearMapLayout(const TCHAR* Why)
 	if (Decor) Decor->Destroy();
 	Decor = nullptr;
 	bMapLayout = false;
+	bMenuPreviewLayout = false;
 	MapArena = nullptr;
 	UE_LOG(LogZoogi, Log, TEXT("BATTLE props map layout cleared (%s)"), Why);
 }
@@ -401,7 +403,7 @@ void UZoogiBattleStateMachine::SpawnMapLayout()
 	UE_LOG(LogZoogi, Log, TEXT("BATTLE props map layout Frozen spawned=%d decor=%d rail_min_speed=%.0f cpu_chance=%.2f: %s"), Props.Num(), Decor ? 1 : 0, Tune.MapRailMinSpeed, Tune.CPUPropChance, *List);
 	LogReach(); // Oct 8: every placed prop vs the measured launch envelope
 	// the first CPU turn was planned at turn start, before the layout existed: plan it again with the props
-	if (TestCase.IsEmpty()) G->ReplanCPUShot();
+	if (TestCase.IsEmpty() && G->Phase != EZoogiPhase::Menu) G->ReplanCPUShot();
 }
 
 void UZoogiBattleStateMachine::AerialShot(const FString& Name, float Delay)
@@ -486,7 +488,13 @@ void UZoogiBattleStateMachine::TickProps()
 	// Oct 8: the map layout follows the arena / mode (spawned at the first aim of a match, cleared on arena change / combo)
 	const bool bWantMap = WantsMapProps();
 	if (bMapLayout && (!bWantMap || MapArena.Get() != G->Arena.Get() || (G->Arena && (uint8)G->Arena->GetTheme() != MapTheme))) ClearMapLayout(TEXT("arena_or_mode_changed"));
-	if (bWantMap && !bMapLayout && G->Phase == EZoogiPhase::Aiming) SpawnMapLayout();
+	// Oct 14 (Evan): the main-menu map preview shows the FULLY built map: stage forming snapped to its final pose and the
+	// map layout (Frozen: rail, halos, bumpers, recovery gates, decor) spawned. That menu-only copy is cleared as soon as the
+	// menu ends, so a match still spawns its own layout at the first aim exactly as before (auto runs never visit the menu).
+	const bool bMenu = G->Phase == EZoogiPhase::Menu;
+	if (bMenu && G->Arena && G->Arena->IsForming() && G->Arena->Forming) G->Arena->Forming->Skip();
+	if (bMapLayout && bMenuPreviewLayout && !bMenu) ClearMapLayout(TEXT("menu_preview_end"));
+	if (bWantMap && !bMapLayout && (G->Phase == EZoogiPhase::Aiming || bMenu)) { SpawnMapLayout(); bMenuPreviewLayout = bMenu && bMapLayout; }
 	Props.RemoveAll([](const TObjectPtr<AZoogiAerialProp>& P) { return P == nullptr; });
 	if (Props.Num() == 0) return;
 	// the Zoogies report prop hits too (one event per hit: the prop's cooldown)
