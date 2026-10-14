@@ -67,6 +67,6 @@ private:
 	int32 FollowOffers = 0;
 	bool bWasOffered = false;
 	// -ZoogiDemoShots=<dir>: engine-viewport screenshots at Standby commits, follow-up offers, episode playback, result
-	FString ShotDir; int32 ShotN = 0, ShotTurn = -1, ShotEpN = 0; bool bWasOfferedShot = false;
+	FString ShotDir; int32 ShotN = 0, ShotTurn = -1, ShotEpN = 0; bool bWasOfferedShot = false; int32 ShotShatters = 0; float ShatterShotT = -1.f; int32 ShatterShotK = 0;
 	void DemoShot(const FString& Name);
 };
