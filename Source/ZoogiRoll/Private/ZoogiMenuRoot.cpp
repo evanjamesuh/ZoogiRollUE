@@ -449,9 +449,22 @@ UWidget* UZoogiMenuRoot::ImgTile(UTexture2D* Tex, const FString& Caption, TFunct
 	if (Tex)
 	{
 		UImage* I = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
-		I->SetBrush(ZMImgBrush(Tex, Wd * ZMK - 18.f, Ht * ZMK - 18.f, 14.f));
+		// Card / Zoogi art is shown whole (Evan 9:37): fit inside the tile, aspect kept, letterboxed on the tile color.
+		// Only big scenic backgrounds (>= 1000 px, e.g. Story episode / arena tiles) still fill-crop.
+		const float IW = Wd * ZMK - 18.f, IH = Ht * ZMK - 18.f;
+		const float TA = (float)Tex->GetSizeX() / FMath::Max(1, Tex->GetSizeY());
+		const bool bFit = Tex->GetSizeX() < 1000 && FMath::Abs(TA / FMath::Max(0.01f, IW / IH) - 1.f) > 0.03f;
+		if (bFit)
+		{
+			const float FW = FMath::Min(IW, IH * TA), FH = FW / TA;
+			FSlateBrush FB;
+			FB.SetResourceObject(Tex);
+			FB.ImageSize = FVector2D(FW, FH);
+			I->SetBrush(FB);
+		}
+		else I->SetBrush(ZMImgBrush(Tex, IW, IH, 14.f));
 		I->SetColorAndOpacity(bLocked ? ImgTint * FLinearColor(0.38f, 0.40f, 0.48f, 1.f) : ImgTint);
-		if (UOverlaySlot* S = O->AddChildToOverlay(I)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); }
+		if (UOverlaySlot* S = O->AddChildToOverlay(I)) { S->SetHorizontalAlignment(bFit ? HAlign_Center : HAlign_Fill); S->SetVerticalAlignment(bFit ? VAlign_Center : VAlign_Fill); }
 	}
 	if (bLocked)
 	{
@@ -500,15 +513,14 @@ void UZoogiMenuRoot::Rebuild()
 	DesignW = FMath::Max(1440.f, 1080.f * BuiltViewport.X / FMath::Max(1.f, BuiltViewport.Y));
 
 	// Full-bleed backdrop: game art per screen (or the optional menu video), with a navy wash.
-	FString Bg = TEXT("frozen_background");
+	FString Bg = TEXT("meadows_background"); // Evan 9:37: Meadow arena art (1456x816 PNG) replaces Frozen on Home/Play/etc.
 	switch (Top())
 	{
 	case EZoogiScreen::Powers: case EZoogiScreen::Story: Bg = TEXT("cosmos_background"); break;
-	case EZoogiScreen::Collection: case EZoogiScreen::Create: case EZoogiScreen::Social: Bg = TEXT("meadows_background"); break;
 	case EZoogiScreen::Shop: Bg = TEXT("lava_background"); break;
 	default: break;
 	}
-	// Evan 9:28 AM CT: HOME uses the same opaque Frozen art backdrop as PLAY (covers the live menu-map preview).
+	// Evan 9:28/9:37 AM CT: HOME uses the same opaque Meadow art backdrop as PLAY (covers the live menu-map preview).
 	const bool bLiveMap = false;
 	UObject* BgRes = (EnsureBackdrop() && BackdropTexture) ? (UObject*)BackdropTexture.Get() : bLiveMap ? nullptr : (UObject*)Art(Bg);
 	if (BgRes)
@@ -589,7 +601,8 @@ void UZoogiMenuRoot::BuildHome()
 	AZoogiGameMode* G = GM();
 	if (!G || G->MenuPlayers.Num() == 0) return;
 	BuildTopBar(FString());
-	Image(Art(TEXT("logo_t")), 118.f, 30.f, 120.f, 100.f);
+	// Official logo (zoogi-roll-arena-logo.png, 419x356) at ~1.5x the old size: 180x153 design units = ~422x359 px at 1080p (native, no upscale blur).
+	Image(Art(TEXT("logo_t")), 96.f, 12.f, 180.f, 153.f);
 
 	const TArray<FZoogiDef>& Roster = ZoogiUtil::Roster();
 	const FZoogiDef& D = Roster[G->MenuPlayers[0].ZoogiIndex % Roster.Num()];
