@@ -8,6 +8,12 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 
+namespace ZoogiProgressHooks
+{
+	FOnCardEffectUsed& CardEffectUsed() { static FOnCardEffectUsed D; return D; }
+	FOnPowerUsed& PowerUsed() { static FOnPowerUsed D; return D; }
+}
+
 // ================================================================== helpers
 
 namespace ZoogiProgress

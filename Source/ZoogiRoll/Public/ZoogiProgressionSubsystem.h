@@ -58,5 +58,7 @@ private:
 	int32 HumanIndex() const;
 	int32 TeamOf(int32 PlayerIdx) const;
 	TWeakObjectPtr<class AZoogiGameMode> GM;
-	FDelegateHandle Handle;
+	FDelegateHandle Handle, CardHandle, PowerHandle;
+	void OnCardEffect(int32 Player, FName CardId);
+	void OnPowerUsed(int32 Player);
 };

@@ -13,6 +13,16 @@
 
 class FJsonObject;
 
+/** Read-only gameplay notifications for progression (Oct 14). Broadcast from the card-effect and power code; no listener =
+ *  no-op. Listeners must never change game state (Rule Zero / parity). */
+namespace ZoogiProgressHooks
+{
+	DECLARE_MULTICAST_DELEGATE_TwoParams(FOnCardEffectUsed, int32 /*PlayerIndex*/, FName /*CardId*/);
+	DECLARE_MULTICAST_DELEGATE_OneParam(FOnPowerUsed, int32 /*PlayerIndex*/);
+	ZOOGIROLL_API FOnCardEffectUsed& CardEffectUsed();
+	ZOOGIROLL_API FOnPowerUsed& PowerUsed();
+}
+
 enum class EZoogiGemBucket : uint8 { Earned, Purchased };
 enum class EZoogiSpendOrder : uint8 { EarnedFirst, PurchasedFirst };
 enum class EZoogiTxnResult : uint8 { Applied, Duplicate, Invalid, Insufficient };

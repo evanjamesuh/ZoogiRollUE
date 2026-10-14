@@ -103,10 +103,14 @@ void UZoogiProgressionMatchBridge::OnWorldBeginPlay(UWorld& InWorld)
 {
 	Super::OnWorldBeginPlay(InWorld);
 	if (AZoogiGameMode* G = InWorld.GetAuthGameMode<AZoogiGameMode>()) { GM = G; Handle = G->OnMatchEvent.AddUObject(this, &UZoogiProgressionMatchBridge::OnMatchEvent); }
+	CardHandle = ZoogiProgressHooks::CardEffectUsed().AddUObject(this, &UZoogiProgressionMatchBridge::OnCardEffect);
+	PowerHandle = ZoogiProgressHooks::PowerUsed().AddUObject(this, &UZoogiProgressionMatchBridge::OnPowerUsed);
 }
 void UZoogiProgressionMatchBridge::Deinitialize()
 {
 	if (AZoogiGameMode* G = GM.Get()) G->OnMatchEvent.Remove(Handle);
+	ZoogiProgressHooks::CardEffectUsed().Remove(CardHandle);
+	ZoogiProgressHooks::PowerUsed().Remove(PowerHandle);
 	Super::Deinitialize();
 }
 
@@ -144,6 +148,9 @@ void UZoogiProgressionMatchBridge::OnMatchEvent(EZoogiMatchEvent E, int32 Who, f
 	case EZoogiMatchEvent::GaugeFull:
 		if (S->HasOpenMatch() && Who == TeamOf(H)) P.HookEpisodeTriggered(S->Tally());
 		break;
+	case EZoogiMatchEvent::OrbOut:
+		if (S->HasOpenMatch() && Who == TeamOf(H)) P.HookOrbCollected(S->Tally()); // 2v2: Who = team that scored the orb
+		break;
 	case EZoogiMatchEvent::MatchOver:
 	{
 		if (!S->HasOpenMatch()) break;
@@ -156,4 +163,24 @@ void UZoogiProgressionMatchBridge::OnMatchEvent(EZoogiMatchEvent E, int32 Who, f
 		break;
 	default: break;
 	}
+}
+
+
+// Card effects that really happened (UZoogiCardSubsystem::FxUse) and classic power charges spent (ZoogiPowers.cpp).
+void UZoogiProgressionMatchBridge::OnCardEffect(int32 Player, FName CardId)
+{
+	UZoogiProgressionSubsystem* S = UZoogiProgressionSubsystem::Get(this);
+	if (!S || !S->HasOpenMatch() || Player != HumanIndex()) return;
+	static const TMap<FName, FName> Tricks = { { "bank_strike", "Trick.BankStrike" }, { "momentum_steal", "Trick.MomentumSteal" }, { "double_impact", "Trick.DoubleImpact" },
+		{ "orb_magnet", "Trick.OrbMagnet" }, { "frost", "Trick.FrostLane" }, { "crystal_collapse", "Trick.CrystalCollapse" } };
+	static const TArray<FZoogiCardDef> Defs = ZoogiCards::BuiltInDefs();
+	const FZoogiCardDef* D = Defs.FindByPredicate([&](const FZoogiCardDef& X) { return X.Id == CardId; });
+	const EZoogiElement E = D ? D->Element : EZoogiElement::Neutral;
+	if (const FName* Tag = Tricks.Find(CardId)) S->Core().HookTrickShot(S->Tally(), *Tag, E);
+	else if (E != EZoogiElement::Neutral) S->Core().HookPowerUsed(S->Tally(), E);
+}
+void UZoogiProgressionMatchBridge::OnPowerUsed(int32 Player)
+{
+	UZoogiProgressionSubsystem* S = UZoogiProgressionSubsystem::Get(this);
+	if (S && S->HasOpenMatch() && Player == HumanIndex()) S->Core().HookPowerUsed(S->Tally(), EZoogiElement::Neutral); // classic powers carry no element tag: Focus
 }
