@@ -66,6 +66,7 @@ void AZoogiGameMode::CardsPlanCPU()
 {
 	UZoogiCardSubsystem* C = UZoogiCardSubsystem::Get(this);
 	if (!C || !CardsOn() || bAwakenDone) return;
+	CardsPlanCPUAwaken(); // v3 P5: same Awakening rules as the classic CPU
 	C->PlanCPU(this); // Select x N + Commit through the same rules as a human
 	const AZoogiBall* B = GetActiveBall();
 	const FZoogiCardPlayerState* S = B ? C->Rules().Player(B->PlayerIndex) : nullptr;

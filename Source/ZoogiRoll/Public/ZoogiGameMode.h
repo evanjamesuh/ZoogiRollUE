@@ -327,6 +327,8 @@ public:
 	bool CardsCommit();
 	void CardsToggleAwaken();
 	void CardsPlanCPU();
+	/** v3 P5: CPU Standby Awakening request in cards mode, same decision inputs as the classic Infuse/Guard choice. */
+	void CardsPlanCPUAwaken();
 	void DoDraw();
 	void PlanCPUAwaken();
 	/** Infused shooter's first contact: apply the artifact effect (computed now = authoritative). */
