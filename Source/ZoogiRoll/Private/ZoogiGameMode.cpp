@@ -19,6 +19,7 @@
 #include "ZoogiStageForming.h"
 #include "ZoogiArenaPiece.h"
 #include "ZoogiCardSubsystem.h"
+#include "ZoogiCardHandWidget.h"
 #include "Engine/World.h"
 #include "Components/SphereComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -107,6 +108,7 @@ void AZoogiGameMode::BeginPlay()
 	SpawnOrbs();
 	Phase = EZoogiPhase::Menu;
 	PlayMusic(TEXT("MenuMusic"));
+	UZoogiCardHandWidget::Spawn(this); // cardui: opt-in -ZoogiCardHandUI drag-to-assign hand (no-op without the flag; shows only with cards on)
 
 	// 2v2 Competitive Combo: -ZoogiCombo (mode), -ZoogiComboDemo=1|2|3 (scripted verification runs, implies -ZoogiCombo).
 	FParse::Value(Cmd, TEXT("ZoogiComboDemo="), ComboDemo);
