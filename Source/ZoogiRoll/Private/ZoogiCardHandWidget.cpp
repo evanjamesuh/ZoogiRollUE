@@ -340,10 +340,10 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 		// hud-v3: the fan sits in the dark card tray recess between the deck slab and the discard / energy slab
 		const float TT = FL.Hand.Min.Y * k, TB = FL.Hand.Max.Y * k, HX0 = FL.Hand.Min.X * k, HX1 = FL.Hand.Max.X * k;
 		FramedTrayTop = TT;
-		Sc0 = FMath::Clamp((TB - TT - 8.f * FL.T * k) / UZoogiCardWidget::CardH, 0.45f, 1.3f);
+		Sc0 = FMath::Clamp((TB - TT - 14.f * FL.T * k) / UZoogiCardWidget::CardH, 0.45f, 1.3f); // a little shorter so the fan sits down in the recess
 		const float Avail = HX1 - HX0 - 20.f * FL.T * k;
 		Spacing = FMath::Min(UZoogiCardWidget::CardW * Sc0 * 1.02f, (Avail - UZoogiCardWidget::CardW * Sc0) / FMath::Max(N - 1, 1));
-		BaseY = TB - 2.f * FL.T * k; ArcK = 1.5f; TiltK = 3.f; HoverSc = Sc0 * 1.1f; HoverY = TB; Spread = Sc0 * 0.5f;
+		BaseY = TB + 4.f * FL.T * k; ArcK = 1.5f; TiltK = 3.f; HoverSc = Sc0 * 1.1f; HoverY = TB; Spread = Sc0 * 0.5f;
 		FanCX = (HX0 + HX1) * 0.5f;
 		FramedFanL = FanCX - ((N - 1) * Spacing + UZoogiCardWidget::CardW * Sc0) * 0.5f;
 	}

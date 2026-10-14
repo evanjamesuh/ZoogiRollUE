@@ -60,7 +60,7 @@ namespace ZoogiFramed
 		if ((X1 - X0) / T < 1180.f) T = (X1 - X0) / 1180.f; // narrower than ~14:9: width-limited, the arena gets taller
 		L.T = T;
 		const float WT = (X1 - X0) / T;
-		const float ColT = WT >= 1376.f ? FMath::Min(270.f, 220.f + (WT - 1376.f) * 0.2f) : FMath::Max(170.f, 220.f - (1376.f - WT) * 0.35f);
+		const float ColT = 220.f; (void)WT; // hud-v3 overlay: columns keep the target width (220) from 16:9 to 20:9; only the arena widens
 		L.ColT = ColT;
 		const float TrayTop = Y1 - 202.f * T;
 		L.Top = FBox2D(FVector2D(X0, Y0), FVector2D(X1, Y0 + 56.f * T));

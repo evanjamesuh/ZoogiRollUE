@@ -144,7 +144,7 @@ int32 UZoogiTeamColumnWidget::NativePaint(const FPaintArgs& Args, const FGeometr
 		Chip(TEXT("chip_purple"), B->bCPU ? TEXT("CPU") : TEXT("YOU"), FMath::Max(34.f * t, TxtW(B->bCPU ? TEXT("CPU") : TEXT("YOU"), 8.f, t) + 14.f * t));
 		if (bActive) Chip(TEXT("chip_gold"), TEXT("TURN"), 41.f * t);
 		const float Pop = ScorePop.Contains(B->PlayerIndex) ? ScorePop[B->PlayerIndex] : 0.f;
-		Txt(L + 6, FVector2D(CP.X + CS.X - 12.f * t, CP.Y + 19.f * t - 4.f * Pop * t), FString::FromInt(B->Score), 21.f + 9.f * Pop, t, FMath::Lerp(ScoreC, HA::GoldText, Pop), 1.f);
+		Txt(L + 6, FVector2D(CP.X + CS.X - 12.f * t, CP.Y + 19.f * t - 4.f * Pop * t), FString::FromInt(B->Score), 27.f + 9.f * Pop, t, FMath::Lerp(ScoreC, HA::GoldText, Pop), 1.f);
 		int32 Hand = -1;
 		if (Cards) { if (const FZoogiCardPlayerState* PS2 = Cards->Rules().Player(B->PlayerIndex)) Hand = PS2->Hand.Num(); }
 		else if (G->bArtifactMode && B->Artifact) Hand = B->Artifact->Hand.Num();
@@ -197,7 +197,7 @@ int32 UZoogiTeamColumnWidget::NativePaint(const FPaintArgs& Args, const FGeometr
 		{
 			const float Sl2 = 1.f - FMath::Square(1.f - PromptAnim);
 			const FVector2D AP(X + 10.f * t, BY), AS(W - 20.f * t, FMath::Min(BH, 64.f * t));
-			if (!bOv) HA::Nine(Out, L + 2, Geo, AP, AS, TEXT("action_box"), FMargin(9.f, 9.f, 9.f, 9.f), t, FMath::Lerp(FLinearColor(1.4f, 1.3f, 1.f), FLinearColor::White, Sl2));
+			HA::Nine(Out, L + 2, Geo, AP, AS, TEXT("action_box"), FMargin(9.f, 9.f, 9.f, 9.f), t, FMath::Lerp(FLinearColor(1.4f, 1.3f, 1.f), FLinearColor::White, Sl2));
 			const FString AL = UZoogiFramedHUDWidget::ActionLabel(G);
 			const float LW = FMath::Max(59.f * t, TxtW(AL, 8.f, t) + 16.f * t);
 			HA::Nine(Out, L + 4, Geo, AP + FVector2D(10.f, 6.f) * t, FVector2D(LW, 15.f * t), TEXT("chip_blue"), FMargin(7.f, 5.f, 7.f, 5.f), t);
@@ -231,7 +231,7 @@ int32 UZoogiTeamColumnWidget::NativePaint(const FPaintArgs& Args, const FGeometr
 		{
 			const FVector2D ES = HA::SizeT(TEXT("emblem"));
 			const float EW = W - 20.f * t, EH = FMath::Min(BH, EW * ES.Y / FMath::Max(1.f, ES.X));
-			if (!bOv) HA::Img(Out, L + 2, Geo, FVector2D(X + 10.f * t, BY + (BH - EH) * 0.5f), FVector2D(EW, EH), TEXT("emblem"));
+			HA::Img(Out, L + 2, Geo, FVector2D(X + 10.f * t, BY + (BH - EH) * 0.5f), FVector2D(EW, EH), TEXT("emblem"));
 		}
 		// diamond connector into the next group
 		if (gi + 1 < Mine.Num() && !bOv) HA::Img(Out, L + 7, Geo, FVector2D(W * 0.5f - 32.f * t, Y + GH - 18.f * t + Gap * 0.5f), FVector2D(64.f, 40.f) * t, TEXT("connector"));

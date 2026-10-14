@@ -430,7 +430,17 @@ int32 UZoogiFramedHUDWidget::PaintBack(const FGeometry& Geo, FSlateWindowElement
 	// hud-v3 overlay (Evan 4:25 PM): his target image as ONE full-frame overlay; arena / pills / plate are holes,
 	// live values are drawn on top (layer 6+), the sliced pieces underneath only show through the holes.
 	const bool bOverlay = HA::Tex(TEXT("overlay")) != nullptr;
-	if (bOverlay) HA::Img(Out, Ly + 5, Geo, FVector2D(X0, Y0), FVector2D(X1 - X0, V.Y - L.Safe.Bottom * s - Y0), TEXT("overlay"));
+	if (bOverlay)
+	{
+		// split at the arena edges: the left (0..380) and right (966..1376) target strips keep their shape, the middle
+		// strip (arena + card tray recess) stretches. Part() takes source px in texture/K units; the overlay is 1x.
+		const float OH = V.Y - L.Safe.Bottom * s - Y0, LW = 380.f * t, RW = 410.f * t;
+		const FVector2D SK = HA::SizeT(TEXT("overlay")) / FVector2D(1376.f, 768.f);
+		auto Strip = [&](float Dx, float Dw, float Sx0, float Sx1) { HA::Part(Out, Ly + 5, Geo, FVector2D(Dx, Y0), FVector2D(Dw, OH), TEXT("overlay"), FBox2D(FVector2D(Sx0 * SK.X, 0.f), FVector2D(Sx1 * SK.X, 768.f * SK.Y))); };
+		Strip(X0, LW, 0.f, 380.f);
+		Strip(X0 + LW, X1 - X0 - LW - RW, 380.f, 966.f);
+		Strip(X1 - RW, RW, 966.f, 1376.f);
+	}
 
 	// 3) top bar: title plate (round / orbs), phase pills + active player / map plate, CAM / MENU plate
 	const AZoogiBall* AB = G->GetActiveBall();
@@ -462,8 +472,10 @@ int32 UZoogiFramedHUDWidget::PaintBack(const FGeometry& Geo, FSlateWindowElement
 				const float Pop = 1.f + 0.12f * (1.f - StageAnim) * FMath::Sin(StageAnim * PI);
 				const FVector2D OS = FVector2D(156.f, 50.f) * t * Pop, OC = PP + PS * 0.5f;
 				HA::Img(Out, Ly + 4, Geo, OC - OS * 0.5f + FVector2D(0.f, 1.f * t), OS, TEXT("pill_on"), FLinearColor(1.f, 1.f, 1.f, 0.85f + 0.15f * FMath::Sin(Time * 5.f)));
+				ZoogiUIStyle::SBox(Out, Ly + 3, Geo, OC - FVector2D(70.f, 22.f) * t * Pop, FVector2D(140.f, 44.f) * t * Pop, FLinearColor(HA::Cyan.R, HA::Cyan.G, HA::Cyan.B, 0.28f + 0.12f * FMath::Sin(Time * 5.f)), FLinearColor::Transparent, 22.f * t, 0.f);
+				HA::Img(Out, Ly + 4, Geo, OC - OS * 0.5f + FVector2D(0.f, 1.f * t), OS, TEXT("pill_on"), FLinearColor(1.2f, 1.2f, 1.2f, 0.6f)); // second pass = stronger glow
 			}
-			TxtT(Ly + 6, PP + PS * 0.5f, Lb, 8.5f, bNow ? FLinearColor::White : (bDone ? FLinearColor(0.9f, 1.f, 0.92f) : FLinearColor(0.86f, 0.86f, 0.84f)), 0.5f);
+			TxtT(Ly + 6, PP + PS * 0.5f, Lb, bNow ? 10.5f : 9.5f, bNow ? FLinearColor::White : (bDone ? FLinearColor(0.95f, 1.f, 0.96f) : FLinearColor(0.97f, 0.96f, 0.93f)), 0.5f);
 		}
 		// active player pill text + map name (the plate shows the current map on every arena)
 		const FVector2D NP(Xc - 90.f * t, Y0 + 26.f * t);
@@ -493,16 +505,16 @@ int32 UZoogiFramedHUDWidget::PaintBack(const FGeometry& Geo, FSlateWindowElement
 		HA::ImgT(Out, Ly + 3, Geo, FVector2D(X0, TT + 12.f * t), t, TEXT("tray_left"));
 		HA::ImgT(Out, Ly + 3, Geo, FVector2D(RX0, TT + 12.f * t), t, TEXT("tray_right"));
 		const FVector2D TL(X0, TT + 12.f * t), TR(RX0, TT + 12.f * t);
-		TxtT(Ly + 6, TL + FVector2D(71.5f, 139.f) * t, bCards ? FString::FromInt(TI.Draw) : FString(TEXT("-")), 15.f, FLinearColor::White, 0.5f);
+		TxtT(Ly + 8, TL + FVector2D(71.5f, 139.f) * t, bCards ? FString::FromInt(TI.Draw) : FString(TEXT("-")), 19.f, FLinearColor::White, 0.5f);
 		// discard portal: breathing cyan light + count
 		const float Br = 0.5f + 0.5f * FMath::Sin(Time * 2.f);
-		ZoogiUIStyle::SBox(Out, Ly + 4, Geo, TR + FVector2D(28.f, 20.f) * t, FVector2D(90.f, 110.f) * t, FLinearColor(0.4f, 0.95f, 1.f, 0.06f + 0.08f * Br), FLinearColor::Transparent, 30.f * t, 0.f);
+		ZoogiUIStyle::SBox(Out, bOverlay ? Ly + 6 : Ly + 4, Geo, TR + FVector2D(28.f, 20.f) * t, FVector2D(90.f, 110.f) * t, FLinearColor(0.4f, 0.95f, 1.f, 0.06f + 0.08f * Br), FLinearColor::Transparent, 30.f * t, 0.f);
 		TxtT(Ly + 6, TR + FVector2D(155.f, 184.f) * t, bCards ? FString::Printf(TEXT("DISCARD %d"), TI.Discard) : FString(TEXT("DISCARD")), 8.f, FLinearColor::White, 0.5f);
 		// energy orb: the swirl turns, number + bar live
 		const FVector2D Sh = bCards ? FVector2D(FMath::Sin(Time * 60.f), FMath::Cos(Time * 47.f)) * 4.f * t * TI.Shake : FVector2D::ZeroVector;
-		HA::ImgRot(Out, Ly + 4, Geo, TR + FVector2D(252.f, 50.f) * t, FVector2D(128.f, 128.f) * t, TEXT("orb_swirl"), Time * 0.7f, FLinearColor(1.f, 1.f, 1.f, 1.f));
+		HA::ImgRot(Out, bOverlay ? Ly + 6 : Ly + 4, Geo, TR + FVector2D(252.f, 50.f) * t, FVector2D(128.f, 128.f) * t, TEXT("orb_swirl"), Time * 0.7f, FLinearColor(1.f, 1.f, 1.f, bOverlay ? 0.75f : 1.f)); // above the overlay so it turns
 		if (bCards && TI.Flash > 0.f) ZoogiUIStyle::SBox(Out, Ly + 5, Geo, TR + FVector2D(292.f, 78.f) * t, FVector2D(72.f, 72.f) * t, FLinearColor(1.f, 1.f, 1.f, 0.5f * TI.Flash), FLinearColor::Transparent, 36.f * t, 0.f);
-		TxtT(Ly + 6, TR + FVector2D(328.f, 108.f) * t + Sh, bCards ? FString::Printf(TEXT("%d/%d"), TI.Energy, TI.EnergyMax) : FString(TEXT("--")), 16.f, TI.Energy >= 0 ? FLinearColor::White : FLinearColor(1.f, 0.45f, 0.4f), 0.5f);
+		TxtT(Ly + 8, TR + FVector2D(328.f, 108.f) * t + Sh, bCards ? FString::Printf(TEXT("%d/%d"), TI.Energy, TI.EnergyMax) : FString(TEXT("--")), 22.f, TI.Energy >= 0 ? FLinearColor::White : FLinearColor(1.f, 0.45f, 0.4f), 0.5f);
 		const float BF = bCards ? FMath::Clamp(TI.EnergyFrac, 0.f, 1.f) : 0.f;
 		if (BF > 0.f) ZoogiUIStyle::SBox(Out, Ly + 5, Geo, TR + FVector2D(277.f, 168.f) * t, FVector2D(92.f * BF, 7.f) * t, FLinearColor(0.78f, 0.45f, 1.f, 1.f), FLinearColor(0.95f, 0.8f, 1.f, 0.6f), 3.5f * t, 1.f * t);
 		// awaken stones (artifact mode): the old central picker lives in the tray now

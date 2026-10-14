@@ -30,6 +30,12 @@ def flat(x0, y0, x1, y1, c):
 for dy in (0, 251):
     for dx in (0, 1140): flat(28+dx, 109+dy, 83+dx, 165+dy, (14, 18, 24))
 flat(380, 584, 966, 763, (22, 21, 20))
+# action box / emblem slots -> plain panel stone; the game draws action_box (acting Zoogi) or emblem itself
+for dy in (0, 255):
+    for dx in (0, 1140):
+        y0, y1, x0, x1 = 236 + dy, 304 + dy, 16 + dx, 220 + dx
+        ring = np.concatenate([res[y0-4:y0, x0:x1].reshape(-1, 3), res[y1:y1+4, x0:x1].reshape(-1, 3)])
+        flat(x0, y0, x1, y1, tuple(int(v) for v in np.median(ring, 0)))
 a = np.full((H, W), 255, np.uint8)
 a[68:560, 242:1134] = 0      # arena window
 a[0:35, 425:952] = 0         # phase pills (drawn live, active one glows)
