@@ -9,6 +9,8 @@
 #include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "UnrealClient.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 
 void UZoogiViewportClient::Tick(float DeltaTime)
 {
@@ -37,6 +39,14 @@ void UZoogiViewportClient::Draw(FViewport* InViewport, FCanvas* SceneCanvas)
 	UWorld* W = GetWorld();
 	ULocalPlayer* LP = GetOuterUEngine() ? GetOuterUEngine()->GetFirstGamePlayer(W) : nullptr;
 	const FIntPoint Sz = InViewport ? InViewport->GetSizeXY() : FIntPoint::ZeroValue;
+	// The engine's on-screen debug messages ("Preparing Textures (n)", "'DisableAllScreenMessages' to suppress") draw at
+	// the viewport's top-left, i.e. over the left team column header in the framed layout: hide them while framed
+	// (kept with -ZoogiDebugUI / -ZoogiScreenMessages; non-shipping builds only ever show them).
+	{
+		static const bool bKeep = FParse::Param(FCommandLine::Get(), TEXT("ZoogiDebugUI")) || FParse::Param(FCommandLine::Get(), TEXT("ZoogiScreenMessages"));
+		const bool bHide = !bKeep && ZoogiFramed::IsActive(W);
+		if (bHide != bMsgsHidden) { GAreScreenMessagesEnabled = !bHide; bMsgsHidden = bHide; }
+	}
 	if (LP && Sz.X > 0 && Sz.Y > 0 && ZoogiFramed::IsActive(W))
 	{
 		const FVector2D V(Sz.X, Sz.Y);

@@ -19,6 +19,7 @@ public:
 
 private:
 	bool bRectApplied = false;
+	bool bMsgsHidden = false; // framed: engine on-screen messages ("Preparing Textures"...) suppressed while the frame is up
 	TEnumAsByte<EAspectRatioAxisConstraint> SavedAxis = AspectRatio_MaintainXFOV;
 	float TrayOpen = 1.f;
 	TWeakObjectPtr<UZoogiFramedHUDWidget> Widget;
