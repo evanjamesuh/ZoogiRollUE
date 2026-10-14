@@ -47,26 +47,26 @@
 namespace
 {
 	// Mockup preview (1024 wide) -> 2400x1080 design units.
-	constexpr float K = 2400.f / 1024.f;
+	constexpr float ZMK = 2400.f / 1024.f;
 
-	FLinearColor Hex(const TCHAR* H) { return FLinearColor::FromSRGBColor(FColor::FromHex(H)); }
-	const FLinearColor CGold = Hex(TEXT("FFB21A"));
-	const FLinearColor CTeal = Hex(TEXT("17C2A4"));
-	const FLinearColor CViolet = Hex(TEXT("7A45F5"));
-	const FLinearColor CNavy = Hex(TEXT("1F4FC8"));
-	const FLinearColor CRed = Hex(TEXT("E5484D"));
-	const FLinearColor CCyan = Hex(TEXT("4FE3FF"));
-	const FLinearColor CDisabled = Hex(TEXT("26346A"));
-	const FLinearColor PNavy = Hex(TEXT("1A3FA8")).CopyWithNewOpacity(0.93f);
-	const FLinearColor PTeal = Hex(TEXT("0E8E9E")).CopyWithNewOpacity(0.93f);
-	const FLinearColor PViolet = Hex(TEXT("6236D6")).CopyWithNewOpacity(0.95f);
-	const FLinearColor TLabel = Hex(TEXT("BFE9FF"));
-	const FLinearColor TSoft = Hex(TEXT("DCE6FF"));
+	FLinearColor ZMHex(const TCHAR* H) { return FLinearColor::FromSRGBColor(FColor::FromHex(H)); }
+	const FLinearColor ZMCGold = ZMHex(TEXT("FFB21A"));
+	const FLinearColor ZMCTeal = ZMHex(TEXT("17C2A4"));
+	const FLinearColor ZMCViolet = ZMHex(TEXT("7A45F5"));
+	const FLinearColor ZMCNavy = ZMHex(TEXT("1F4FC8"));
+	const FLinearColor ZMCRed = ZMHex(TEXT("E5484D"));
+	const FLinearColor ZMCCyan = ZMHex(TEXT("4FE3FF"));
+	const FLinearColor ZMCDisabled = ZMHex(TEXT("26346A"));
+	const FLinearColor ZMPNavy = ZMHex(TEXT("1A3FA8")).CopyWithNewOpacity(0.93f);
+	const FLinearColor ZMPTeal = ZMHex(TEXT("0E8E9E")).CopyWithNewOpacity(0.93f);
+	const FLinearColor ZMPViolet = ZMHex(TEXT("6236D6")).CopyWithNewOpacity(0.95f);
+	const FLinearColor ZMTLabel = ZMHex(TEXT("BFE9FF"));
+	const FLinearColor ZMTSoft = ZMHex(TEXT("DCE6FF"));
 
-	FLinearColor Lighten(const FLinearColor& C, float T) { return FMath::Lerp(C, FLinearColor::White, T).CopyWithNewOpacity(C.A); }
-	FLinearColor Darken(const FLinearColor& C, float T) { return FMath::Lerp(C, FLinearColor::Black, T).CopyWithNewOpacity(C.A); }
+	FLinearColor ZMLighten(const FLinearColor& C, float T) { return FMath::Lerp(C, FLinearColor::White, T).CopyWithNewOpacity(C.A); }
+	FLinearColor ZMDarken(const FLinearColor& C, float T) { return FMath::Lerp(C, FLinearColor::Black, T).CopyWithNewOpacity(C.A); }
 
-	const TCHAR* ScreenName(EZoogiScreen S)
+	const TCHAR* ZMScreenName(EZoogiScreen S)
 	{
 		switch (S)
 		{
@@ -85,11 +85,11 @@ namespace
 		return TEXT("?");
 	}
 
-	bool DevFlag() { static const bool b = FParse::Param(FCommandLine::Get(), TEXT("ZoogiDev")); return b; }
+	bool ZMDevFlag() { static const bool b = FParse::Param(FCommandLine::Get(), TEXT("ZoogiDev")); return b; }
 
 	// Collection art (game art from the approved mockups; no Wolfgang).
-	struct FArtEntry { const TCHAR* Art; const TCHAR* Label; const TCHAR* RosterId; };
-	const FArtEntry GCollection[] = {
+	struct ZMFArtEntry { const TCHAR* Art; const TCHAR* Label; const TCHAR* RosterId; };
+	const ZMFArtEntry ZMGCollection[] = {
 		{ TEXT("blue"), TEXT("BLUE"), TEXT("blue") }, { TEXT("bolt"), TEXT("BOLT"), nullptr }, { TEXT("luma"), TEXT("LUMA"), TEXT("luma") },
 		{ TEXT("vex"), TEXT("VEX"), TEXT("vex") }, { TEXT("sera"), TEXT("SERA"), TEXT("sera") }, { TEXT("tavi"), TEXT("TAVI"), TEXT("tavi") },
 		{ TEXT("nightshade"), TEXT("NIGHTSHADE"), nullptr }, { TEXT("pinpoint"), TEXT("PINPOINT"), nullptr }, { TEXT("lars"), TEXT("LARS"), nullptr },
@@ -98,7 +98,7 @@ namespace
 		{ TEXT("coralie"), TEXT("CORALIE"), nullptr }, { TEXT("dark_zoogy"), TEXT("DARK ZOOGY"), TEXT("darkzoogy") }, { TEXT("master_orin"), TEXT("MASTER ORIN"), TEXT("orin") },
 	};
 
-	FString ArenaArt(int32 A)
+	FString ZMArenaArt(int32 A)
 	{
 		switch ((EZoogiArena)A)
 		{
@@ -109,19 +109,19 @@ namespace
 		default: return FString();
 		}
 	}
-	FLinearColor ArenaTint(int32 A)
+	FLinearColor ZMArenaTint(int32 A)
 	{
 		switch ((EZoogiArena)A)
 		{
-		case EZoogiArena::Arabian: return Hex(TEXT("C9862E"));
-		case EZoogiArena::Tomb: return Hex(TEXT("B08A3A"));
-		case EZoogiArena::Neon: return Hex(TEXT("3A2BC9"));
-		case EZoogiArena::Training: return Hex(TEXT("9FD8A0"));
+		case EZoogiArena::Arabian: return ZMHex(TEXT("C9862E"));
+		case EZoogiArena::Tomb: return ZMHex(TEXT("B08A3A"));
+		case EZoogiArena::Neon: return ZMHex(TEXT("3A2BC9"));
+		case EZoogiArena::Training: return ZMHex(TEXT("9FD8A0"));
 		default: return FLinearColor::White;
 		}
 	}
 
-	FString Upper(const FString& S) { return S.ToUpper(); }
+	FString ZMUpper(const FString& S) { return S.ToUpper(); }
 }
 
 // ---------------------------------------------------------------------------------------------------------- lifecycle
@@ -172,14 +172,14 @@ void UZoogiMenuRoot::Push(EZoogiScreen S)
 {
 	if (Top() == S) return;
 	Stack.Add(S);
-	UE_LOG(LogZoogi, Log, TEXT("MENU push %s (depth %d)"), ScreenName(S), Stack.Num());
+	UE_LOG(LogZoogi, Log, TEXT("MENU push %s (depth %d)"), ZMScreenName(S), Stack.Num());
 	bDirty = true;
 }
 
 void UZoogiMenuRoot::Pop()
 {
 	if (Stack.Num() > 1) Stack.Pop();
-	UE_LOG(LogZoogi, Log, TEXT("MENU back -> %s"), ScreenName(Top()));
+	UE_LOG(LogZoogi, Log, TEXT("MENU back -> %s"), ZMScreenName(Top()));
 	bDirty = true;
 }
 
@@ -262,14 +262,14 @@ FString UZoogiMenuRoot::PortraitFor(FName ZoogiId) const
 UWidget* UZoogiMenuRoot::Place(UWidget* W, float X, float Y, float Wd, float Ht, EAnchor A)
 {
 	if (!W || !Canvas) return W;
-	float DX = X * K;
-	if (A == EAnchor::Center) DX = X * K - 1200.f + DesignW * 0.5f;
-	else if (A == EAnchor::Right) DX = X * K - 2400.f + DesignW;
+	float DX = X * ZMK;
+	if (A == EAnchor::Center) DX = X * ZMK - 1200.f + DesignW * 0.5f;
+	else if (A == EAnchor::Right) DX = X * ZMK - 2400.f + DesignW;
 	if (UCanvasPanelSlot* S = Canvas->AddChildToCanvas(W))
 	{
 		S->SetAnchors(FAnchors(0.f, 0.f));
-		S->SetPosition(FVector2D(DX, Y * K));
-		S->SetSize(FVector2D(Wd * K, Ht * K));
+		S->SetPosition(FVector2D(DX, Y * ZMK));
+		S->SetSize(FVector2D(Wd * ZMK, Ht * ZMK));
 	}
 	return W;
 }
@@ -303,14 +303,14 @@ UWidget* UZoogiMenuRoot::Panel(float X, float Y, float Wd, float Ht, const FLine
 	UBorder* Sheen = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
 	Sheen->SetBrush(ZoogiUIStyle::RoundBrush(FLinearColor(1.f, 1.f, 1.f, 0.06f), FLinearColor::Transparent, 0.f, 20.f));
 	USizeBox* SB = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
-	SB->SetHeightOverride(FMath::Min(40.f, Ht * K * 0.12f));
+	SB->SetHeightOverride(FMath::Min(40.f, Ht * ZMK * 0.12f));
 	SB->AddChild(Sheen);
 	B->SetContent(SB);
 	B->SetVisibility(ESlateVisibility::HitTestInvisible);
 	return Place(B, X, Y, Wd, Ht, A);
 }
 
-static void CropBrush(FSlateBrush& B, UTexture2D* Tex, float W, float H)
+static void ZMCropBrush(FSlateBrush& B, UTexture2D* Tex, float W, float H)
 {
 	if (!Tex || W <= 0.f || H <= 0.f) return;
 	const float TA = (float)Tex->GetSizeX() / FMath::Max(1, Tex->GetSizeY());
@@ -319,7 +319,7 @@ static void CropBrush(FSlateBrush& B, UTexture2D* Tex, float W, float H)
 	else { const float U = SA / TA; B.SetUVRegion(FBox2f(FVector2f((1.f - U) * 0.5f, 0.f), FVector2f((1.f + U) * 0.5f, 1.f))); }
 }
 
-static FSlateBrush ImgBrush(UTexture2D* Tex, float W, float H, float Radius)
+static FSlateBrush ZMImgBrush(UTexture2D* Tex, float W, float H, float Radius)
 {
 	FSlateBrush B;
 	B.SetResourceObject(Tex);
@@ -330,7 +330,7 @@ static FSlateBrush ImgBrush(UTexture2D* Tex, float W, float H, float Radius)
 		B.OutlineSettings = FSlateBrushOutlineSettings(FVector4(Radius, Radius, Radius, Radius), FSlateColor(FLinearColor::Transparent), 0.f);
 		B.OutlineSettings.RoundingType = ESlateBrushRoundingType::FixedRadius;
 	}
-	CropBrush(B, Tex, W, H);
+	ZMCropBrush(B, Tex, W, H);
 	return B;
 }
 
@@ -338,7 +338,7 @@ UWidget* UZoogiMenuRoot::Image(UTexture2D* Tex, float X, float Y, float Wd, floa
 {
 	if (!Tex) return nullptr;
 	UImage* I = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
-	I->SetBrush(ImgBrush(Tex, Wd * K, Ht * K, Radius));
+	I->SetBrush(ZMImgBrush(Tex, Wd * ZMK, Ht * ZMK, Radius));
 	I->SetColorAndOpacity(Tint);
 	I->SetVisibility(ESlateVisibility::HitTestInvisible);
 	return Place(I, X, Y, Wd, Ht, A);
@@ -348,14 +348,14 @@ UWidget* UZoogiMenuRoot::Bar(float X, float Y, float Wd, float Ht, float Frac, c
 {
 	UOverlay* O = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass());
 	UBorder* Track = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
-	Track->SetBrush(ZoogiUIStyle::RoundBrush(ZoogiUIStyle::Track, ZoogiUIStyle::Outline, 3.f, Ht * K * 0.5f));
+	Track->SetBrush(ZoogiUIStyle::RoundBrush(ZoogiUIStyle::Track, ZoogiUIStyle::Outline, 3.f, Ht * ZMK * 0.5f));
 	if (UOverlaySlot* S = O->AddChildToOverlay(Track)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); }
 	if (Frac > 0.001f)
 	{
 		USizeBox* FillBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
-		FillBox->SetWidthOverride(FMath::Max(Ht * K, (Wd * K - 6.f) * FMath::Clamp(Frac, 0.f, 1.f)));
+		FillBox->SetWidthOverride(FMath::Max(Ht * ZMK, (Wd * ZMK - 6.f) * FMath::Clamp(Frac, 0.f, 1.f)));
 		UBorder* Fill = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
-		Fill->SetBrush(ZoogiUIStyle::RoundBrush(FMath::Lerp(A, B, 0.5f), FLinearColor::Transparent, 0.f, Ht * K * 0.5f));
+		Fill->SetBrush(ZoogiUIStyle::RoundBrush(FMath::Lerp(A, B, 0.5f), FLinearColor::Transparent, 0.f, Ht * ZMK * 0.5f));
 		FillBox->AddChild(Fill);
 		if (UOverlaySlot* S = O->AddChildToOverlay(FillBox)) { S->SetHorizontalAlignment(HAlign_Left); S->SetVerticalAlignment(VAlign_Fill); S->SetPadding(FMargin(3.f)); }
 	}
@@ -376,16 +376,16 @@ UZoogiMenuRootClick* UZoogiMenuRoot::BindClick(UButton* B, TFunction<void()> Fn)
 UWidget* UZoogiMenuRoot::Btn(const FString& Label, const FLinearColor& FillIn, TFunction<void()> Fn, float X, float Y, float Wd, float Ht, int32 FontSize,
 	bool bSelected, bool bDisabled, EAnchor A, const FString& Icon, const FString& Sub)
 {
-	const FLinearColor Fill = bDisabled ? CDisabled : FillIn;
-	const float R = FMath::Min(26.f, Ht * K * 0.3f);
+	const FLinearColor Fill = bDisabled ? ZMCDisabled : FillIn;
+	const float R = FMath::Min(26.f, Ht * ZMK * 0.3f);
 	UButton* B = WidgetTree->ConstructWidget<UZoogiButton>(UZoogiButton::StaticClass());
 	FButtonStyle St;
-	const FLinearColor Edge = bSelected ? CCyan : ZoogiUIStyle::Outline;
+	const FLinearColor Edge = bSelected ? ZMCCyan : ZoogiUIStyle::Outline;
 	const float EdgeW = bSelected ? 7.f : 5.f;
 	St.SetNormal(ZoogiUIStyle::RoundBrush(Fill, Edge, EdgeW, R));
-	St.SetHovered(ZoogiUIStyle::RoundBrush(Lighten(Fill, bDisabled ? 0.f : 0.12f), Edge, EdgeW, R));
-	St.SetPressed(ZoogiUIStyle::RoundBrush(Darken(Fill, 0.2f), FLinearColor::White, EdgeW, R));
-	St.SetDisabled(ZoogiUIStyle::RoundBrush(CDisabled, ZoogiUIStyle::Outline, 5.f, R));
+	St.SetHovered(ZoogiUIStyle::RoundBrush(ZMLighten(Fill, bDisabled ? 0.f : 0.12f), Edge, EdgeW, R));
+	St.SetPressed(ZoogiUIStyle::RoundBrush(ZMDarken(Fill, 0.2f), FLinearColor::White, EdgeW, R));
+	St.SetDisabled(ZoogiUIStyle::RoundBrush(ZMCDisabled, ZoogiUIStyle::Outline, 5.f, R));
 	St.SetNormalPadding(FMargin(8.f, 6.f));
 	St.SetPressedPadding(FMargin(8.f, 10.f, 8.f, 2.f));
 	B->SetStyle(St);
@@ -397,7 +397,7 @@ UWidget* UZoogiMenuRoot::Btn(const FString& Label, const FLinearColor& FillIn, T
 	UBorder* Gloss = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
 	Gloss->SetBrush(ZoogiUIStyle::RoundBrush(FLinearColor(1.f, 1.f, 1.f, bDisabled ? 0.06f : 0.22f), FLinearColor::Transparent, 0.f, R * 0.7f));
 	USizeBox* GB = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
-	GB->SetHeightOverride(FMath::Min(34.f, Ht * K * 0.22f));
+	GB->SetHeightOverride(FMath::Min(34.f, Ht * ZMK * 0.22f));
 	GB->AddChild(Gloss);
 	if (UOverlaySlot* S = O->AddChildToOverlay(GB)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Top); S->SetPadding(FMargin(10.f, 0.f)); }
 
@@ -408,7 +408,7 @@ UWidget* UZoogiMenuRoot::Btn(const FString& Label, const FLinearColor& FillIn, T
 	{
 		const float IS = FontSize * 1.5f;
 		UImage* I = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
-		I->SetBrush(ImgBrush(IT, IS, IS, 0.f));
+		I->SetBrush(ZMImgBrush(IT, IS, IS, 0.f));
 		if (UHorizontalBoxSlot* HS = H->AddChildToHorizontalBox(I)) { HS->SetVerticalAlignment(VAlign_Center); HS->SetPadding(FMargin(0.f, 0.f, Label.IsEmpty() ? 0.f : 14.f, 0.f)); }
 	}
 	if (!Label.IsEmpty())
@@ -434,12 +434,12 @@ UWidget* UZoogiMenuRoot::ImgTile(UTexture2D* Tex, const FString& Caption, TFunct
 	const FLinearColor& Frame, bool bCaptionBottomLeft, int32 CaptionSize, const FLinearColor& ImgTint)
 {
 	UButton* B = WidgetTree->ConstructWidget<UZoogiButton>(UZoogiButton::StaticClass());
-	const FLinearColor Edge = bSelected ? CCyan : ZoogiUIStyle::Outline;
+	const FLinearColor Edge = bSelected ? ZMCCyan : ZoogiUIStyle::Outline;
 	const float EdgeW = bSelected ? 8.f : 5.f;
 	FButtonStyle St;
 	St.SetNormal(ZoogiUIStyle::RoundBrush(Frame, Edge, EdgeW, 20.f));
-	St.SetHovered(ZoogiUIStyle::RoundBrush(Lighten(Frame, 0.15f), Edge, EdgeW, 20.f));
-	St.SetPressed(ZoogiUIStyle::RoundBrush(Darken(Frame, 0.2f), FLinearColor::White, EdgeW, 20.f));
+	St.SetHovered(ZoogiUIStyle::RoundBrush(ZMLighten(Frame, 0.15f), Edge, EdgeW, 20.f));
+	St.SetPressed(ZoogiUIStyle::RoundBrush(ZMDarken(Frame, 0.2f), FLinearColor::White, EdgeW, 20.f));
 	St.SetNormalPadding(FMargin(EdgeW + 1.f));
 	St.SetPressedPadding(FMargin(EdgeW + 1.f, EdgeW + 4.f, EdgeW + 1.f, EdgeW - 2.f));
 	B->SetStyle(St);
@@ -449,15 +449,15 @@ UWidget* UZoogiMenuRoot::ImgTile(UTexture2D* Tex, const FString& Caption, TFunct
 	if (Tex)
 	{
 		UImage* I = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
-		I->SetBrush(ImgBrush(Tex, Wd * K - 18.f, Ht * K - 18.f, 14.f));
+		I->SetBrush(ZMImgBrush(Tex, Wd * ZMK - 18.f, Ht * ZMK - 18.f, 14.f));
 		I->SetColorAndOpacity(bLocked ? ImgTint * FLinearColor(0.38f, 0.40f, 0.48f, 1.f) : ImgTint);
 		if (UOverlaySlot* S = O->AddChildToOverlay(I)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); }
 	}
 	if (bLocked)
 	{
 		UImage* L = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
-		const float LS = FMath::Min(Wd, Ht) * K * 0.42f;
-		L->SetBrush(ImgBrush(Art(TEXT("icon_lock")), LS, LS, 0.f));
+		const float LS = FMath::Min(Wd, Ht) * ZMK * 0.42f;
+		L->SetBrush(ZMImgBrush(Art(TEXT("icon_lock")), LS, LS, 0.f));
 		if (UOverlaySlot* S = O->AddChildToOverlay(L)) { S->SetHorizontalAlignment(HAlign_Center); S->SetVerticalAlignment(VAlign_Center); }
 	}
 	if (!Caption.IsEmpty())
@@ -485,7 +485,7 @@ UWidget* UZoogiMenuRoot::Tabs(const TArray<FString>& Names, int32& Current, floa
 		const bool bSel = Current == i;
 		const float TX = bVertical ? X : X + i * (TabW + Gap);
 		const float TY = bVertical ? Y + i * (52.f + Gap) : Y;
-		Last = Btn(Names[i], bSel ? (bVertical ? CViolet : CTeal) : CNavy, [this, Cur, i]() { *Cur = i; bDirty = true; }, TX, TY, TabW, 52.f, 28, bSel);
+		Last = Btn(Names[i], bSel ? (bVertical ? ZMCViolet : ZMCTeal) : ZMCNavy, [this, Cur, i]() { *Cur = i; bDirty = true; }, TX, TY, TabW, 52.f, 28, bSel);
 	}
 	return Last;
 }
@@ -563,14 +563,14 @@ void UZoogiMenuRoot::BuildTopBar(const FString& Title)
 {
 	if (!Title.IsEmpty())
 	{
-		Btn(FString(), CNavy, [this]() { HandleBack(); }, 55.f, 20.f, 80.f, 52.f, 30, false, false, EAnchor::Left, TEXT("icon_back"));
+		Btn(FString(), ZMCNavy, [this]() { HandleBack(); }, 55.f, 20.f, 80.f, 52.f, 30, false, false, EAnchor::Left, TEXT("icon_back"));
 		Label(Title, 152.f, 22.f, 400.f, 50.f, 64, FLinearColor::White, EAnchor::Left);
 	}
 	const UZoogiPowerUnlockSubsystem* U = UZoogiPowerUnlockSubsystem::Get(this);
 	auto Pill = [this](float X, float W, const TCHAR* Icon, const FString& Val)
 	{
 		UBorder* P = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
-		P->SetBrush(ZoogiUIStyle::RoundBrush(Hex(TEXT("0B1E5C")).CopyWithNewOpacity(0.92f), ZoogiUIStyle::Outline, 4.f, 40.f));
+		P->SetBrush(ZoogiUIStyle::RoundBrush(ZMHex(TEXT("0B1E5C")).CopyWithNewOpacity(0.92f), ZoogiUIStyle::Outline, 4.f, 40.f));
 		P->SetVisibility(ESlateVisibility::HitTestInvisible);
 		Place(P, X, 25.f, W, 34.f, EAnchor::Right);
 		Image(Art(Icon), X + 6.f, 30.f, 24.f, 24.f, FLinearColor::White, EAnchor::Right);
@@ -578,7 +578,7 @@ void UZoogiMenuRoot::BuildTopBar(const FString& Title)
 	};
 	Pill(670.f, 90.f, TEXT("icon_coin"), TEXT("12,480")); // placeholder coins
 	Pill(812.f, 70.f, TEXT("icon_gem"), FString::FromInt(U ? U->GetGems() : 340)); // placeholder gems
-	Btn(FString(), CNavy, [this]() { if (Top() != EZoogiScreen::Settings) Push(EZoogiScreen::Settings); }, 898.f, 20.f, 72.f, 52.f, 30, false, false, EAnchor::Right, TEXT("icon_gear"));
+	Btn(FString(), ZMCNavy, [this]() { if (Top() != EZoogiScreen::Settings) Push(EZoogiScreen::Settings); }, 898.f, 20.f, 72.f, 52.f, 30, false, false, EAnchor::Right, TEXT("icon_gear"));
 }
 
 // ---- HOME
@@ -598,47 +598,47 @@ void UZoogiMenuRoot::BuildHome()
 		Place(Glow, 428.f, 78.f, 220.f, 220.f);
 		Image(Art(PortraitFor(D.Id)), 446.f, 96.f, 184.f, 184.f, FLinearColor::White, EAnchor::Center, 210.f);
 	}
-	Btn(FString(), CNavy, [this]() { Fire("ZoogiPrev", 0); }, 274.f, 188.f, 52.f, 62.f, 30, false, false, EAnchor::Center, TEXT("icon_back"));
-	Btn(FString(), CNavy, [this]() { Fire("ZoogiNext", 0); }, 700.f, 188.f, 52.f, 62.f, 30, false, false, EAnchor::Center, TEXT("icon_play"));
+	Btn(FString(), ZMCNavy, [this]() { Fire("ZoogiPrev", 0); }, 274.f, 188.f, 52.f, 62.f, 30, false, false, EAnchor::Center, TEXT("icon_back"));
+	Btn(FString(), ZMCNavy, [this]() { Fire("ZoogiNext", 0); }, 700.f, 188.f, 52.f, 62.f, 30, false, false, EAnchor::Center, TEXT("icon_play"));
 	{
-		Panel(436.f, 346.f, 212.f, 42.f, PViolet);
-		Label(Upper(D.Name), 446.f, 354.f, 90.f, 30.f, 40, FLinearColor::White);
+		Panel(436.f, 346.f, 212.f, 42.f, ZMPViolet);
+		Label(ZMUpper(D.Name), 446.f, 354.f, 90.f, 30.f, 40, FLinearColor::White);
 		const UZoogiPowerUnlockSubsystem* U = UZoogiPowerUnlockSubsystem::Get(this);
 		const FName Eq = U ? U->GetEquipped(D.Id) : NAME_None;
 		const FZoogiPowerDef* PD = U && !Eq.IsNone() ? U->FindPower(Eq) : nullptr;
-		const FString Chip = PD ? FString::Printf(TEXT("%s %d - EQUIPPED"), *PD->Type.ToString().ToUpper(), PD->Tier) : Upper(D.Ability);
+		const FString Chip = PD ? FString::Printf(TEXT("%s %d - EQUIPPED"), *PD->Type.ToString().ToUpper(), PD->Tier) : ZMUpper(D.Ability);
 		UBorder* C = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
-		C->SetBrush(ZoogiUIStyle::RoundBrush(Hex(TEXT("2A1680")), FLinearColor::Transparent, 0.f, 20.f));
+		C->SetBrush(ZoogiUIStyle::RoundBrush(ZMHex(TEXT("2A1680")), FLinearColor::Transparent, 0.f, 20.f));
 		C->SetHorizontalAlignment(HAlign_Center); C->SetVerticalAlignment(VAlign_Center);
-		C->SetContent(Txt(Chip, 18, Hex(TEXT("BDF4FF")), 2.f));
+		C->SetContent(Txt(Chip, 18, ZMHex(TEXT("BDF4FF")), 2.f));
 		C->SetVisibility(ESlateVisibility::HitTestInvisible);
 		Place(C, 520.f, 357.f, 120.f, 22.f);
 	}
-	Btn(TEXT("STORY"), CTeal, [this]() { Push(EZoogiScreen::Story); }, 108.f, 202.f, 150.f, 52.f, 36);
-	Btn(TEXT("POWERS"), CViolet, [this]() { Push(EZoogiScreen::Powers); }, 108.f, 262.f, 150.f, 52.f, 36);
-	Btn(TEXT("COLLECTION"), CNavy, [this]() { Push(EZoogiScreen::Collection); }, 108.f, 322.f, 150.f, 52.f, 34);
-	Panel(106.f, 386.f, 494.f, 64.f, PNavy);
+	Btn(TEXT("STORY"), ZMCTeal, [this]() { Push(EZoogiScreen::Story); }, 108.f, 202.f, 150.f, 52.f, 36);
+	Btn(TEXT("POWERS"), ZMCViolet, [this]() { Push(EZoogiScreen::Powers); }, 108.f, 262.f, 150.f, 52.f, 36);
+	Btn(TEXT("COLLECTION"), ZMCNavy, [this]() { Push(EZoogiScreen::Collection); }, 108.f, 322.f, 150.f, 52.f, 34);
+	Panel(106.f, 386.f, 494.f, 64.f, ZMPNavy);
 	const TCHAR* Dock[] = { TEXT("EVENTS"), TEXT("SHOP"), TEXT("SOCIAL"), TEXT("CREATE"), TEXT("RADIO") };
 	const EZoogiScreen DockS[] = { EZoogiScreen::Events, EZoogiScreen::Shop, EZoogiScreen::Social, EZoogiScreen::Create, EZoogiScreen::Home };
 	for (int32 i = 0; i < 5; ++i)
 	{
 		const EZoogiScreen S = DockS[i];
-		Btn(Dock[i], CNavy, [this, S]() { if (S == EZoogiScreen::Home) ShowComingSoon(TEXT("Radio: the weekly radio player isn't in the Unreal build yet.")); else Push(S); },
+		Btn(Dock[i], ZMCNavy, [this, S]() { if (S == EZoogiScreen::Home) ShowComingSoon(TEXT("Radio: the weekly radio player isn't in the Unreal build yet.")); else Push(S); },
 			114.f + i * 97.f, 392.f, 91.f, 52.f, 26);
 	}
-	Panel(768.f, 86.f, 152.f, 106.f, PTeal);
+	Panel(768.f, 86.f, 152.f, 106.f, ZMPTeal);
 	Label(TEXT("DAILY BONUS"), 778.f, 94.f, 140.f, 16.f, 24, FLinearColor::White);
-	Label(TEXT("Day 4 streak - claim 250"), 778.f, 112.f, 140.f, 16.f, 20, TSoft);
-	Btn(TEXT("CLAIM"), CGold, [this]() { ShowComingSoon(TEXT("Daily bonus needs the progression backend.")); }, 778.f, 134.f, 132.f, 52.f, 30);
-	Panel(768.f, 205.f, 152.f, 88.f, PNavy);
+	Label(TEXT("Day 4 streak - claim 250"), 778.f, 112.f, 140.f, 16.f, 20, ZMTSoft);
+	Btn(TEXT("CLAIM"), ZMCGold, [this]() { ShowComingSoon(TEXT("Daily bonus needs the progression backend.")); }, 778.f, 134.f, 132.f, 52.f, 30);
+	Panel(768.f, 205.f, 152.f, 88.f, ZMPNavy);
 	Label(TEXT("BATTLE PASS"), 778.f, 213.f, 140.f, 16.f, 24, FLinearColor::White);
-	Label(TEXT("Tier 12 / 40"), 778.f, 231.f, 140.f, 16.f, 22, TSoft);
+	Label(TEXT("Tier 12 / 40"), 778.f, 231.f, 140.f, 16.f, 22, ZMTSoft);
 	Bar(778.f, 250.f, 132.f, 9.f, 12.f / 40.f, ZoogiUIStyle::EnergyA, ZoogiUIStyle::CardEnergyA);
-	Label(TEXT("Next: Void trail skin"), 778.f, 266.f, 140.f, 16.f, 18, TSoft);
-	Btn(TEXT("PLAY"), CGold, [this]() { Push(EZoogiScreen::Play); }, 726.f, 320.f, 194.f, 120.f, 72, false, false, EAnchor::Center, TEXT("icon_play"));
+	Label(TEXT("Next: Void trail skin"), 778.f, 266.f, 140.f, 16.f, 18, ZMTSoft);
+	Btn(TEXT("PLAY"), ZMCGold, [this]() { Push(EZoogiScreen::Play); }, 726.f, 320.f, 194.f, 120.f, 72, false, false, EAnchor::Center, TEXT("icon_play"));
 	const FString Last = FString::Printf(TEXT("Last: %s - %s - %s"), G->bComboMode ? TEXT("2v2 Combo") : TEXT("Classic"),
 		*ZoogiUtil::ArenaName(G->MenuArena), CurrentPlayMode() == 1 ? TEXT("local") : TEXT("vs CPU"));
-	Label(Last, 604.f, 400.f, 118.f, 44.f, 18, TSoft, EAnchor::Center, 2, true);
+	Label(Last, 604.f, 400.f, 118.f, 44.f, 18, ZMTSoft, EAnchor::Center, 2, true);
 }
 
 // ---- PLAY setup
@@ -686,11 +686,11 @@ void UZoogiMenuRoot::BuildPlay()
 	AZoogiGameMode* G = GM();
 	if (!G) return;
 	BuildTopBar(TEXT("PLAY"));
-	Panel(106.f, 86.f, 240.f, 296.f, PNavy);
-	Label(TEXT("1 - MODE"), 118.f, 94.f, 200.f, 14.f, 22, TLabel);
+	Panel(106.f, 86.f, 240.f, 296.f, ZMPNavy);
+	Label(TEXT("1 - MODE"), 118.f, 94.f, 200.f, 14.f, 22, ZMTLabel);
 	const TCHAR* Modes[] = { TEXT("CLASSIC"), TEXT("LOCAL"), TEXT("PRACTICE"), TEXT("2v2 COMBO"), TEXT("ONLINE") };
 	const TCHAR* Subs[] = { TEXT("vs CPU"), TEXT("2-4 on one device"), TEXT("coming soon"), TEXT("teams"), TEXT("coming soon") };
-	const FLinearColor MC[] = { CGold, CTeal, CNavy, CViolet, CNavy };
+	const FLinearColor MC[] = { ZMCGold, ZMCTeal, ZMCNavy, ZMCViolet, ZMCNavy };
 	const int32 Cur = CurrentPlayMode();
 	for (int32 m = 0; m < 5; ++m)
 	{
@@ -700,26 +700,26 @@ void UZoogiMenuRoot::BuildPlay()
 		Label(Subs[m], 236.f, Y + 19.f, 90.f, 18.f, 17, FLinearColor::White, EAnchor::Center, 2);
 	}
 	// 2 - arena: all 8 arenas, 4 x 2 (the 4 with art match the mockup)
-	Panel(358.f, 86.f, 308.f, 182.f, PTeal);
-	Label(TEXT("2 - ARENA"), 370.f, 94.f, 200.f, 14.f, 22, TLabel);
+	Panel(358.f, 86.f, 308.f, 182.f, ZMPTeal);
+	Label(TEXT("2 - ARENA"), 370.f, 94.f, 200.f, 14.f, 22, ZMTLabel);
 	for (int32 a = 0; a < (int32)EZoogiArena::MAX && a < 8; ++a)
 	{
 		const float X = 368.f + (a % 4) * 73.f, Y = 110.f + (a / 4) * 78.f;
-		const FString A = ArenaArt(a);
+		const FString A = ZMArenaArt(a);
 		static const TCHAR* Short[] = { TEXT("MEADOW"), TEXT("FROZEN RING"), TEXT("VOLCANIC"), TEXT("COSMIC"), TEXT("ARABIAN"), TEXT("TOMB"), TEXT("NIGHT CIRCUIT"), TEXT("TRAINING") };
 		const FString Name = a < 8 ? FString(Short[a]) : ZoogiUtil::ArenaName((EZoogiArena)a).ToUpper();
 		ImgTile(A.IsEmpty() ? nullptr : Art(A), Name, [this, a]() { Fire("Arena", a); }, X, Y, 70.f, 72.f, G->MenuArena == (EZoogiArena)a, false,
-			A.IsEmpty() ? ArenaTint(a) : Hex(TEXT("0B1E5C")), true, 16, A.IsEmpty() ? FLinearColor::White : ArenaTint(a));
+			A.IsEmpty() ? ZMArenaTint(a) : ZMHex(TEXT("0B1E5C")), true, 16, A.IsEmpty() ? FLinearColor::White : ZMArenaTint(a));
 	}
-	Panel(358.f, 276.f, 308.f, 106.f, PNavy);
-	Label(TEXT("ROUNDS & RULES"), 372.f, 284.f, 200.f, 14.f, 24, TLabel);
-	Btn(TEXT("-"), CNavy, [this, G]() { Fire("Rounds", G->MenuRounds - 1); }, 370.f, 308.f, 52.f, 52.f, 44);
+	Panel(358.f, 276.f, 308.f, 106.f, ZMPNavy);
+	Label(TEXT("ROUNDS & RULES"), 372.f, 284.f, 200.f, 14.f, 24, ZMTLabel);
+	Btn(TEXT("-"), ZMCNavy, [this, G]() { Fire("Rounds", G->MenuRounds - 1); }, 370.f, 308.f, 52.f, 52.f, 44);
 	Label(FString::FromInt(G->MenuRounds), 422.f, 318.f, 40.f, 36.f, 52, FLinearColor::White, EAnchor::Center, 1);
-	Btn(TEXT("+"), CNavy, [this, G]() { Fire("Rounds", G->MenuRounds + 1); }, 462.f, 308.f, 52.f, 52.f, 44);
-	Btn(TEXT("CPU: NORMAL"), CTeal, [this]() { ShowComingSoon(TEXT("CPU difficulty: the CPU has one level today (NORMAL).")); }, 526.f, 308.f, 130.f, 52.f, 28);
+	Btn(TEXT("+"), ZMCNavy, [this, G]() { Fire("Rounds", G->MenuRounds + 1); }, 462.f, 308.f, 52.f, 52.f, 44);
+	Btn(TEXT("CPU: NORMAL"), ZMCTeal, [this]() { ShowComingSoon(TEXT("CPU difficulty: the CPU has one level today (NORMAL).")); }, 526.f, 308.f, 130.f, 52.f, 28);
 	// 3 - zoogis (P1-P4): card = pick a Zoogi, tag = HUMAN / CPU / OFF
-	Panel(678.f, 86.f, 244.f, 252.f, PViolet);
-	Label(TEXT("3 - ZOOGIS"), 690.f, 94.f, 200.f, 14.f, 22, TLabel);
+	Panel(678.f, 86.f, 244.f, 252.f, ZMPViolet);
+	Label(TEXT("3 - ZOOGIS"), 690.f, 94.f, 200.f, 14.f, 22, ZMTLabel);
 	const TArray<FZoogiDef>& Roster = ZoogiUtil::Roster();
 	for (int32 i = 0; i < 4 && i < G->MenuPlayers.Num(); ++i)
 	{
@@ -727,13 +727,13 @@ void UZoogiMenuRoot::BuildPlay()
 		const bool bOn = i < G->MenuNumPlayers;
 		const FZoogiDef& D = Roster[G->MenuPlayers[i].ZoogiIndex % Roster.Num()];
 		ImgTile(Art(PortraitFor(D.Id)), FString(), [this, i, bOn]() { if (bOn) { SelectSlot = i; PendingZoogi = -1; Push(EZoogiScreen::ZoogiSelect); } else CycleSlot(i); },
-			X, Y, 108.f, 56.f, false, false, bOn ? Lighten(ZoogiUtil::PlayerColor(i), 0.35f) : CDisabled, true, 20, bOn ? FLinearColor::White : FLinearColor(0.25f, 0.28f, 0.42f, 1.f));
+			X, Y, 108.f, 56.f, false, false, bOn ? ZMLighten(ZoogiUtil::PlayerColor(i), 0.35f) : ZMCDisabled, true, 20, bOn ? FLinearColor::White : FLinearColor(0.25f, 0.28f, 0.42f, 1.f));
 		const FString Tag = FString::Printf(TEXT("P%d - %s"), i + 1, !bOn ? TEXT("OFF") : G->MenuPlayers[i].bCPU ? TEXT("CPU") : TEXT("HUMAN"));
-		Btn(Tag, !bOn ? CDisabled : G->MenuPlayers[i].bCPU ? CNavy : CTeal, [this, i]() { CycleSlot(i); }, X, Y + 54.f, 108.f, 52.f, 26, false, !bOn);
+		Btn(Tag, !bOn ? ZMCDisabled : G->MenuPlayers[i].bCPU ? ZMCNavy : ZMCTeal, [this, i]() { CycleSlot(i); }, X, Y + 54.f, 108.f, 52.f, 26, false, !bOn);
 	}
 	Label(TEXT("Tap a card to pick a Zoogi - tap the tag to cycle HUMAN / CPU / OFF"), 682.f, 340.f, 238.f, 22.f, 16, FLinearColor::White, EAnchor::Center, 0, true);
-	Btn(TEXT("POWERS"), CNavy, [this]() { Push(EZoogiScreen::Powers); }, 582.f, 388.f, 126.f, 52.f, 30);
-	Btn(TEXT("START"), CGold, [this]() { UE_LOG(LogZoogi, Log, TEXT("MENU START pressed (PLAY setup)")); Fire("Start", 0); }, 726.f, 362.f, 194.f, 80.f, 64, false, false, EAnchor::Center, TEXT("icon_play"));
+	Btn(TEXT("POWERS"), ZMCNavy, [this]() { Push(EZoogiScreen::Powers); }, 582.f, 388.f, 126.f, 52.f, 30);
+	Btn(TEXT("START"), ZMCGold, [this]() { UE_LOG(LogZoogi, Log, TEXT("MENU START pressed (PLAY setup)")); Fire("Start", 0); }, 726.f, 362.f, 194.f, 80.f, 64, false, false, EAnchor::Center, TEXT("icon_play"));
 }
 
 // ---- ZOOGI select
@@ -745,35 +745,35 @@ void UZoogiMenuRoot::BuildZoogiSelect()
 	const TArray<FZoogiDef>& Roster = ZoogiUtil::Roster();
 	const int32 CurIdx = G->MenuPlayers[SelectSlot].ZoogiIndex % Roster.Num();
 	if (PendingZoogi < 0) PendingZoogi = CurIdx;
-	Panel(106.f, 86.f, 478.f, 354.f, PNavy);
-	Label(FString::Printf(TEXT("ROSTER - P%d"), SelectSlot + 1), 118.f, 94.f, 200.f, 14.f, 22, TLabel);
+	Panel(106.f, 86.f, 478.f, 354.f, ZMPNavy);
+	Label(FString::Printf(TEXT("ROSTER - P%d"), SelectSlot + 1), 118.f, 94.f, 200.f, 14.f, 22, ZMTLabel);
 	for (int32 r = 0; r < Roster.Num(); ++r)
 	{
 		const float X = 118.f + (r % 4) * 115.f, Y = 112.f + (r / 4) * 107.f;
-		ImgTile(Art(PortraitFor(Roster[r].Id)), Upper(Roster[r].Name), [this, r]() { PendingZoogi = r; bDirty = true; }, X, Y, 106.f, 98.f, r == PendingZoogi, false, FLinearColor::White, true, 22);
+		ImgTile(Art(PortraitFor(Roster[r].Id)), ZMUpper(Roster[r].Name), [this, r]() { PendingZoogi = r; bDirty = true; }, X, Y, 106.f, 98.f, r == PendingZoogi, false, FLinearColor::White, true, 22);
 	}
 	const FZoogiDef& D = Roster[PendingZoogi % Roster.Num()];
-	Panel(596.f, 86.f, 326.f, 236.f, PViolet);
-	Label(Upper(D.Name), 610.f, 98.f, 190.f, 36.f, 56, FLinearColor::White);
-	Label(FString::Printf(TEXT("%s - mass %.2f"), *D.Type, D.MassRatio()), 610.f, 136.f, 190.f, 16.f, 22, TSoft);
+	Panel(596.f, 86.f, 326.f, 236.f, ZMPViolet);
+	Label(ZMUpper(D.Name), 610.f, 98.f, 190.f, 36.f, 56, FLinearColor::White);
+	Label(FString::Printf(TEXT("%s - mass %.2f"), *D.Type, D.MassRatio()), 610.f, 136.f, 190.f, 16.f, 22, ZMTSoft);
 	const TCHAR* SN[] = { TEXT("SPD"), TEXT("PWR"), TEXT("DEF"), TEXT("CTL") };
 	const int32 SV[] = { D.Speed, D.Power, D.Defense, D.Control };
 	for (int32 s = 0; s < 4; ++s)
 	{
-		Label(SN[s], 612.f, 155.f + s * 23.f, 40.f, 16.f, 22, TLabel);
+		Label(SN[s], 612.f, 155.f + s * 23.f, 40.f, 16.f, 22, ZMTLabel);
 		Bar(656.f, 157.f + s * 23.f, 134.f, 10.f, SV[s] / 100.f, ZoogiUIStyle::EnergyA, ZoogiUIStyle::CardEnergyA);
 	}
 	ImgTile(Art(PortraitFor(D.Id)), FString(), nullptr, 805.f, 98.f, 104.f, 94.f, false, false, FLinearColor::White);
 	const UZoogiPowerUnlockSubsystem* U = UZoogiPowerUnlockSubsystem::Get(this);
 	const FName Eq = U ? U->GetEquipped(D.Id) : NAME_None;
 	const FZoogiPowerDef* PD = U && !Eq.IsNone() ? U->FindPower(Eq) : nullptr;
-	Btn(FString(), CNavy, [this]() { Push(EZoogiScreen::Powers); }, 610.f, 258.f, 300.f, 54.f, 24);
+	Btn(FString(), ZMCNavy, [this]() { Push(EZoogiScreen::Powers); }, 610.f, 258.f, 300.f, 54.f, 24);
 	if (PD) Image(Art(PD->CardArt), 620.f, 263.f, 26.f, 44.f);
-	Label(PD ? FString::Printf(TEXT("POWER: %s %d - %s"), *PD->Type.ToString().ToUpper(), PD->Tier, *PD->Name.ToString().ToUpper()) : FString::Printf(TEXT("POWER: %s"), *Upper(D.Ability)),
+	Label(PD ? FString::Printf(TEXT("POWER: %s %d - %s"), *PD->Type.ToString().ToUpper(), PD->Tier, *PD->Name.ToString().ToUpper()) : FString::Printf(TEXT("POWER: %s"), *ZMUpper(D.Ability)),
 		652.f, 266.f, 250.f, 18.f, 24, FLinearColor::White);
-	Label(PD ? FString(TEXT("Equipped - change in POWERS")) : D.AbilityDesc, 652.f, 285.f, 250.f, 24.f, 16, TSoft, EAnchor::Center, 0, true);
-	Btn(TEXT("SKINS"), CNavy, [this]() { ShowComingSoon(TEXT("Skins arrive with the shop backend.")); }, 598.f, 338.f, 114.f, 52.f, 30);
-	Btn(TEXT("CONFIRM"), CGold, [this, CurIdx]()
+	Label(PD ? FString(TEXT("Equipped - change in POWERS")) : D.AbilityDesc, 652.f, 285.f, 250.f, 24.f, 16, ZMTSoft, EAnchor::Center, 0, true);
+	Btn(TEXT("SKINS"), ZMCNavy, [this]() { ShowComingSoon(TEXT("Skins arrive with the shop backend.")); }, 598.f, 338.f, 114.f, 52.f, 30);
+	Btn(TEXT("CONFIRM"), ZMCGold, [this, CurIdx]()
 	{
 		const int32 N = ZoogiUtil::Roster().Num();
 		const int32 Fwd = (PendingZoogi - CurIdx + N) % N;
@@ -794,8 +794,8 @@ void UZoogiMenuRoot::BuildPowers()
 	BuildTopBar(TEXT("POWERS"));
 	const TArray<FZoogiDef>& Roster = ZoogiUtil::Roster();
 	const FZoogiDef& Z = Roster[G->MenuPlayers[0].ZoogiIndex % Roster.Num()];
-	Panel(106.f, 86.f, 410.f, 354.f, PNavy);
-	Label(TEXT("ALL POWERS"), 118.f, 100.f, 160.f, 14.f, 24, TLabel);
+	Panel(106.f, 86.f, 410.f, 354.f, ZMPNavy);
+	Label(TEXT("ALL POWERS"), 118.f, 100.f, 160.f, 14.f, 24, ZMTLabel);
 	TArray<FString> F = { TEXT("VOID"), TEXT("ALL TYPES") };
 	Tabs(F, PowerFilter, 304.f, 90.f, 100.f, 6.f);
 	TArray<const FZoogiPowerDef*> Shown;
@@ -806,11 +806,11 @@ void UZoogiMenuRoot::BuildPowers()
 		const FZoogiPowerDef* D = Shown[i];
 		const FName Id = D->PowerId;
 		const float X = 118.f + (i % 3) * 132.f, Y = 148.f + (i / 3) * 145.f;
-		ImgTile(Art(D->CardArt), FString(), [this, Id]() { PowerSel = Id; bDirty = true; }, X, Y, 124.f, 140.f, PowerSel == Id, !U->IsUnlocked(Id), Hex(TEXT("1A1A2E")), false, 20);
+		ImgTile(Art(D->CardArt), FString(), [this, Id]() { PowerSel = Id; bDirty = true; }, X, Y, 124.f, 140.f, PowerSel == Id, !U->IsUnlocked(Id), ZMHex(TEXT("1A1A2E")), false, 20);
 		if (U->GetEquipped(Z.Id) == Id)
 		{
 			UBorder* C = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
-			C->SetBrush(ZoogiUIStyle::RoundBrush(CTeal, ZoogiUIStyle::Outline, 3.f, 14.f));
+			C->SetBrush(ZoogiUIStyle::RoundBrush(ZMCTeal, ZoogiUIStyle::Outline, 3.f, 14.f));
 			C->SetHorizontalAlignment(HAlign_Center); C->SetVerticalAlignment(VAlign_Center);
 			C->SetContent(Txt(TEXT("EQUIPPED"), 16, FLinearColor::White, 2.f));
 			C->SetVisibility(ESlateVisibility::HitTestInvisible);
@@ -821,21 +821,21 @@ void UZoogiMenuRoot::BuildPowers()
 	if (!S) return;
 	const bool bUnlocked = U->IsUnlocked(PowerSel);
 	const bool bEquipped = U->GetEquipped(Z.Id) == PowerSel;
-	Panel(528.f, 86.f, 394.f, 238.f, PViolet);
+	Panel(528.f, 86.f, 394.f, 238.f, ZMPViolet);
 	ImgTile(Art(S->CardArt), TEXT("PREVIEW"), [this]() { ShowComingSoon(TEXT("Power preview video: Animations & Powers' visuals land here.")); },
-		542.f, 98.f, 172.f, 214.f, false, !bUnlocked, Hex(TEXT("15122A")), false, 26);
-	Label(FString::Printf(TEXT("%s - TIER %d"), *S->Type.ToString().ToUpper(), S->Tier), 726.f, 100.f, 190.f, 14.f, 22, TLabel);
+		542.f, 98.f, 172.f, 214.f, false, !bUnlocked, ZMHex(TEXT("15122A")), false, 26);
+	Label(FString::Printf(TEXT("%s - TIER %d"), *S->Type.ToString().ToUpper(), S->Tier), 726.f, 100.f, 190.f, 14.f, 22, ZMTLabel);
 	Label(S->Name.ToString().ToUpper(), 726.f, 114.f, 190.f, 60.f, 44, FLinearColor::White, EAnchor::Center, 0, true);
 	{
 		UBorder* C = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
-		C->SetBrush(ZoogiUIStyle::RoundBrush(bUnlocked ? CTeal : Hex(TEXT("2A1680")), ZoogiUIStyle::Outline, 3.f, 16.f));
+		C->SetBrush(ZoogiUIStyle::RoundBrush(bUnlocked ? ZMCTeal : ZMHex(TEXT("2A1680")), ZoogiUIStyle::Outline, 3.f, 16.f));
 		C->SetHorizontalAlignment(HAlign_Center); C->SetVerticalAlignment(VAlign_Center);
-		C->SetContent(Txt(bEquipped ? TEXT("EQUIPPED") : bUnlocked ? TEXT("UNLOCKED") : TEXT("LOCKED"), 20, bUnlocked ? FLinearColor::White : CGold, 2.f));
+		C->SetContent(Txt(bEquipped ? TEXT("EQUIPPED") : bUnlocked ? TEXT("UNLOCKED") : TEXT("LOCKED"), 20, bUnlocked ? FLinearColor::White : ZMCGold, 2.f));
 		C->SetVisibility(ESlateVisibility::HitTestInvisible);
 		Place(C, 726.f, 180.f, 80.f, 20.f);
 	}
 	Label(S->Desc.ToString(), 726.f, 208.f, 188.f, 80.f, 19, FLinearColor::White, EAnchor::Center, 0, true);
-	Panel(528.f, 334.f, 186.f, 56.f, PNavy);
+	Panel(528.f, 334.f, 186.f, 56.f, ZMPNavy);
 	FText Why;
 	const bool bCan = U->CanUnlock(PowerSel, Why);
 	if (!bUnlocked)
@@ -847,13 +847,13 @@ void UZoogiMenuRoot::BuildPowers()
 	else
 	{
 		Label(U->IsUnlockAllCheat() ? TEXT("Unlocked (-ZoogiUnlockAll)") : TEXT("Requirement reached"), 538.f, 344.f, 170.f, 18.f, 20, FLinearColor::White);
-		Label(FString::Printf(TEXT("Equipped on: %s"), bEquipped ? *Upper(Z.Name) : TEXT("-")), 538.f, 364.f, 170.f, 18.f, 20, FLinearColor::White);
+		Label(FString::Printf(TEXT("Equipped on: %s"), bEquipped ? *ZMUpper(Z.Name) : TEXT("-")), 538.f, 364.f, 170.f, 18.f, 20, FLinearColor::White);
 	}
 	const FName PId = PowerSel, ZId = Z.Id;
 	if (!bUnlocked)
 	{
-		Btn(TEXT("EQUIP"), CNavy, [this]() { ShowComingSoon(TEXT("Unlock this power first.")); }, 528.f, 396.f, 186.f, 52.f, 30, false, true, EAnchor::Center, TEXT("icon_lock"));
-		Btn(TEXT("UNLOCK"), CGold, [this, U, PId]()
+		Btn(TEXT("EQUIP"), ZMCNavy, [this]() { ShowComingSoon(TEXT("Unlock this power first.")); }, 528.f, 396.f, 186.f, 52.f, 30, false, true, EAnchor::Center, TEXT("icon_lock"));
+		Btn(TEXT("UNLOCK"), ZMCGold, [this, U, PId]()
 		{
 			FText W;
 			if (!U->Unlock(PId))
@@ -865,8 +865,8 @@ void UZoogiMenuRoot::BuildPowers()
 	}
 	else
 	{
-		Btn(TEXT("EQUIP ON..."), CNavy, [this]() { SelectSlot = 0; PendingZoogi = -1; Push(EZoogiScreen::ZoogiSelect); }, 528.f, 396.f, 186.f, 52.f, 30);
-		Btn(bEquipped ? TEXT("EQUIPPED") : TEXT("EQUIP"), CTeal, [U, ZId, PId, bEquipped]() { U->SetEquipped(ZId, bEquipped ? NAME_None : PId); },
+		Btn(TEXT("EQUIP ON..."), ZMCNavy, [this]() { SelectSlot = 0; PendingZoogi = -1; Push(EZoogiScreen::ZoogiSelect); }, 528.f, 396.f, 186.f, 52.f, 30);
+		Btn(bEquipped ? TEXT("EQUIPPED") : TEXT("EQUIP"), ZMCTeal, [U, ZId, PId, bEquipped]() { U->SetEquipped(ZId, bEquipped ? NAME_None : PId); },
 			726.f, 340.f, 194.f, 100.f, 56, false, false, EAnchor::Center, bEquipped ? TEXT("icon_check") : FString());
 	}
 }
@@ -890,22 +890,22 @@ void UZoogiMenuRoot::BuildSettings()
 	BuildTopBar(TEXT("SETTINGS"));
 	TArray<FString> T = { TEXT("AUDIO"), TEXT("GRAPHICS"), TEXT("CONTROLS"), TEXT("ACCOUNT"), TEXT("ABOUT") };
 	Tabs(T, SettingsTab, 108.f, 84.f, 168.f, 12.f, true);
-	Panel(296.f, 86.f, 626.f, 354.f, PNavy);
+	Panel(296.f, 86.f, 626.f, 354.f, ZMPNavy);
 	auto Slider = [this](int32 Row, const TCHAR* Name, int32 Pct, TFunction<void(int32)> Set)
 	{
 		const float Y = 100.f + Row * 58.f;
-		Label(Name, 310.f, Y + 17.f, 90.f, 20.f, 26, TLabel);
-		Btn(TEXT("-"), CNavy, [Set, Pct]() { Set(FMath::Max(0, Pct - 10)); }, 400.f, Y, 52.f, 52.f, 40);
+		Label(Name, 310.f, Y + 17.f, 90.f, 20.f, 26, ZMTLabel);
+		Btn(TEXT("-"), ZMCNavy, [Set, Pct]() { Set(FMath::Max(0, Pct - 10)); }, 400.f, Y, 52.f, 52.f, 40);
 		Bar(462.f, Y + 18.f, 330.f, 16.f, Pct / 100.f, ZoogiUIStyle::EnergyA, ZoogiUIStyle::CardEnergyA);
-		Btn(TEXT("+"), CNavy, [Set, Pct]() { Set(FMath::Min(100, Pct + 10)); }, 802.f, Y, 52.f, 52.f, 40);
+		Btn(TEXT("+"), ZMCNavy, [Set, Pct]() { Set(FMath::Min(100, Pct + 10)); }, 802.f, Y, 52.f, 52.f, 40);
 		Label(FString::Printf(TEXT("%d%%"), Pct), 856.f, Y + 14.f, 58.f, 24.f, 34, FLinearColor::White, EAnchor::Center, 2);
 	};
 	auto Toggle = [this](float X, float Y, const TCHAR* Name, const TCHAR* Key, int32 Def)
 	{
 		const bool bOn = GetLocalSetting(Key, Def) != 0;
-		Label(Name, X, Y + 17.f, 136.f, 20.f, 24, TLabel);
+		Label(Name, X, Y + 17.f, 136.f, 20.f, 24, ZMTLabel);
 		const FString K2 = Key;
-		Btn(bOn ? TEXT("ON") : TEXT("OFF"), bOn ? CTeal : CDisabled, [this, K2, bOn]() { SetLocalSetting(*K2, bOn ? 0 : 1); }, X + 138.f, Y, 72.f, 52.f, 28);
+		Btn(bOn ? TEXT("ON") : TEXT("OFF"), bOn ? ZMCTeal : ZMCDisabled, [this, K2, bOn]() { SetLocalSetting(*K2, bOn ? 0 : 1); }, X + 138.f, Y, 72.f, 52.f, 28);
 	};
 	if (SettingsTab == 0)
 	{
@@ -916,21 +916,21 @@ void UZoogiMenuRoot::BuildSettings()
 		Toggle(310.f, 332.f, TEXT("MENU RADIO"), TEXT("MenuRadio"), 1);
 		Toggle(620.f, 332.f, TEXT("HAPTICS"), TEXT("Haptics"), 1);
 		Toggle(310.f, 386.f, TEXT("MUTE ALL"), TEXT("MuteAll"), 0);
-		Btn(TEXT("OPEN RADIO"), CNavy, [this]() { ShowComingSoon(TEXT("The radio player isn't in the Unreal build yet.")); }, 622.f, 382.f, 254.f, 52.f, 30);
+		Btn(TEXT("OPEN RADIO"), ZMCNavy, [this]() { ShowComingSoon(TEXT("The radio player isn't in the Unreal build yet.")); }, 622.f, 382.f, 254.f, 52.f, 30);
 	}
 	else if (SettingsTab == 1)
 	{
 		UGameUserSettings* S = GEngine ? GEngine->GetGameUserSettings() : nullptr;
 		const int32 Q = S ? S->GetOverallScalabilityLevel() : 3;
-		Label(TEXT("QUALITY"), 310.f, 120.f, 120.f, 20.f, 26, TLabel);
+		Label(TEXT("QUALITY"), 310.f, 120.f, 120.f, 20.f, 26, ZMTLabel);
 		const TCHAR* QN[] = { TEXT("LOW"), TEXT("MED"), TEXT("HIGH"), TEXT("EPIC") };
-		for (int32 q = 0; q < 4; ++q) Btn(QN[q], q == Q ? CTeal : CNavy, [this, S, q]() { if (S) { S->SetOverallScalabilityLevel(q); S->ApplySettings(false); } bDirty = true; }, 440.f + q * 110.f, 104.f, 100.f, 52.f, 28, q == Q);
+		for (int32 q = 0; q < 4; ++q) Btn(QN[q], q == Q ? ZMCTeal : ZMCNavy, [this, S, q]() { if (S) { S->SetOverallScalabilityLevel(q); S->ApplySettings(false); } bDirty = true; }, 440.f + q * 110.f, 104.f, 100.f, 52.f, 28, q == Q);
 		const float Fps = S ? S->GetFrameRateLimit() : 0.f;
-		Label(TEXT("FRAME RATE"), 310.f, 178.f, 120.f, 20.f, 26, TLabel);
+		Label(TEXT("FRAME RATE"), 310.f, 178.f, 120.f, 20.f, 26, ZMTLabel);
 		for (int32 f = 0; f < 2; ++f)
 		{
 			const int32 V = f == 0 ? 30 : 60;
-			Btn(FString::Printf(TEXT("%d FPS"), V), FMath::IsNearlyEqual(Fps, (float)V) ? CTeal : CNavy, [this, S, V]() { if (S) { S->SetFrameRateLimit((float)V); S->ApplySettings(false); } bDirty = true; },
+			Btn(FString::Printf(TEXT("%d FPS"), V), FMath::IsNearlyEqual(Fps, (float)V) ? ZMCTeal : ZMCNavy, [this, S, V]() { if (S) { S->SetFrameRateLimit((float)V); S->ApplySettings(false); } bDirty = true; },
 				440.f + f * 160.f, 162.f, 150.f, 52.f, 28);
 		}
 		Toggle(310.f, 230.f, TEXT("CAMERA SHAKE"), TEXT("CameraShake"), 1);
@@ -940,28 +940,28 @@ void UZoogiMenuRoot::BuildSettings()
 		Toggle(310.f, 104.f, TEXT("SWIPE AIM"), TEXT("SwipeAim"), 1);
 		Toggle(620.f, 104.f, TEXT("LEFT-HAND"), TEXT("LeftHand"), 0);
 		const int32 Sc = GetLocalSetting(TEXT("ButtonScale"), 100);
-		Label(TEXT("BUTTON SIZE"), 310.f, 178.f, 150.f, 20.f, 26, TLabel);
+		Label(TEXT("BUTTON SIZE"), 310.f, 178.f, 150.f, 20.f, 26, ZMTLabel);
 		for (int32 b = 0; b < 3; ++b)
 		{
 			const int32 V = 90 + b * 15;
-			Btn(FString::Printf(TEXT("%d%%"), V), V == Sc ? CTeal : CNavy, [this, V]() { SetLocalSetting(TEXT("ButtonScale"), V); }, 470.f + b * 110.f, 162.f, 100.f, 52.f, 28, V == Sc);
+			Btn(FString::Printf(TEXT("%d%%"), V), V == Sc ? ZMCTeal : ZMCNavy, [this, V]() { SetLocalSetting(TEXT("ButtonScale"), V); }, 470.f + b * 110.f, 162.f, 100.f, 52.f, 28, V == Sc);
 		}
-		Btn(TEXT("REPLAY TUTORIAL"), CViolet, [this]() { ShowComingSoon(TEXT("The controls tutorial isn't in the Unreal build yet.")); }, 310.f, 240.f, 260.f, 52.f, 30);
-		Label(TEXT("Tap an enemy or orb to lock on - Tab: cycle - SPACE: fire - E / Q: power - Esc / Android back: back"), 310.f, 310.f, 590.f, 40.f, 20, TSoft, EAnchor::Center, 0, true);
+		Btn(TEXT("REPLAY TUTORIAL"), ZMCViolet, [this]() { ShowComingSoon(TEXT("The controls tutorial isn't in the Unreal build yet.")); }, 310.f, 240.f, 260.f, 52.f, 30);
+		Label(TEXT("Tap an enemy or orb to lock on - Tab: cycle - SPACE: fire - E / Q: power - Esc / Android back: back"), 310.f, 310.f, 590.f, 40.f, 20, ZMTSoft, EAnchor::Center, 0, true);
 	}
 	else if (SettingsTab == 3)
 	{
 		Label(TEXT("Accounts, cloud saves and profiles need the online backend."), 310.f, 110.f, 590.f, 40.f, 26, FLinearColor::White, EAnchor::Center, 0, true);
-		Btn(TEXT("SIGN IN"), CViolet, [this]() { ShowComingSoon(TEXT("Sign in needs the online backend.")); }, 310.f, 170.f, 220.f, 52.f, 32);
+		Btn(TEXT("SIGN IN"), ZMCViolet, [this]() { ShowComingSoon(TEXT("Sign in needs the online backend.")); }, 310.f, 170.f, 220.f, 52.f, 32);
 	}
 	else
 	{
 		Label(TEXT("ZOOGI ROLL"), 310.f, 100.f, 400.f, 30.f, 48, FLinearColor::White);
-		Label(TEXT("Unreal Engine 5.6 build - local"), 310.f, 136.f, 400.f, 20.f, 22, TSoft);
-		Label(TEXT("CREDITS"), 310.f, 166.f, 400.f, 20.f, 28, TLabel);
+		Label(TEXT("Unreal Engine 5.6 build - local"), 310.f, 136.f, 400.f, 20.f, 22, ZMTSoft);
+		Label(TEXT("CREDITS"), 310.f, 166.f, 400.f, 20.f, 28, ZMTLabel);
 		Label(TEXT("Created by Evan James - game design, characters and art direction.\nZoogi Roll team: Gameplay & UI, Game Camera, Animations & Powers, the arena builders, Comic, Playtester.\nEngine: Unreal Engine by Epic Games."),
 			310.f, 190.f, 600.f, 150.f, 20, FLinearColor::White, EAnchor::Center, 0, true);
-		Btn(TEXT("QUIT GAME"), CRed, [this]() { bModal = true; bModalQuit = true; ModalTitle = TEXT("QUIT ZOOGI ROLL?"); ModalBody = TEXT("See you next round!"); bDirty = true; }, 700.f, 380.f, 210.f, 52.f, 30);
+		Btn(TEXT("QUIT GAME"), ZMCRed, [this]() { bModal = true; bModalQuit = true; ModalTitle = TEXT("QUIT ZOOGI ROLL?"); ModalBody = TEXT("See you next round!"); bDirty = true; }, 700.f, 380.f, 210.f, 52.f, 30);
 	}
 }
 
@@ -971,20 +971,20 @@ void UZoogiMenuRoot::BuildCollection()
 	BuildTopBar(TEXT("COLLECTION"));
 	TArray<FString> T = { TEXT("ZOOGIPEDIA"), TEXT("MY STUFF"), TEXT("SKINS"), TEXT("GALLERY") };
 	Tabs(T, CollectionTab, 106.f, 82.f, 120.f, 8.f);
-	Panel(106.f, 140.f, 492.f, 300.f, PNavy);
-	const int32 N = UE_ARRAY_COUNT(GCollection);
+	Panel(106.f, 140.f, 492.f, 300.f, ZMPNavy);
+	const int32 N = UE_ARRAY_COUNT(ZMGCollection);
 	if (CollectionTab == 0)
 	{
 		for (int32 i = 0; i < N; ++i)
 		{
 			const float X = 116.f + (i % 6) * 80.f, Y = 148.f + (i / 6) * 96.f;
-			ImgTile(Art(GCollection[i].Art), GCollection[i].Label, [this, i]() { CollectionSel = i; bDirty = true; }, X, Y, 74.f, 90.f, CollectionSel == i, false, FLinearColor::White, true, 15);
+			ImgTile(Art(ZMGCollection[i].Art), ZMGCollection[i].Label, [this, i]() { CollectionSel = i; bDirty = true; }, X, Y, 74.f, 90.f, CollectionSel == i, false, FLinearColor::White, true, 15);
 		}
 	}
 	else Label(CollectionTab == 1 ? TEXT("MY STUFF - owned Zoogis and items: coming soon") : CollectionTab == 2 ? TEXT("SKINS / CUSTOMIZE - coming soon") : TEXT("GALLERY - community gallery (online): coming soon"),
 		126.f, 260.f, 452.f, 60.f, 32, FLinearColor::White, EAnchor::Center, 1, true);
-	const FArtEntry& E = GCollection[FMath::Clamp(CollectionSel, 0, N - 1)];
-	Panel(610.f, 86.f, 312.f, 240.f, PTeal);
+	const ZMFArtEntry& E = ZMGCollection[FMath::Clamp(CollectionSel, 0, N - 1)];
+	Panel(610.f, 86.f, 312.f, 240.f, ZMPTeal);
 	Label(E.Label, 624.f, 98.f, 170.f, 36.f, 50, FLinearColor::White);
 	const FZoogiDef* D = nullptr;
 	if (E.RosterId) for (const FZoogiDef& R : ZoogiUtil::Roster()) if (R.Id == FName(E.RosterId)) D = &R;
@@ -993,8 +993,8 @@ void UZoogiMenuRoot::BuildCollection()
 		624.f, 168.f, 170.f, 84.f, 18, FLinearColor::White, EAnchor::Center, 0, true);
 	if (D) Label(FString::Printf(TEXT("SPD %d - PWR %d - DEF %d - CTL %d"), D->Speed, D->Power, D->Defense, D->Control), 624.f, 270.f, 290.f, 18.f, 20, FLinearColor::White);
 	ImgTile(Art(E.Art), FString(), nullptr, 798.f, 98.f, 110.f, 100.f, false, false, FLinearColor::White);
-	Btn(TEXT("CREATE"), CViolet, [this]() { Push(EZoogiScreen::Create); }, 610.f, 388.f, 104.f, 52.f, 30);
-	Btn(TEXT("CUSTOMIZE"), CGold, [this]() { ShowComingSoon(TEXT("The skin / trail editor isn't in the Unreal build yet.")); }, 726.f, 340.f, 194.f, 100.f, 50);
+	Btn(TEXT("CREATE"), ZMCViolet, [this]() { Push(EZoogiScreen::Create); }, 610.f, 388.f, 104.f, 52.f, 30);
+	Btn(TEXT("CUSTOMIZE"), ZMCGold, [this]() { ShowComingSoon(TEXT("The skin / trail editor isn't in the Unreal build yet.")); }, 726.f, 340.f, 194.f, 100.f, 50);
 }
 
 // ---- STORY
@@ -1008,14 +1008,14 @@ void UZoogiMenuRoot::BuildStory()
 	for (int32 e = 0; e < 4; ++e)
 	{
 		const float X = 106.f + e * 204.f;
-		ImgTile(Art(Eps[e].Bg), FString(), [this, e]() { StorySel = e; bDirty = true; }, X, 94.f, 194.f, 258.f, StorySel == e, false, Hex(TEXT("0B1E5C")), true, 30,
+		ImgTile(Art(Eps[e].Bg), FString(), [this, e]() { StorySel = e; bDirty = true; }, X, 94.f, 194.f, 258.f, StorySel == e, false, ZMHex(TEXT("0B1E5C")), true, 30,
 			Eps[e].bLocked ? FLinearColor(0.45f, 0.45f, 0.55f, 1.f) : FLinearColor::White);
 		Image(Art(Eps[e].Who), X + 22.f, 140.f, 150.f, 150.f, Eps[e].bLocked ? FLinearColor(0.4f, 0.4f, 0.45f, 1.f) : FLinearColor::White, EAnchor::Center, 60.f);
 		if (Eps[e].bLocked) Image(Art(TEXT("icon_lock")), X + 72.f, 170.f, 50.f, 50.f);
-		Label(FString::Printf(TEXT("EP %d"), e + 1), X + 14.f, 102.f, 60.f, 16.f, 22, CCyan);
+		Label(FString::Printf(TEXT("EP %d"), e + 1), X + 14.f, 102.f, 60.f, 16.f, 22, ZMCCyan);
 		Label(Eps[e].Title, X + 12.f, 312.f, 180.f, 30.f, 32, FLinearColor::White);
 	}
-	Btn(TEXT("WATCH ANIME"), CNavy, [this]()
+	Btn(TEXT("WATCH ANIME"), ZMCNavy, [this]()
 	{
 		if (UZoogiAnimeSubsystem* A = GetWorld()->GetSubsystem<UZoogiAnimeSubsystem>())
 		{
@@ -1026,9 +1026,9 @@ void UZoogiMenuRoot::BuildStory()
 		if (!bAnimeView) ShowComingSoon(TEXT("No anime clips found (Content/Anime/Movies)."));
 		bDirty = true;
 	}, 106.f, 368.f, 150.f, 52.f, 28);
-	Btn(TEXT("3D COMIC"), CNavy, [this]() { ShowComingSoon(TEXT("The 3D comic reader isn't in the Unreal build yet.")); }, 266.f, 368.f, 142.f, 52.f, 28);
+	Btn(TEXT("3D COMIC"), ZMCNavy, [this]() { ShowComingSoon(TEXT("The 3D comic reader isn't in the Unreal build yet.")); }, 266.f, 368.f, 142.f, 52.f, 28);
 	const bool bLocked = StorySel >= 2;
-	Btn(TEXT("READ"), CGold, [this, bLocked]() { ShowComingSoon(bLocked ? TEXT("Finish the earlier episodes to unlock this one.") : TEXT("Episode reader: coming soon. WATCH ANIME plays the clips today.")); },
+	Btn(TEXT("READ"), ZMCGold, [this, bLocked]() { ShowComingSoon(bLocked ? TEXT("Finish the earlier episodes to unlock this one.") : TEXT("Episode reader: coming soon. WATCH ANIME plays the clips today.")); },
 		726.f, 340.f, 194.f, 100.f, 64, false, bLocked, EAnchor::Center, TEXT("icon_play"));
 }
 
@@ -1038,7 +1038,7 @@ void UZoogiMenuRoot::BuildEvents()
 	BuildTopBar(TEXT("EVENTS"));
 	TArray<FString> T = { TEXT("CHALLENGES"), TEXT("BATTLE PASS"), TEXT("DAILY"), TEXT("TOURNEYS") };
 	Tabs(T, EventsTab, 106.f, 82.f, 128.f, 8.f);
-	Panel(106.f, 140.f, 600.f, 300.f, PNavy);
+	Panel(106.f, 140.f, 600.f, 300.f, ZMPNavy);
 	if (EventsTab == 0)
 	{
 		const TCHAR* CN[] = { TEXT("Win 3 Classic matches"), TEXT("Knock 20 orbs off the edge"), TEXT("Land a Titan Meteor"), TEXT("Play a Local match") };
@@ -1046,20 +1046,20 @@ void UZoogiMenuRoot::BuildEvents()
 		for (int32 i = 0; i < 4; ++i)
 		{
 			const float Y = 148.f + i * 72.f;
-			Panel(116.f, Y, 580.f, 66.f, i == 0 ? PTeal : Hex(TEXT("163591")));
+			Panel(116.f, Y, 580.f, 66.f, i == 0 ? ZMPTeal : ZMHex(TEXT("163591")));
 			Label(CN[i], 130.f, Y + 9.f, 400.f, 18.f, 26, FLinearColor::White);
 			Bar(130.f, Y + 40.f, 380.f, 10.f, CP[i], ZoogiUIStyle::EnergyA, ZoogiUIStyle::CardEnergyA);
-			if (CP[i] >= 1.f) Btn(TEXT("CLAIM"), CGold, [this]() { ShowComingSoon(TEXT("Rewards need the progression backend.")); }, 560.f, Y + 7.f, 126.f, 52.f, 28);
-			else Btn(FString::Printf(TEXT("%d%%"), FMath::RoundToInt(CP[i] * 100.f)), CDisabled, nullptr, 560.f, Y + 7.f, 126.f, 52.f, 28, false, true);
+			if (CP[i] >= 1.f) Btn(TEXT("CLAIM"), ZMCGold, [this]() { ShowComingSoon(TEXT("Rewards need the progression backend.")); }, 560.f, Y + 7.f, 126.f, 52.f, 28);
+			else Btn(FString::Printf(TEXT("%d%%"), FMath::RoundToInt(CP[i] * 100.f)), ZMCDisabled, nullptr, 560.f, Y + 7.f, 126.f, 52.f, 28, false, true);
 		}
 	}
 	else Label(EventsTab == 1 ? TEXT("BATTLE PASS - tiers and rewards: coming soon") : EventsTab == 2 ? TEXT("DAILY BONUS - login streak: coming soon") : TEXT("TOURNEYS - online tournaments: coming soon"),
 		126.f, 260.f, 560.f, 60.f, 32, FLinearColor::White, EAnchor::Center, 1, true);
-	Panel(718.f, 86.f, 204.f, 236.f, PViolet);
+	Panel(718.f, 86.f, 204.f, 236.f, ZMPViolet);
 	Label(TEXT("WEEKLY"), 730.f, 96.f, 180.f, 16.f, 24, FLinearColor::White);
-	Label(TEXT("Ends in 3d 4h"), 730.f, 114.f, 180.f, 16.f, 20, TSoft);
+	Label(TEXT("Ends in 3d 4h"), 730.f, 114.f, 180.f, 16.f, 20, ZMTSoft);
 	Image(Art(TEXT("heavy_roll")), 776.f, 140.f, 88.f, 146.f, FLinearColor::White, EAnchor::Center, 10.f);
-	Btn(TEXT("CLAIM ALL"), CGold, [this]() { ShowComingSoon(TEXT("Rewards need the progression backend.")); }, 726.f, 340.f, 194.f, 100.f, 50);
+	Btn(TEXT("CLAIM ALL"), ZMCGold, [this]() { ShowComingSoon(TEXT("Rewards need the progression backend.")); }, 726.f, 340.f, 194.f, 100.f, 50);
 }
 
 // ---- SHOP
@@ -1075,15 +1075,15 @@ void UZoogiMenuRoot::BuildShop()
 	for (int32 i = 0; i < 4; ++i)
 	{
 		const float X = 106.f + i * 152.f;
-		ImgTile(nullptr, FString(), [this, i]() { ShopSel = i; bDirty = true; }, X, 146.f, 144.f, 230.f, ShopSel == i, false, i == 2 ? PTeal : PNavy);
+		ImgTile(nullptr, FString(), [this, i]() { ShopSel = i; bDirty = true; }, X, 146.f, 144.f, 230.f, ShopSel == i, false, i == 2 ? ZMPTeal : ZMPNavy);
 		Image(Art(IArt[i]), X + 14.f, 158.f, 116.f, 106.f, FLinearColor::White, EAnchor::Center, 14.f);
 		Label(IName[i], X + 8.f, 272.f, 128.f, 20.f, 28, FLinearColor::White, EAnchor::Center, 1);
-		Btn(IPrice[i], CGold, [this, i]() { ShopSel = i; ShowComingSoon(TEXT("Purchases need the economy backend (coins and gems are placeholders).")); }, X + 12.f, 308.f, 120.f, 52.f, 28, false, false, EAnchor::Center, IIcon[i]);
+		Btn(IPrice[i], ZMCGold, [this, i]() { ShopSel = i; ShowComingSoon(TEXT("Purchases need the economy backend (coins and gems are placeholders).")); }, X + 12.f, 308.f, 120.f, 52.f, 28, false, false, EAnchor::Center, IIcon[i]);
 	}
-	ImgTile(nullptr, FString(), [this]() { ShopSel = 4; bDirty = true; }, 714.f, 146.f, 206.f, 176.f, ShopSel == 4, false, PViolet);
+	ImgTile(nullptr, FString(), [this]() { ShopSel = 4; bDirty = true; }, 714.f, 146.f, 206.f, 176.f, ShopSel == 4, false, ZMPViolet);
 	Label(TEXT("BUNDLE"), 728.f, 156.f, 100.f, 16.f, 24, FLinearColor::White);
 	Image(Art(TEXT("lars")), 770.f, 180.f, 96.f, 90.f, FLinearColor::White, EAnchor::Center, 48.f);
-	Btn(TEXT("BUY"), CGold, [this]() { ShowComingSoon(TEXT("Purchases need the economy backend (coins and gems are placeholders).")); }, 726.f, 340.f, 194.f, 100.f, 60, false, false, EAnchor::Center, TEXT("icon_gem"));
+	Btn(TEXT("BUY"), ZMCGold, [this]() { ShowComingSoon(TEXT("Purchases need the economy backend (coins and gems are placeholders).")); }, 726.f, 340.f, 194.f, 100.f, 60, false, false, EAnchor::Center, TEXT("icon_gem"));
 }
 
 // ---- SOCIAL
@@ -1092,13 +1092,13 @@ void UZoogiMenuRoot::BuildSocial()
 	BuildTopBar(TEXT("SOCIAL"));
 	TArray<FString> T = { TEXT("PROFILE"), TEXT("FRIENDS"), TEXT("SCORES"), TEXT("CLANS"), TEXT("REPLAYS") };
 	Tabs(T, SocialTab, 106.f, 82.f, 112.f, 8.f);
-	Panel(106.f, 146.f, 292.f, 294.f, PNavy);
+	Panel(106.f, 146.f, 292.f, 294.f, ZMPNavy);
 	ImgTile(Art(TEXT("luma")), FString(), nullptr, 118.f, 156.f, 90.f, 82.f, false, false, FLinearColor::White);
 	Label(TEXT("EVAN"), 120.f, 246.f, 260.f, 30.f, 48, FLinearColor::White);
-	Label(TEXT("Games 126 - Wins 71 - Orbs 960 - KOs 204\nHigh score 3,420 - Streak 4 days  (sample)"), 120.f, 282.f, 270.f, 44.f, 18, TSoft, EAnchor::Center, 0, true);
-	Btn(TEXT("SIGN IN"), CViolet, [this]() { ShowComingSoon(TEXT("Sign in needs the online backend.")); }, 116.f, 380.f, 132.f, 52.f, 28);
-	Btn(TEXT("CHAT"), CNavy, [this]() { ShowComingSoon(TEXT("Chat needs the online backend.")); }, 258.f, 380.f, 130.f, 52.f, 28);
-	Panel(410.f, 146.f, 512.f, 176.f, PTeal);
+	Label(TEXT("Games 126 - Wins 71 - Orbs 960 - KOs 204\nHigh score 3,420 - Streak 4 days  (sample)"), 120.f, 282.f, 270.f, 44.f, 18, ZMTSoft, EAnchor::Center, 0, true);
+	Btn(TEXT("SIGN IN"), ZMCViolet, [this]() { ShowComingSoon(TEXT("Sign in needs the online backend.")); }, 116.f, 380.f, 132.f, 52.f, 28);
+	Btn(TEXT("CHAT"), ZMCNavy, [this]() { ShowComingSoon(TEXT("Chat needs the online backend.")); }, 258.f, 380.f, 130.f, 52.f, 28);
+	Panel(410.f, 146.f, 512.f, 176.f, ZMPTeal);
 	if (SocialTab == 0 || SocialTab == 2)
 	{
 		Label(TEXT("LEADERBOARD (sample - online coming soon)"), 424.f, 156.f, 480.f, 16.f, 22, FLinearColor::White);
@@ -1112,7 +1112,7 @@ void UZoogiMenuRoot::BuildSocial()
 	}
 	else Label(SocialTab == 1 ? TEXT("FRIENDS - coming soon (online)") : SocialTab == 3 ? TEXT("CLANS - coming soon (online)") : TEXT("REPLAYS - coming soon"),
 		424.f, 220.f, 480.f, 40.f, 32, FLinearColor::White, EAnchor::Center, 1);
-	Btn(TEXT("ADD FRIEND"), CGold, [this]() { ShowComingSoon(TEXT("Friends need the online backend.")); }, 726.f, 340.f, 194.f, 100.f, 46);
+	Btn(TEXT("ADD FRIEND"), ZMCGold, [this]() { ShowComingSoon(TEXT("Friends need the online backend.")); }, 726.f, 340.f, 194.f, 100.f, 46);
 }
 
 // ---- CREATE
@@ -1121,20 +1121,20 @@ void UZoogiMenuRoot::BuildCreate()
 	BuildTopBar(TEXT("CREATE"));
 	const TCHAR* TN[] = { TEXT("CREATE ZOOGI"), TEXT("MAP EDITOR"), TEXT("ARENA SHOWCASE"), TEXT("ARENA EDITOR") };
 	const TCHAR* TS[] = { TEXT("Design a custom Zoogi"), TEXT("Place walls, zones, models"), TEXT("Fly-through of every arena"), TEXT("Edit layout presets") };
-	const FLinearColor TC[] = { CViolet, CTeal, CNavy, CNavy };
+	const FLinearColor TC[] = { ZMCViolet, ZMCTeal, ZMCNavy, ZMCNavy };
 	const bool TDev[] = { false, true, false, true };
 	for (int32 i = 0; i < 4; ++i)
 	{
 		const float X = 106.f + i * 204.f;
-		const bool bHidden = TDev[i] && !DevFlag();
-		ImgTile(nullptr, FString(), [this, i]() { CreateSel = i; bDirty = true; }, X, 100.f, 194.f, 226.f, CreateSel == i, bHidden, bHidden ? CDisabled : TC[i]);
+		const bool bHidden = TDev[i] && !ZMDevFlag();
+		ImgTile(nullptr, FString(), [this, i]() { CreateSel = i; bDirty = true; }, X, 100.f, 194.f, 226.f, CreateSel == i, bHidden, bHidden ? ZMCDisabled : TC[i]);
 		Label(TN[i], X + 10.f, 250.f, 174.f, 26.f, 32, FLinearColor::White, EAnchor::Center, 1);
-		Label(bHidden ? TEXT("Developer tool (-ZoogiDev)") : TS[i], X + 10.f, 286.f, 174.f, 20.f, 19, TSoft, EAnchor::Center, 1);
+		Label(bHidden ? TEXT("Developer tool (-ZoogiDev)") : TS[i], X + 10.f, 286.f, 174.f, 20.f, 19, ZMTSoft, EAnchor::Center, 1);
 	}
-	Label(TEXT("Developer tools (map / arena editor) are hidden behind the -ZoogiDev flag."), 106.f, 340.f, 600.f, 20.f, 20, TSoft);
+	Label(TEXT("Developer tools (map / arena editor) are hidden behind the -ZoogiDev flag."), 106.f, 340.f, 600.f, 20.f, 20, ZMTSoft);
 	const int32 Sel = CreateSel;
-	const bool bHiddenSel = TDev[Sel] && !DevFlag();
-	Btn(TEXT("OPEN"), CGold, [this, Sel, bHiddenSel]()
+	const bool bHiddenSel = TDev[Sel] && !ZMDevFlag();
+	Btn(TEXT("OPEN"), ZMCGold, [this, Sel, bHiddenSel]()
 	{
 		if (bHiddenSel) ShowComingSoon(TEXT("This editor is a developer tool. Run with -ZoogiDev."));
 		else ShowComingSoon(Sel == 0 ? TEXT("Create Zoogi isn't in the Unreal build yet.") : Sel == 2 ? TEXT("Arena showcase: coming soon to the menu.") : TEXT("The in-game editor isn't in the Unreal build yet (dev)."));
@@ -1151,15 +1151,15 @@ void UZoogiMenuRoot::BuildModal()
 	St.SetNormal(Dim); St.SetHovered(Dim); St.SetPressed(Dim);
 	Scrim->SetStyle(St);
 	if (UCanvasPanelSlot* S = Canvas->AddChildToCanvas(Scrim)) { S->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f)); S->SetOffsets(FMargin(-400.f)); }
-	Panel(312.f, 120.f, 400.f, 220.f, PNavy);
+	Panel(312.f, 120.f, 400.f, 220.f, ZMPNavy);
 	Label(ModalTitle, 330.f, 140.f, 364.f, 40.f, 56, FLinearColor::White, EAnchor::Center, 1);
-	Label(ModalBody, 334.f, 192.f, 356.f, 70.f, 26, TSoft, EAnchor::Center, 1, true);
+	Label(ModalBody, 334.f, 192.f, 356.f, 70.f, 26, ZMTSoft, EAnchor::Center, 1, true);
 	if (bModalQuit)
 	{
-		Btn(TEXT("CANCEL"), CNavy, [this]() { bModal = false; bDirty = true; }, 334.f, 270.f, 170.f, 54.f, 34);
-		Btn(TEXT("QUIT"), CRed, [this]() { Fire("Quit", 0); }, 520.f, 270.f, 170.f, 54.f, 34);
+		Btn(TEXT("CANCEL"), ZMCNavy, [this]() { bModal = false; bDirty = true; }, 334.f, 270.f, 170.f, 54.f, 34);
+		Btn(TEXT("QUIT"), ZMCRed, [this]() { Fire("Quit", 0); }, 520.f, 270.f, 170.f, 54.f, 34);
 	}
-	else Btn(TEXT("OK"), CGold, [this]() { bModal = false; bDirty = true; }, 427.f, 270.f, 170.f, 54.f, 40);
+	else Btn(TEXT("OK"), ZMCGold, [this]() { bModal = false; bDirty = true; }, 427.f, 270.f, 170.f, 54.f, 40);
 }
 
 void UZoogiMenuRoot::BuildAnimeView()
@@ -1182,10 +1182,10 @@ void UZoogiMenuRoot::BuildAnimeView()
 		if (UZoogiAnimeSubsystem* AS = GetWorld()->GetSubsystem<UZoogiAnimeSubsystem>()) { AnimeClip = AS->PlayMenuMovie(Dir); bAnimeView = !AnimeClip.IsEmpty(); }
 		bDirty = true;
 	};
-	Btn(TEXT("PREV"), CNavy, [Step]() { Step(-1); }, 300.f, 400.f, 120.f, 52.f, 30);
+	Btn(TEXT("PREV"), ZMCNavy, [Step]() { Step(-1); }, 300.f, 400.f, 120.f, 52.f, 30);
 	Label(AnimeClip, 430.f, 414.f, 164.f, 20.f, 18, FLinearColor::White, EAnchor::Center, 1);
-	Btn(TEXT("NEXT"), CNavy, [Step]() { Step(1); }, 604.f, 400.f, 120.f, 52.f, 30);
-	Btn(TEXT("BACK"), CGold, [this]() { HandleBack(); }, 55.f, 20.f, 120.f, 52.f, 30, false, false, EAnchor::Left);
+	Btn(TEXT("NEXT"), ZMCNavy, [Step]() { Step(1); }, 604.f, 400.f, 120.f, 52.f, 30);
+	Btn(TEXT("BACK"), ZMCGold, [this]() { HandleBack(); }, 55.f, 20.f, 120.f, 52.f, 30, false, false, EAnchor::Left);
 }
 
 // ---------------------------------------------------------------------------------------------------------- tour
@@ -1210,7 +1210,7 @@ void UZoogiMenuRoot::TickTour(float Dt)
 		{
 			const FString P = FPaths::Combine(TourDir, FString::Printf(TEXT("menu_%s%s.png"), Names[TourStep], *Tag));
 			FScreenshotRequest::RequestScreenshot(P, true, false);
-			UE_LOG(LogZoogi, Log, TEXT("MENU TOUR screenshot %s (screen %s, modal %d)"), *P, ScreenName(Top()), bModal ? 1 : 0);
+			UE_LOG(LogZoogi, Log, TEXT("MENU TOUR screenshot %s (screen %s, modal %d)"), *P, ZMScreenName(Top()), bModal ? 1 : 0);
 		}
 		bTourSetupDone = false;
 		++TourStep;
