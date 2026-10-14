@@ -109,18 +109,18 @@ void AZoogiTitanMeteorFX::Build()
 	UMaterialInterface* ChunkMat = nullptr;
 	if (Variant == 0)
 	{
-		Rock = MakeMesh(TM_TombRock, nullptr, true);
+		Rock = MakeMesh(TM_TombRock, nullptr, false);
 		ChunkMat = Cast<UMaterialInterface>(LoadAsset(TM_TombRockMat));
 	}
 	if (!Rock || !Rock->GetStaticMesh())
 	{
 		UMaterialInstanceDynamic* M = MID(TEXT("MI_ZAFX_Rock"));
 		if (M) { M->SetVectorParameterValue(TEXT("Tint"), FLinearColor(0.20f, 0.17f, 0.14f)); M->SetVectorParameterValue(TEXT("RimColor"), FLinearColor(0.10f, 0.045f, 0.015f)); }
-		Rock = MakeMesh(TM_KfxRock, M, true);
+		Rock = MakeMesh(TM_KfxRock, M, false);
 		ChunkMat = M;
 	}
-	Rock->bCastDynamicShadow = true;
-	Rock->SetCastShadow(true);
+	Rock->bCastDynamicShadow = false; // Oct 14: no hard sun shadow (read as a solid black blob); the soft disc below is the shadow
+	Rock->SetCastShadow(false);
 	RockR = Options.RockDiameter * (bShort ? 0.85f : 1.f) * 0.5f;
 	if (UStaticMesh* SM = Rock->GetStaticMesh()) RockUnit = (RockR * 2.f) / FMath::Max(1.f, 2.f * SM->GetBounds().BoxExtent.GetMax());
 
@@ -490,9 +490,9 @@ bool AZoogiTitanMeteorFX::TickFX(float Dt, float U)
 	// soft shadow of the incoming mass pooling over the target (dark, never glowing), then the crater shadow lifting
 	{
 		const float S = FMath::Pow(Desc, 1.5f);
-		float Op = (0.12f + 0.6f * S) * Window(U, 0.02f, 0.2f);
+		float Op = (0.03f + 0.32f * S) * Window(U, 0.02f, 0.2f); // Oct 14: faint, grows as the rock nears
 		float Rad = RockR * (0.7f + 1.0f * S);
-		if (bImpacted) { Op = 0.6f * (1.f - Smooth(AfterU / 0.5f)); Rad *= 1.f + 0.5f * AfterU; }
+		if (bImpacted) { Op = 0.35f * (1.f - Smooth(AfterU / 0.5f)); Rad *= 1.f + 0.5f * AfterU; }
 		Op *= G;
 		if (Op > 0.01f) Disc(BDark, Contact + FVector(0, 0, 4.f), Rad, FLinearColor(0.025f, 0.022f, 0.02f, Op), FLinearColor(0.025f, 0.022f, 0.02f, 0.f), 28);
 	}
