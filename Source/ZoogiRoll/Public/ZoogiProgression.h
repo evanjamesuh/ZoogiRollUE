@@ -110,7 +110,9 @@ struct ZOOGIROLL_API FZoogiProgressionConfig
 	int32 DailyMatchGemCap = 500;
 	int32 DailyResetHourLocal = 4;
 	int32 RollbackToleranceMinutes = 10;
-	int32 StartGems = 0;
+	int32 StartGems = 0;                 // shipping: new saves start at 0 gems, mastery level 1 everywhere
+	int32 TestProfileGems = 340;         // dev/test profile only (-ZoogiTestProfile)
+	int32 TestProfileVoidLevel = 3;
 	int32 EarnedBalanceCap = 999999;
 	EZoogiSpendOrder SpendOrder = EZoogiSpendOrder::EarnedFirst;
 	float IdleFractionZeroReward = 0.5f;
@@ -248,7 +250,8 @@ struct ZOOGIROLL_API FZoogiProfile
 class ZOOGIROLL_API FZoogiProgression
 {
 public:
-	void Init(const FZoogiProgressionConfig& InConfig);           // fresh profile (StartGems, Level 1)
+	void Init(const FZoogiProgressionConfig& InConfig);
+	void ApplyTestProfile();                                       // dev only: +TestProfileGems earned, Void at TestProfileVoidLevel           // fresh profile (StartGems, Level 1)
 	bool Load(const FZoogiProgressionConfig& InConfig, const FString& Json, FString& OutError);
 	FString Save() const { return Profile.ToJsonString(); }
 	const FZoogiProfile& Get() const { return Profile; }

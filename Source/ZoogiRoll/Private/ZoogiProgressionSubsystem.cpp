@@ -27,6 +27,7 @@ void UZoogiProgressionSubsystem::Initialize(FSubsystemCollectionBase& Collection
 	{
 		if (!Json.IsEmpty()) { UE_LOG(LogZoogi, Warning, TEXT("PROGRESSION profile rejected (%s): kept as .rejected, new profile"), *Err); IFileManager::Get().Move(*(ProfilePath() + TEXT(".rejected")), *ProfilePath()); }
 		Prog.Init(Cfg);
+		if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiTestProfile"))) { Prog.ApplyTestProfile(); UE_LOG(LogZoogi, Warning, TEXT("PROGRESSION -ZoogiTestProfile: dev profile (+%d gems, Void level %d)"), Cfg.TestProfileGems, Cfg.TestProfileVoidLevel); }
 		SaveProfile();
 		UE_LOG(LogZoogi, Log, TEXT("PROGRESSION new profile %s data=%s [%s]"), *Prog.Get().ProfileId.ToString(), *Cfg.Source, *Log);
 	}

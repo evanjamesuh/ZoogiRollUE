@@ -13,3 +13,5 @@ focus_change_context,Standby
 dr_after_matches,5
 dr_mult,0.5
 rewarded_match_ids_kept,64
+test_profile_gems,340
+test_profile_void_level,3

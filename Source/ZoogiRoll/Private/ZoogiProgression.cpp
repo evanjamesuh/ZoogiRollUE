@@ -227,6 +227,8 @@ bool FZoogiProgressionConfig::LoadFromDir(const FString& Dir, FString& OutLog)
 			else if (K == TEXT("daily_reset_hour_local")) DailyResetHourLocal = FCString::Atoi(*V);
 			else if (K == TEXT("rollback_tolerance_minutes")) RollbackToleranceMinutes = FCString::Atoi(*V);
 			else if (K == TEXT("start_gems")) StartGems = FCString::Atoi(*V);
+			else if (K == TEXT("test_profile_gems")) TestProfileGems = FCString::Atoi(*V);
+			else if (K == TEXT("test_profile_void_level")) TestProfileVoidLevel = FCString::Atoi(*V);
 			else if (K == TEXT("earned_balance_cap")) EarnedBalanceCap = FCString::Atoi(*V);
 			else if (K == TEXT("spend_order")) SpendOrder = V.Equals(TEXT("PurchasedFirst"), ESearchCase::IgnoreCase) ? EZoogiSpendOrder::PurchasedFirst : EZoogiSpendOrder::EarnedFirst;
 			else if (K == TEXT("idle_fraction_zero_reward")) IdleFractionZeroReward = FCString::Atof(*V);
@@ -747,4 +749,15 @@ bool FZoogiProgression::EquipCosmetic(FName Id, const FDateTime& Utc)
 	if (!C || !Profile.OwnedCosmetics.Contains(Id)) return false;
 	Profile.EquippedCosmetics.FindOrAdd(C->Slot) = Id; Touch(Utc);
 	return true;
+}
+
+
+void FZoogiProgression::ApplyTestProfile()
+{
+	const FZoogiProgressionConfig& C = Cfg;
+	const int32 Lv = FMath::Clamp(C.TestProfileVoidLevel, 1, C.MasteryCumulativeXP.Num());
+	const int32 Need = C.MasteryCumulativeXP[Lv - 1] - MasteryXP(EZoogiCardElement::Void);
+	if (Need > 0) AddMasteryXP(EZoogiCardElement::Void, Need, Profile.CreatedUtc);
+	const int32 TopUp = C.TestProfileGems - Profile.Wallet.Total(); // level-up gems count toward the 340
+	if (TopUp > 0) Profile.Wallet.Grant(ZoogiProgress::DeterministicId(TEXT("testprofile:") + Profile.ProfileId.ToString()), EZoogiGemBucket::Earned, TopUp, "testprofile", Profile.CreatedUtc);
 }
