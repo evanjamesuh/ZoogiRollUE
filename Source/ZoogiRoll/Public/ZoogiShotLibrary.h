@@ -131,8 +131,14 @@ struct ZOOGIROLL_API FZoogiShotSpec
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Framing") float MaxFOV = 100.f;
 	/** Pivot follow damping (1/s). 0 = rigidly locked to the focus. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Framing", meta = (ClampMin = "0")) float TrackingLag = 0.f;
-	/** Pull the camera in front of static geometry between the look point and the camera. */
+	/** Pull the camera in front of static geometry between the look point and the camera (sphere sweep subject -> camera;
+	 *  a pull-in closer than 40 % of the distance tries lifting the camera instead). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Framing") bool bAvoidOcclusion = true;
+	/** Keep the camera out of active particle / glow bursts near the subject (Niagara / FX system component bounds and
+	 *  AZoogiFX glow actors, expanded by ParticleMargin): lifts, pulls in, swings or backs off until outside, snapping out
+	 *  when it would be inside and easing back when the burst is gone. Never touches the gameplay camera. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Framing") bool bAvoidParticles = true;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Framing", meta = (ClampMin = "0")) float ParticleMargin = 60.f;
 	/** Trick shots: pivot position between focus / secondary pivot (0) and the event point (1). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Framing", meta = (ClampMin = "0", ClampMax = "1")) float EventBias = 0.f;
 	/** Widen the FOV (never narrow it) so the event point fits as well. */
@@ -147,10 +153,9 @@ struct ZOOGIROLL_API FZoogiShotSpec
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Motion") float ShakeHz = 7.f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Motion", meta = (ClampMin = "0")) float ShakeDecay = 0.f;
 
-	// ---- slow-mo entry (Tier 3). Goes through UZoogiEpisodeCameraDirector::EaseTimeScale, so the time-scale policy
-	// applies (Disabled by default; OnlyWhenPhysicsAtRest refuses while bodies move). Refused = the shot plays at normal
-	// speed. The ease is owned by the shot: it is timed to be back at the exact prior value before the shot ends, and any
-	// early end (stop / replace / focus lost / world ending) restores the prior value immediately.
+	// ---- slow-mo LOOK (Tier 3). Presentation only (core rule: physics is never dilated): the world's time dilation is
+	// never touched. Over the window below the shot's own camera motion (move / orbit / wobble / shake) slows to
+	// SlowMoTarget and a subtle grade (vignette up, saturation down) is added. A true freeze is the Episode core's pause-hold.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SlowMo") bool bSlowMoEntry = false;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "SlowMo", meta = (ClampMin = "0.05", ClampMax = "1")) float SlowMoTarget = 0.35f;
 	/** Real seconds after the shot starts. */

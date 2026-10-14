@@ -9,6 +9,9 @@
 #include "Components/SceneCaptureComponent2D.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Particles/ParticleSystemComponent.h"
+#include "ZoogiFX.h"
+#include "UObject/UObjectIterator.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
 #include "Engine/Engine.h"
@@ -23,6 +26,8 @@
 
 namespace ZoogiCamDirPrivate
 {
+	TAutoConsoleVariable<int32> CVarAllowTimeDilation(TEXT("zoogi.Shot.AllowTimeDilation"), 0,
+		TEXT("Core rule: physics is never dilated, so EaseTimeScale refuses unless this is 1 (debug only)."));
 	TAutoConsoleVariable<int32> CVarShotRTFormat(TEXT("zoogi.Shot.RTFormat"), 0,
 		TEXT("Render target format for director-created shot targets: 0 = RGBA8 sRGB (default), 1 = RGBA8 linear, 2 = RGBA16F."));
 
@@ -44,6 +49,18 @@ namespace ZoogiCamDirPrivate
 		R.Rotation = FQuat::Slerp(A.Rotation.Quaternion(), B.Rotation.Quaternion(), W).Rotator();
 		R.FOV = FMath::Lerp(A.FOV, B.FOV, W);
 		return R;
+	}
+
+	void CamDirSlowLookGrade(FPostProcessSettings& PP, float W)
+	{
+		if (W <= 0.001f) return;
+		const float V = PP.bOverride_VignetteIntensity ? PP.VignetteIntensity : 0.4f;
+		PP.bOverride_VignetteIntensity = true;
+		PP.VignetteIntensity = V + 0.15f * W;
+		const FVector4 Sat = PP.bOverride_ColorSaturation ? PP.ColorSaturation : FVector4(1, 1, 1, 1);
+		const float M = FMath::Lerp(1.f, 0.9f, W);
+		PP.bOverride_ColorSaturation = true;
+		PP.ColorSaturation = FVector4(Sat.X * M, Sat.Y * M, Sat.Z * M, Sat.W);
 	}
 
 	UCameraComponent* CamDirCameraComponentOf(AActor* A)
@@ -277,6 +294,8 @@ void UZoogiEpisodeCameraDirector::FinishShot(int32 Index, EZoogiShotEndReason Re
 		MainViewShotId = 0;
 		RestoreMainView(Reason);
 	}
+	StatsById.Add(S.Id, S.Stats);
+	if (StatsById.Num() > 64) { TArray<int32> K; StatsById.GetKeys(K); K.Sort(); for (int32 i = 0; i < K.Num() - 64; ++i) StatsById.Remove(K[i]); }
 	if (TS.bActive && TimeScaleOwnerShotId == S.Id)
 	{
 		// The shot's slow-mo is timed to be over before the shot ends; any early end puts the prior value back now.
@@ -521,7 +540,7 @@ bool UZoogiEpisodeCameraDirector::EvaluateShotView(FZoogiActiveShot& S, float Dt
 	}
 	S.LastFocus = FC;
 
-	const float T = S.Age / FMath::Max(S.Duration, 0.01f);
+	const float T = S.MotionClock / FMath::Max(S.Duration, 0.01f);
 	const float M = CurveOrEase(Spec.MotionCurve, Spec.MoveEase, T);
 	const FVector WantPivot = FMath::Lerp(bSec && Spec.SecondaryBias > 0.f ? FMath::Lerp(FC, SC, Spec.SecondaryBias) : FC, S.EventLoc, Spec.EventBias) + Spec.PivotOffset;
 	S.Pivot = (Spec.TrackingLag > 0.f && Dt > 0.f) ? CamDirDampV(S.Pivot, WantPivot, Spec.TrackingLag, Dt) : WantPivot;
@@ -537,25 +556,70 @@ bool UZoogiEpisodeCameraDirector::EvaluateShotView(FZoogiActiveShot& S, float Dt
 	FVector Loc = S.Pivot - Dir * Dist * FMath::Cos(Pr) + FVector(0, 0, Dist * FMath::Sin(Pr));
 	const FVector Look = S.Pivot + Spec.LookOffset;
 
-	if (Spec.bAvoidOcclusion)
+	// ---- readability: static occluders (sweep subject -> camera, pull in or lift) and particle / glow bursts.
 	{
-		FCollisionQueryParams Q(SCENE_QUERY_STAT(ZoogiShotProbe), false);
-		Q.AddIgnoredActor(F);
-		if (bSec) Q.AddIgnoredActor(Sec);
-		if (ShotCam) Q.AddIgnoredActor(ShotCam);
-		for (int32 Try = 0; Try < 6; ++Try)
+		auto Place = [&](float DPitch, float DistMul, float DYaw)
 		{
-			FHitResult Hit;
-			if (!GetWorld()->SweepSingleByChannel(Hit, Look, Loc, FQuat::Identity, ECC_Camera, FCollisionShape::MakeSphere(12.f), Q)) break;
-			const UPrimitiveComponent* HC = Hit.GetComponent();
-			if (Hit.bStartPenetrating || (HC && HC->IsSimulatingPhysics()))
+			const float P2 = FMath::DegreesToRadians(FMath::Clamp(Pitch + DPitch, -30.f, 88.f));
+			const FVector D2 = FRotator(0.f, Yaw + DYaw, 0.f).Vector();
+			const float R2 = Dist * DistMul;
+			return S.Pivot - D2 * R2 * FMath::Cos(P2) + FVector(0, 0, R2 * FMath::Sin(P2));
+		};
+		auto Occlude = [&](const FVector& In, bool& bBlocked)
+		{
+			bBlocked = false;
+			if (!Spec.bAvoidOcclusion) return In;
+			FVector OutP = ResolveOcclusion(Look, In, F, bSec ? Sec : nullptr, bBlocked);
+			if (bBlocked && FVector::Dist(OutP, Look) < 0.4f * FVector::Dist(In, Look))
 			{
-				// Moving bodies (Zoogis, orbs, rubble) never push the shot camera around; only static set pieces do.
-				if (AActor* HA = Hit.GetActor()) { Q.AddIgnoredActor(HA); continue; }
-				break;
+				// A deep pull-in reads badly: try going over the occluder first.
+				for (float Lift : { 20.f, 40.f })
+				{
+					bool bB2 = false;
+					const FVector Up = ResolveOcclusion(Look, Place(Lift, 1.f, 0.f), F, bSec ? Sec : nullptr, bB2);
+					if (!bB2) { OutP = Up; break; }
+				}
 			}
-			Loc = Look + (Loc - Look) * FMath::Clamp(Hit.Time - 0.02f, 0.1f, 1.f);
-			break;
+			return OutP;
+		};
+		TArray<FBox> FX;
+		if (Spec.bAvoidParticles) GatherAvoidVolumes(Look, Dist + 1500.f, FX);
+		auto InsideFX = [&](const FVector& P)
+		{
+			for (const FBox& B : FX) if (B.ExpandBy(Spec.ParticleMargin).IsInsideOrOn(P)) return true;
+			return false;
+		};
+		bool bBlocked = false;
+		const FVector Base = Occlude(Loc, bBlocked);
+		if (bBlocked) { S.Stats.OccludedFrames++; S.Stats.MaxPullInCm = FMath::Max(S.Stats.MaxPullInCm, FVector::Dist(Base, Loc)); }
+		FVector Want = Base;
+		if (FX.Num() > 0 && InsideFX(Base))
+		{
+			S.Stats.RawInsideFXFrames++;
+			// Lift first (keeps the readable high angle), then pull in, swing, back off.
+			static const FVector Cands[] = {
+				FVector(15.f, 1.f, 0.f), FVector(0.f, 0.75f, 0.f), FVector(30.f, 1.f, 0.f), FVector(0.f, 1.f, 25.f), FVector(0.f, 1.f, -25.f),
+				FVector(15.f, 0.6f, 0.f), FVector(45.f, 1.f, 0.f), FVector(0.f, 1.f, 50.f), FVector(0.f, 1.f, -50.f), FVector(20.f, 1.4f, 0.f), FVector(0.f, 1.7f, 0.f) };
+			for (const FVector& Cd : Cands)
+			{
+				bool bB = false;
+				const FVector P = Occlude(Place(Cd.X, Cd.Y, Cd.Z), bB);
+				if (!InsideFX(P)) { Want = P; break; }
+			}
+		}
+		const FVector WantOffset = Want - Base;
+		const FVector Eased = (Dt > 0.f) ? CamDirDampV(S.AvoidOffset, WantOffset, 6.f, Dt) : WantOffset;
+		// Never ease INTO a burst: snap out when the eased position would be inside one.
+		S.AvoidOffset = (FX.Num() > 0 && InsideFX(Base + Eased)) ? WantOffset : Eased;
+		Loc = Base + S.AvoidOffset;
+		S.Stats.MaxAvoidOffsetCm = FMath::Max(S.Stats.MaxAvoidOffsetCm, S.AvoidOffset.Size());
+		S.Stats.Frames++;
+		if (FX.Num() > 0 && InsideFX(Loc)) S.Stats.FinalInsideFXFrames++;
+		if (Spec.bAvoidOcclusion)
+		{
+			bool bStill = false;
+			ResolveOcclusion(Look, Loc, F, bSec ? Sec : nullptr, bStill);
+			if (bStill) S.Stats.FinalOccludedFrames++;
 		}
 	}
 
@@ -582,7 +646,7 @@ bool UZoogiEpisodeCameraDirector::EvaluateShotView(FZoogiActiveShot& S, float Dt
 		Fov = FMath::Clamp(FMath::Max(Fov, FMath::RadiansToDegrees(2.f * NeedHalf) * Spec.FramePadding), 5.f, Spec.MaxFOV);
 	}
 	// Deterministic motion character (no randomness: the same shot always plays the same).
-	const float Tm = S.Age;
+	const float Tm = S.MotionClock;
 	if (Spec.RollWobbleDeg != 0.f) Rot.Roll += Spec.RollWobbleDeg * FMath::Sin(UE_TWO_PI * Spec.RollWobbleHz * Tm);
 	if (Spec.ShakeDeg != 0.f)
 	{
@@ -600,28 +664,88 @@ bool UZoogiEpisodeCameraDirector::EvaluateShotView(FZoogiActiveShot& S, float Dt
 	return true;
 }
 
-void UZoogiEpisodeCameraDirector::TryStartShotSlowMo(FZoogiActiveShot& S)
+float UZoogiEpisodeCameraDirector::SlowLookWeight(const FZoogiShotSpec& Spec, float Age, float Duration) const
 {
-	S.bSlowMoTried = true;
-	// Fit the whole ramp inside the shot (real time) so the prior value is back before the shot's own end.
-	const float Avail = S.Duration - S.Age - 0.1f;
-	if (Avail < 0.2f) return;
-	FZoogiTimeScaleSpec T;
-	T.Target = S.Spec.SlowMoTarget;
-	T.EaseIn = FMath::Min(S.Spec.SlowMoEaseIn, Avail * 0.3f);
-	T.EaseOut = FMath::Min(S.Spec.SlowMoEaseOut, Avail * 0.4f);
-	T.Hold = FMath::Clamp(S.Spec.SlowMoHold, 0.f, Avail - T.EaseIn - T.EaseOut);
-	T.Ease = EZoogiShotEase::SmoothStep;
-	PendingTimeScaleOwner = S.Id;
-	S.bSlowMoRunning = EaseTimeScale(T);
-	PendingTimeScaleOwner = 0;
-	UE_LOG(LogZoogi, Log, TEXT("CAMDIR shot %d %s slow-mo entry %s"), S.Id, *S.Spec.Name.ToString(), S.bSlowMoRunning ? TEXT("running") : TEXT("refused by the time-scale policy, playing at normal speed"));
+	if (!Spec.bSlowMoEntry) return 0.f;
+	// Same window shape the old time-scale entry had, fitted inside the shot.
+	const float Avail = FMath::Max(0.f, Duration - Spec.SlowMoDelay - 0.1f);
+	const float In = FMath::Min(Spec.SlowMoEaseIn, Avail * 0.3f);
+	const float Out = FMath::Min(Spec.SlowMoEaseOut, Avail * 0.4f);
+	const float Hold = FMath::Clamp(Spec.SlowMoHold, 0.f, FMath::Max(0.f, Avail - In - Out));
+	const float T = Age - Spec.SlowMoDelay;
+	if (T <= 0.f) return 0.f;
+	if (T < In) return ZoogiShot::ApplyEase(EZoogiShotEase::SmoothStep, T / FMath::Max(In, 1e-3f));
+	if (T < In + Hold) return 1.f;
+	if (T < In + Hold + Out) return 1.f - ZoogiShot::ApplyEase(EZoogiShotEase::SmoothStep, (T - In - Hold) / FMath::Max(Out, 1e-3f));
+	return 0.f;
+}
+
+void UZoogiEpisodeCameraDirector::GatherAvoidVolumes(const FVector& Around, float Radius, TArray<FBox>& Out) const
+{
+	UWorld* W = GetWorld();
+	if (!W) return;
+	if (AvoidCacheFrame == GFrameCounter && FVector::DistSquared(AvoidCacheAround, Around) < 1.f) { Out.Append(AvoidCache); return; }
+	TArray<FBox> Found;
+	auto Consider = [&](const FBox& B)
+	{
+		if (!B.IsValid) return;
+		const FVector Ext = B.GetExtent();
+		// Effects with huge fixed bounds (sky, ambient snow) cannot be avoided meaningfully; ignore them.
+		if (Ext.GetMax() > 1500.f || Ext.GetMax() < 5.f) return;
+		if (B.ComputeSquaredDistanceToPoint(Around) > Radius * Radius) return;
+		Found.Add(B);
+	};
+	for (TObjectIterator<UFXSystemComponent> It; It; ++It)
+	{
+		UFXSystemComponent* C = *It;
+		if (!C || C->GetWorld() != W || !C->IsRegistered() || !C->IsActive() || !C->IsVisible() || C->IsBeingDestroyed()) continue;
+		if (const AActor* O = C->GetOwner()) { if (O->IsHidden()) continue; }
+		Consider(C->Bounds.GetBox());
+	}
+	for (TActorIterator<AZoogiFX> It(W); It; ++It)
+	{
+		if (It->IsHidden() || It->IsActorBeingDestroyed()) continue;
+		Consider(It->GetComponentsBoundingBox(true));
+	}
+	AvoidCacheFrame = GFrameCounter;
+	AvoidCacheAround = Around;
+	AvoidCache = Found;
+	Out.Append(Found);
+}
+
+FVector UZoogiEpisodeCameraDirector::ResolveOcclusion(const FVector& Look, const FVector& Loc, AActor* F, AActor* Sec, bool& bOutBlocked) const
+{
+	bOutBlocked = false;
+	FCollisionQueryParams Q(SCENE_QUERY_STAT(ZoogiShotProbe), false);
+	if (F) Q.AddIgnoredActor(F);
+	if (Sec) Q.AddIgnoredActor(Sec);
+	if (ShotCam) Q.AddIgnoredActor(ShotCam);
+	for (int32 Try = 0; Try < 6; ++Try)
+	{
+		FHitResult Hit;
+		if (!GetWorld()->SweepSingleByChannel(Hit, Look, Loc, FQuat::Identity, ECC_Camera, FCollisionShape::MakeSphere(12.f), Q)) return Loc;
+		const UPrimitiveComponent* HC = Hit.GetComponent();
+		if (Hit.bStartPenetrating || (HC && HC->IsSimulatingPhysics()))
+		{
+			// Moving bodies (Zoogis, orbs, rubble) never push the shot camera around; only static set pieces do.
+			if (AActor* HA = Hit.GetActor()) { Q.AddIgnoredActor(HA); continue; }
+			return Loc;
+		}
+		bOutBlocked = true;
+		return Look + (Loc - Look) * FMath::Clamp(Hit.Time - 0.02f, 0.1f, 1.f);
+	}
+	return Loc;
 }
 
 void UZoogiEpisodeCameraDirector::TickShot(FZoogiActiveShot& S, float Dt, bool& bOutFinished, EZoogiShotEndReason& OutReason)
 {
 	bOutFinished = false;
 	S.Age += Dt;
+	// Presentation-only slow-mo look: the shot's own motion slows; world time is never touched.
+	const float SlowW = SlowLookWeight(S.Spec, S.Age, S.Duration);
+	S.MotionRate = FMath::Lerp(1.f, FMath::Clamp(S.Spec.SlowMoTarget, 0.05f, 1.f), SlowW);
+	S.MotionClock += Dt * S.MotionRate;
+	if (SlowW > 0.01f) { S.Stats.SlowLookFrames++; S.Stats.MinMotionRate = FMath::Min(S.Stats.MinMotionRate, S.MotionRate); }
 	FMinimalViewInfo ShotView;
 	if (!EvaluateShotView(S, Dt, ShotView))
 	{
@@ -631,7 +755,6 @@ void UZoogiEpisodeCameraDirector::TickShot(FZoogiActiveShot& S, float Dt, bool& 
 	}
 	S.LastShotView = ShotView;
 	const float FocusDist = FVector::Dist(ShotView.Location, S.LastFocus);
-	if (S.Spec.bSlowMoEntry && !S.bSlowMoTried && !S.bStopping && S.Age >= S.Spec.SlowMoDelay) TryStartShotSlowMo(S);
 
 	if (S.Output == EZoogiShotOutput::RenderTarget)
 	{
@@ -641,6 +764,7 @@ void UZoogiEpisodeCameraDirector::TickShot(FZoogiActiveShot& S, float Dt, bool& 
 			S.Capture->SetWorldLocationAndRotation(ShotView.Location, ShotView.Rotation);
 			S.Capture->FOVAngle = ShotView.FOV;
 			S.Capture->PostProcessSettings = BuildShotPostProcess(S.Spec, FocusDist, 1.f);
+			CamDirSlowLookGrade(S.Capture->PostProcessSettings, SlowW);
 			S.Capture->PostProcessBlendWeight = 1.f;
 			S.Capture->CaptureSceneDeferred();
 		}
@@ -680,6 +804,7 @@ void UZoogiEpisodeCameraDirector::TickShot(FZoogiActiveShot& S, float Dt, bool& 
 		ShotCam->SetActorLocationAndRotation(Out.Location, Out.Rotation);
 		C->SetFieldOfView(Out.FOV);
 		C->PostProcessSettings = BuildShotPostProcess(S.Spec, FocusDist, W);
+		CamDirSlowLookGrade(C->PostProcessSettings, SlowW * W);
 		C->PostProcessBlendWeight = Live.PostProcessBlendWeight;
 	}
 	if (bStopDone) { bOutFinished = true; OutReason = EZoogiShotEndReason::Stopped; }
@@ -750,6 +875,11 @@ bool UZoogiEpisodeCameraDirector::EaseTimeScale(const FZoogiTimeScaleSpec& Spec)
 	UWorld* W = GetWorld();
 	AWorldSettings* WS = W ? W->GetWorldSettings() : nullptr;
 	if (!WS || bTornDown) return false;
+	if (CVarAllowTimeDilation.GetValueOnGameThread() == 0)
+	{
+		UE_LOG(LogZoogi, Log, TEXT("CAMDIR time-scale ease refused: physics is never dilated (core rule); use the Episode pause-hold or a shot's presentation-only slow-mo look"));
+		return false;
+	}
 	if (Policy == EZoogiTimeScalePolicy::Disabled)
 	{
 		UE_LOG(LogZoogi, Log, TEXT("CAMDIR time-scale ease refused: policy Disabled (opt in with SetTimeScalePolicy)"));
@@ -939,4 +1069,11 @@ bool UZoogiEpisodeCameraDirector::CompareSnapshots(const FZoogiCameraSnapshot& A
 	OutReport = FString::Printf(TEXT("vt=%s dLoc=%.5fcm dRot=%.5fdeg dFov=%.5f"), *GetNameSafe(B.ViewTarget.Get()), DLoc, DRot, DFov);
 	if (Bad.Num() > 0) OutReport += TEXT(" MISMATCH: ") + FString::Join(Bad, TEXT(", "));
 	return Bad.Num() == 0;
+}
+
+bool UZoogiEpisodeCameraDirector::GetShotAvoidStats(FZoogiShotHandle Shot, FZoogiShotAvoidStats& Out) const
+{
+	if (const FZoogiActiveShot* A = Shots.FindByPredicate([&](const FZoogiActiveShot& S) { return S.Id == Shot.Id; })) { Out = A->Stats; return true; }
+	if (const FZoogiShotAvoidStats* F = StatsById.Find(Shot.Id)) { Out = *F; return true; }
+	return false;
 }

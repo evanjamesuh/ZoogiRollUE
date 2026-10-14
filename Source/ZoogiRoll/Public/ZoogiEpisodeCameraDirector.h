@@ -66,6 +66,27 @@ struct ZOOGIROLL_API FZoogiShotPlayParams
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Shot") FVector EventLocation = FVector::ZeroVector;
 };
 
+/** What a shot's camera had to do to stay readable (kept after the shot ends; see GetShotAvoidStats). */
+USTRUCT(BlueprintType)
+struct ZOOGIROLL_API FZoogiShotAvoidStats
+{
+	GENERATED_BODY()
+	UPROPERTY(BlueprintReadOnly, Category = "Shot") int32 Frames = 0;
+	/** Frames where the raw shot position was inside a particle / glow burst (before avoidance). */
+	UPROPERTY(BlueprintReadOnly, Category = "Shot") int32 RawInsideFXFrames = 0;
+	/** Frames where the FINAL camera was inside a burst (should stay 0). */
+	UPROPERTY(BlueprintReadOnly, Category = "Shot") int32 FinalInsideFXFrames = 0;
+	/** Frames where static geometry blocked subject -> camera and the camera was pulled in / lifted. */
+	UPROPERTY(BlueprintReadOnly, Category = "Shot") int32 OccludedFrames = 0;
+	/** Frames where the final camera still had blocking geometry between it and the subject (should stay 0). */
+	UPROPERTY(BlueprintReadOnly, Category = "Shot") int32 FinalOccludedFrames = 0;
+	UPROPERTY(BlueprintReadOnly, Category = "Shot") float MaxAvoidOffsetCm = 0.f;
+	UPROPERTY(BlueprintReadOnly, Category = "Shot") float MaxPullInCm = 0.f;
+	/** Slow-mo look frames (presentation only) and the slowest motion rate reached. */
+	UPROPERTY(BlueprintReadOnly, Category = "Shot") int32 SlowLookFrames = 0;
+	UPROPERTY(BlueprintReadOnly, Category = "Shot") float MinMotionRate = 1.f;
+};
+
 USTRUCT(BlueprintType)
 struct ZOOGIROLL_API FZoogiTimeScaleSpec
 {
@@ -166,9 +187,12 @@ struct FZoogiActiveShot
 	/** Event point (trick shots); always set (default = arena centre at the focus' start height). */
 	FVector EventLoc = FVector::ZeroVector;
 	bool bEventFromCaller = false;
-	/** Slow-mo entry attempted (once per shot) / accepted. */
-	bool bSlowMoTried = false;
-	bool bSlowMoRunning = false;
+	/** Shot-local motion clock (real time scaled by the presentation-only slow-mo look). */
+	float MotionClock = 0.f;
+	float MotionRate = 1.f;
+	/** Particle-avoid offset (eased back out when the burst is gone). */
+	FVector AvoidOffset = FVector::ZeroVector;
+	FZoogiShotAvoidStats Stats;
 	/** MainView ease-in source: the live gameplay view, or the previous shot's last view when this one replaced it. */
 	bool bBlendFromFrozen = false;
 	FMinimalViewInfo BlendFrom;
@@ -237,8 +261,12 @@ public:
 	/** bImmediate puts the prior value back this frame; otherwise eases out from the current value. */
 	void StopTimeScale(bool bImmediate = true);
 	bool IsTimeScaleActive() const { return TS.bActive; }
-	/** True while the running time-scale ease was started by this shot's slow-mo entry. */
+	/** Kept for API compatibility: shots never own a time-scale ease any more (slow-mo looks are presentation only). */
 	bool IsTimeScaleOwnedBy(FZoogiShotHandle Shot) const { return TS.bActive && Shot.IsValid() && TimeScaleOwnerShotId == Shot.Id; }
+	/** Occlusion / particle-avoid / slow-mo-look stats of a running or recently finished shot. */
+	bool GetShotAvoidStats(FZoogiShotHandle Shot, FZoogiShotAvoidStats& Out) const;
+	/** Bounds of the active particle / glow bursts the shot camera keeps out of (near Around, within Radius). */
+	void GatherAvoidVolumes(const FVector& Around, float Radius, TArray<FBox>& Out) const;
 	/** Name of an awake simulated body, or empty if all are asleep. */
 	FString FindAwakePhysicsBody() const;
 
@@ -264,7 +292,12 @@ private:
 	void SetCinematicDilation(float Value);
 	void RestoreTimeScaleExact(const TCHAR* Why);
 	float CurveOrEase(UCurveFloat* Curve, EZoogiShotEase Ease, float T) const;
-	void TryStartShotSlowMo(FZoogiActiveShot& S);
+	float SlowLookWeight(const FZoogiShotSpec& Spec, float Age, float Duration) const;
+	FVector ResolveOcclusion(const FVector& Look, const FVector& Loc, AActor* F, AActor* Sec, bool& bOutBlocked) const;
+	TMap<int32, FZoogiShotAvoidStats> StatsById;
+	mutable uint64 AvoidCacheFrame = 0;
+	mutable FVector AvoidCacheAround = FVector::ZeroVector;
+	mutable TArray<FBox> AvoidCache;
 
 	UPROPERTY() TObjectPtr<UZoogiShotLibrary> Library = nullptr;
 	UPROPERTY() TArray<FZoogiActiveShot> Shots;

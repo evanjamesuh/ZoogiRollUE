@@ -23,7 +23,7 @@ class UTextureRenderTarget2D;
 
 namespace ZoogiShotTest
 {
-	enum class ECaseKind : uint8 { Shot, Cancel, StopEased, Overlap, FocusDestroyed, TimeScaleRefused, TimeScale, TimeScaleCancel, AirborneSlowMoCancel, AirborneSlowMoRefused, LevelEnd };
+	enum class ECaseKind : uint8 { Shot, Cancel, StopEased, Overlap, FocusDestroyed, TimeScaleRefused, TimeScale, TimeScaleCancel, AirborneSlowMoCancel, AirborneSlowMoRefused, AvoidParticles, AvoidOcclusion, LevelEnd };
 	enum class EStep : uint8 { StartMatch, WaitLive, WaitSettle, Run, WaitEnd, Verify, Restored, Done, Summary };
 	struct FCase
 	{
@@ -95,6 +95,7 @@ private:
 
 	UPROPERTY() TObjectPtr<AStaticMeshActor> TrackProp = nullptr;
 	UPROPERTY() TObjectPtr<AStaticMeshActor> TempProp = nullptr;
+	UPROPERTY() TObjectPtr<AActor> TempFX = nullptr;
 	UPROPERTY() TArray<TObjectPtr<UTextureRenderTarget2D>> KeepTargets;
 	FVector TrackCenter = FVector::ZeroVector;
 	float TrackAngle = 0.f;

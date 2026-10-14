@@ -4,6 +4,10 @@
 #include "ZoogiBall.h"
 #include "ZoogiOrb.h"
 #include "ZoogiArena.h"
+#include "ZoogiFX.h"
+#include "NiagaraFunctionLibrary.h"
+#include "NiagaraSystem.h"
+#include "NiagaraComponent.h"
 #include "Camera/CameraActor.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/StaticMeshComponent.h"
@@ -186,10 +190,12 @@ void AZoogiShotTestDriver::BuildCases()
 	Add(ZoogiShotTest::ECaseKind::Overlap, TEXT("Overlap_CloseUp_TwoShot_plus_RT"), EZoogiShotType::CloseUp, EZoogiShotOutput::MainView);
 	Add(ZoogiShotTest::ECaseKind::FocusDestroyed, TEXT("FocusDestroyed_MainView_plus_RT"), EZoogiShotType::CloseUp, EZoogiShotOutput::MainView);
 	Add(ZoogiShotTest::ECaseKind::TimeScaleRefused, TEXT("TimeScale_PolicyDisabled"), EZoogiShotType::CloseUp, EZoogiShotOutput::MainView);
-	Add(ZoogiShotTest::ECaseKind::TimeScale, TEXT("TimeScale_Ease_with_LowAngle_MainView"), EZoogiShotType::LowAngleHero, EZoogiShotOutput::MainView);
-	Add(ZoogiShotTest::ECaseKind::TimeScaleCancel, TEXT("TimeScale_Cancel"), EZoogiShotType::CloseUp, EZoogiShotOutput::MainView);
-	Add(ZoogiShotTest::ECaseKind::AirborneSlowMoCancel, TEXT("Airborne_SlowMo_Cancel_MainView"), EZoogiShotType::Airborne, EZoogiShotOutput::MainView);
-	Add(ZoogiShotTest::ECaseKind::AirborneSlowMoRefused, TEXT("Airborne_SlowMo_PolicyDisabled_RenderTarget"), EZoogiShotType::Airborne, EZoogiShotOutput::RenderTarget);
+	Add(ZoogiShotTest::ECaseKind::TimeScale, TEXT("TimeScale_NeverDilates_with_LowAngle_MainView"), EZoogiShotType::LowAngleHero, EZoogiShotOutput::MainView);
+	Add(ZoogiShotTest::ECaseKind::TimeScaleCancel, TEXT("TimeScale_NeverDilates_Cancel"), EZoogiShotType::CloseUp, EZoogiShotOutput::MainView);
+	Add(ZoogiShotTest::ECaseKind::AirborneSlowMoCancel, TEXT("Airborne_SlowLook_Cancel_MainView"), EZoogiShotType::Airborne, EZoogiShotOutput::MainView);
+	Add(ZoogiShotTest::ECaseKind::AirborneSlowMoRefused, TEXT("Airborne_SlowLook_PolicyDisabled_RenderTarget"), EZoogiShotType::Airborne, EZoogiShotOutput::RenderTarget);
+	Add(ZoogiShotTest::ECaseKind::AvoidParticles, TEXT("AvoidParticles_Tracking_MainView"), EZoogiShotType::Tracking, EZoogiShotOutput::MainView);
+	Add(ZoogiShotTest::ECaseKind::AvoidOcclusion, TEXT("AvoidOcclusion_CloseUp_RenderTarget"), EZoogiShotType::CloseUp, EZoogiShotOutput::RenderTarget);
 	Add(ZoogiShotTest::ECaseKind::LevelEnd, TEXT("LevelEnd"), EZoogiShotType::TopDownImpact, EZoogiShotOutput::MainView);
 }
 
@@ -539,6 +545,44 @@ void AZoogiShotTestDriver::StartCase()
 		bTimeScaleStarted = D->EaseTimeScale(TSpec);
 		break;
 	}
+	case ZoogiShotTest::ECaseKind::AvoidParticles:
+	{
+		// A white glow burst (+ a Niagara white burst) right where the tracking camera would sit; the camera must stay out of it.
+		const AZoogiBall* B = Cast<AZoogiBall>(F);
+		const FVector Pv = B ? B->BallLocation() : (F ? F->GetActorLocation() : FVector::ZeroVector);
+		const float Pr = FMath::DegreesToRadians(17.f);
+		const FVector Cam = Pv - FRotator(0.f, Snap0.POV.Rotation.Yaw, 0.f).Vector() * 530.f * FMath::Cos(Pr) + FVector(0.f, 0.f, 530.f * FMath::Sin(Pr));
+		TempFX = AZoogiFX::Spawn(GetWorld(), Cam, FLinearColor::White, 230.f, 4.0f, false, 4.f);
+		if (UNiagaraSystem* NS = LoadObject<UNiagaraSystem>(nullptr, TEXT("/Game/FX/NS_Burst_White.NS_Burst_White"), nullptr, LOAD_NoWarn))
+			UNiagaraFunctionLibrary::SpawnSystemAtLocation(GetWorld(), NS, Cam, FRotator::ZeroRotator, FVector(2.f), true, true, ENCPoolMethod::None);
+		UE_LOG(LogZoogi, Log, TEXT("ZOOGI SHOTTEST   burst at the predicted tracking camera %s (glow actor %s)"), *Cam.ToString(), *GetNameSafe(TempFX));
+		Handles.Add(D->PlayShot(Spec, F, nullptr, EZoogiShotOutput::MainView));
+		break;
+	}
+	case ZoogiShotTest::ECaseKind::AvoidOcclusion:
+	{
+		// A camera-only blocker (query only, blocks ECC_Camera, ignores every other channel: no physics contact) between
+		// P1 and the predicted close-up camera, low enough to stay below the high gameplay view.
+		const AZoogiBall* B = Cast<AZoogiBall>(F);
+		const FVector Pv = B ? B->BallLocation() : (F ? F->GetActorLocation() : FVector::ZeroVector);
+		const float Yw = Snap0.POV.Rotation.Yaw + Spec.YawOffset + Spec.OrbitDegrees * 0.5f;
+		const FVector Out = -FRotator(0.f, Yw, 0.f).Vector();
+		TempProp = SpawnProp(Pv + Out * 150.f + FVector(0.f, 0.f, 5.f), 1.f);
+		if (TempProp)
+		{
+			UStaticMeshComponent* M = TempProp->GetStaticMeshComponent();
+			M->SetStaticMesh(LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube")));
+			TempProp->SetActorRotation(FRotator(0.f, Yw, 0.f));
+			TempProp->SetActorScale3D(FVector(0.15f, 2.6f, 1.1f));
+			M->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+			M->SetCollisionResponseToAllChannels(ECR_Ignore);
+			M->SetCollisionResponseToChannel(ECC_Camera, ECR_Block);
+		}
+		const FZoogiShotHandle H = D->PlayShot(Spec, F, nullptr, EZoogiShotOutput::RenderTarget);
+		Handles.Add(H);
+		Panel(H, TEXT("CloseUp behind a camera blocker"));
+		break;
+	}
 	default: break;
 	}
 	if (C.Kind == ZoogiShotTest::ECaseKind::AirborneSlowMoCancel) CaseMid = 0.6f; // screenshot mid slow-mo, before the cancel
@@ -568,7 +612,7 @@ void AZoogiShotTestDriver::RunCase(float RealDt)
 		ArcProp->SetActorLocation(Pos);
 	}
 	// RenderTarget output must leave the main view completely alone, every frame.
-	if ((C.Kind == ZoogiShotTest::ECaseKind::Shot || C.Kind == ZoogiShotTest::ECaseKind::AirborneSlowMoRefused) && C.Output == EZoogiShotOutput::RenderTarget)
+	if ((C.Kind == ZoogiShotTest::ECaseKind::Shot || C.Kind == ZoogiShotTest::ECaseKind::AirborneSlowMoRefused || C.Kind == ZoogiShotTest::ECaseKind::AvoidOcclusion) && C.Output == EZoogiShotOutput::RenderTarget)
 	{
 		APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
 		if (PC && PC->PlayerCameraManager)
@@ -647,7 +691,7 @@ void AZoogiShotTestDriver::RunCase(float RealDt)
 	{
 		bMidDone = true;
 		Shot(C.Name + TEXT("_shot"));
-		if ((C.Kind == ZoogiShotTest::ECaseKind::Shot || C.Kind == ZoogiShotTest::ECaseKind::AirborneSlowMoRefused) && C.Output == EZoogiShotOutput::RenderTarget && Handles.Num())
+		if ((C.Kind == ZoogiShotTest::ECaseKind::Shot || C.Kind == ZoogiShotTest::ECaseKind::AirborneSlowMoRefused || C.Kind == ZoogiShotTest::ECaseKind::AvoidOcclusion) && C.Output == EZoogiShotOutput::RenderTarget && Handles.Num())
 			ExportRT(D->GetShotRenderTarget(Handles[0]), C.Name + TEXT("_rendertarget"));
 		if (C.Kind == ZoogiShotTest::ECaseKind::Overlap && Handles.Num() >= 3) ExportRT(D->GetShotRenderTarget(Handles[2]), C.Name + TEXT("_rendertarget"));
 	}
@@ -676,7 +720,7 @@ void AZoogiShotTestDriver::Verify()
 	APlayerController* PC = Snap1.PC.Get();
 	if (PC && D->GetShotCamera() && PC->GetViewTarget() == D->GetShotCamera()) { bPass = false; Extra.Add(TEXT("shot camera still the view target")); }
 	if (D->IsMainViewTaken() || D->NumActiveCaptures() > 0) { bPass = false; Extra.Add(TEXT("director not idle")); }
-	if ((C.Kind == ZoogiShotTest::ECaseKind::Shot || C.Kind == ZoogiShotTest::ECaseKind::AirborneSlowMoRefused) && C.Output == EZoogiShotOutput::RenderTarget)
+	if ((C.Kind == ZoogiShotTest::ECaseKind::Shot || C.Kind == ZoogiShotTest::ECaseKind::AirborneSlowMoRefused || C.Kind == ZoogiShotTest::ECaseKind::AvoidOcclusion) && C.Output == EZoogiShotOutput::RenderTarget)
 	{
 		const bool bUntouched = MaxMainDev <= 0.01f;
 		bPass &= bUntouched;
@@ -689,22 +733,35 @@ void AZoogiShotTestDriver::Verify()
 	}
 	if (C.Kind == ZoogiShotTest::ECaseKind::TimeScale || C.Kind == ZoogiShotTest::ECaseKind::TimeScaleCancel)
 	{
-		if (!bTimeScaleStarted) Extra.Add(TEXT("ease REFUSED by the physics-at-rest gate (see CAMDIR line)"));
-		else Extra.Add(FString::Printf(TEXT("ease ran: min effective dilation %.3f, cinematic dilation back to %.6f (prior %.6f)"), MinEffDilation, Snap1.CinematicTimeDilation, Snap0.CinematicTimeDilation));
-		bPass &= bTimeScaleStarted && MinEffDilation < 0.5f;
+		// Core rule: physics is never dilated. EaseTimeScale must refuse even with an opt-in policy.
+		const bool bNever = !bTimeScaleStarted && MinEffDilation > 0.999f;
+		Extra.Add(bNever ? FString::Printf(TEXT("ease refused, world never dilated (min effective %.4f)"), MinEffDilation)
+			: FString::Printf(TEXT("WORLD DILATED: started=%d min effective %.4f"), bTimeScaleStarted ? 1 : 0, MinEffDilation));
+		bPass &= bNever;
 	}
-	if ((C.Kind == ZoogiShotTest::ECaseKind::Shot && C.Type == EZoogiShotType::Airborne) || C.Kind == ZoogiShotTest::ECaseKind::AirborneSlowMoCancel)
+	if ((C.Kind == ZoogiShotTest::ECaseKind::Shot && C.Type == EZoogiShotType::Airborne) || C.Kind == ZoogiShotTest::ECaseKind::AirborneSlowMoCancel || C.Kind == ZoogiShotTest::ECaseKind::AirborneSlowMoRefused)
 	{
-		const bool bSlowed = MinEffDilation < (C.Kind == ZoogiShotTest::ECaseKind::Shot ? 0.5f : 0.9f);
-		bPass &= bSlowed && !D->IsTimeScaleActive();
-		Extra.Add(FString::Printf(TEXT("slow-mo entry %s: min effective dilation %.3f, cinematic dilation back to %.6f (prior %.6f), arc peak %.0f cm"),
-			bSlowed ? TEXT("ran") : TEXT("DID NOT RUN"), MinEffDilation, Snap1.CinematicTimeDilation, Snap0.CinematicTimeDilation, MaxArcHeight));
+		FZoogiShotAvoidStats St;
+		const bool bHave = Handles.Num() && D->GetShotAvoidStats(Handles[0], St);
+		const bool bLook = bHave && St.SlowLookFrames > 0 && St.MinMotionRate < 0.6f;
+		const bool bNoDil = MinEffDilation > 0.999f && !D->IsTimeScaleActive();
+		bPass &= bLook && bNoDil;
+		Extra.Add(FString::Printf(TEXT("slow-mo look %s (presentation only: %d frames, slowest motion rate %.2f) | world dilation min %.4f (%s) | arc peak %.0f cm"),
+			bLook ? TEXT("ran") : TEXT("DID NOT RUN"), St.SlowLookFrames, St.MinMotionRate, MinEffDilation, bNoDil ? TEXT("never dilated") : TEXT("DILATED"), MaxArcHeight));
 	}
-	if (C.Kind == ZoogiShotTest::ECaseKind::AirborneSlowMoRefused)
+	if (C.Kind == ZoogiShotTest::ECaseKind::AvoidParticles || C.Kind == ZoogiShotTest::ECaseKind::AvoidOcclusion || C.Kind == ZoogiShotTest::ECaseKind::Shot)
 	{
-		const bool bNormal = MinEffDilation > 0.999f;
-		bPass &= bNormal;
-		Extra.Add(bNormal ? TEXT("slow-mo refused under the Disabled policy, shot played at normal speed") : TEXT("time dilation CHANGED under the Disabled policy"));
+		FZoogiShotAvoidStats St;
+		if (Handles.Num() && D->GetShotAvoidStats(Handles[0], St))
+		{
+			bool bOk = St.FinalInsideFXFrames == 0;
+			if (C.Kind == ZoogiShotTest::ECaseKind::AvoidParticles) bOk &= St.RawInsideFXFrames > 0;
+			if (C.Kind == ZoogiShotTest::ECaseKind::AvoidOcclusion) bOk &= St.OccludedFrames > 0 && St.FinalOccludedFrames == 0;
+			bPass &= bOk;
+			Extra.Add(FString::Printf(TEXT("avoid: frames %d, raw-in-burst %d, final-in-burst %d, occluded %d (final %d), max offset %.0f cm, max pull-in %.0f cm"),
+				St.Frames, St.RawInsideFXFrames, St.FinalInsideFXFrames, St.OccludedFrames, St.FinalOccludedFrames, St.MaxAvoidOffsetCm, St.MaxPullInCm));
+		}
+		else if (C.Kind != ZoogiShotTest::ECaseKind::Shot) { bPass = false; Extra.Add(TEXT("no avoid stats")); }
 	}
 	if (FinishLog.Num()) Extra.Add(TEXT("ends ") + FString::Join(FinishLog, TEXT(",")));
 	if (AZoogiGameMode* G = GM()) Extra.Add(FString::Printf(TEXT("stage %d phase %d"), (int32)G->Stage, (int32)G->Phase));
@@ -792,6 +849,7 @@ void AZoogiShotTestDriver::Tick(float DeltaSeconds)
 			if (TrackProp) TrackProp->SetActorHiddenInGame(true);
 			if (ArcProp) ArcProp->SetActorHiddenInGame(true);
 			if (TempProp) { TempProp->Destroy(); TempProp = nullptr; }
+			if (TempFX) { TempFX->Destroy(); TempFX = nullptr; }
 			WaitFrames = 1;
 		}
 		else if (WaitFrames == 1 && StepTime > 0.15f)
