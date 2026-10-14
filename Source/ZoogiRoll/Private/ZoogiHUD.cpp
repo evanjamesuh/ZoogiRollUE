@@ -36,6 +36,8 @@
 #include "Misc/Paths.h"
 #include "ZoogiEpisodeDirector.h"
 #include "ZoogiUIStyle.h"
+#include "ZoogiFramedLayout.h"
+#include "SceneView.h"
 
 static const FLinearColor GPanel = ZoogiUIStyle::PanelNavy; // uistyle: saturated navy (was near-black 0.02/0.03/0.08 @ 0.72)
 static const FLinearColor GOrbBlue(0.53f, 0.81f, 0.92f, 1.f);
@@ -85,7 +87,9 @@ void AZoogiHUD::Text(const FString& S, float X, float Y, const FLinearColor& C, 
 bool AZoogiHUD::Button(const FString& Label, float X, float Y, float W, float H, FName Action, int32 Index, const FLinearColor& Accent, bool bSelected)
 {
 	float MX = 0.f, MY = 0.f;
-	const bool bHover = PlayerOwner && PlayerOwner->GetMousePosition(MX, MY) && MX >= X && MX <= X + W && MY >= Y && MY <= Y + H;
+	const bool bMouse = PlayerOwner && PlayerOwner->GetMousePosition(MX, MY);
+	MX -= FrameOrg.X; MY -= FrameOrg.Y; // framed: canvas space = arena view rect
+	const bool bHover = bMouse && MX >= X && MX <= X + W && MY >= Y && MY <= Y + H;
 	// uistyle: chunky rounded plate (saturated navy idle, accent when selected), navy outline, gloss + accent strip
 	FLinearColor Bg = bSelected ? Accent * 0.8f : ZoogiUIStyle::ButtonNavy;
 	if (bHover) Bg = bSelected ? Accent * 0.95f : FLinearColor(0.08f, 0.26f, 0.72f, 1.f);
@@ -129,14 +133,14 @@ bool AZoogiHUD::UIConsumedClick() const
 
 bool AZoogiHUD::IsOverUI(const FVector2D& ViewportPos) const
 {
-	return AwakenWidget && AwakenWidget->IsOverPanels(ViewportPos);
+	return (AwakenWidget && AwakenWidget->IsOverPanels(ViewportPos)) || ZoogiFramed::IsOutsideArena(GetWorld(), ViewportPos); // framed: margins are UI, never world picks
 }
 
 bool AZoogiHUD::HitTest(const FVector2D& Mouse, FName& OutAction, int32& OutIndex) const
 {
 	for (const FZoogiButton& B : Buttons)
 	{
-		if (B.Rect.IsInside(Mouse))
+		if (B.Rect.IsInside(Mouse - FrameOrg))
 		{
 			OutAction = B.Action;
 			OutIndex = B.Index;
@@ -153,6 +157,7 @@ void AZoogiHUD::DrawHUD()
 	AZoogiGameMode* G = GetWorld()->GetAuthGameMode<AZoogiGameMode>();
 	if (!G || !Canvas) return;
 	U = Canvas->ClipY / 1080.f;
+	FrameOrg = Canvas->SceneView ? FVector2D(Canvas->SceneView->UnscaledViewRect.Min.X, Canvas->SceneView->UnscaledViewRect.Min.Y) : FVector2D::ZeroVector;
 	Time += FApp::GetDeltaTime(); // real time (independent of pause / fixed step)
 	static const bool bNoHUD = FParse::Param(FCommandLine::Get(), TEXT("ZoogiNoHUD")); // clean captures (portraits)
 	if (bNoHUD && G->Phase != EZoogiPhase::Menu) { UpdateAwakenWidget(G, true); return; }
@@ -352,10 +357,12 @@ void AZoogiHUD::DrawScoreboard(AZoogiGameMode* G)
 	float Y = 24.f * U;
 	const float X = 24.f * U;
 	const float RowH = 58.f * U;
-	Panel(X, Y, 400.f * U, RowH * G->Balls.Num() + 16.f * U, GPanel);
-	Y += 8.f * U;
+	const bool bFramed = ZoogiFramed::IsActive(GetWorld()); // framed: player rows live in the side columns
+	if (!bFramed) Panel(X, Y, 400.f * U, RowH * G->Balls.Num() + 16.f * U, GPanel);
+	Y += bFramed ? -22.f * U : 8.f * U;
 	for (AZoogiBall* B : G->Balls)
 	{
+		if (bFramed) break;
 		if (!B) continue;
 		const bool bActive = B->PlayerIndex == G->ActivePlayer && G->Phase != EZoogiPhase::GameOver;
 		const FLinearColor PC = ZoogiUtil::PlayerColor(B->PlayerIndex);
@@ -420,13 +427,14 @@ void AZoogiHUD::DrawMatch(AZoogiGameMode* G)
 		DrawRect(FLinearColor(0.f, 0.f, 0.f, 0.92f), 0.f, H - BarH, W, BarH);
 	}
 	DrawScoreboard(G);
+	const bool bFramed = ZoogiFramed::IsActive(GetWorld()); // framed: header / prompt / buttons are drawn in the margins
 
 	// Top centre: round, orbs left, turn banner.
 	const FString Info = G->bComboMode
 		? FString::Printf(TEXT("2v2 COMBO   ROUND %d / %d     TEAM A %d  -  %d TEAM B"), FMath::Min(G->RoundNumber, G->MenuRounds), G->MenuRounds, G->TeamScore(0), G->TeamScore(1))
 		: FString::Printf(TEXT("ROUND %d / %d     ORBS LEFT %d"), FMath::Min(G->RoundNumber, G->MenuRounds), G->MenuRounds, G->OrbsLeft());
-	Panel(W * 0.5f - 260.f * U, 20.f * U, 520.f * U, 46.f * U, GPanel);
-	Text(Info, W * 0.5f, 28.f * U, GOrbBlue, 0.55f, true);
+	if (!bFramed) Panel(W * 0.5f - 260.f * U, 20.f * U, 520.f * U, 46.f * U, GPanel);
+	if (!bFramed) Text(Info, W * 0.5f, 28.f * U, GOrbBlue, 0.55f, true);
 	if (AZoogiBall* B = G->GetActiveBall())
 	{
 		if (G->Phase != EZoogiPhase::GameOver)
@@ -447,7 +455,7 @@ void AZoogiHUD::DrawMatch(AZoogiGameMode* G)
 			else if (G->IsPowerUpStep()) Status = TEXT("POWER UP - launching!");
 			else if (G->HasAim()) Status = TEXT("");
 			else Status = TEXT("Click a rival or orb to lock on - or click the floor to aim at a point");
-			if (!Status.IsEmpty()) Text(Status, W * 0.5f, H - 70.f * U, FLinearColor(0.85f, 0.9f, 1.f), 0.5f, true, false);
+			if (!Status.IsEmpty() && !bFramed) Text(Status, W * 0.5f, H - 70.f * U, FLinearColor(0.85f, 0.9f, 1.f), 0.5f, true, false);
 		}
 	}
 
@@ -508,11 +516,12 @@ void AZoogiHUD::DrawMatch(AZoogiGameMode* G)
 	else if (G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Awaken && !bUmgAwaken) DrawAwaken(G);
 	if (G->IsHumanAiming() && G->IsAimStep() && !bUmgAim) DrawAimControls(G);
 	DrawEpisodeP5(G);
-	if (Letterbox < 0.3f && G->bComboMode) Text(TEXT("2v2 COMBO   Awaken: card + I / G / S   Battle: Q switch Zoogi, click target / floor, A/D cut, 1 CONTROL 2 DRIVE 3 LAUNCH, SPACE confirm   Follow-Up: F accept / X skip   C camera"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.88f, 1.f, 0.9f), 0.36f, false, false);
+	if (bFramed) {}
+	else if (Letterbox < 0.3f && G->bComboMode) Text(TEXT("2v2 COMBO   Awaken: card + I / G / S   Battle: Q switch Zoogi, click target / floor, A/D cut, 1 CONTROL 2 DRIVE 3 LAUNCH, SPACE confirm   Follow-Up: F accept / X skip   C camera"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.88f, 1.f, 0.9f), 0.36f, false, false);
 	else if (Letterbox < 0.3f && G->CardsOn()) Text(TEXT("Standby: click cards (1-5) + COMMIT (Enter), Backspace clears   Aim: click target or floor, A/D cut, Up/Down force CONTROL/DRIVE/LAUNCH, SPACE confirm   C camera"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.88f, 1.f, 0.9f), 0.36f, false, false);
 	else if (Letterbox < 0.3f) Text(TEXT("Awaken: click a card + INFUSE / GUARD / SAVE (I/G/S)   Aim: click target or floor, A/D cut, Up/Down power, SPACE confirm   RMB/Esc cancel   C camera   Ctrl+R restart"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.88f, 1.f, 0.9f), 0.36f, false, false);
-	Button(TEXT("MENU"), W - 150.f * U, 24.f * U, 126.f * U, 46.f * U, "Menu", 0, GOrbBlue);
-	Button(G->bCinematicCam ? TEXT("CAM: CINE") : TEXT("CAM: TACT"), W - 340.f * U, 24.f * U, 176.f * U, 46.f * U, "CamStyle", 0, FLinearColor(0.6f, 0.9f, 0.6f), G->bCinematicCam);
+	if (!bFramed) Button(TEXT("MENU"), W - 150.f * U, 24.f * U, 126.f * U, 46.f * U, "Menu", 0, GOrbBlue);
+	if (!bFramed) Button(G->bCinematicCam ? TEXT("CAM: CINE") : TEXT("CAM: TACT"), W - 340.f * U, 24.f * U, 176.f * U, 46.f * U, "CamStyle", 0, FLinearColor(0.6f, 0.9f, 0.6f), G->bCinematicCam);
 	DrawAnime(G);
 	// Climax impact frame (drawn even with Anime=Off): 1-2 frames of white on the hit, fading over ~0.1 s.
 	{
@@ -781,7 +790,7 @@ void AZoogiHUD::DrawStages(AZoogiGameMode* G)
 	const float BW = 128.f * U, BH = 30.f * U, Gap = 8.f * U;
 	const float X0 = W * 0.5f - (N * BW + (N - 1) * Gap) * 0.5f, Y = 74.f * U;
 	const int32 Cur = (int32)G->Stage;
-	for (int32 i = 0; i < N; ++i)
+	for (int32 i = 0; i < N && !ZoogiFramed::IsActive(GetWorld()); ++i) // framed: the stepper is in the header
 	{
 		const float X = X0 + i * (BW + Gap);
 		const bool bNow = i == Cur, bDone = i < Cur;
@@ -832,7 +841,7 @@ void AZoogiHUD::DrawStages(AZoogiGameMode* G)
 		{
 			if (Hv != T)
 			{
-				const FVector2D M = ZPC->GetCursor();
+				const FVector2D M = ZPC->GetCursor() - FrameOrg;
 				Text(G->TargetName(Hv), M.X + 22.f * U, M.Y - 34.f * U, FLinearColor(0.9f, 0.97f, 1.f), 0.42f, false, false);
 			}
 		}
@@ -1207,7 +1216,7 @@ void AZoogiHUD::DrawAwaken(AZoogiGameMode* G)
 		const FZoogiArtifactRow& R = ZoogiArtifacts::Get(C.Value);
 		const bool bSel = C.Key == Pick;
 		float MX = 0.f, MY = 0.f;
-		const bool bHover = PlayerOwner && PlayerOwner->GetMousePosition(MX, MY) && MX >= X && MX <= X + CW && MY >= Y0 && MY <= Y0 + CH;
+		const bool bHover = PlayerOwner && PlayerOwner->GetMousePosition(MX, MY) && MX - FrameOrg.X >= X && MX - FrameOrg.X <= X + CW && MY - FrameOrg.Y >= Y0 && MY - FrameOrg.Y <= Y0 + CH;
 		Panel(X, Y0, CW, CH, bSel ? FLinearColor(R.CoreColor.R * 0.3f, R.CoreColor.G * 0.3f, R.CoreColor.B * 0.3f, 0.95f) : FLinearColor(0.05f, 0.07f, 0.14f, bHover ? 0.98f : 0.9f));
 		if (bSel)
 		{
@@ -1410,9 +1419,10 @@ void AZoogiHUD::DrawCombo(AZoogiGameMode* G)
 	{
 		// Team panel (top right, under the camera / menu buttons).
 		const float PW = 560.f * U, PH = 212.f * U;
-		const float X0 = W - PW - 24.f * U, Y0 = 84.f * U;
-		Panel(X0, Y0, PW, PH, GPanel);
-		for (int32 t = 0; t < 2; ++t)
+		const bool bFramed = ZoogiFramed::IsActive(GetWorld()); // framed: team gauges live in the side columns, callouts stay
+		const float X0 = W - PW - 24.f * U, Y0 = bFramed ? 24.f * U - PH - 12.f * U : 84.f * U;
+		if (!bFramed) Panel(X0, Y0, PW, PH, GPanel);
+		for (int32 t = 0; t < 2 && !bFramed; ++t)
 		{
 			const float RY = Y0 + 10.f * U + t * 82.f * U;
 			const FLinearColor TC = AZoogiGameMode::TeamColor(t);
@@ -1442,7 +1452,7 @@ void AZoogiHUD::DrawCombo(AZoogiGameMode* G)
 		}
 		const FString Floor = G->ComboArena ? AZoogiComboArena::FloorStateName(G->ComboArena->GetFloorState()) : TEXT("-");
 		const bool bShift = G->ComboArena && G->ComboArena->IsShifted();
-		Text(FString::Printf(TEXT("FLOOR SECTION: %s      RESONANCE SHIFT: %s"), *Floor, bShift ? TEXT("ACTIVE (bumpers swell)") : *FString::Printf(TEXT("at %.0f control"), ZoogiComboTune::ShiftAtControl)),
+		if (!bFramed) Text(FString::Printf(TEXT("FLOOR SECTION: %s      RESONANCE SHIFT: %s"), *Floor, bShift ? TEXT("ACTIVE (bumpers swell)") : *FString::Printf(TEXT("at %.0f control"), ZoogiComboTune::ShiftAtControl)),
 			X0 + 22.f * U, Y0 + PH - 30.f * U, FLinearColor(1.f, 0.7f, 0.4f), 0.34f, false, false);
 
 		// Callouts under the panel (newest on top).
