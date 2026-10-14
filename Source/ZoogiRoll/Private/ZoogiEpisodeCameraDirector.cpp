@@ -781,7 +781,9 @@ bool UZoogiEpisodeCameraDirector::EvaluateShotView(FZoogiActiveShot& S, float Dt
 		}
 	}
 
-	if (S.LeftPlayAge >= 0.f) Loc.Z = FMath::Max(Loc.Z, CamDirFloorZ + 2.f * ZoogiConst::ZoogiRadius); // never dive below the court
+	// Also floor the camera while the focus is at the rim / dropping, before it formally leaves play.
+	const bool bNearEdge = FCraw.Z < CamDirFloorZ || (AZoogiArena::ActiveKnockoffR > 0.f && FVector2D(FCraw.X, FCraw.Y).Size() > AZoogiArena::ActiveKnockoffR * 0.9f);
+	if (S.LeftPlayAge >= 0.f || bNearEdge) Loc.Z = FMath::Max(Loc.Z, CamDirFloorZ + 2.f * ZoogiConst::ZoogiRadius); // never dive below the court
 	FRotator Rot = (Look - Loc).Rotation();
 	Rot.Roll = Spec.Roll;
 	float Fov = FMath::Lerp(Spec.FOV, Spec.FOVEnd, M);
