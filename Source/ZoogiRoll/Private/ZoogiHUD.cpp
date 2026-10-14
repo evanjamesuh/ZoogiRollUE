@@ -470,6 +470,7 @@ void AZoogiHUD::DrawMatch(AZoogiGameMode* G)
 			if (!Bt || Bt->bOut) continue;
 			const FVector S = Project(Bt->BallLocation() + FVector(0, 0, ZoogiConst::ZoogiRadius + 70.f), true);
 			if (S.Z <= 0.f) continue;
+			if (bFramed && ZoogiFramed::IsOutsideArena(GetWorld(), FVector2D(S.X, S.Y - 30.f * U))) continue; // hud-v3: no tags over the frame / name plate
 			const FLinearColor PC = ZoogiUtil::PlayerColor(Bt->PlayerIndex);
 			FString Tag = FString::Printf(TEXT("P%d"), Bt->PlayerIndex + 1);
 			if (Bt->StunTurns > 0) Tag += TEXT("  STUN");
@@ -819,7 +820,7 @@ void AZoogiHUD::DrawStages(AZoogiGameMode* G)
 
 	// Target panel (locked target): name, distance, estimated hit power.
 	AActor* T = G->TargetLock.Get();
-	if (T && B && G->Phase == EZoogiPhase::Aiming)
+	if (T && B && G->Phase == EZoogiPhase::Aiming && !ZoogiFramed::IsActive(GetWorld())) // hud-v3: framed shows the target in the action box
 	{
 		const FVector TP = Cast<AZoogiOrb>(T) ? Cast<AZoogiOrb>(T)->OrbLocation() : (Cast<AZoogiBall>(T) ? Cast<AZoogiBall>(T)->BallLocation() : T->GetActorLocation());
 		const float Dist = FVector::Dist2D(TP, B->BallLocation());
