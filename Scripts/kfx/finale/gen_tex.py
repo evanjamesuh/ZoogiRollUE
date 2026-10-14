@@ -56,17 +56,20 @@ for k in range(260):
     side = 1 if rng.random() < 0.65 else -1
     t = np.clip(d * side / L, 0, 1)
     licks += np.exp(-(da / (w * (1 - t) + 1e-4)) ** 2) * (1 - t) * (d * side > -0.004) * (0.4 + 0.6 * rng.random())
-ringR = np.clip(core + glow + licks * 0.8, 0, 1)
+gapn = np.interp(ang * 512, np.arange(512), tile_noise(512, 4, 8, 21)[7])            # round 12: broken ring with gaps
+gapn = (gapn - gapn.min()) / (gapn.max() - gapn.min())
+gapm = 0.12 + 0.88 * np.clip((gapn - 0.40) / 0.14, 0, 1) * (0.55 + 0.45 * np.interp(ang * 512, np.arange(512), noise_a[50]))
+ringR = np.clip((core + glow + licks * 0.8) * gapm, 0, 1)
 cr = np.zeros_like(r)
-for k in range(90):  # scorch cracks crossing the ring
+for k in range(160):  # scorch cracks crossing the ring (round 12: more, longer dark veins)
     a0 = rng.random() * 2 * math.pi; rr = R0 + (rng.random() - 0.5) * 0.12
     x, y = math.cos(a0) * rr, math.sin(a0) * rr; th = rng.random() * 2 * math.pi
-    for s in range(int(10 + rng.random() * 25)):
+    for s in range(int(14 + rng.random() * 40)):
         th += (rng.random() - 0.5) * 0.9; x += math.cos(th) * 0.006; y += math.sin(th) * 0.006
         px, py = int((x + 1) / 2 * N), int((y + 1) / 2 * N)
         if 0 <= px < N and 0 <= py < N: cr[py, px] = 1
 cr = blur(cr, 0.8) * 3
-scorch = np.clip(np.exp(-(d / 0.05) ** 2) * 0.75 + cr * 0.8, 0, 1)
+scorch = np.clip(np.exp(-(d / 0.05) ** 2) * 0.75 + cr * 1.0, 0, 1)
 inner = np.clip(1 - r / R0, 0, 1) ** 0.6 * (r < R0)          # soft inner floor glow (added in material with InnerGlow)
 save('T_ZAFX_Ring', ringR, ang, scorch)
 save('T_ZAFX_RingInner', inner)
@@ -96,16 +99,16 @@ save('T_ZAFX_Splat', hot, np.clip(1 - r, 0, 1), spl)
 
 # 7. portal rim: thick soft ring with wisps (R), wobble noise ring (G)
 pn = tile_noise(512, 5, 5, 9)
-wob = (np.interp(ang * 512, np.arange(512), pn[100]) - 0.5) * 0.06
+wob = (np.interp(ang * 512, np.arange(512), pn[100]) - 0.5) * 0.11  # round 12: slightly irregular
 pd = r - (0.80 + wob)
-rim = np.exp(-(pd / 0.045) ** 2) + 0.55 * np.exp(-(np.maximum(pd, 0) / 0.11) ** 2) * (pd > 0) + 0.25 * np.exp(-(np.minimum(pd, 0) / 0.12) ** 2) * (pd < 0)
+rim = np.exp(-(pd / 0.075) ** 2) + 0.55 * np.exp(-(np.maximum(pd, 0) / 0.11) ** 2) * (pd > 0) + 0.25 * np.exp(-(np.minimum(pd, 0) / 0.12) ** 2) * (pd < 0)
 wisp = np.clip(pn * 1.6 - 0.5, 0, 1) * np.exp(-(pd / 0.14) ** 2)
 inside = np.clip((0.80 + wob - r) / 0.05, 0, 1)
 save('T_ZAFX_PortalRim', np.clip(rim * 0.8 + wisp * 0.7, 0, 1), inside, pn)
 
 # 8. star field (tileable): sharp points of different sizes + faint nebula in G
 st = np.zeros((512, 512))
-for k in range(700):
+for k in range(2600):  # round 12: dense starfield
     x, y = rng.integers(0, 512, 2); b = rng.random() ** 3
     st[y, x] = max(st[y, x], 0.35 + 0.65 * b)
     if b > 0.6:

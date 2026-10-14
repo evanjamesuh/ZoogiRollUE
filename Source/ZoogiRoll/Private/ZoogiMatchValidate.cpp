@@ -310,6 +310,17 @@ void UZoogiMatchValidator::Tick(float Dt)
 		{ ShotTurn = G->TurnCounter; DemoShot(FString::Printf(TEXT("turn%02d_P%d_standby_cards"), G->TurnCounter, G->ActivePlayer + 1)); }
 		if (G->bFollowUpOffered && !bWasOfferedShot) DemoShot(FString::Printf(TEXT("turn%02d_followup_offer"), G->TurnCounter));
 		bWasOfferedShot = G->bFollowUpOffered;
+		// shatter: 3 frames over 0.45 s so a blinking debug flash (-ZoogiDebugUI) is caught on at least one
+		if (UZoogiBattleStateMachine* Ssm = UZoogiBattleStateMachine::Get(G))
+		{
+			if (Ssm->ShatterCount != ShotShatters) { ShotShatters = Ssm->ShatterCount; ShatterShotT = 0.f; ShatterShotK = 0; }
+			if (ShatterShotT >= 0.f)
+			{
+				ShatterShotT += Dt;
+				if (ShatterShotK < 3 && ShatterShotT >= 0.05f + 0.2f * ShatterShotK) { DemoShot(FString::Printf(TEXT("turn%02d_shatter%d_f%d"), G->TurnCounter, ShotShatters, ++ShatterShotK)); }
+				if (ShatterShotK >= 3) ShatterShotT = -1.f;
+			}
+		}
 		UZoogiEpisodeDirector* Dd = UZoogiEpisodeDirector::Get(G);
 		const int32 Shown = Dd ? Dd->Played + Dd->Skipped : 0;
 		if (Dd && Dd->Current() && Dd->Current()->T > 1.5f)
