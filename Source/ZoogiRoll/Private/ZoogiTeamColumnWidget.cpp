@@ -71,7 +71,7 @@ int32 UZoogiTeamColumnWidget::NativePaint(const FPaintArgs& Args, const FGeometr
 	const float u = UScale;
 	const int32 L = Layer;
 	const FLinearColor SC = SideColor(Side);
-	auto Font = [&](float Sz) { return BoldFont(FMath::Max(7, FMath::RoundToInt(Sz * u)), FMath::Max(1.f, 2.f * u)); };
+	auto Font = [&](float Sz) { return BoldFont(FMath::Max(11, FMath::RoundToInt(FMath::Max(Sz, 11.5f) * u)), FMath::Max(1.f, 2.f * u)); };
 	auto Txt = [&](int32 Lay, float X, float Y, const FString& T, float Sz, const FLinearColor& C) { ZoogiUIStyle::SText(Out, Lay, Geo, FVector2D(X, Y), T, Font(Sz), C); };
 	auto TxtW = [&](const FString& T, float Sz) { return FSlateApplication::IsInitialized() ? (float)FSlateApplication::Get().GetRenderer()->GetFontMeasureService()->Measure(T, Font(Sz)).X : T.Len() * Sz * u * 0.62f; };
 

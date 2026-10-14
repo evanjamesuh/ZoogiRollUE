@@ -42,6 +42,7 @@ public:
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual void NativeTick(const FGeometry& Geo, float Dt) override;
+	virtual FReply NativeOnMouseButtonDown(const FGeometry& Geo, const FPointerEvent& Ev) override; // touch: tap-to-target while a card is armed
 	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& Geo, const FSlateRect& Cull, FSlateWindowElementList& Out, int32 Layer, const FWidgetStyle& Style, bool bParentEnabled) const override;
 
 private:
@@ -61,6 +62,7 @@ private:
 	};
 	struct FReact { FVector2D Pos; float T = 0.f; FLinearColor Color; FString Label; };
 
+	void AssignTo(UZoogiCardWidget* C); // the one select path (drag-drop and tap-tap)
 	UFUNCTION() void OnConfirm();
 	UFUNCTION() void OnClear();
 	UZoogiCardWidget* MakeCard(int32 InstanceId, FName CardId);
@@ -85,6 +87,9 @@ private:
 	int32 KeyPlayer = -1, KeyTurn = -1;
 	bool bShown = false, bInteractive = false;
 	TWeakObjectPtr<UZoogiCardWidget> Hovered, Dragging;
+	TWeakObjectPtr<UZoogiCardWidget> Armed; // touch: tapped card waiting for a tap on the target
+	FVector2D PressPos = FVector2D::ZeroVector;
+	float PressHeld = 0.f;                  // long-press (>= 0.4 s, no move) shows the tooltip
 	FVector2D Cursor = FVector2D::ZeroVector;
 	FGeometry CachedGeo;
 	FVector2D ViewSize = FVector2D(1920.f, 1080.f);

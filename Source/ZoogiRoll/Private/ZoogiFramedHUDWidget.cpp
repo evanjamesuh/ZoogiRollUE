@@ -227,7 +227,8 @@ void UZoogiFramedHUDWidget::NativeTick(const FGeometry& Geo, float Dt)
 	PlaceW(ColL, LB.Key, LB.Value, true);
 	PlaceW(ColR, RB.Key, RB.Value, true);
 	// header buttons (right end of the top bar)
-	const float BH = (L.bCompact ? 40.f : 46.f) * u, BY = L.Top.Min.Y * s + ((L.Top.Max.Y - L.Top.Min.Y) * s - BH) * 0.5f;
+	const float BH = FMath::Max(48.f * u, (L.bCompact ? 48.f : 50.f) * u), // >= 48 dp tap targets (touch + mouse)
+		     BY = L.Top.Min.Y * s + ((L.Top.Max.Y - L.Top.Min.Y) * s - BH) * 0.5f;
 	const float MW = 150.f * u, CW = 170.f * u, BX1 = L.Top.Max.X * s - 14.f * u;
 	PlaceW(MenuBtn, FVector2D(BX1 - MW, BY), FVector2D(MW, BH), true);
 	PlaceW(CamBtn, FVector2D(BX1 - MW - 10.f * u - CW, BY), FVector2D(CW, BH), true);
@@ -348,7 +349,7 @@ int32 UZoogiFramedHUDWidget::PaintBack(const FGeometry& Geo, FSlateWindowElement
 	const FVector2D V = Geo.GetLocalSize();
 	const FVector2D A0 = L.Arena.Min * s, A1 = L.Arena.Max * s, AS = A1 - A0;
 	int32 Ly = Layer;
-	auto Font = [&](float Sz) { return BoldFont(FMath::Max(7, FMath::RoundToInt(Sz * u)), FMath::Max(1.f, 2.f * u)); };
+	auto Font = [&](float Sz) { return BoldFont(FMath::Max(12, FMath::RoundToInt(FMath::Max(Sz, 12.f) * u)), FMath::Max(1.f, 2.f * u)); };
 	auto Txt = [&](float X, float Y, const FString& T, float Sz, const FLinearColor& C, float AlignX = 0.f)
 	{
 		const FSlateFontInfo F = Font(Sz);
