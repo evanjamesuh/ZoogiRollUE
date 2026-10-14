@@ -29,6 +29,7 @@
 #include "Brushes/SlateRoundedBoxBrush.h"
 #include "Styling/CoreStyle.h"
 #include "ZoogiUIStyle.h"
+#include "ZoogiFramedLayout.h"
 
 namespace
 {
@@ -229,6 +230,15 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 	Super::NativeTick(Geo, Dt);
 	CachedGeo = Geo;
 	ViewSize = Geo.GetLocalSize();
+	{
+		// framed HUD: CONFIRM / CLEAR sit in the bottom tray's right corner (inside the safe area), not over the arena
+		const bool bFr = ZoogiFramed::IsActive(GetWorld()) && ZoogiFramed::Current().bValid;
+		const ZoogiFramed::FLayout& FL = ZoogiFramed::Current();
+		const float k = bFr && FL.Viewport.X > 0.f ? ViewSize.X / FL.Viewport.X : 1.f;
+		const float R = bFr ? -24.f - FL.Safe.Right * k : -24.f, Bm = bFr ? -FL.Safe.Bottom * k : 0.f;
+		if (ConfirmBtn) if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(ConfirmBtn->Slot)) S->SetPosition(FVector2D(R, bFr ? Bm - 30.f : -196.f));
+		if (ClearBtn) if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(ClearBtn->Slot)) S->SetPosition(FVector2D(R, bFr ? Bm - 92.f : -256.f));
+	}
 	Time += Dt;
 	AZoogiGameMode* G = GetWorld() ? GetWorld()->GetAuthGameMode<AZoogiGameMode>() : nullptr;
 	UZoogiCardSubsystem* Cards = UZoogiCardSubsystem::Get(this);
