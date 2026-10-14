@@ -142,4 +142,5 @@ private:
 	FString TourDir;
 	int32 TourStep = -1;
 	float TourClock = 0.f;
+	bool bTourSetupDone = false;
 };

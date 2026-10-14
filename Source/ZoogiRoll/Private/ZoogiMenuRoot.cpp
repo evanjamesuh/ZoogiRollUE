@@ -706,9 +706,10 @@ void UZoogiMenuRoot::BuildPlay()
 	{
 		const float X = 368.f + (a % 4) * 73.f, Y = 110.f + (a / 4) * 78.f;
 		const FString A = ArenaArt(a);
-		const FString Name = ZoogiUtil::ArenaName((EZoogiArena)a).ToUpper().Replace(TEXT(" ARENA"), TEXT("")).Replace(TEXT(" PLATFORM"), TEXT("")).Replace(TEXT(" PIT"), TEXT(""));
+		static const TCHAR* Short[] = { TEXT("MEADOW"), TEXT("FROZEN RING"), TEXT("VOLCANIC"), TEXT("COSMIC"), TEXT("ARABIAN"), TEXT("TOMB"), TEXT("NIGHT CIRCUIT"), TEXT("TRAINING") };
+		const FString Name = a < 8 ? FString(Short[a]) : ZoogiUtil::ArenaName((EZoogiArena)a).ToUpper();
 		ImgTile(A.IsEmpty() ? nullptr : Art(A), Name, [this, a]() { Fire("Arena", a); }, X, Y, 70.f, 72.f, G->MenuArena == (EZoogiArena)a, false,
-			A.IsEmpty() ? ArenaTint(a) : Hex(TEXT("0B1E5C")), true, 18, A.IsEmpty() ? FLinearColor::White : ArenaTint(a));
+			A.IsEmpty() ? ArenaTint(a) : Hex(TEXT("0B1E5C")), true, 16, A.IsEmpty() ? FLinearColor::White : ArenaTint(a));
 	}
 	Panel(358.f, 276.f, 308.f, 106.f, PNavy);
 	Label(TEXT("ROUNDS & RULES"), 372.f, 284.f, 200.f, 14.f, 24, TLabel);
@@ -726,7 +727,7 @@ void UZoogiMenuRoot::BuildPlay()
 		const bool bOn = i < G->MenuNumPlayers;
 		const FZoogiDef& D = Roster[G->MenuPlayers[i].ZoogiIndex % Roster.Num()];
 		ImgTile(Art(PortraitFor(D.Id)), FString(), [this, i, bOn]() { if (bOn) { SelectSlot = i; PendingZoogi = -1; Push(EZoogiScreen::ZoogiSelect); } else CycleSlot(i); },
-			X, Y, 108.f, 56.f, false, false, bOn ? Lighten(ZoogiUtil::PlayerColor(i), 0.35f) : CDisabled, true, 20, bOn ? FLinearColor::White : FLinearColor(0.4f, 0.45f, 0.6f, 1.f));
+			X, Y, 108.f, 56.f, false, false, bOn ? Lighten(ZoogiUtil::PlayerColor(i), 0.35f) : CDisabled, true, 20, bOn ? FLinearColor::White : FLinearColor(0.25f, 0.28f, 0.42f, 1.f));
 		const FString Tag = FString::Printf(TEXT("P%d - %s"), i + 1, !bOn ? TEXT("OFF") : G->MenuPlayers[i].bCPU ? TEXT("CPU") : TEXT("HUMAN"));
 		Btn(Tag, !bOn ? CDisabled : G->MenuPlayers[i].bCPU ? CNavy : CTeal, [this, i]() { CycleSlot(i); }, X, Y + 54.f, 108.f, 52.f, 26, false, !bOn);
 	}
@@ -805,7 +806,7 @@ void UZoogiMenuRoot::BuildPowers()
 		const FZoogiPowerDef* D = Shown[i];
 		const FName Id = D->PowerId;
 		const float X = 118.f + (i % 3) * 132.f, Y = 148.f + (i / 3) * 145.f;
-		ImgTile(Art(D->CardArt), D->Name.ToString().ToUpper(), [this, Id]() { PowerSel = Id; bDirty = true; }, X, Y, 124.f, 140.f, PowerSel == Id, !U->IsUnlocked(Id), Hex(TEXT("1A1A2E")), false, 20);
+		ImgTile(Art(D->CardArt), FString(), [this, Id]() { PowerSel = Id; bDirty = true; }, X, Y, 124.f, 140.f, PowerSel == Id, !U->IsUnlocked(Id), Hex(TEXT("1A1A2E")), false, 20);
 		if (U->GetEquipped(Z.Id) == Id)
 		{
 			UBorder* C = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
@@ -824,16 +825,16 @@ void UZoogiMenuRoot::BuildPowers()
 	ImgTile(Art(S->CardArt), TEXT("PREVIEW"), [this]() { ShowComingSoon(TEXT("Power preview video: Animations & Powers' visuals land here.")); },
 		542.f, 98.f, 172.f, 214.f, false, !bUnlocked, Hex(TEXT("15122A")), false, 26);
 	Label(FString::Printf(TEXT("%s - TIER %d"), *S->Type.ToString().ToUpper(), S->Tier), 726.f, 100.f, 190.f, 14.f, 22, TLabel);
-	Label(S->Name.ToString().ToUpper(), 726.f, 114.f, 190.f, 56.f, 52, FLinearColor::White, EAnchor::Center, 0, true);
+	Label(S->Name.ToString().ToUpper(), 726.f, 114.f, 190.f, 60.f, 44, FLinearColor::White, EAnchor::Center, 0, true);
 	{
 		UBorder* C = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
 		C->SetBrush(ZoogiUIStyle::RoundBrush(bUnlocked ? CTeal : Hex(TEXT("2A1680")), ZoogiUIStyle::Outline, 3.f, 16.f));
 		C->SetHorizontalAlignment(HAlign_Center); C->SetVerticalAlignment(VAlign_Center);
 		C->SetContent(Txt(bEquipped ? TEXT("EQUIPPED") : bUnlocked ? TEXT("UNLOCKED") : TEXT("LOCKED"), 20, bUnlocked ? FLinearColor::White : CGold, 2.f));
 		C->SetVisibility(ESlateVisibility::HitTestInvisible);
-		Place(C, 726.f, 174.f, 80.f, 20.f);
+		Place(C, 726.f, 180.f, 80.f, 20.f);
 	}
-	Label(S->Desc.ToString(), 726.f, 200.f, 188.f, 80.f, 19, FLinearColor::White, EAnchor::Center, 0, true);
+	Label(S->Desc.ToString(), 726.f, 208.f, 188.f, 80.f, 19, FLinearColor::White, EAnchor::Center, 0, true);
 	Panel(528.f, 334.f, 186.f, 56.f, PNavy);
 	FText Why;
 	const bool bCan = U->CanUnlock(PowerSel, Why);
@@ -1126,11 +1127,11 @@ void UZoogiMenuRoot::BuildCreate()
 	{
 		const float X = 106.f + i * 204.f;
 		const bool bHidden = TDev[i] && !DevFlag();
-		ImgTile(nullptr, FString(), [this, i]() { CreateSel = i; bDirty = true; }, X, 112.f, 194.f, 280.f, CreateSel == i, bHidden, bHidden ? CDisabled : TC[i]);
-		Label(TN[i], X + 10.f, 300.f, 174.f, 26.f, 32, FLinearColor::White, EAnchor::Center, 1);
-		Label(bHidden ? TEXT("Developer tool (-ZoogiDev)") : TS[i], X + 10.f, 336.f, 174.f, 20.f, 19, TSoft, EAnchor::Center, 1);
+		ImgTile(nullptr, FString(), [this, i]() { CreateSel = i; bDirty = true; }, X, 100.f, 194.f, 226.f, CreateSel == i, bHidden, bHidden ? CDisabled : TC[i]);
+		Label(TN[i], X + 10.f, 250.f, 174.f, 26.f, 32, FLinearColor::White, EAnchor::Center, 1);
+		Label(bHidden ? TEXT("Developer tool (-ZoogiDev)") : TS[i], X + 10.f, 286.f, 174.f, 20.f, 19, TSoft, EAnchor::Center, 1);
 	}
-	Label(TEXT("Developer tools (map / arena editor) are hidden behind the -ZoogiDev flag."), 106.f, 404.f, 600.f, 20.f, 20, TSoft);
+	Label(TEXT("Developer tools (map / arena editor) are hidden behind the -ZoogiDev flag."), 106.f, 340.f, 600.f, 20.f, 20, TSoft);
 	const int32 Sel = CreateSel;
 	const bool bHiddenSel = TDev[Sel] && !DevFlag();
 	Btn(TEXT("OPEN"), CGold, [this, Sel, bHiddenSel]()
@@ -1193,20 +1194,29 @@ void UZoogiMenuRoot::TickTour(float Dt)
 	if (TourStep < 0) return;
 	TourClock += Dt;
 	const float StepTime = 2.5f;
-	if (TourClock < 5.f + TourStep * StepTime) return; // first step after 5 s (art + arena settle)
+	// Step n: set the screen up at T, capture it 1.5 s later (after the rebuild has rendered).
+	const float T0 = 5.f + TourStep * StepTime;
+	if (TourClock < T0) return;
 	UZoogiPowerUnlockSubsystem* U = UZoogiPowerUnlockSubsystem::Get(this);
 	const bool bUnlockedRun = U && U->IsUnlockAllCheat();
 	const FString Tag = bUnlockedRun ? TEXT("_unlockall") : TEXT("");
-	// Step n sets a screen up; step n+1 captures it (after a rebuild + render), then sets up the next.
 	static const TCHAR* Names[] = { TEXT("01_home"), TEXT("02_play_setup"), TEXT("03_zoogi_select"), TEXT("04_powers"), TEXT("05_powers_after_equip"), TEXT("06_settings"), TEXT("06b_settings_about"),
-		TEXT("07_collection"), TEXT("08_story_comics"), TEXT("09_events"), TEXT("10_shop"), TEXT("11_social"), TEXT("12_create"), TEXT("13_home_back_quit_modal"), TEXT("14_play_before_start"), TEXT("01b_home_after") };
+		TEXT("07_collection"), TEXT("08_story_comics"), TEXT("09_events"), TEXT("10_shop"), TEXT("11_social"), TEXT("12_create"), TEXT("13_home_back_quit_modal"), TEXT("14_play_before_start"), TEXT("16_home_after_tour") };
 	const int32 NumShots = UE_ARRAY_COUNT(Names);
-	if (TourStep > 0 && TourStep <= NumShots)
+	if (bTourSetupDone)
 	{
-		const FString P = FPaths::Combine(TourDir, FString::Printf(TEXT("menu_%s%s.png"), Names[TourStep - 1], *Tag));
-		FScreenshotRequest::RequestScreenshot(P, true, false);
-		UE_LOG(LogZoogi, Log, TEXT("MENU TOUR screenshot %s (screen %s)"), *P, ScreenName(Top()));
+		if (TourClock < T0 + 1.5f) return;
+		if (TourStep < NumShots)
+		{
+			const FString P = FPaths::Combine(TourDir, FString::Printf(TEXT("menu_%s%s.png"), Names[TourStep], *Tag));
+			FScreenshotRequest::RequestScreenshot(P, true, false);
+			UE_LOG(LogZoogi, Log, TEXT("MENU TOUR screenshot %s (screen %s, modal %d)"), *P, ScreenName(Top()), bModal ? 1 : 0);
+		}
+		bTourSetupDone = false;
+		++TourStep;
+		return;
 	}
+	bTourSetupDone = true;
 	switch (TourStep)
 	{
 	case 0: PopToHome(); break;
@@ -1238,6 +1248,7 @@ void UZoogiMenuRoot::TickTour(float Dt)
 	case 14: HandleBack(); Push(EZoogiScreen::Play); break; // close the modal, open PLAY
 	case 15: PopToHome(); break;
 	case 16:
+		bTourSetupDone = false;
 		if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiMenuTourStart")))
 		{
 			Push(EZoogiScreen::Play);
@@ -1255,7 +1266,6 @@ void UZoogiMenuRoot::TickTour(float Dt)
 		TourStep = -100;
 		return;
 	}
-	++TourStep;
 }
 
 // ---------------------------------------------------------------------------------------------------------- backdrop video (ported from UZoogiMenuWidget)
