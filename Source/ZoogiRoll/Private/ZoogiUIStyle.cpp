@@ -25,6 +25,12 @@ namespace ZoogiUIStyle
 	const FLinearColor CardEnergyA(0.85f, 0.45f, 1.f, 1.f), CardEnergyB(0.50f, 0.15f, 1.f, 1.f);
 	const FLinearColor Gold(1.f, 0.82f, 0.25f, 1.f);
 	const FLinearColor LossRed(1.f, 0.15f, 0.2f, 1.f);
+	const FLinearColor DeepBg(0.008f, 0.03f, 0.13f, 1.f);
+	const FLinearColor Friendly(0.15f, 0.85f, 1.f, 1.f);
+	const FLinearColor Enemy(1.f, 0.38f, 0.30f, 1.f);
+	const FLinearColor Violet(0.62f, 0.32f, 1.f, 1.f);
+	const FLinearColor RoyalBlue(0.16f, 0.36f, 1.f, 1.f);
+	const FLinearColor Mint(0.35f, 1.f, 0.72f, 1.f);
 
 	FLinearColor HealthColor(float Frac)
 	{

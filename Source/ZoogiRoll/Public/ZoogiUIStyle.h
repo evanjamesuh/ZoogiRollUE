@@ -28,6 +28,14 @@ namespace ZoogiUIStyle
 	ZOOGIROLL_API extern const FLinearColor CardEnergyA, CardEnergyB; // Card Energy violet
 	ZOOGIROLL_API extern const FLinearColor Gold;
 	ZOOGIROLL_API extern const FLinearColor LossRed;
+	// framed (spec v2.0 palette): deep blue background, friendly cyan / electric blue, enemy coral, primary buttons gold
+	// (Gold above), powers violet, secondary royal blue, positive mint.
+	ZOOGIROLL_API extern const FLinearColor DeepBg;
+	ZOOGIROLL_API extern const FLinearColor Friendly;
+	ZOOGIROLL_API extern const FLinearColor Enemy;
+	ZOOGIROLL_API extern const FLinearColor Violet;
+	ZOOGIROLL_API extern const FLinearColor RoyalBlue;
+	ZOOGIROLL_API extern const FLinearColor Mint;
 
 	/** Health colour by value: green (full) -> yellow -> red (empty). */
 	ZOOGIROLL_API FLinearColor HealthColor(float Frac);
