@@ -76,6 +76,7 @@ void UZoogiCardSubsystem::EnsureMatch(AZoogiGameMode* G)
 	FString LogS;
 	const bool bOk = RulesV.Init(Backend, Tune, Seed, Decks, ZoogiCards::BuiltInDeck(), LogS);
 	LastStandbyTurn = -1;
+	FxReset();
 	CollapseEffectId = 0; CollapseOwner = -1; CollapsePiece.Reset();
 	UE_LOG(LogZoogi, Log, TEXT("CARDS match: backend=%s data=%s defs=%d players=%d seed=%d ok=%d%s"), *Backend->BackendName().ToString(), *DataSource, Defs.Num(), G->Balls.Num(), Seed, bOk ? 1 : 0, *LogS);
 }
@@ -109,6 +110,7 @@ void UZoogiCardSubsystem::BeginStandby(AZoogiGameMode* G)
 	const int32 P = ActivePlayer(G);
 	if (P < 0) return;
 	ExpireCollapse(TEXT("turn_end"));
+	if (LastStandbyTurn != G->TurnCounter) FxTurnEnd(G);
 	RulesV.BeginStandby(P, G->TurnCounter);
 	const FZoogiCardPlayerState* S = RulesV.Player(P);
 	FString Hand;
@@ -149,8 +151,20 @@ EZoogiCardResult UZoogiCardSubsystem::Commit(AZoogiGameMode* G, FString& OutChoi
 		Cost += D ? D->Cost : 0;
 		OutChoice += FString::Printf(TEXT("%s%s"), k == 0 ? TEXT(" ") : TEXT(" + "), D ? *D->Name : *K.Card.CardId.ToString());
 		if (K.Card.CardId == FName(TEXT("crystal_collapse"))) { CollapseEffectId = K.EffectId; CollapseOwner = P; CollapsePiece.Reset(); }
+		FxArm(G, P, K.Card.CardId, K.EffectId);
 	}
-	UE_LOG(LogZoogi, Log, TEXT("CARDS commit P%d commit=%lld cards=%d cost=%d energy %d -> %d (effects: Phase 3/4 except crystal_collapse)"), P + 1, Out.Num() ? Out[0].CommitId : 0, Out.Num(), Cost, EBefore, S->Energy);
+	if (TestCase == TEXT("effects") && !bTestDone)
+	{
+		// effect test: additionally arm one card per turn in a fixed rotation (every card gets exercised in the real roll)
+		static const TCHAR* Rot[] = { TEXT("titan"), TEXT("guard"), TEXT("storm"), TEXT("double_impact"), TEXT("heavy_roll"), TEXT("frost"), TEXT("ember"),
+			TEXT("momentum_steal"), TEXT("anchor_guard"), TEXT("bank_strike"), TEXT("orb_magnet"), TEXT("orb_relay"), TEXT("precision"), TEXT("recovery_roll") };
+		for (int32 k = 0; k < 2; ++k) // two per turn: the whole rotation fits in 7 turns
+		{
+			FxArm(G, P, FName(Rot[FxForceIdx % UE_ARRAY_COUNT(Rot)]), 9000000 + FxForceIdx);
+			++FxForceIdx;
+		}
+	}
+	UE_LOG(LogZoogi, Log, TEXT("CARDS commit P%d commit=%lld cards=%d cost=%d energy %d -> %d (effects armed)"), P + 1, Out.Num() ? Out[0].CommitId : 0, Out.Num(), Cost, EBefore, S->Energy);
 	if (LastPhase != TEXT("COMMIT")) { TurnPhases.Add(TEXT("COMMIT")); LastPhase = TEXT("COMMIT"); }
 	TestOnCommit(G, P, EBefore, SpentBefore, Cost);
 	return R;
@@ -228,6 +242,7 @@ void UZoogiCardSubsystem::ObservePhase(AZoogiGameMode* G)
 	if (Ph == TEXT("RESOLVE"))
 	{
 		ApplyPendingCollapses(G);
+		FxLeadActionEnd(G);
 		if (!TestCase.IsEmpty() && TestStandbys > 0)
 		{
 			// order check for this turn: STANDBY < COMMIT < (AIM_FORCE) < CONFIRM < ROLL < RESOLVE
@@ -244,11 +259,13 @@ void UZoogiCardSubsystem::Tick(float Dt)
 	AZoogiGameMode* G = GetWorld() ? GetWorld()->GetAuthGameMode<AZoogiGameMode>() : nullptr;
 	if (!G || !Tune.bCards) return;
 	ObservePhase(G);
+	FxTick(G, Dt);
 	TickForecast(G, Dt);
 	if (!TestCase.IsEmpty() && !bTestDone)
 	{
 		if (TestCase == TEXT("crystal_collapse") && !bCrystalTested && TestStandbys >= 1) TestCrystal(G);
-		const int32 Need = TestCase == TEXT("crystal_collapse") ? 1 : 8;
+		if (TestCase == TEXT("mutual_ko") && !bMutualTested && TestStandbys >= 1) { TestMutualKO(G); TestFinish(G); return; }
+		const int32 Need = TestCase == TEXT("crystal_collapse") ? 1 : TestCase == TEXT("effects") ? 28 : 8;
 		if (TestResolved >= Need || G->Phase == EZoogiPhase::GameOver) TestFinish(G);
 	}
 }
@@ -354,8 +371,19 @@ void UZoogiCardSubsystem::TestFinish(AZoogiGameMode* G)
 	for (const FZoogiCardEvent& E : RulesV.Events()) { bool bDup = false; Ids.Add(E.EventId, &bDup); bUnique &= !bDup; }
 	TestCheck(bUnique, TEXT("ledger event ids unique"));
 	TestCheck(TestStandbys > 0, TEXT("at least one standby"));
-	UE_LOG(LogZoogi, Log, TEXT("CARD_TEST case=%s result=%s checks=%d fails=%d standbys=%d resolved=%d commits=%d rejects=%d events=%d hash=%08x first_fail=\"%s\""),
-		*TestCase, TestFails == 0 ? TEXT("PASS") : TEXT("FAIL"), TestChecks, TestFails, TestStandbys, TestResolved, Commits, Rejects, RulesV.Events().Num(), RulesV.StateHash(), *TestFirstFail);
+	FString Uses;
+	if (TestCase == TEXT("effects"))
+	{
+		TestCheck(FxTitanRestoreOk, TEXT("titan mass restored to the actual previous value"));
+		TestCheck(FxNoHealOk, TEXT("no card heals Ring Marks (recovery_roll)"));
+		TestCheck(FxMaxBursts <= 2, FString::Printf(TEXT("double_impact bursts per contact %d <= 2"), FxMaxBursts));
+		TestCheck(FxMagnetMoved <= FxMagnetMax + 15.f, FString::Printf(TEXT("orb_magnet displacement %.0f <= bound %.0f (pull-attributable, +1 frame)"), FxMagnetMoved, FxMagnetMax));
+		TestCheck(FxForceIdx >= 14, FString::Printf(TEXT("every effect card armed at least once (%d)"), FxForceIdx));
+		TArray<FName> Keys; FxUses.GetKeys(Keys); Keys.Sort(FNameLexicalLess());
+		for (const FName& K : Keys) Uses += FString::Printf(TEXT("%s:%d,"), *K.ToString(), FxUses[K]);
+	}
+	UE_LOG(LogZoogi, Log, TEXT("CARD_TEST case=%s result=%s checks=%d fails=%d standbys=%d resolved=%d commits=%d rejects=%d events=%d hash=%08x fx=%08x uses=%s first_fail=\"%s\""),
+		*TestCase, TestFails == 0 ? TEXT("PASS") : TEXT("FAIL"), TestChecks, TestFails, TestStandbys, TestResolved, Commits, Rejects, RulesV.Events().Num(), RulesV.StateHash(), Fx.Hash(), Uses.IsEmpty() ? TEXT("-") : *Uses, *TestFirstFail);
 }
 
 // ------------------------------------------------------------------ Standby aim forecast (ArrowTrail pack, visual only)

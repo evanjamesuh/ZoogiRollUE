@@ -17,6 +17,7 @@
 #include "ZoogiCombo.h"
 #include "ZoogiStageForming.h"
 #include "ZoogiArenaPiece.h"
+#include "ZoogiCardSubsystem.h"
 #include "Engine/World.h"
 #include "Components/SphereComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -770,7 +771,10 @@ bool AZoogiGameMode::ReleaseAim()
 	}
 	if (Ball) ApplyStatusOnShot(Ball, V);
 	if (bComboMode && Ball) ComboModifyShot(Ball, V);
+	UZoogiCardSubsystem* CardFx = CardsOn() ? UZoogiCardSubsystem::Get(this) : nullptr; // v3 Phase 3: card shot modifiers (cards on only)
+	if (CardFx && Ball) CardFx->FxModifyShot(this, Ball, V);
 	FireShot(V);
+	if (CardFx && Ball) CardFx->FxAfterShot(this, Ball, V);
 	SetBattleStep(EZoogiBattleStep::Rolling);
 	return true;
 }

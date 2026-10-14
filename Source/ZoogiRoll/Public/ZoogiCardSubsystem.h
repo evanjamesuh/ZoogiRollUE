@@ -12,11 +12,13 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "ZoogiCards.h"
+#include "ZoogiCardEffects.h"
 #include "ZoogiCardSubsystem.generated.h"
 
 class AZoogiGameMode;
 class AZoogiBall;
 class AZoogiArenaPiece;
+class AZoogiOrb;
 
 UCLASS()
 class ZOOGIROLL_API UZoogiCardSubsystem : public UTickableWorldSubsystem
@@ -50,6 +52,13 @@ public:
 	/** Backend in use this match (rldb_toolkit or native). */
 	FName BackendName() const { return RulesV.Backend() ? RulesV.Backend()->BackendName() : NAME_None; }
 
+	// ---- Phase 3 card effects in the rolling simulation (ZoogiCardFxWorld.cpp; all no-ops with cards off)
+	void FxModifyShot(AZoogiGameMode* G, AZoogiBall* Ball, FVector2D& V);   // before Launch: Storm / Heavy Roll / Precision
+	void FxAfterShot(AZoogiGameMode* G, AZoogiBall* Ball, const FVector2D& V); // after Launch: Titan mass, Frost lane, Orb Magnet target
+	void FxContact(AZoogiBall* Self, AActor* Other, const FVector& NormalImpulse, const FHitResult& Hit); // AZoogiBall::OnSphereHit
+	const FZoogiCardEffectCore& FxCore() const { return Fx; }
+	static bool IsEnemy(const AZoogiGameMode* G, const AZoogiBall* A, const AZoogiBall* B);
+
 private:
 	void EnsureMatch(AZoogiGameMode* G);
 	void LoadData(TArray<FZoogiCardDef>& Defs, TArray<FName>& Deck);
@@ -62,6 +71,34 @@ private:
 	void TestCheck(bool bOk, const FString& What);
 	void TestFinish(AZoogiGameMode* G);
 	void TickForecast(AZoogiGameMode* G, float Dt);
+
+	// Phase 3 effects state
+	void FxArm(AZoogiGameMode* G, int32 P, FName Card, int64 EffectId);
+	void FxTick(AZoogiGameMode* G, float Dt);
+	void FxLeadActionEnd(AZoogiGameMode* G);
+	void FxTurnEnd(AZoogiGameMode* G);
+	void FxReset();
+	void FxUse(const FZoogiFxArmed& F, const FString& What);
+	FVector Prev(const AZoogiBall* B) const;
+	FZoogiCardEffectCore Fx;
+	TArray<FVector> PrevVel;
+	struct FBurst { TWeakObjectPtr<AZoogiBall> Victim; FVector Dv = FVector::ZeroVector; float At = 0.f; int64 Effect = 0; uint64 Contact = 0; int32 Owner = -1; };
+	TArray<FBurst> PendingBursts;
+	TArray<int32> OrbLife;
+	TArray<bool> OrbWasOut;
+	TWeakObjectPtr<AZoogiOrb> MagnetOrb, RelayOrb;
+	FVector MagnetStart = FVector::ZeroVector, MagnetAdded = FVector::ZeroVector;
+	float MagnetT = 0.f, MagnetPullDisp = 0.f;
+	int64 MagnetEffect = 0;
+	int32 MagnetOwner = -1, RelayLife = 0, FxShooter = -1, FxRingMarksAtShot = -1;
+	// effect test telemetry (-ZoogiCardTest=effects / mutual_ko)
+	TMap<FName, int32> FxUses;
+	float FxShotIn = 0.f, FxShotOut = 0.f, FxShotMul = 1.f, FxTitanPrev = 0.f, FxTitanSet = 0.f, FxMagnetMoved = 0.f, FxMagnetMax = 0.f;
+	int32 FxMaxBursts = 0, FxTitanRestores = 0, FxFrostTicks = 0, FxForceIdx = 0;
+	bool FxTitanRestoreOk = true, FxNoHealOk = true, bMutualTested = false;
+	void TestEffectsOnShot(AZoogiGameMode* G, AZoogiBall* Ball);
+	void TestMutualKO(AZoogiGameMode* G);
+	void TestStageContact(AZoogiGameMode* G, AZoogiBall* Ball, const FVector2D& V);
 	UPROPERTY() TObjectPtr<class UNiagaraComponent> Trail;
 	UPROPERTY() TObjectPtr<class UNiagaraComponent> AimPoint;
 	float ForecastS = 0.f;

@@ -804,6 +804,12 @@ void AZoogiGameMode::ComboCheckKnockoffs()
 				ComboWinner = 1 - B->TeamIndex;
 				ComboOverReason = FString::Printf(TEXT("both %s Zoogis knocked out"), *TeamName(B->TeamIndex));
 			}
+			else if (TeamAlive(B->TeamIndex) == 0 && bComboMatchOver && ComboWinner == B->TeamIndex && CardsOn())
+			{
+				// v3 cards rules: the last Zoogis of both teams knocked out in the same action = draw (cards on only)
+				ComboWinner = -1;
+				ComboOverReason = TEXT("mutual final KO: both teams' last Zoogis knocked out");
+			}
 		}
 		BigColor = Att >= 0 ? ZoogiUtil::PlayerColor(Att) : FLinearColor(1.f, 0.4f, 0.35f);
 		BigAge = 0.f;

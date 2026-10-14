@@ -2,6 +2,7 @@
 #include "ZoogiRoll.h"
 #include "ZoogiPhysics.h"
 #include "ZoogiOrb.h"
+#include "ZoogiCardSubsystem.h"
 #include "ZoogiGameMode.h"
 #include "ZoogiFX.h"
 #include "ZoogiRock.h"
@@ -563,6 +564,8 @@ void AZoogiBall::OnSphereHit(UPrimitiveComponent* HitComp, AActor* OtherActor, U
 	// Knock-off credit goes to the shooter, also through chains (shooter -> Zoogi -> orb).
 	AZoogiGameMode* G = GetWorld() ? GetWorld()->GetAuthGameMode<AZoogiGameMode>() : nullptr;
 	const int32 Shooter = G ? G->ActivePlayer : -1;
+	// v3 Phase 3: card effects on real contacts (cards on only; nothing runs with bCards=False)
+	if (G && G->CardsOn()) if (UZoogiCardSubsystem* Cards = UZoogiCardSubsystem::Get(this)) Cards->FxContact(this, OtherActor, NormalImpulse, Hit);
 	if (G && PlayerIndex == Shooter && (Cast<AZoogiBall>(OtherActor) || Cast<AZoogiOrb>(OtherActor))) G->OnShooterContact(this, OtherActor);
 	if (G && G->bComboMode) G->ComboOnBallHit(this, OtherActor, OtherComp, NormalImpulse, Hit);
 	// Guard: the active attacker hit this guarded Zoogi.
