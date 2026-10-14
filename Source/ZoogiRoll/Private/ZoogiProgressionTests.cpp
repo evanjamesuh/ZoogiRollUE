@@ -51,7 +51,7 @@ bool FZoogiProgConfigTest::RunTest(const FString&)
 	int32 Starter = 0; for (const FZoogiPowerRow& P : C.Powers) if (P.Tier == FName(TEXT("starter"))) ++Starter;
 	TestEqual(TEXT("4 starter powers"), Starter, 4);
 	// advanced powers rule (Evan Q12): mastery 6-7 OR 400-600 gems
-	FZoogiProgressionConfig A = C; A.Powers.Add({ TEXT("x_adv"), TEXT("X"), EZoogiElement::Fire, TEXT("advanced"), false, 6, 500, NAME_None });
+	FZoogiProgressionConfig A = C; A.Powers.Add({ TEXT("x_adv"), TEXT("X"), EZoogiCardElement::Fire, TEXT("advanced"), false, 6, 500, NAME_None });
 	TestTrue(TEXT("advanced 6/500 ok"), A.Validate(E));
 	A.Powers.Last().MasteryLevel = 8; TestFalse(TEXT("advanced mastery 8 rejected"), A.Validate(E));
 	A.Powers.Last().MasteryLevel = 7; A.Powers.Last().GemCost = 700; TestFalse(TEXT("advanced 700 gems rejected"), A.Validate(E));
@@ -95,8 +95,8 @@ bool FZoogiProgPersistTest::RunTest(const FString&)
 	A.GrantGems(Id(TEXT("g1")), EZoogiGemBucket::Earned, 70, TEXT("t"), T);
 	A.GrantGems(Id(TEXT("g2")), EZoogiGemBucket::Purchased, 550, TEXT("store.test"), T, TEXT("test:1"));
 	A.SpendGems(Id(TEXT("s1")), 100, TEXT("x"), T);
-	A.AddMasteryXP(EZoogiElement::Fire, 500, T);
-	FString Why; A.SetFocusElement(EZoogiElement::Frost, EZoogiPlayContext::Standby, T, Why);
+	A.AddMasteryXP(EZoogiCardElement::Fire, 500, T);
+	FString Why; A.SetFocusElement(EZoogiCardElement::Frost, EZoogiPlayContext::Standby, T, Why);
 	A.Mutable().Affinity.FindOrAdd(TEXT("blue")).XP = 120;
 	const FString J = A.Save();
 	FZoogiProgression B; FString Err;
@@ -107,8 +107,8 @@ bool FZoogiProgPersistTest::RunTest(const FString&)
 	TestEqual(TEXT("purchased"), B.Get().Wallet.Purchased(), A.Get().Wallet.Purchased());
 	TestEqual(TEXT("ledger"), B.Get().Wallet.Ledger().Num(), A.Get().Wallet.Ledger().Num());
 	TestTrue(TEXT("duplicate after reload still blocked"), B.GrantGems(Id(TEXT("g2")), EZoogiGemBucket::Purchased, 550, TEXT("store.test"), T) == EZoogiTxnResult::Duplicate);
-	TestEqual(TEXT("fire xp"), B.MasteryXP(EZoogiElement::Fire), 500);
-	TestTrue(TEXT("focus"), B.Focus() == EZoogiElement::Frost);
+	TestEqual(TEXT("fire xp"), B.MasteryXP(EZoogiCardElement::Fire), 500);
+	TestTrue(TEXT("focus"), B.Focus() == EZoogiCardElement::Frost);
 	TestEqual(TEXT("affinity"), B.Get().Affinity.FindRef(TEXT("blue")).XP, 120);
 	FString Bad = J.Replace(TEXT("\"earned\":"), TEXT("\"earned\":9")); // tamper with the balance
 	FZoogiProgression C;
@@ -121,38 +121,38 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiProgMasteryTest, "ZoogiRoll.Progression.M
 bool FZoogiProgMasteryTest::RunTest(const FString&)
 {
 	FZoogiProgression P; P.Init(Cfg()); const FZoogiProgressionConfig& C = P.Config(); const FDateTime T = At(14, 12);
-	TestEqual(TEXT("starts L1"), P.MasteryLevel(EZoogiElement::Void), 1);
+	TestEqual(TEXT("starts L1"), P.MasteryLevel(EZoogiCardElement::Void), 1);
 	TArray<FName> Ups; int32 Gems = 0;
-	const int32 Gained = P.AddMasteryXP(EZoogiElement::Void, C.MasteryCumulativeXP[3], T, &Ups, &Gems);
-	TestEqual(TEXT("to L4"), P.MasteryLevel(EZoogiElement::Void), 4);
+	const int32 Gained = P.AddMasteryXP(EZoogiCardElement::Void, C.MasteryCumulativeXP[3], T, &Ups, &Gems);
+	TestEqual(TEXT("to L4"), P.MasteryLevel(EZoogiCardElement::Void), 4);
 	TestEqual(TEXT("3 levels"), Gained, 3);
 	TestEqual(TEXT("level gems"), Gems, C.MasteryLevelGems[1] + C.MasteryLevelGems[2] + C.MasteryLevelGems[3]);
-	TestEqual(TEXT("other elements independent"), P.MasteryLevel(EZoogiElement::Fire), 1);
-	P.AddMasteryXP(EZoogiElement::Void, 10000000, T);
-	TestEqual(TEXT("caps at 10"), P.MasteryLevel(EZoogiElement::Void), 10);
+	TestEqual(TEXT("other elements independent"), P.MasteryLevel(EZoogiCardElement::Fire), 1);
+	P.AddMasteryXP(EZoogiCardElement::Void, 10000000, T);
+	TestEqual(TEXT("caps at 10"), P.MasteryLevel(EZoogiCardElement::Void), 10);
 	// focus: neutral XP goes to focus; changes only in Standby
 	FString Why;
-	TestFalse(TEXT("no change in Battle"), P.SetFocusElement(EZoogiElement::Fire, EZoogiPlayContext::Battle, T, Why));
-	TestFalse(TEXT("no change in Menu"), P.SetFocusElement(EZoogiElement::Fire, EZoogiPlayContext::Menu, T, Why));
-	TestFalse(TEXT("Neutral not a focus"), P.SetFocusElement(EZoogiElement::Neutral, EZoogiPlayContext::Standby, T, Why));
-	TestTrue(TEXT("Standby ok"), P.SetFocusElement(EZoogiElement::Fire, EZoogiPlayContext::Standby, T, Why));
-	P.AddMasteryXP(EZoogiElement::Neutral, 40, T);
-	TestEqual(TEXT("neutral -> focus (Fire)"), P.MasteryXP(EZoogiElement::Fire), 40);
+	TestFalse(TEXT("no change in Battle"), P.SetFocusElement(EZoogiCardElement::Fire, EZoogiPlayContext::Battle, T, Why));
+	TestFalse(TEXT("no change in Menu"), P.SetFocusElement(EZoogiCardElement::Fire, EZoogiPlayContext::Menu, T, Why));
+	TestFalse(TEXT("Neutral not a focus"), P.SetFocusElement(EZoogiCardElement::Neutral, EZoogiPlayContext::Standby, T, Why));
+	TestTrue(TEXT("Standby ok"), P.SetFocusElement(EZoogiCardElement::Fire, EZoogiPlayContext::Standby, T, Why));
+	P.AddMasteryXP(EZoogiCardElement::Neutral, 40, T);
+	TestEqual(TEXT("neutral -> focus (Fire)"), P.MasteryXP(EZoogiCardElement::Fire), 40);
 	// hooks resolve at event time: not retroactive
 	FZoogiMatchTally Tally; Tally.MatchId = FGuid::NewGuid();
-	P.HookKO(Tally, EZoogiElement::Neutral);                    // Fire (focus now)
-	P.SetFocusElement(EZoogiElement::Shock, EZoogiPlayContext::Standby, T, Why);
-	P.HookKO(Tally, EZoogiElement::Neutral);                    // Shock
-	P.HookPowerUsed(Tally, EZoogiElement::Frost);               // element of the power
-	P.HookTrickShot(Tally, TEXT("Trick.FrostLane"), EZoogiElement::Frost);
-	P.HookTrickShot(Tally, TEXT("Trick.BankStrike"), EZoogiElement::Neutral);
-	P.HookOrbCollected(Tally); P.HookEpisodeTriggered(Tally); P.HookRingOut(Tally, EZoogiElement::Void);
+	P.HookKO(Tally, EZoogiCardElement::Neutral);                    // Fire (focus now)
+	P.SetFocusElement(EZoogiCardElement::Shock, EZoogiPlayContext::Standby, T, Why);
+	P.HookKO(Tally, EZoogiCardElement::Neutral);                    // Shock
+	P.HookPowerUsed(Tally, EZoogiCardElement::Frost);               // element of the power
+	P.HookTrickShot(Tally, TEXT("Trick.FrostLane"), EZoogiCardElement::Frost);
+	P.HookTrickShot(Tally, TEXT("Trick.BankStrike"), EZoogiCardElement::Neutral);
+	P.HookOrbCollected(Tally); P.HookEpisodeTriggered(Tally); P.HookRingOut(Tally, EZoogiCardElement::Void);
 	P.HookAwakening(Tally);
-	TestTrue(TEXT("KO1 -> Fire"), Tally.Events[0].XPElement == EZoogiElement::Fire);
-	TestTrue(TEXT("KO2 -> Shock"), Tally.Events[1].XPElement == EZoogiElement::Shock);
-	TestTrue(TEXT("power -> Frost"), Tally.Events[2].XPElement == EZoogiElement::Frost);
-	TestTrue(TEXT("frost lane -> Frost"), Tally.Events[3].XPElement == EZoogiElement::Frost);
-	TestTrue(TEXT("bank strike -> focus"), Tally.Events[4].XPElement == EZoogiElement::Shock);
+	TestTrue(TEXT("KO1 -> Fire"), Tally.Events[0].XPElement == EZoogiCardElement::Fire);
+	TestTrue(TEXT("KO2 -> Shock"), Tally.Events[1].XPElement == EZoogiCardElement::Shock);
+	TestTrue(TEXT("power -> Frost"), Tally.Events[2].XPElement == EZoogiCardElement::Frost);
+	TestTrue(TEXT("frost lane -> Frost"), Tally.Events[3].XPElement == EZoogiCardElement::Frost);
+	TestTrue(TEXT("bank strike -> focus"), Tally.Events[4].XPElement == EZoogiCardElement::Shock);
 	TestEqual(TEXT("awakening is not an award event"), Tally.Events.Num(), 7);
 	TestEqual(TEXT("awakening counted"), Tally.Awakenings, 1);
 	return true;
@@ -179,7 +179,7 @@ bool FZoogiProgMatchTest::RunTest(const FString&)
 {
 	const FZoogiProgressionConfig C = Cfg();
 	auto Win = [&](EZoogiCPUTier Tier) { FZoogiProgression P; P.Init(C); FZoogiMatchTally T; T.MatchId = FGuid::NewGuid(); T.Tier = Tier;
-		for (int32 i = 0; i < 10; ++i) P.HookKO(T, EZoogiElement::Void); // capped at per_match_cap
+		for (int32 i = 0; i < 10; ++i) P.HookKO(T, EZoogiCardElement::Void); // capped at per_match_cap
 		return P.ApplyMatch(T, EZoogiMatchOutcome::Win, At(14, 12), At(14, 7)); };
 	const FZoogiMatchRewardResult N = Win(EZoogiCPUTier::Normal), E = Win(EZoogiCPUTier::Easy), H = Win(EZoogiCPUTier::Hard), X = Win(EZoogiCPUTier::Expert);
 	const int32 KoCap = C.FindReward(TEXT("ko"))->PerMatchCap;
@@ -189,7 +189,7 @@ bool FZoogiProgMatchTest::RunTest(const FString&)
 	TestEqual(TEXT("easy x0.5"), E.GemsPaid, FMath::RoundToInt(Base * C.Tier(EZoogiCPUTier::Easy).GemMult));
 	TestEqual(TEXT("hard x1.3"), H.GemsPaid, FMath::RoundToInt(Base * C.Tier(EZoogiCPUTier::Hard).GemMult));
 	TestEqual(TEXT("expert x1.6"), X.GemsPaid, FMath::RoundToInt(Base * C.Tier(EZoogiCPUTier::Expert).GemMult));
-	TestTrue(TEXT("Void XP from KOs"), N.XP[(int32)EZoogiElement::Void] > 0);
+	TestTrue(TEXT("Void XP from KOs"), N.XP[(int32)EZoogiCardElement::Void] > 0);
 	// idempotent by MatchId
 	FZoogiProgression P; P.Init(C); FZoogiMatchTally T; T.MatchId = Id(TEXT("same"));
 	const FZoogiMatchRewardResult A = P.ApplyMatch(T, EZoogiMatchOutcome::Win, At(14, 12), At(14, 7));
@@ -198,7 +198,7 @@ bool FZoogiProgMatchTest::RunTest(const FString&)
 	TestTrue(TEXT("second apply = duplicate"), A.bApplied && B.bDuplicate && !B.bApplied);
 	TestEqual(TEXT("balance unchanged on replay"), P.Get().Wallet.Total(), Bal);
 	// forfeit / abandoned / idle: zero
-	auto Zero = [&](EZoogiMatchOutcome O, int32 Turns, int32 Idle) { FZoogiProgression Q; Q.Init(C); FZoogiMatchTally Z; Z.MatchId = FGuid::NewGuid(); Z.Turns = Turns; Z.IdleTurns = Idle; Q.HookKO(Z, EZoogiElement::Void);
+	auto Zero = [&](EZoogiMatchOutcome O, int32 Turns, int32 Idle) { FZoogiProgression Q; Q.Init(C); FZoogiMatchTally Z; Z.MatchId = FGuid::NewGuid(); Z.Turns = Turns; Z.IdleTurns = Idle; Q.HookKO(Z, EZoogiCardElement::Void);
 		const FZoogiMatchRewardResult R = Q.ApplyMatch(Z, O, At(14, 12), At(14, 7)); return R.GemsPaid == 0 && R.XP[1] == 0 && Q.Get().Wallet.Total() == 0 && !R.ZeroReason.IsEmpty(); };
 	TestTrue(TEXT("forfeit = 0"), Zero(EZoogiMatchOutcome::Forfeit, 10, 0));
 	TestTrue(TEXT("abandoned = 0"), Zero(EZoogiMatchOutcome::Abandoned, 10, 0));
@@ -214,7 +214,7 @@ bool FZoogiProgDailyTest::RunTest(const FString&)
 	auto Play = [&](const FDateTime& Utc, const FDateTime& Local)
 	{
 		FZoogiMatchTally T; T.MatchId = FGuid::NewGuid(); T.Tier = EZoogiCPUTier::Expert;
-		for (int32 i = 0; i < 4; ++i) { P.HookKO(T, EZoogiElement::Void); P.HookOrbCollected(T); }
+		for (int32 i = 0; i < 4; ++i) { P.HookKO(T, EZoogiCardElement::Void); P.HookOrbCollected(T); }
 		return P.ApplyMatch(T, EZoogiMatchOutcome::Win, Utc, Local);
 	};
 	int32 Paid = 0, XPTotal = 0; FZoogiMatchRewardResult R;
@@ -257,7 +257,7 @@ bool FZoogiProgPowersTest::RunTest(const FString&)
 	TestTrue(TEXT("unlock by gems"), P.UnlockPower(TEXT("fire_2_ember"), T, Why));
 	TestEqual(TEXT("gems spent"), P.Get().Wallet.Total(), 0);
 	const FZoogiPowerRow* Prec = P.Config().FindPower(TEXT("void_1_precision"));
-	P.AddMasteryXP(EZoogiElement::Void, P.Config().MasteryCumulativeXP[Prec->MasteryLevel - 1], T);
+	P.AddMasteryXP(EZoogiCardElement::Void, P.Config().MasteryCumulativeXP[Prec->MasteryLevel - 1], T);
 	const int32 G0 = P.Get().Wallet.Total();
 	TestTrue(TEXT("mastery path"), P.CanUnlockPower(TEXT("void_1_precision"), bM, Why) && bM);
 	TestTrue(TEXT("unlock by mastery"), P.UnlockPower(TEXT("void_1_precision"), T, Why));

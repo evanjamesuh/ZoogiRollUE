@@ -33,7 +33,7 @@ public:
 	FZoogiMatchTally& Tally() { return OpenTally; }
 	FZoogiMatchRewardResult EndMatch(EZoogiMatchOutcome Outcome);
 	const FZoogiMatchRewardResult& LastResult() const { return Last; }
-	bool SetFocusElement(EZoogiElement E, EZoogiPlayContext Ctx, FString& OutWhy);
+	bool SetFocusElement(EZoogiCardElement E, EZoogiPlayContext Ctx, FString& OutWhy);
 	bool UnlockPower(FName PowerId, FString& OutWhy);
 
 	FOnZoogiProgressionChanged OnChanged;

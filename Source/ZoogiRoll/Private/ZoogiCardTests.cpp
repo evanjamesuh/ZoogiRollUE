@@ -66,13 +66,13 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiCardElementTest, "ZoogiRoll.Cards.Element
 bool FZoogiCardElementTest::RunTest(const FString&)
 {
 	// Oct 14 (Evan Q4): power cards carry their power's element, generic cards are Neutral; identity (id/cost/type) unchanged.
-	TMap<FName, EZoogiElement> Want = { { "storm", EZoogiElement::Shock }, { "ember", EZoogiElement::Fire }, { "titan", EZoogiElement::Void },
-		{ "frost", EZoogiElement::Frost }, { "precision", EZoogiElement::Void }, { "crystal_collapse", EZoogiElement::Void } };
+	TMap<FName, EZoogiCardElement> Want = { { "storm", EZoogiCardElement::Shock }, { "ember", EZoogiCardElement::Fire }, { "titan", EZoogiCardElement::Void },
+		{ "frost", EZoogiCardElement::Frost }, { "precision", EZoogiCardElement::Void }, { "crystal_collapse", EZoogiCardElement::Void } };
 	const TArray<FZoogiCardDef> Defs = ZoogiCards::BuiltInDefs();
 	for (const FZoogiCardDef& D : Defs)
 	{
-		const EZoogiElement* W = Want.Find(D.Id);
-		TestEqual(FString::Printf(TEXT("builtin element %s"), *D.Id.ToString()), (int32)D.Element, (int32)(W ? *W : EZoogiElement::Neutral));
+		const EZoogiCardElement* W = Want.Find(D.Id);
+		TestEqual(FString::Printf(TEXT("builtin element %s"), *D.Id.ToString()), (int32)D.Element, (int32)(W ? *W : EZoogiCardElement::Neutral));
 	}
 	FString Text, Err; TArray<FZoogiCardDef> Csv;
 	if (TestTrue(TEXT("Cards.csv"), FFileHelper::LoadFileToString(Text, *(FPaths::ProjectContentDir() / TEXT("Data/Cards.csv")))) && TestTrue(TEXT("parses"), ZoogiCards::ParseCardsCsv(Text, Csv, Err)) && TestEqual(TEXT("15 rows"), Csv.Num(), 15))
@@ -83,7 +83,7 @@ bool FZoogiCardElementTest::RunTest(const FString&)
 			TestFalse(TEXT("element not in rule text"), Csv[i].Rule.StartsWith(ZoogiCards::ElementName(Csv[i].Element)));
 		}
 	TArray<FZoogiCardDef> Old; // legacy CSV without the column still parses, Neutral
-	TestTrue(TEXT("legacy csv"), ZoogiCards::ParseCardsCsv(TEXT("h\nember,E,2,Infusion,ActingZoogi,TurnEnd,0,0,1,true,r\n"), Old, Err) && Old.Num() == 1 && Old[0].Element == EZoogiElement::Neutral);
+	TestTrue(TEXT("legacy csv"), ZoogiCards::ParseCardsCsv(TEXT("h\nember,E,2,Infusion,ActingZoogi,TurnEnd,0,0,1,true,r\n"), Old, Err) && Old.Num() == 1 && Old[0].Element == EZoogiCardElement::Neutral);
 	TestFalse(TEXT("bad element rejected"), ZoogiCards::ParseCardsCsv(TEXT("id,name,cost,type,target,expiry,param_a,param_b,cpu_weight,requires_alive,element,rule\nember,E,2,Infusion,ActingZoogi,TurnEnd,0,0,1,true,Lava,r\n"), Old, Err));
 	return true;
 }

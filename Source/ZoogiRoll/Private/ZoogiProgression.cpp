@@ -184,13 +184,13 @@ FZoogiProgressionConfig FZoogiProgressionConfig::BuiltIn()
 	R(TEXT("trick"), TEXT("Trick.Other"), 1, 3, 2, false); R(TEXT("power_used"), nullptr, 1, 4, 3, false); R(TEXT("orb_collected"), nullptr, 1, 1, 4, true); R(TEXT("episode"), nullptr, 2, 0, 2, true);
 	C.Tiers = { { EZoogiCPUTier::Easy, 5, 900.f, 0, false, 0, 1.8f, 0.5f, 0.5f }, { EZoogiCPUTier::Normal, 3, 350.f, 0, false, 0, 1.f, 1.f, 1.f },
 		{ EZoogiCPUTier::Hard, 2, 150.f, 1, true, 1, 0.7f, 1.3f, 1.3f }, { EZoogiCPUTier::Expert, 1, 0.f, 1, true, 2, 0.45f, 1.6f, 1.5f } };
-	auto P = [&](const TCHAR* Id, const TCHAR* N, EZoogiElement E, const TCHAR* T, bool bF, int32 M, int32 G, const TCHAR* Card) { C.Powers.Add({ FName(Id), N, E, FName(T), bF, M, G, FName(Card) }); };
-	P(TEXT("shock_1_storm"), TEXT("Storm"), EZoogiElement::Shock, TEXT("free"), true, 0, 0, TEXT("storm"));
-	P(TEXT("frost_2_frost"), TEXT("Frost"), EZoogiElement::Frost, TEXT("free"), true, 0, 0, TEXT("frost"));
-	P(TEXT("void_1_precision"), TEXT("Precision"), EZoogiElement::Void, TEXT("starter"), false, 2, 300, TEXT("precision"));
-	P(TEXT("fire_2_ember"), TEXT("Ember"), EZoogiElement::Fire, TEXT("starter"), false, 3, 400, TEXT("ember"));
-	P(TEXT("void_2_crystal_collapse"), TEXT("Crystal Collapse"), EZoogiElement::Void, TEXT("starter"), false, 4, 500, TEXT("crystal_collapse"));
-	P(TEXT("void_2_titan_meteor"), TEXT("Titan Meteor"), EZoogiElement::Void, TEXT("starter"), false, 5, 550, TEXT("titan"));
+	auto P = [&](const TCHAR* Id, const TCHAR* N, EZoogiCardElement E, const TCHAR* T, bool bF, int32 M, int32 G, const TCHAR* Card) { C.Powers.Add({ FName(Id), N, E, FName(T), bF, M, G, FName(Card) }); };
+	P(TEXT("shock_1_storm"), TEXT("Storm"), EZoogiCardElement::Shock, TEXT("free"), true, 0, 0, TEXT("storm"));
+	P(TEXT("frost_2_frost"), TEXT("Frost"), EZoogiCardElement::Frost, TEXT("free"), true, 0, 0, TEXT("frost"));
+	P(TEXT("void_1_precision"), TEXT("Precision"), EZoogiCardElement::Void, TEXT("starter"), false, 2, 300, TEXT("precision"));
+	P(TEXT("fire_2_ember"), TEXT("Ember"), EZoogiCardElement::Fire, TEXT("starter"), false, 3, 400, TEXT("ember"));
+	P(TEXT("void_2_crystal_collapse"), TEXT("Crystal Collapse"), EZoogiCardElement::Void, TEXT("starter"), false, 4, 500, TEXT("crystal_collapse"));
+	P(TEXT("void_2_titan_meteor"), TEXT("Titan Meteor"), EZoogiCardElement::Void, TEXT("starter"), false, 5, 550, TEXT("titan"));
 	const TCHAR* TT[7][3] = { { TEXT("arena_rookie"), TEXT("Arena Rookie"), TEXT("A_FIRST_MATCH") }, { TEXT("rolling_challenger"), TEXT("Rolling Challenger"), TEXT("A_WINS_10") },
 		{ TEXT("marble_master"), TEXT("Marble Master"), TEXT("A_MASTERY_5") }, { TEXT("elemental_specialist"), TEXT("Elemental Specialist"), TEXT("A_MASTERY_ALL5") },
 		{ TEXT("arena_champion"), TEXT("Arena Champion"), TEXT("A_WINS_50") }, { TEXT("master_strategist"), TEXT("Master Strategist"), TEXT("A_EXPERT_WINS_10") }, { TEXT("zoogi_legend"), TEXT("Zoogi Legend"), TEXT("A_AFFINITY_MAX") } };
@@ -422,7 +422,7 @@ bool FZoogiProfile::FromJsonString(const FString& S, FString& OutError)
 	if (J->TryGetArrayField(TEXT("mastery_xp"), A)) for (int32 i = 0; i < FMath::Min(5, A->Num()); ++i) P.MasteryXP[i] = FMath::Max(0, (int32)(*A)[i]->AsNumber());
 	P.MasteryUpdatedUtc = FromIso(J->GetStringField(TEXT("mastery_utc")));
 	ZoogiCards::ParseElement(J->GetStringField(TEXT("focus")), P.FocusElement);
-	if (P.FocusElement == EZoogiElement::Neutral) P.FocusElement = EZoogiElement::Void;
+	if (P.FocusElement == EZoogiCardElement::Neutral) P.FocusElement = EZoogiCardElement::Void;
 	P.FocusChangedUtc = FromIso(J->GetStringField(TEXT("focus_utc")));
 	if (const TSharedPtr<FJsonObject>* D = nullptr; J->TryGetObjectField(TEXT("daily"), D))
 	{
@@ -495,10 +495,10 @@ EZoogiTxnResult FZoogiProgression::SpendGems(const FGuid& TxnId, int32 Amount, F
 	return R;
 }
 
-int32 FZoogiProgression::MasteryXP(EZoogiElement E) const { return Profile.MasteryXP[(int32)E]; }
-int32 FZoogiProgression::MasteryLevel(EZoogiElement E) const { return E == EZoogiElement::Neutral ? 0 : Cfg.LevelForXP(Profile.MasteryXP[(int32)E]); }
+int32 FZoogiProgression::MasteryXP(EZoogiCardElement E) const { return Profile.MasteryXP[(int32)E]; }
+int32 FZoogiProgression::MasteryLevel(EZoogiCardElement E) const { return E == EZoogiCardElement::Neutral ? 0 : Cfg.LevelForXP(Profile.MasteryXP[(int32)E]); }
 
-int32 FZoogiProgression::AddMasteryXP(EZoogiElement E, int32 Amount, const FDateTime& Utc, TArray<FName>* OutLevelUps, int32* OutGems)
+int32 FZoogiProgression::AddMasteryXP(EZoogiCardElement E, int32 Amount, const FDateTime& Utc, TArray<FName>* OutLevelUps, int32* OutGems)
 {
 	if (Amount <= 0) return 0;
 	E = Resolve(E);
@@ -516,9 +516,9 @@ int32 FZoogiProgression::AddMasteryXP(EZoogiElement E, int32 Amount, const FDate
 	return After - Before;
 }
 
-bool FZoogiProgression::SetFocusElement(EZoogiElement E, EZoogiPlayContext Ctx, const FDateTime& Utc, FString& OutWhy)
+bool FZoogiProgression::SetFocusElement(EZoogiCardElement E, EZoogiPlayContext Ctx, const FDateTime& Utc, FString& OutWhy)
 {
-	if (E == EZoogiElement::Neutral) { OutWhy = TEXT("Focus must be Void, Fire, Shock or Frost"); return false; }
+	if (E == EZoogiCardElement::Neutral) { OutWhy = TEXT("Focus must be Void, Fire, Shock or Frost"); return false; }
 	if (Ctx != EZoogiPlayContext::Standby && !(Cfg.FocusChangeContext == EZoogiPlayContext::Menu && Ctx == EZoogiPlayContext::Menu))
 	{ OutWhy = TEXT("Focus Element can only be changed in Standby"); return false; }
 	Profile.FocusElement = E; Profile.FocusChangedUtc = Utc; Touch(Utc);
@@ -526,15 +526,15 @@ bool FZoogiProgression::SetFocusElement(EZoogiElement E, EZoogiPlayContext Ctx, 
 }
 
 // --- hooks: element resolved NOW (a later focus change does not move already-earned XP)
-void FZoogiProgression::HookKO(FZoogiMatchTally& T, EZoogiElement E) const { T.Events.Add({ "ko", NAME_None, Resolve(E) }); }
-void FZoogiProgression::HookRingOut(FZoogiMatchTally& T, EZoogiElement E) const { T.Events.Add({ "ring_out", NAME_None, Resolve(E) }); }
-void FZoogiProgression::HookTrickShot(FZoogiMatchTally& T, FName Tag, EZoogiElement E) const
+void FZoogiProgression::HookKO(FZoogiMatchTally& T, EZoogiCardElement E) const { T.Events.Add({ "ko", NAME_None, Resolve(E) }); }
+void FZoogiProgression::HookRingOut(FZoogiMatchTally& T, EZoogiCardElement E) const { T.Events.Add({ "ring_out", NAME_None, Resolve(E) }); }
+void FZoogiProgression::HookTrickShot(FZoogiMatchTally& T, FName Tag, EZoogiCardElement E) const
 {
 	const FZoogiRewardRow* R = Cfg.FindReward("trick", Tag);
 	const FName Key = R ? R->Tag : FName("Trick.Other");
 	T.Events.Add({ "trick", Key, (R && R->bXPToFocus) ? Profile.FocusElement : Resolve(E) });
 }
-void FZoogiProgression::HookPowerUsed(FZoogiMatchTally& T, EZoogiElement E) const { T.Events.Add({ "power_used", NAME_None, Resolve(E) }); }
+void FZoogiProgression::HookPowerUsed(FZoogiMatchTally& T, EZoogiCardElement E) const { T.Events.Add({ "power_used", NAME_None, Resolve(E) }); }
 void FZoogiProgression::HookOrbCollected(FZoogiMatchTally& T) const { T.Events.Add({ "orb_collected", NAME_None, Profile.FocusElement }); }
 void FZoogiProgression::HookEpisodeTriggered(FZoogiMatchTally& T) const { T.Events.Add({ "episode", NAME_None, Profile.FocusElement }); }
 
@@ -588,7 +588,7 @@ FZoogiMatchRewardResult FZoogiProgression::ApplyMatch(const FZoogiMatchTally& T,
 		if (!L) { L = &R.Lines.AddDefaulted_GetRef(); L->Source = Row->Source; L->Tag = Row->Tag; L->Element = E.XPElement; }
 		L->Count++; L->Gems += Row->Gems; L->XP += Row->XP;
 		R.BaseGems += Row->Gems;
-		const EZoogiElement XE = E.XPElement == EZoogiElement::Neutral ? Profile.FocusElement : E.XPElement;
+		const EZoogiCardElement XE = E.XPElement == EZoogiCardElement::Neutral ? Profile.FocusElement : E.XPElement;
 		XPBase[(int32)XE] += Row->XP;
 	}
 	const FZoogiTierRow& Tier = Cfg.Tier(T.Tier);
@@ -604,7 +604,7 @@ FZoogiMatchRewardResult FZoogiProgression::ApplyMatch(const FZoogiMatchTally& T,
 	for (int32 i = 1; i < 5; ++i)
 	{
 		R.XP[i] = FMath::RoundToInt(XPBase[i] * R.XPMult); // XP continues past the gem cap (Evan Q13)
-		AddMasteryXP((EZoogiElement)i, R.XP[i], NowUtc, &R.LevelUps, &R.LevelUpGems);
+		AddMasteryXP((EZoogiCardElement)i, R.XP[i], NowUtc, &R.LevelUps, &R.LevelUpGems);
 	}
 	// stats (achievements). Awakening counted here only.
 	AddStat("matches_completed", 1);
@@ -697,8 +697,8 @@ void FZoogiProgression::AddStat(FName S, int32 Delta) { Profile.Stats.FindOrAdd(
 int32 FZoogiProgression::Stat(FName S) const { const int32* V = Profile.Stats.Find(S); return V ? *V : 0; }
 int32 FZoogiProgression::DerivedStat(FName S) const
 {
-	if (S == FName("max_mastery_level")) { int32 M = 0; for (int32 i = 1; i < 5; ++i) M = FMath::Max(M, MasteryLevel((EZoogiElement)i)); return M; }
-	if (S == FName("min_core_mastery_level")) { int32 M = 99; for (int32 i = 1; i < 5; ++i) M = FMath::Min(M, MasteryLevel((EZoogiElement)i)); return M; }
+	if (S == FName("max_mastery_level")) { int32 M = 0; for (int32 i = 1; i < 5; ++i) M = FMath::Max(M, MasteryLevel((EZoogiCardElement)i)); return M; }
+	if (S == FName("min_core_mastery_level")) { int32 M = 99; for (int32 i = 1; i < 5; ++i) M = FMath::Min(M, MasteryLevel((EZoogiCardElement)i)); return M; }
 	return Stat(S);
 }
 bool FZoogiProgression::HasAchievement(FName Id) const { return Profile.Achievements.ContainsByPredicate([&](const FZoogiAchievementRecord& A) { return A.Id == Id; }); }

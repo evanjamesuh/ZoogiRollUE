@@ -19,7 +19,7 @@ enum class EZoogiCardType : uint8 { Infusion, Technique, Defense, Utility, Impac
 
 /** Oct 14 (Evan Q4): element tag stored in card data. Power cards take their power's element; generic cards are Neutral.
  *  Progression (mastery XP) reads it; it never changes card rules or physics. */
-enum class EZoogiElement : uint8 { Neutral, Void, Fire, Shock, Frost };
+enum class EZoogiCardElement : uint8 { Neutral, Void, Fire, Shock, Frost };
 
 /** Expiry tokens from the card book (Phase 3/4 consume them; Phase 2 only stores them). */
 enum class EZoogiCardExpiry : uint8
@@ -55,7 +55,7 @@ struct ZOOGIROLL_API FZoogiCardDef
 	FString Rule;                // one-line rule text (card book)
 	bool bRequiresAlive = true;  // a KO actor cannot activate (Recovery Roll: explicit in the card book)
 	FName RequiredPower;         // Oct 14 (Evan): optional power id gating deck entry (power unlocks); None = always eligible. Empty for all 15 cards.
-	EZoogiElement Element = EZoogiElement::Neutral; // Oct 14 (Evan Q4): Cards.csv column 'element'; data only (progression)
+	EZoogiCardElement Element = EZoogiCardElement::Neutral; // Oct 14 (Evan Q4): Cards.csv column 'element'; data only (progression)
 };
 
 /** One physical card in a deck (two copies of Storm are two instances). */
@@ -199,8 +199,8 @@ namespace ZoogiCards
 	ZOOGIROLL_API const TCHAR* TypeName(EZoogiCardType T);
 	ZOOGIROLL_API const TCHAR* ExpiryName(EZoogiCardExpiry E);
 	ZOOGIROLL_API const TCHAR* TargetName(EZoogiCardTarget T);
-	ZOOGIROLL_API const TCHAR* ElementName(EZoogiElement E);
-	ZOOGIROLL_API bool ParseElement(const FString& S, EZoogiElement& Out);
+	ZOOGIROLL_API const TCHAR* ElementName(EZoogiCardElement E);
+	ZOOGIROLL_API bool ParseElement(const FString& S, EZoogiCardElement& Out);
 	/** Force labels in cards mode: CONTROL / DRIVE / LAUNCH = the existing SOFT / MED / FULL power steps (PROPOSED mapping). */
 	ZOOGIROLL_API const TCHAR* ForceLabel(int32 PowerStep, bool bCardsMode);
 }

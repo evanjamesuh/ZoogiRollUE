@@ -73,7 +73,7 @@ FZoogiMatchRewardResult UZoogiProgressionSubsystem::EndMatch(EZoogiMatchOutcome 
 	return Last;
 }
 
-bool UZoogiProgressionSubsystem::SetFocusElement(EZoogiElement E, EZoogiPlayContext Ctx, FString& OutWhy)
+bool UZoogiProgressionSubsystem::SetFocusElement(EZoogiCardElement E, EZoogiPlayContext Ctx, FString& OutWhy)
 {
 	const bool b = Prog.SetFocusElement(E, Ctx, FDateTime::UtcNow(), OutWhy);
 	if (b) SaveProfile();
@@ -140,10 +140,10 @@ void UZoogiProgressionMatchBridge::OnMatchEvent(EZoogiMatchEvent E, int32 Who, f
 	}
 	case EZoogiMatchEvent::KnockedOut:
 		// Who = team of the Zoogi that fell. Credit only enemy falls (no attribution data yet: element Neutral -> Focus).
-		if (S->HasOpenMatch() && Who != TeamOf(H)) P.HookKO(S->Tally(), EZoogiElement::Neutral);
+		if (S->HasOpenMatch() && Who != TeamOf(H)) P.HookKO(S->Tally(), EZoogiCardElement::Neutral);
 		break;
 	case EZoogiMatchEvent::RingOut:
-		if (S->HasOpenMatch() && Who != TeamOf(H)) P.HookRingOut(S->Tally(), EZoogiElement::Neutral);
+		if (S->HasOpenMatch() && Who != TeamOf(H)) P.HookRingOut(S->Tally(), EZoogiCardElement::Neutral);
 		break;
 	case EZoogiMatchEvent::GaugeFull:
 		if (S->HasOpenMatch() && Who == TeamOf(H)) P.HookEpisodeTriggered(S->Tally());
@@ -175,12 +175,12 @@ void UZoogiProgressionMatchBridge::OnCardEffect(int32 Player, FName CardId)
 		{ "orb_magnet", "Trick.OrbMagnet" }, { "frost", "Trick.FrostLane" }, { "crystal_collapse", "Trick.CrystalCollapse" } };
 	static const TArray<FZoogiCardDef> Defs = ZoogiCards::BuiltInDefs();
 	const FZoogiCardDef* D = Defs.FindByPredicate([&](const FZoogiCardDef& X) { return X.Id == CardId; });
-	const EZoogiElement E = D ? D->Element : EZoogiElement::Neutral;
+	const EZoogiCardElement E = D ? D->Element : EZoogiCardElement::Neutral;
 	if (const FName* Tag = Tricks.Find(CardId)) S->Core().HookTrickShot(S->Tally(), *Tag, E);
-	else if (E != EZoogiElement::Neutral) S->Core().HookPowerUsed(S->Tally(), E);
+	else if (E != EZoogiCardElement::Neutral) S->Core().HookPowerUsed(S->Tally(), E);
 }
 void UZoogiProgressionMatchBridge::OnPowerUsed(int32 Player)
 {
 	UZoogiProgressionSubsystem* S = UZoogiProgressionSubsystem::Get(this);
-	if (S && S->HasOpenMatch() && Player == HumanIndex()) S->Core().HookPowerUsed(S->Tally(), EZoogiElement::Neutral); // classic powers carry no element tag: Focus
+	if (S && S->HasOpenMatch() && Player == HumanIndex()) S->Core().HookPowerUsed(S->Tally(), EZoogiCardElement::Neutral); // classic powers carry no element tag: Focus
 }

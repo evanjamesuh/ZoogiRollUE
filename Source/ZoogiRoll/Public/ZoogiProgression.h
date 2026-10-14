@@ -9,7 +9,7 @@
 #include "CoreMinimal.h"
 #include "Misc/Guid.h"
 #include "Misc/DateTime.h"
-#include "ZoogiCards.h" // EZoogiElement
+#include "ZoogiCards.h" // EZoogiCardElement
 
 class FJsonObject;
 
@@ -97,7 +97,7 @@ struct FZoogiTierRow
 	int32 Candidates = 3; float PickSpread = 350.f; int32 Lookahead = 0; bool bComboPlan = false; int32 EnergyReserve = 0; float AimNoise = 1.f;
 	float GemMult = 1.f; float XPMult = 1.f;
 };
-struct FZoogiPowerRow { FName PowerId; FString Name; EZoogiElement Element = EZoogiElement::Neutral; FName Tier; bool bDefaultUnlocked = false; int32 MasteryLevel = 0; int32 GemCost = 0; FName CardId; };
+struct FZoogiPowerRow { FName PowerId; FString Name; EZoogiCardElement Element = EZoogiCardElement::Neutral; FName Tier; bool bDefaultUnlocked = false; int32 MasteryLevel = 0; int32 GemCost = 0; FName CardId; };
 struct FZoogiAchievementRow { FName Id; FString Name; FName Stat; int32 Target = 1; int32 Gems = 0; FName Title; FName Cosmetic; };
 struct FZoogiTitleRow { FName Id; FString Name; FName Source; };
 struct FZoogiCosmeticRow { FName Id; FString Name; FName Slot; FString Source; bool bDisplayed = false; };
@@ -148,7 +148,7 @@ struct ZOOGIROLL_API FZoogiProgressionConfig
 
 // ------------------------------------------------------------------ match tally (award hooks, P3/P4)
 
-struct FZoogiAwardEvent { FName Source; FName Tag; EZoogiElement XPElement = EZoogiElement::Neutral; };
+struct FZoogiAwardEvent { FName Source; FName Tag; EZoogiCardElement XPElement = EZoogiCardElement::Neutral; };
 
 /** Built during a match by the award hooks; applied once at match end (idempotent by MatchId). Neutral events resolve to the
  *  Focus Element at the moment they happen (not retroactive). Awakening is counted for achievements only (Evan Q7). */
@@ -165,7 +165,7 @@ struct ZOOGIROLL_API FZoogiMatchTally
 	TArray<FZoogiAwardEvent> Events;
 };
 
-struct FZoogiRewardLine { FName Source; FName Tag; int32 Count = 0; int32 Gems = 0; int32 XP = 0; EZoogiElement Element = EZoogiElement::Neutral; };
+struct FZoogiRewardLine { FName Source; FName Tag; int32 Count = 0; int32 Gems = 0; int32 XP = 0; EZoogiCardElement Element = EZoogiCardElement::Neutral; };
 
 struct ZOOGIROLL_API FZoogiMatchRewardResult
 {
@@ -178,7 +178,7 @@ struct ZOOGIROLL_API FZoogiMatchRewardResult
 	int32 GemsBeforeCap = 0;
 	int32 GemsPaid = 0;             // after the daily cap
 	int32 CapClipped = 0;
-	int32 XP[5] = { 0, 0, 0, 0, 0 }; // by EZoogiElement (Neutral stays 0: resolved to Focus)
+	int32 XP[5] = { 0, 0, 0, 0, 0 }; // by EZoogiCardElement (Neutral stays 0: resolved to Focus)
 	int32 LevelUpGems = 0;
 	int32 AchievementGems = 0;
 	TArray<FName> NewAchievements;
@@ -225,7 +225,7 @@ struct ZOOGIROLL_API FZoogiProfile
 	FZoogiWallet Wallet;
 	int32 MasteryXP[5] = { 0, 0, 0, 0, 0 };
 	FDateTime MasteryUpdatedUtc;
-	EZoogiElement FocusElement = EZoogiElement::Void;
+	EZoogiCardElement FocusElement = EZoogiCardElement::Void;
 	FDateTime FocusChangedUtc;
 	FZoogiDailyState Daily;
 	TArray<FGuid> RewardedMatchIds;
@@ -260,19 +260,19 @@ public:
 	EZoogiTxnResult SpendGems(const FGuid& TxnId, int32 Amount, FName Sink, const FDateTime& Utc);
 
 	// --- mastery
-	int32 MasteryLevel(EZoogiElement E) const;
-	int32 MasteryXP(EZoogiElement E) const;
+	int32 MasteryLevel(EZoogiCardElement E) const;
+	int32 MasteryXP(EZoogiCardElement E) const;
 	/** Adds XP (Neutral -> Focus); level-ups pay the curve's gem bonus once each (idempotent ids). Returns levels gained. */
-	int32 AddMasteryXP(EZoogiElement E, int32 Amount, const FDateTime& Utc, TArray<FName>* OutLevelUps = nullptr, int32* OutGems = nullptr);
-	bool SetFocusElement(EZoogiElement E, EZoogiPlayContext Ctx, const FDateTime& Utc, FString& OutWhy);
-	EZoogiElement Focus() const { return Profile.FocusElement; }
-	EZoogiElement Resolve(EZoogiElement E) const { return E == EZoogiElement::Neutral ? Profile.FocusElement : E; }
+	int32 AddMasteryXP(EZoogiCardElement E, int32 Amount, const FDateTime& Utc, TArray<FName>* OutLevelUps = nullptr, int32* OutGems = nullptr);
+	bool SetFocusElement(EZoogiCardElement E, EZoogiPlayContext Ctx, const FDateTime& Utc, FString& OutWhy);
+	EZoogiCardElement Focus() const { return Profile.FocusElement; }
+	EZoogiCardElement Resolve(EZoogiCardElement E) const { return E == EZoogiCardElement::Neutral ? Profile.FocusElement : E; }
 
 	// --- award hooks (record into a tally; Neutral resolves to the CURRENT focus)
-	void HookKO(FZoogiMatchTally& T, EZoogiElement CauseElement) const;
-	void HookRingOut(FZoogiMatchTally& T, EZoogiElement CauseElement) const;
-	void HookTrickShot(FZoogiMatchTally& T, FName TrickTag, EZoogiElement CardElement) const;
-	void HookPowerUsed(FZoogiMatchTally& T, EZoogiElement PowerElement) const;
+	void HookKO(FZoogiMatchTally& T, EZoogiCardElement CauseElement) const;
+	void HookRingOut(FZoogiMatchTally& T, EZoogiCardElement CauseElement) const;
+	void HookTrickShot(FZoogiMatchTally& T, FName TrickTag, EZoogiCardElement CardElement) const;
+	void HookPowerUsed(FZoogiMatchTally& T, EZoogiCardElement PowerElement) const;
 	void HookOrbCollected(FZoogiMatchTally& T) const;
 	void HookEpisodeTriggered(FZoogiMatchTally& T) const;
 	void HookAwakening(FZoogiMatchTally& T) const { ++T.Awakenings; } // achievements only: no gems, no XP (Evan Q7)
