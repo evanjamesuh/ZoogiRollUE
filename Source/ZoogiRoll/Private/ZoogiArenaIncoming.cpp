@@ -52,6 +52,7 @@ void AZoogiArena::BuildTraining()
 		ZoogiUtil::Hex(TEXT("#7A7771")), ZoogiUtil::Hex(TEXT("#5E5A54")), 0.3f, FloorMat);
 	if (!Kit) AddCylinder(FVector2D::ZeroVector, ZoogiConst::KnockoffRadius - 5.f, 0.6f, 0.6f, ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#2CCFC4")), 1.8f), false)->SetCastShadow(false);
 	if (!Kit) AddCylinder(FVector2D::ZeroVector, ZoogiConst::KnockoffRadius - 20.f, 0.8f, 0.8f, FloorMat, false)->SetCastShadow(false);
+	AddPanoramaSky(TEXT("Training"), 0.9f, 0.f, FLinearColor::White); // _skies-lighting/08: emissive x0.9
 }
 
 void AZoogiArena::PlaceIncoming()

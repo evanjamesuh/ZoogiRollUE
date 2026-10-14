@@ -464,6 +464,25 @@ void AZoogiArena::SetupSky(EZoogiArena InTheme)
 		P.ColorSaturation = FVector4(1.f, 1.f, 1.12f, 1.f);
 		break;
 	case EZoogiArena::Arabian:
+		Clouds->SetVisibility(false);
+		Atmosphere->SetRayleighScatteringScale(0.f);
+		Atmosphere->SetMieScatteringScale(0.f);
+		// _skies-lighting (Oct 14 sky pass)
+		Sun->SetRelativeRotation(FRotator(-34.f, 276.f, 0.f));
+		Sun->SetIntensity(1.5f);
+		Sun->SetLightColor(FLinearColor(0.83f, 0.82f, 1.f));
+		SkyLight->SetIntensity(1.6f);
+		SkyLight->SetLightColor(FLinearColor(0.70f, 0.74f, 1.f));
+		Fog->SetFogDensity(0.006f);
+		Fog->SetFogInscatteringColor(FLinearColor(0.05f, 0.05f, 0.16f));
+		Fog->SetStartDistance(2600.f);
+		P.AutoExposureBias = 0.0f;
+		P.BloomIntensity = 1.0f;
+		P.bOverride_BloomThreshold = true; P.BloomThreshold = 1.0f;
+		P.ColorSaturation = FVector4(1.08f, 1.08f, 1.08f, 1.f);
+		P.ColorContrast = FVector4(1.05f, 1.05f, 1.05f, 1.f);
+		P.VignetteIntensity = 0.3f;
+		break;
 	case EZoogiArena::Tomb:
 	{
 		// Comic night: moonlight key, purple horizon haze, black starry sky (Lights.tsx saturn / tomb).
@@ -502,19 +521,43 @@ void AZoogiArena::SetupSky(EZoogiArena InTheme)
 		break;
 	case EZoogiArena::Meadow:
 		// r3 (Buzzy Meadow): warm high sun, saturated greens, light haze so the painted hills/waterfalls read.
-		Sun->SetRelativeRotation(FRotator(-48.f, 215.f, 0.f));
-		Sun->SetIntensity(9.5f);
-		Sun->SetLightColor(FLinearColor(1.f, 0.9f, 0.74f)); // r10: warmer golden afternoon
-		Fog->SetFogDensity(0.0012f);
-		Fog->SetStartDistance(16000.f);
-		Fog->SetFogInscatteringColor(FLinearColor(0.55f, 0.72f, 0.95f));
-		Clouds->SetVisibility(false);
-		SkyLight->SetIntensity(1.25f);
-		P.AutoExposureBias = -0.55f;
+		// Previous r18 grade: sun (-48,215) 9.5 lux (1,0.9,0.74), fog 0.0012 start 16000, SkyLight 1.25, exposure -0.55, sat/contrast 1.08/1.06, clouds on.
+		Clouds->SetVisibility(false); // painted T_MeadowSky replaces the cumulus deck
+		Sun->SetEnableLightShaftBloom(true); Sun->SetBloomScale(0.2f); Sun->SetBloomThreshold(8.f);
+		// _skies-lighting (Oct 14 sky pass)
+		Sun->SetRelativeRotation(FRotator(-48.f, 125.f, 0.f));
+		Sun->SetIntensity(4.2f);
+		Sun->SetLightColor(FLinearColor(1.f, 0.95f, 0.85f));
+		SkyLight->SetIntensity(1.0f);
+		SkyLight->SetLightColor(FLinearColor(0.85f, 0.92f, 1.f));
+		Fog->SetFogDensity(0.006f);
+		Fog->SetFogInscatteringColor(FLinearColor(0.55f, 0.70f, 0.95f));
+		Fog->SetStartDistance(2600.f);
+		P.AutoExposureBias = -0.5f;
 		P.BloomIntensity = 1.0f;
-		P.ColorSaturation = FVector4(1.08f, 1.08f, 1.08f, 1.f); // r12: art is bright and saturated (r10 mute read washed)
-		P.ColorContrast = FVector4(1.06f, 1.06f, 1.06f, 1.f);
-		Clouds->SetVisibility(true); // r18: soft cumulus like the art's sky
+		P.bOverride_BloomThreshold = true; P.BloomThreshold = 0.75f;
+		P.ColorSaturation = FVector4(1.12f, 1.12f, 1.12f, 1.f);
+		P.ColorContrast = FVector4(1.03f, 1.03f, 1.03f, 1.f);
+		P.VignetteIntensity = 0.25f;
+		break;
+	case EZoogiArena::Training:
+		// Clouds deck stays (below the island, 08 LIGHTING.md).
+		Sun->SetEnableLightShaftBloom(true); Sun->SetBloomScale(0.15f); Sun->SetBloomMaxBrightness(0.5f);
+		// _skies-lighting (Oct 14 sky pass)
+		Sun->SetRelativeRotation(FRotator(-50.f, 55.f, 0.f));
+		Sun->SetIntensity(4.2f);
+		Sun->SetLightColor(FLinearColor(1.f, 0.95f, 0.86f));
+		SkyLight->SetIntensity(1.0f);
+		SkyLight->SetLightColor(FLinearColor(0.85f, 0.92f, 1.f));
+		Fog->SetFogDensity(0.005f);
+		Fog->SetFogInscatteringColor(FLinearColor(0.6f, 0.75f, 1.f));
+		Fog->SetStartDistance(2500.f);
+		P.AutoExposureBias = -0.5f;
+		P.BloomIntensity = 1.0f;
+		P.bOverride_BloomThreshold = true; P.BloomThreshold = 0.72f;
+		P.ColorSaturation = FVector4(1.10f, 1.10f, 1.10f, 1.f);
+		P.ColorContrast = FVector4(1.04f, 1.04f, 1.04f, 1.f);
+		P.VignetteIntensity = 0.25f;
 		break;
 	default:
 		Sun->SetRelativeRotation(FRotator(-42.f, 35.f, 0.f));
@@ -1120,6 +1163,9 @@ void AZoogiArena::BuildArabian()
 		Lt->SetRelativeLocation(P);
 		AddPointLight(P, ZoogiUtil::Hex(TEXT("#FF9A3C")), 90.f, 2600.f);
 	}
+	// _skies-lighting/05: T_ArabianSky has the moon and ~4000 stars baked in, so the 3D moon + star actor only build as a fallback.
+	if (!AddPanoramaSky(TEXT("Arabian"), 0.7f, 0.f, FLinearColor::Black))
+	{
 	// Crescent moon: bright disc with a sky-coloured disc offset in front of it.
 	UStaticMeshComponent* Moon = AddMesh(Sph, ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#FFF1C9")), 12.f), false, false);
 	const FVector MoonDir = FVector(-0.55f, 0.6f, 0.58f).GetSafeNormal();
@@ -1129,6 +1175,7 @@ void AZoogiArena::BuildArabian()
 	Bite->SetRelativeScale3D(FVector(38.f));
 	Bite->SetRelativeLocation(MoonDir * 58500.f + FVector(900.f, 700.f, 500.f));
 	AddStars(1200, 2.5f, 6.f, FLinearColor(1.f, 0.92f, 0.8f), 7);
+	}
 	// Oct 14 (target arabian_nights.png): pink glowing edge ring just outside the knockoff line, and a translucent
 	// fountain jet at the centre. Visual only: no collision, no shadows.
 	{
