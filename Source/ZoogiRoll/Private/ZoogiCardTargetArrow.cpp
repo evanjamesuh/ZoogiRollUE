@@ -26,7 +26,10 @@ namespace ZoogiCardTargetArrow
 			const float Th = FMath::Lerp(5.f, 11.f, T0);
 			FLinearColor C = Color; C.A *= FMath::Lerp(0.55f, 1.f, T0);
 			TArray<FVector2f> Pts = { FVector2f(P0), FVector2f(P1) };
+			// uistyle: thick deep-navy outline under each dash, then the saturated dash and a white gloss core
+			FSlateDrawElement::MakeLines(Out, Layer, Geo.ToPaintGeometry(), Pts, ESlateDrawEffect::None, FLinearColor(0.012f, 0.025f, 0.11f, C.A), true, Th + 7.f);
 			FSlateDrawElement::MakeLines(Out, Layer, Geo.ToPaintGeometry(), Pts, ESlateDrawEffect::None, C, true, Th);
+			FSlateDrawElement::MakeLines(Out, Layer, Geo.ToPaintGeometry(), Pts, ESlateDrawEffect::None, FLinearColor(1.f, 1.f, 1.f, 0.45f * C.A), true, FMath::Max(1.5f, Th * 0.3f));
 		}
 		// head: two strokes along the tangent at the end
 		FVector2D Dir = (End - Bez(Start, Ctrl, End, 0.93f)).GetSafeNormal();
@@ -34,6 +37,7 @@ namespace ZoogiCardTargetArrow
 		const FVector2D N(-Dir.Y, Dir.X);
 		const FVector2D A = End - Dir * 26.f + N * 16.f, B = End - Dir * 26.f - N * 16.f;
 		TArray<FVector2f> H = { FVector2f(A), FVector2f(End), FVector2f(B) };
+		FSlateDrawElement::MakeLines(Out, Layer + 1, Geo.ToPaintGeometry(), H, ESlateDrawEffect::None, FLinearColor(0.012f, 0.025f, 0.11f, Color.A), true, 16.f);
 		FSlateDrawElement::MakeLines(Out, Layer + 1, Geo.ToPaintGeometry(), H, ESlateDrawEffect::None, Color, true, 9.f);
 	}
 
@@ -46,6 +50,7 @@ namespace ZoogiCardTargetArrow
 			const float A = 2.f * PI * i / N;
 			Pts.Add(FVector2f(C + FVector2D(FMath::Cos(A), FMath::Sin(A)) * R));
 		}
+		FSlateDrawElement::MakeLines(Out, Layer, Geo.ToPaintGeometry(), Pts, ESlateDrawEffect::None, FLinearColor(0.012f, 0.025f, 0.11f, Color.A * 0.8f), true, Thick + 5.f);
 		FSlateDrawElement::MakeLines(Out, Layer, Geo.ToPaintGeometry(), Pts, ESlateDrawEffect::None, Color, true, Thick);
 	}
 }

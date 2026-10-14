@@ -9,6 +9,7 @@
 #include "CanvasItem.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "ZoogiUIStyle.h"
 
 static constexpr double ZoogiDebugShatterFlashSeconds = 1.5;
 
@@ -62,6 +63,11 @@ void UZoogiDebugEpisodeWidget::Tick(float DeltaTime)
 		UE_LOG(LogZoogi, Verbose, TEXT("ZOOGI_DEBUGUI state %s"), ZoogiBattle::StateName(S));
 	LastState = S;
 	LastShatterCount = SM->ShatterCount;
+	// uistyle: bar juice follows each Zoogi's energy (display only)
+	const float Cap = FMath::Max(1.f, SM->GetTuning().EnergyCap);
+	const int32 N = SM->Players.Num();
+	if (EnergyJuice.Num() < N) EnergyJuice.SetNum(N);
+	for (int32 i = 0; i < N; ++i) EnergyJuice[i].Update(FMath::Clamp(SM->GetEnergy(i) / Cap, 0.f, 1.f), FApp::GetDeltaTime());
 }
 
 void UZoogiDebugEpisodeWidget::OnHUDPostRender(AHUD* HUD, UCanvas* Canvas)
@@ -69,49 +75,37 @@ void UZoogiDebugEpisodeWidget::OnHUDPostRender(AHUD* HUD, UCanvas* Canvas)
 	if (!Canvas || !HUD || HUD->GetWorld() != GetWorld() || !GEngine) return;
 	const UZoogiBattleStateMachine* SM = UZoogiBattleStateMachine::Get(this);
 	const AZoogiGameMode* G = GetWorld()->GetAuthGameMode<AZoogiGameMode>();
-	UFont* Font = GEngine->GetSmallFont();
+	// uistyle: navy outlined panel, chunky cyan -> electric blue Episode Energy bars with juice, outlined bold text
+	using namespace ZoogiUIStyle;
 	const float X = 20.f;
 	float Y = Canvas->ClipY * 0.55f;
+	const FSlateFontInfo FTitle = CanvasFont(10), FRow = CanvasFont(8, 1.5f), FBig = CanvasFont(24, 3.f);
+	auto Txt = [Canvas](const FString& S, float TX, float TY, const FSlateFontInfo& F, const FLinearColor& Col) { CText(Canvas, S, TX, TY, F, Col); };
 
-	auto Box = [Canvas](float BX, float BY, float BW, float BH, const FLinearColor& Col)
-	{
-		FCanvasTileItem T(FVector2D(BX, BY), FVector2D(BW, BH), Col);
-		T.BlendMode = SE_BLEND_Translucent;
-		Canvas->DrawItem(T);
-	};
-	auto Txt = [Canvas, Font](const FString& S, float TX, float TY, const FLinearColor& Col, float Scale = 1.f)
-	{
-		FCanvasTextItem T(FVector2D(TX, TY), FText::FromString(S), Font, Col);
-		T.Scale = FVector2D(Scale, Scale);
-		T.EnableShadow(FLinearColor::Black);
-		Canvas->DrawItem(T);
-	};
+	const int32 N = G ? G->Balls.Num() : (SM ? SM->Players.Num() : 0);
+	CPanel(Canvas, X - 12.f, Y - 12.f, 316.f, 50.f + N * 40.f, 1.f, PanelNavy, EnergyA);
+	if (!SM) { Txt(TEXT("DEBUG UI: no battle state machine"), X, Y, FTitle, Gold); return; }
 
-	Box(X - 8.f, Y - 8.f, 300.f, 150.f, FLinearColor(0.f, 0.f, 0.f, 0.45f));
-	if (!SM) { Txt(TEXT("DEBUG UI: no battle state machine"), X, Y, FLinearColor::Yellow); return; }
-
-	Txt(FString::Printf(TEXT("TURN STATE: %s"), ZoogiBattle::StateName(SM->GetState())), X, Y, FLinearColor::White, 1.2f);
-	Y += 24.f;
+	Txt(FString::Printf(TEXT("TURN STATE: %s"), ZoogiBattle::StateName(SM->GetState())), X, Y, FTitle, FLinearColor::White);
+	Y += 28.f;
 
 	const float Cap = FMath::Max(1.f, SM->GetTuning().EnergyCap);
-	const int32 N = G ? G->Balls.Num() : SM->Players.Num();
 	for (int32 i = 0; i < N; ++i)
 	{
 		const float E = SM->GetEnergy(i);
 		const FString Name = SM->Players.IsValidIndex(i) ? SM->Players[i].Name : FString::Printf(TEXT("Zoogi %d"), i + 1);
-		Txt(FString::Printf(TEXT("P%d %s  %3.0f / %.0f"), i + 1, *Name, E, Cap), X, Y, FLinearColor(0.85f, 0.95f, 1.f));
-		Y += 15.f;
-		const float BW = 260.f, BH = 8.f;
-		Box(X, Y, BW, BH, FLinearColor(0.15f, 0.15f, 0.2f, 0.9f));
-		Box(X, Y, BW * FMath::Clamp(E / Cap, 0.f, 1.f), BH, FLinearColor(0.2f, 0.75f, 1.f, 0.95f));
-		Y += BH + 8.f;
+		Txt(FString::Printf(TEXT("P%d %s  %3.0f / %.0f"), i + 1, *Name, E, Cap), X, Y, FRow, FLinearColor(0.85f, 0.97f, 1.f));
+		Y += 19.f;
+		const float BW = 250.f, BH = 12.f;
+		CBar(Canvas, X + 2.f, Y, BW, BH, 1.f, FMath::Clamp(E / Cap, 0.f, 1.f), EnergyA, EnergyB, EnergyJuice.IsValidIndex(i) ? &EnergyJuice[i] : nullptr, 4, (float)RealClock);
+		Y += BH + 9.f;
 	}
 
 	if (RealClock < ShatterFlashUntil && FMath::Fmod(RealClock, 0.2) < 0.12)
 	{
 		const float W = Canvas->ClipX;
-		Box(W * 0.5f - 160.f, Canvas->ClipY * 0.2f - 10.f, 320.f, 60.f, FLinearColor(0.6f, 0.f, 0.f, 0.6f));
-		Txt(TEXT("SHATTER"), W * 0.5f - 70.f, Canvas->ClipY * 0.2f, FLinearColor(1.f, 0.2f, 0.2f), 2.5f);
+		CPanel(Canvas, W * 0.5f - 160.f, Canvas->ClipY * 0.2f - 12.f, 320.f, 64.f, 1.f, FLinearColor(0.55f, 0.02f, 0.12f, 0.85f), Gold);
+		Txt(TEXT("SHATTER"), W * 0.5f - 80.f, Canvas->ClipY * 0.2f - 4.f, FBig, FLinearColor(1.f, 0.92f, 0.3f));
 	}
 
 	if (!bLoggedFirstDraw) { bLoggedFirstDraw = true; UE_LOG(LogZoogi, Log, TEXT("ZOOGI_DEBUGUI first draw players=%d cap=%.0f"), N, Cap); }
