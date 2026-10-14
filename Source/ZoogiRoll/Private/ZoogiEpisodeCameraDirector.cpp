@@ -593,13 +593,16 @@ bool UZoogiEpisodeCameraDirector::EvaluateShotView(FZoogiActiveShot& S, float Dt
 		const FVector Base = Occlude(Loc, bBlocked);
 		if (bBlocked) { S.Stats.OccludedFrames++; S.Stats.MaxPullInCm = FMath::Max(S.Stats.MaxPullInCm, FVector::Dist(Base, Loc)); }
 		FVector Want = Base;
+		for (const FBox& B : FX) S.Stats.MaxVolumeExtentCm = FMath::Max(S.Stats.MaxVolumeExtentCm, (float)B.GetExtent().GetMax());
 		if (FX.Num() > 0 && InsideFX(Base))
 		{
 			S.Stats.RawInsideFXFrames++;
 			// Lift first (keeps the readable high angle), then pull in, swing, back off.
 			static const FVector Cands[] = {
 				FVector(15.f, 1.f, 0.f), FVector(0.f, 0.75f, 0.f), FVector(30.f, 1.f, 0.f), FVector(0.f, 1.f, 25.f), FVector(0.f, 1.f, -25.f),
-				FVector(15.f, 0.6f, 0.f), FVector(45.f, 1.f, 0.f), FVector(0.f, 1.f, 50.f), FVector(0.f, 1.f, -50.f), FVector(20.f, 1.4f, 0.f), FVector(0.f, 1.7f, 0.f) };
+				FVector(15.f, 0.6f, 0.f), FVector(45.f, 1.f, 0.f), FVector(0.f, 1.f, 50.f), FVector(0.f, 1.f, -50.f), FVector(20.f, 1.4f, 0.f), FVector(0.f, 1.7f, 0.f),
+				// The subject is inside a big burst: go wide and high until the camera is clear of it.
+				FVector(30.f, 2.2f, 0.f), FVector(40.f, 3.0f, 0.f), FVector(55.f, 3.8f, 0.f), FVector(65.f, 4.6f, 0.f) };
 			for (const FVector& Cd : Cands)
 			{
 				bool bB = false;

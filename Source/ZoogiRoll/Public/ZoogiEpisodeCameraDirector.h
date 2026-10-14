@@ -82,6 +82,8 @@ struct ZOOGIROLL_API FZoogiShotAvoidStats
 	UPROPERTY(BlueprintReadOnly, Category = "Shot") int32 FinalOccludedFrames = 0;
 	UPROPERTY(BlueprintReadOnly, Category = "Shot") float MaxAvoidOffsetCm = 0.f;
 	UPROPERTY(BlueprintReadOnly, Category = "Shot") float MaxPullInCm = 0.f;
+	/** Largest half-extent of an avoided burst volume seen (diagnostics). */
+	UPROPERTY(BlueprintReadOnly, Category = "Shot") float MaxVolumeExtentCm = 0.f;
 	/** Slow-mo look frames (presentation only) and the slowest motion rate reached. */
 	UPROPERTY(BlueprintReadOnly, Category = "Shot") int32 SlowLookFrames = 0;
 	UPROPERTY(BlueprintReadOnly, Category = "Shot") float MinMotionRate = 1.f;

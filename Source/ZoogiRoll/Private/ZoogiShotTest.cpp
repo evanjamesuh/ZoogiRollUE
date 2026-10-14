@@ -758,8 +758,8 @@ void AZoogiShotTestDriver::Verify()
 			if (C.Kind == ZoogiShotTest::ECaseKind::AvoidParticles) bOk &= St.RawInsideFXFrames > 0;
 			if (C.Kind == ZoogiShotTest::ECaseKind::AvoidOcclusion) bOk &= St.OccludedFrames > 0 && St.FinalOccludedFrames == 0;
 			bPass &= bOk;
-			Extra.Add(FString::Printf(TEXT("avoid: frames %d, raw-in-burst %d, final-in-burst %d, occluded %d (final %d), max offset %.0f cm, max pull-in %.0f cm"),
-				St.Frames, St.RawInsideFXFrames, St.FinalInsideFXFrames, St.OccludedFrames, St.FinalOccludedFrames, St.MaxAvoidOffsetCm, St.MaxPullInCm));
+			Extra.Add(FString::Printf(TEXT("avoid: frames %d, raw-in-burst %d, final-in-burst %d, occluded %d (final %d), max offset %.0f cm, max pull-in %.0f cm, largest burst half-extent %.0f cm"),
+				St.Frames, St.RawInsideFXFrames, St.FinalInsideFXFrames, St.OccludedFrames, St.FinalOccludedFrames, St.MaxAvoidOffsetCm, St.MaxPullInCm, St.MaxVolumeExtentCm));
 		}
 		else if (C.Kind != ZoogiShotTest::ECaseKind::Shot) { bPass = false; Extra.Add(TEXT("no avoid stats")); }
 	}
