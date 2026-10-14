@@ -508,7 +508,9 @@ void UZoogiMenuRoot::Rebuild()
 	case EZoogiScreen::Shop: Bg = TEXT("lava_background"); break;
 	default: break;
 	}
-	UObject* BgRes = (EnsureBackdrop() && BackdropTexture) ? (UObject*)BackdropTexture.Get() : (UObject*)Art(Bg);
+	// HOME shows the live main-menu map preview (589dd96) behind a light wash; the other screens use art backdrops.
+	const bool bLiveMap = Top() == EZoogiScreen::Home && !bAnimeView;
+	UObject* BgRes = (EnsureBackdrop() && BackdropTexture) ? (UObject*)BackdropTexture.Get() : bLiveMap ? nullptr : (UObject*)Art(Bg);
 	if (BgRes)
 	{
 		UScaleBox* Fill = WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass());
@@ -524,7 +526,7 @@ void UZoogiMenuRoot::Rebuild()
 		if (UOverlaySlot* S = Root->AddChildToOverlay(Fill)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); }
 	}
 	UBorder* Wash = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
-	Wash->SetBrushColor(FLinearColor(0.02f, 0.08f, 0.35f, 0.55f));
+	Wash->SetBrushColor(FLinearColor(0.02f, 0.08f, 0.35f, bLiveMap ? 0.25f : 0.55f));
 	Wash->SetVisibility(ESlateVisibility::HitTestInvisible);
 	if (UOverlaySlot* S = Root->AddChildToOverlay(Wash)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); }
 
