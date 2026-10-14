@@ -1,6 +1,8 @@
 #include "ZoogiKFXPreview.h"
 #include "ZoogiFX.h"
 #include "ZoogiAwakenFX.h"
+#include "ZoogiAPFXBase.h"
+#include "ZoogiOrb.h"
 #include "ZoogiTypes.h"
 #include "ZoogiRoll.h"
 #include "Components/SceneCaptureComponent2D.h"
@@ -194,11 +196,30 @@ void AZoogiKFXPreview::TickPlan(float Dt)
 	if (PlanIndex < 0) { if (T >= 0.f) NextPlan(); return; }
 	FPlanShot& S = Plan[PlanIndex];
 	AZoogiAwakenFX::ViewOverride = Capture->GetComponentLocation();
+	AZoogiAPFXBase::ViewOverride = Capture->GetComponentLocation();
 	for (FMover& M : Movers) if (AActor* A = M.Actor.Get()) A->SetActorLocation(A->GetActorLocation() + M.Vel * Dt);
 	for (FPlanEvent& E : S.Events)
 	{
 		if (E.bFired || T < E.Time) continue;
 		E.bFired = true;
+		if (E.Prefab == TEXT("AFX_Orb"))
+		{
+			// real gameplay orb (physics) on the stage floor, e.g. to show the Void 1 gravity pull
+			Floor->SetCollisionProfileName(TEXT("BlockAll"));
+			Floor->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+			if (AZoogiOrb* O = GetWorld()->SpawnActor<AZoogiOrb>(AZoogiOrb::StaticClass(), FTransform(KFXBase + E.Pos + FVector(0, 0, 40.f))))
+			{
+				O->InitOrb(nullptr, 30.f);
+				Spawned.Add(O);
+			}
+			continue;
+		}
+		if (E.Prefab == TEXT("AFX_Void2"))
+		{
+			// Void 2 Titan Meteor: from the ground point toward ground + velocity field (the target)
+			if (AActor* X = AZoogiAwakenFX::PlayVoid2(GetWorld(), KFXBase + E.Pos, KFXBase + E.Pos + E.Vel, nullptr)) Spawned.Add(X);
+			continue;
+		}
 		if (E.Prefab.StartsWith(TEXT("AFX_")))
 		{
 			// Awaken FX (launch ring / shock chain / void portal): 'scale' is the size, the velocity field carries the parameters

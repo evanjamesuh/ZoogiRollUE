@@ -7,6 +7,7 @@
 #include "CoreMinimal.h"
 #include "Subsystems/WorldSubsystem.h"
 #include "ZoogiArtifacts.h"
+#include "ZoogiAnimePanels.h"
 #include "ZoogiAnimeSubsystem.generated.h"
 
 class AZoogiBall;
@@ -74,14 +75,18 @@ public:
 	 *  micro-pause before the hit lands) and dip the music. */
 	void PlayEventSfx(const FZoogiCombatEvent& E);
 	/** A sequence is playing (gameplay waits before the next phase change). */
-	bool IsBusy() const { return bPlaying; }
+	bool IsBusy() const { return bActive; }
 	/** Click / Space: skip (after the minimum 0.3 s). */
 	void Skip();
 	void ResetMatch();
 	EZoogiAnimeMode Mode = EZoogiAnimeMode::Full;
 
 	// ---- read by the HUD / camera
+	/** HUD-facing: a centre-card sequence is on screen. False while the Awaken clip plays as edge comic panels (bPanelMode),
+	 *  so the HUD draws no card / letterbox over the Zoogi; gameplay waits on IsBusy() (bActive) either way. */
 	bool bPlaying = false;
+	bool bActive = false;
+	bool bPanelMode = false;
 	FString CurrentId;
 	FString CurrentTier;
 	FString Caption;        // big line ("CRITICAL!", "EMBER STONE INFUSED")
@@ -116,6 +121,9 @@ protected:
 	FString FindMovie(const FZoogiCombatEvent& E, const FString& ResolvedId) const;
 	void LoadMovieTable();
 	TMap<FString, float> MovieSeconds; // Content/Anime/Movies/Movies.csv
+	void SyncPlaying() { bPlaying = bActive && !bPanelMode; }
+	FZoogiAnimePanels Panels;
+	int32 PanelShots = 0;
 	bool bMoviesOff = false;
 	bool bCutInShot = false;
 public:

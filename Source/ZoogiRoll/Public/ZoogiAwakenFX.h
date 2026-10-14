@@ -26,6 +26,15 @@ class UPrimitiveComponent;
 UENUM()
 enum class EZoogiAwakenFX : uint8 { LaunchRing, ShockChain, ShockHit, VoidPortal };
 
+/** Void tuning, [ZoogiRoll.Void] in DefaultGame.ini (Evan, Oct 14). Void 1 = portal gravity pull only; Void 2 = Titan Meteor. */
+struct FZoogiVoidTune
+{
+	float PullRadius = 1000.f;   // cm (was 650)
+	float PullAccel = 1700.f;    // cm/s^2 at the rim scale 0.3..1 toward the sink (was 1100)
+	float PullSeconds = 2.0f;    // s (was 1.4)
+	float MeteorSeconds = 2.4f;  // Void 2 presentation length (real s)
+};
+
 UCLASS()
 class ZOOGIROLL_API AZoogiAwakenFX : public AActor
 {
@@ -41,6 +50,11 @@ public:
 	static AZoogiAwakenFX* SpawnFX(UWorld* World, EZoogiAwakenFX Kind, const FVector& Ground, float Scale, AZoogiBall* Ball, const FVector& Param, AActor* TargetActor = nullptr);
 	/** Captures render from a scene capture: billboards face this when set. */
 	static TOptional<FVector> ViewOverride;
+	static FZoogiVoidTune GetVoidTune();
+	/** True when Void 2 (Titan Meteor) is unlocked AND equipped on this Zoogi (UZoogiPowerUnlockSubsystem); else Void 1. */
+	static bool UseVoid2(UWorld* World, FName ZoogiId);
+	/** Void 2: Titan Meteor strikes Impact (the targeted orb / player), coming in along From -> Impact. Presentation only. */
+	static AActor* PlayVoid2(UWorld* World, const FVector& From, const FVector& Impact, AActor* Target);
 
 	UFUNCTION() void OnBallHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
 
