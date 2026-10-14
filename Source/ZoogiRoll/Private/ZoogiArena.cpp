@@ -433,14 +433,22 @@ void AZoogiArena::SetupSky(EZoogiArena InTheme)
 		P.ColorSaturation = FVector4(1.02f, 1.08f, 1.2f, 1.f);
 		break;
 	case EZoogiArena::Volcanic:
-		Sun->SetRelativeRotation(FRotator(-12.f, 20.f, 0.f));
-		Sun->SetIntensity(5.f);
-		Sun->SetLightColor(FLinearColor(1.f, 0.55f, 0.3f));
-		Fog->SetFogDensity(0.06f);
-		Fog->SetFogInscatteringColor(FLinearColor(0.6f, 0.15f, 0.05f));
+		// Oct 14 (_skies-lighting/03-volcanic-pit LIGHTING.md, normal): dim red key, thin haze, +0.2 exposure, hub-only bloom.
+		Sun->SetRelativeRotation(FRotator(-35.f, 35.f, 0.f));
+		Sun->SetIntensity(2.5f);
+		Sun->SetLightColor(FLinearColor(1.f, 0.45f, 0.25f));
+		Fog->SetFogDensity(0.015f);
+		Fog->SetFogInscatteringColor(FLinearColor(0.35f, 0.08f, 0.03f));
+		Fog->SetStartDistance(2400.f);
 		Clouds->SetVisibility(false);
-		P.AutoExposureBias = 1.0f;
-		P.ColorSaturation = FVector4(1.1f, 1.f, 0.95f, 1.f);
+		Atmosphere->SetRayleighScatteringScale(0.f);
+		Atmosphere->SetMieScatteringScale(0.f);
+		SkyLight->SetIntensity(0.6f);
+		SkyLight->SetLightColor(FLinearColor(1.f, 0.62f, 0.48f));
+		P.AutoExposureBias = 0.2f;
+		P.BloomIntensity = 0.9f; P.bOverride_BloomThreshold = true; P.BloomThreshold = 1.25f;
+		P.ColorSaturation = FVector4(1.05f, 1.05f, 1.05f, 1.f);
+		P.ColorContrast = FVector4(1.12f, 1.12f, 1.12f, 1.f);
 		break;
 	case EZoogiArena::Neon:
 		Sun->SetRelativeRotation(FRotator(-60.f, 200.f, 0.f));
@@ -475,16 +483,22 @@ void AZoogiArena::SetupSky(EZoogiArena InTheme)
 		break;
 	}
 	case EZoogiArena::Cosmic:
-		Sun->SetRelativeRotation(FRotator(-55.f, 140.f, 0.f));
-		Sun->SetIntensity(6.f);
-		Sun->SetLightColor(FLinearColor(0.8f, 0.8f, 1.f));
+		// Oct 14 (_skies-lighting/04-cosmic-platform LIGHTING.md, normal): 3.2 lux cool key from the galaxy core, dim sky light
+		// so the navy floor stays navy, +1.0 exposure, bloom only above 1.6.
+		Sun->SetRelativeRotation(FRotator(-34.f, 340.f, 0.f));
+		Sun->SetIntensity(3.2f);
+		Sun->SetLightColor(FLinearColor(0.78f, 0.84f, 1.f));
 		Fog->SetFogDensity(0.0f);
 		Clouds->SetVisibility(false);
 		// Keep the atmosphere (the real-time sky light capture needs one) but make it black space.
 		Atmosphere->SetRayleighScatteringScale(0.f);
 		Atmosphere->SetMieScatteringScale(0.f);
-		P.AutoExposureBias = 1.2f;
-		P.ColorSaturation = FVector4(1.f, 1.f, 1.1f, 1.f);
+		SkyLight->SetIntensity(0.8f);
+		SkyLight->SetLightColor(FLinearColor(0.62f, 0.58f, 1.f));
+		P.AutoExposureBias = 1.0f;
+		P.BloomIntensity = 0.8f; P.bOverride_BloomThreshold = true; P.BloomThreshold = 1.6f;
+		P.ColorSaturation = FVector4(1.1f, 1.1f, 1.1f, 1.f);
+		P.ColorContrast = FVector4(1.08f, 1.08f, 1.08f, 1.f);
 		break;
 	case EZoogiArena::Meadow:
 		// r3 (Buzzy Meadow): warm high sun, saturated greens, light haze so the painted hills/waterfalls read.
@@ -512,8 +526,8 @@ void AZoogiArena::SetupSky(EZoogiArena InTheme)
 		P.ColorSaturation = FVector4(1.02f, 1.02f, 1.02f, 1.f);
 		break;
 	}
-	Fog->SetFogHeightFalloff(0.002f);
-	Fog->SetRelativeLocation(FVector(0, 0, -3000.f));
+	Fog->SetFogHeightFalloff(InTheme == EZoogiArena::Volcanic ? 0.25f : 0.002f);
+	Fog->SetRelativeLocation(FVector(0, 0, InTheme == EZoogiArena::Volcanic ? -400.f : -3000.f));
 	SkyLight->RecaptureSky();
 }
 
@@ -633,16 +647,21 @@ void AZoogiArena::BuildIslet(const FVector& Center, float Radius, const FLinearC
 void AZoogiArena::BuildVolcanic()
 {
 	BuildIsland(ZoogiUtil::Hex(TEXT("#3A2A26")), ZoogiUtil::Hex(TEXT("#5A3A2E")), ZoogiUtil::Hex(TEXT("#FF5722")),
-		ZoogiUtil::Hex(TEXT("#1E1513")), ZoogiUtil::Hex(TEXT("#3A2622")), 0.3f, KitFloorMaterial(TEXT("Volcanic"), ZoogiUtil::Hex(TEXT("#FF6A1A")), 1.2f, 1.0f));
+		ZoogiUtil::Hex(TEXT("#1E1513")), ZoogiUtil::Hex(TEXT("#3A2622")), 0.3f, KitFloorMaterial(TEXT("Volcanic"), ZoogiUtil::Hex(TEXT("#FF6A1A")), 1.0f, 1.0f)); // Oct 14: dark basalt, glow lines <= 1.0
 	TArray<FVector4> Rim = {
 		FVector4(32, 13.35, 1.15, 1.2), FVector4(70, 13.5, 1.05, 1.0), FVector4(152, 13.25, 1.2, 1.3),
 		FVector4(196, 13.45, 1.1, 1.1), FVector4(250, 13.3, 1.22, 1.25), FVector4(332, 13.4, 1.08, 1.0) };
 	BuildRim(Rim, ZoogiUtil::Hex(TEXT("#2B1D1A")), ZoogiUtil::Hex(TEXT("#4A2A20")), 0.55f);
-	// Glowing lava sea far below.
+	// Lava field around the court (Oct 14): drifting crust plates at <= 0.9 emissive (03 LIGHTING.md trims) instead of the
+	// flat x4 glow sheet that washed the whole scene orange. Raised so it reads as a field right below the court.
 	UStaticMesh* Plane = ZoogiUtil::BasicShape(TEXT("Plane"));
-	UStaticMeshComponent* Lava = AddMesh(Plane, ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#FF4500")), 4.f), false, false);
+	UMaterialInterface* LavaMat = KitLavaMaterial(36.f, 36.f, 0.004f, 0.002f, 0.9f, 0.55f);
+	UStaticMeshComponent* Lava = AddMesh(Plane, LavaMat ? LavaMat : ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#FF4500")), 0.9f), false, false);
 	Lava->SetRelativeScale3D(FVector(1500.f, 1500.f, 1.f));
-	Lava->SetRelativeLocation(FVector(0, 0, -2400.f));
+	Lava->SetRelativeLocation(FVector(0, 0, -700.f));
+	Lava->SetCastShadow(false);
+	AddPointLight(FVector(0, 0, -1500.f), FLinearColor(1.f, 0.42f, 0.15f), 2000.f, 6000.f); // LavaBounce under-island fill
+	AddPanoramaSky(TEXT("Volcanic"), 0.75f, 0.f, FLinearColor::Black);
 	FRandomStream Rng(99);
 	UStaticMesh* Hoodoo = ZoogiUtil::LoadMesh(TEXT("/Game/Env/DesertHoodoo/SM_DesertHoodoo.SM_DesertHoodoo"));
 	for (int32 i = 0; i < 12; ++i)
@@ -657,17 +676,20 @@ void AZoogiArena::BuildVolcanic()
 void AZoogiArena::BuildCosmic()
 {
 	BuildIsland(ZoogiUtil::Hex(TEXT("#2A2550")), ZoogiUtil::Hex(TEXT("#3F3A7A")), ZoogiUtil::Hex(TEXT("#7C4DFF")),
-		ZoogiUtil::Hex(TEXT("#15122B")), ZoogiUtil::Hex(TEXT("#29224F")), 0.3f, KitFloorMaterial(TEXT("Cosmic"), ZoogiUtil::Hex(TEXT("#8B5CFF")), 1.2f, 1.0f));
+		ZoogiUtil::Hex(TEXT("#15122B")), ZoogiUtil::Hex(TEXT("#29224F")), 0.3f, KitFloorMaterial(TEXT("Cosmic"), ZoogiUtil::Hex(TEXT("#8B5CFF")), 1.0f, 0.2f)); // Oct 14: navy-violet albedo (T_CosmicFloor is pale lavender), glow 1.0
 	TArray<FVector4> Rim = {
 		FVector4(32, 13.35, 0.9, 1.2), FVector4(70, 13.5, 0.9, 1.2), FVector4(152, 13.25, 0.9, 1.2),
 		FVector4(196, 13.45, 0.9, 1.2), FVector4(250, 13.3, 0.9, 1.2), FVector4(332, 13.4, 0.9, 1.2) };
 	BuildRim(Rim, ZoogiUtil::Hex(TEXT("#6D28D9")), ZoogiUtil::Hex(TEXT("#A78BFA")), 0.8f);
 	// Glowing lip ring.
-	AddCylinder(FVector2D::ZeroVector, ZoogiConst::KnockoffRadius + 15.f, 20.f, -2.f, ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#7C4DFF")), 5.f), false);
+	AddCylinder(FVector2D::ZeroVector, ZoogiConst::KnockoffRadius + 15.f, 20.f, -2.f, ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#7C4DFF")), 1.2f), false); // Arena Maps cap 1.2 (was x5)
+	AddPointLight(FVector(0, 0, 364.f), ZoogiUtil::Hex(TEXT("#33E0FF")), 80.f, 1200.f);   // CoreCyan
+	AddPointLight(FVector(0, 0, -900.f), ZoogiUtil::Hex(TEXT("#7A4DFF")), 600.f, 2600.f); // UnderViolet
 	// Animated "space journey" backdrop (nebula sky, star streaks, drifting planets). Falls back to the
 	// old static star shell if the /Game/Env/Cosmic assets are missing (or with -ZoogiNoSpaceBackdrop, for A/B tests).
 	FRandomStream Rng(42);
-	if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiNoSpaceBackdrop")) || !AddSpaceBackdrop())
+	// Oct 14: the pack's painted dark-navy void (T_CosmicSky x0.6) frames the board; the streak backdrop is the fallback.
+	if (!AddPanoramaSky(TEXT("Cosmic"), 0.22f, 0.f, FLinearColor::Black) && (FParse::Param(FCommandLine::Get(), TEXT("ZoogiNoSpaceBackdrop")) || !AddSpaceBackdrop()))
 	{
 		UStaticMesh* SphereMesh = ZoogiUtil::BasicShape(TEXT("Sphere"));
 		UInstancedStaticMeshComponent* Stars = NewObject<UInstancedStaticMeshComponent>(this);
@@ -686,7 +708,7 @@ void AZoogiArena::BuildCosmic()
 		Built.Add(Stars);
 	}
 	UStaticMesh* Crystal = ZoogiUtil::LoadMesh(TEXT("/Game/Env/AlienCrystal/SM_AlienCrystal.SM_AlienCrystal"));
-	for (int32 i = 0; i < 10; ++i)
+	for (int32 i = 0; i < 0; ++i) // Oct 14: no crystal islets; the target frames the board with dark void, the arch and planets
 	{
 		const float A = i * (2.f * PI / 10.f) + Rng.FRandRange(-0.15f, 0.15f);
 		const float D = Rng.FRandRange(2800.f, 6000.f);
@@ -1107,6 +1129,16 @@ void AZoogiArena::BuildArabian()
 	Bite->SetRelativeScale3D(FVector(38.f));
 	Bite->SetRelativeLocation(MoonDir * 58500.f + FVector(900.f, 700.f, 500.f));
 	AddStars(1200, 2.5f, 6.f, FLinearColor(1.f, 0.92f, 0.8f), 7);
+	// Oct 14 (target arabian_nights.png): pink glowing edge ring just outside the knockoff line, and a translucent
+	// fountain jet at the centre. Visual only: no collision, no shadows.
+	{
+		const float KR = ZoogiConst::KnockoffRadius;
+		AddCylinder(FVector2D::ZeroVector, KR + 30.f, 8.f, -1.f, ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#FF5FB0")), 1.0f), false)->SetCastShadow(false);
+		UMaterialInterface* Jet = ZoogiUtil::FxMID(this, ZoogiUtil::Hex(TEXT("#9FE8FF")), 0.8f);
+		AddCylinder(FVector2D::ZeroVector, 22.f, 560.f, 560.f, Jet, false)->SetCastShadow(false);
+		AddCylinder(FVector2D::ZeroVector, 55.f, 240.f, 240.f, Jet, false)->SetCastShadow(false);
+		AddCylinder(FVector2D::ZeroVector, 110.f, 30.f, 30.f, Jet, false)->SetCastShadow(false);
+	}
 }
 
 // ------------------------------------------------------------------ Pharaoh's Tomb

@@ -81,8 +81,8 @@ void AZoogiArena::PlaceIncoming()
 	}
 	else if (!bNoInc && Theme == EZoogiArena::Neon)
 	{
-		Sun->SetRelativeRotation(FRotator(-40.f, 300.f, 0.f)); Sun->SetIntensity(0.8f); Sun->SetLightColor(ZoogiUtil::Hex(TEXT("#9AA8FF")));
-		SkyLight->SetIntensity(0.5f); SkyLight->SetLightColor(FLinearColor(0.62f, 0.58f, 1.f));
+		Sun->SetRelativeRotation(FRotator(-40.f, 300.f, 0.f)); Sun->SetIntensity(2.4f); Sun->SetLightColor(ZoogiUtil::Hex(TEXT("#9AA8FF")));
+		SkyLight->SetIntensity(2.2f); // Oct 14: was 0.8 / 0.5, which left the wood stands, pagodas and islets black SkyLight->SetLightColor(FLinearColor(0.62f, 0.58f, 1.f));
 		Fog->SetFogDensity(0.008f); Fog->SetFogHeightFalloff(0.15f); Fog->SetFogInscatteringColor(FLinearColor(0.24f, 0.13f, 0.36f)); Fog->SetStartDistance(2600.f);
 		FPostProcessSettings& PP = Post->Settings;
 		PP.bOverride_BloomIntensity = true; PP.BloomIntensity = 1.4f; PP.bOverride_BloomThreshold = true; PP.BloomThreshold = 0.95f;
@@ -91,6 +91,13 @@ void AZoogiArena::PlaceIncoming()
 		PP.bOverride_VignetteIntensity = true; PP.VignetteIntensity = 0.35f;
 		AddPanoramaSky(TEXT("NightCircuit"), 0.8f, 0.f, FLinearColor::Black);
 		AddPointLight(FVector(0, 0, 280.f), ZoogiUtil::Hex(TEXT("#8FEFFF")), 40.f, 1400.f);
+		// Oct 14: the real-time sky light captures a near-black sky, so the stands, pagodas and islets get soft cool fills
+		// (shadowless, outside the court) to read like the target render.
+		for (int32 k = 0; k < 6; ++k)
+		{
+			const float A = FMath::DegreesToRadians(30.f + 60.f * k);
+			AddPointLight(FVector(FMath::Cos(A) * 2700.f, FMath::Sin(A) * 2700.f, 900.f), ZoogiUtil::Hex(TEXT("#B4BEFF")), 500.f, 2600.f);
+		}
 	}
 	TMap<FName, UMaterialInterface*> Mats;
 	for (const ZoogiInc::FMat& M : ZoogiInc::Mats)
@@ -106,11 +113,25 @@ void AZoogiArena::PlaceIncoming()
 			EmS = FMath::Min(EmS, Cap);
 		}
 		else if (Th == (int32)EZoogiArena::Tomb) EmS = FMath::Min(EmS, 1.2f); // 06 LIGHTING.md: nothing brighter than the sun orb
+		// Oct 14: NC IMPORT.md marks the beams, light column and holo slots translucent additive. As opaque GlowMIDs they
+		// rendered as solid cyan blocks, so they get the additive FX material.
+		const FString SlotS(M.Slot);
+		if (Th == (int32)EZoogiArena::Neon && (SlotS.Contains(TEXT("Beam")) || SlotS.Contains(TEXT("LightColumn")) || SlotS.Contains(TEXT("Holo"))))
+		{
+			Mats.Add(FName(M.Slot), ZoogiUtil::FxMID(this, Em, FMath::Max(EmS, 0.3f)));
+			continue;
+		}
+		// Oct 14: the NC albedos are near-black (wood 0.014, metal 0.03), which only reads under the pack's preview lights;
+		// in game the stands, pagodas and islets went black. Lift the dark non-emissive albedos (hue kept, max x5).
+		FLinearColor BaseL = Base;
+		if (Th == (int32)EZoogiArena::Neon && Em.GetMax() <= 0.f)
+			BaseL = FLinearColor(FMath::Min(Base.R * 5.f, 1.f), FMath::Min(Base.G * 5.f, 1.f), FMath::Min(Base.B * 5.f, 1.f));
 		UMaterialInterface* Mi = (EmS > 0.6f && Base.GetLuminance() < Em.GetLuminance())
 			? (UMaterialInterface*)ZoogiUtil::GlowMID(this, Em, FMath::Min(EmS, 6.f))
-			: (UMaterialInterface*)ZoogiUtil::SurfaceMID(this, Base, M.Rough, Em, FMath::Min(EmS, 3.f), M.Metal);
+			: (UMaterialInterface*)ZoogiUtil::SurfaceMID(this, BaseL, M.Rough, Em, FMath::Min(EmS, 3.f), Th == (int32)EZoogiArena::Neon ? M.Metal * 0.5f : M.Metal);
 		Mats.Add(FName(M.Slot), Mi);
 	}
+	if (Th == (int32)EZoogiArena::Neon && Mats.Contains(TEXT("M_NC_Beam"))) Mats.Add(TEXT("M_NC_BeamGlowCyan"), Mats[TEXT("M_NC_Beam")]); // slot missing from the table
 	auto Dress = [&](UStaticMeshComponent* C, UStaticMesh* SM)
 	{
 		C->SetStaticMesh(SM);
@@ -129,14 +150,36 @@ void AZoogiArena::PlaceIncoming()
 	TSharedRef<TArray<FSwap>> Swaps = MakeShared<TArray<FSwap>>();
 	UPhysicalMaterial* PillarPM = ZoogiPhysics::MakeMaterial(this, 0.25f, 0.6f, false);
 	const float KR = ZoogiConst::KnockoffRadius;
-	int32 NPieces = 0, NPillars = 0, NVis = 0, NMiss = 0, NSwap = 0;
+	int32 NPieces = 0, NPillars = 0, NVis = 0, NMiss = 0, NSwap = 0, NHalo = 0;
+	UMaterialInterface* PlanetMat = Th == (int32)EZoogiArena::Cosmic ? ZoogiUtil::SurfaceMID(this, ZoogiUtil::Hex(TEXT("#2E2866")), 0.55f, ZoogiUtil::Hex(TEXT("#5B4BA8")), 0.08f, 0.f) : nullptr; // M_PlanetBody / BandDark
 	for (const ZoogiInc::FPlace& Pl : ZoogiInc::Places)
 	{
 		if (Pl.Theme != Th || bNoInc) continue;
 		const TArray<UStaticMesh*>& Set = Sets[0][Pl.Mesh];
 		if (Set.Num() == 0) { ++NMiss; continue; }
-		const FVector L(Pl.X, Pl.Y, Pl.Z);
-		const FRotator R(0.f, Pl.Yaw, 0.f);
+		FVector L(Pl.X, Pl.Y, Pl.Z);
+		FRotator R(0.f, Pl.Yaw, 0.f);
+		// Oct 14: unit-length pieces (PLACEMENT.json "scale X = length") scale along X only; a uniform scale had turned the
+		// Night Circuit light beams and cables into giant cyan slabs and shrunk the bridges.
+		const FString MeshName(ZoogiInc::Meshes[Pl.Mesh]);
+		FVector S3(Pl.Scale);
+		if (MeshName.Contains(TEXT("LightBeam")) || MeshName.Contains(TEXT("_Cable")) || MeshName.StartsWith(TEXT("SM_NC_Bridge"))) S3 = FVector(Pl.Scale, 1.f, 1.f);
+		else if (MeshName == TEXT("SM_ZArch")) S3 = FVector(1.f, 1.40f, 1.06f) * Pl.Scale; // 04 IMPORT.md art pass 2
+		else if (MeshName == TEXT("SM_HaloRing"))
+		{
+			// 04 IMPORT.md art pass 2: two halo rings at yaw 241.5 / 298.5, r 6260 world (/1.3 kit), Z 0, tilt X 72 pitch 12,
+			// each around a planet (r 468 world), framing the arch in the match camera.
+			const float Yw = FMath::DegreesToRadians(NHalo++ == 0 ? 241.5f : 298.5f), Rk = 6260.f / 1.3f;
+			L = FVector(FMath::Cos(Yw) * Rk, FMath::Sin(Yw) * Rk, 1400.f); // raised so they frame the arch in the match camera
+			R = FRotator(12.f, FMath::RadiansToDegrees(Yw), 72.f);
+			S3 = FVector(1.f);
+			if (!bNoInc)
+			{
+				UStaticMeshComponent* Planet = AddMesh(ZoogiUtil::BasicShape(TEXT("Sphere")), PlanetMat, false, false);
+				Planet->SetRelativeLocation(L);
+				Planet->SetRelativeScale3D(FVector(468.f / 1.3f / 50.f));
+			}
+		}
 		const float Rd = FVector2D(Pl.X, Pl.Y).Size();
 		const float FormDelay = 0.35f + 1.6f * FMath::Clamp((Rd - KR * 0.5f) / (KR * 3.f), 0.f, 1.f);
 		FBox Local(ForceInit);
@@ -144,7 +187,7 @@ void AZoogiArena::PlaceIncoming()
 		int32 Kind = Local.IsValid ? Pl.Kind : 0;
 		if (Kind == 1)
 		{
-			const FBox W = Local.TransformBy(FTransform(R, L, FVector(Pl.Scale)) * GetActorTransform()).ExpandBy(-4.f);
+			const FBox W = Local.TransformBy(FTransform(R, L, S3) * GetActorTransform()).ExpandBy(-4.f);
 			for (const FBox& B : Blocking) if (B.Intersect(W)) { Kind = 0; break; }
 		}
 		if (Kind > 0)
@@ -155,7 +198,7 @@ void AZoogiArena::PlaceIncoming()
 			FSwap Sw; Sw.P = P;
 			for (UStaticMesh* SM : Set)
 			{
-				UStaticMeshComponent* C = P->AddShape(TEXT("Cube"), FTransform(FRotator::ZeroRotator, FVector::ZeroVector, FVector(Pl.Scale)), nullptr);
+				UStaticMeshComponent* C = P->AddShape(TEXT("Cube"), FTransform(FRotator::ZeroRotator, FVector::ZeroVector, S3), nullptr);
 				Dress(C, SM);
 				Sw.S[0].Add(C);
 			}
@@ -176,7 +219,7 @@ void AZoogiArena::PlaceIncoming()
 				{
 					UStaticMeshComponent* C = NewObject<UStaticMeshComponent>(P);
 					C->SetupAttachment(P->GetRootComponent());
-					C->SetRelativeScale3D(FVector(Pl.Scale));
+					C->SetRelativeScale3D(S3);
 					C->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 					C->SetVisibility(false);
 					C->RegisterComponent();
@@ -184,7 +227,7 @@ void AZoogiArena::PlaceIncoming()
 					Sw.S[s].Add(C);
 				}
 			if (Sw.S[1].Num() || Sw.S[2].Num()) { Swaps->Add(Sw); ++NSwap; }
-			Blocking.Add(Local.TransformBy(FTransform(R, L, FVector(Pl.Scale)) * GetActorTransform()));
+			Blocking.Add(Local.TransformBy(FTransform(R, L, S3) * GetActorTransform()));
 			if (Forming)
 			{
 				const float H = FMath::Max(Local.Max.Z * Pl.Scale, 60.f) + 120.f;
@@ -202,7 +245,7 @@ void AZoogiArena::PlaceIncoming()
 				UStaticMeshComponent* C = AddMesh(SM, nullptr, false, true);
 				Dress(C, SM);
 				C->SetRelativeLocationAndRotation(L, R);
-				C->SetRelativeScale3D(FVector(Pl.Scale));
+				C->SetRelativeScale3D(S3);
 				if (Forming && Rd < KR * 4.f) Forming->AddComponent(C, EZoogiFormStyle::Rise, FVector(0, 0, -300.f), FormDelay, 0.8f, 0.f);
 			}
 			++NVis;
