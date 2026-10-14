@@ -642,10 +642,10 @@ void AZoogiAwakenFX::TickShockHit(float Dt)
 
 void AZoogiAwakenFX::TickMeteorArm()
 {
-	// disarm (no meteor) once the Void infusion is over: shot resolved, Zoogi out, or 30 s safety
+	// disarm (no meteor) once the Void infusion is over: shot resolved, Zoogi out, or a 120 s safety cap
 	if (EndAt >= 0.f) return;
 	const AZoogiBall* B = Ball.Get();
-	if (!B || B->bOut || !B->Artifact || B->Artifact->Infused != EZoogiArtifact::Void || Age > 30.f)
+	if (!B || B->bOut || !B->Artifact || B->Artifact->Infused != EZoogiArtifact::Void || Age > 120.f)
 	{
 		UE_LOG(LogZoogi, Log, TEXT("AwakenFX: Void 2 Titan Meteor disarmed without a collision (no meteor)"));
 		Finish(0.05f);
