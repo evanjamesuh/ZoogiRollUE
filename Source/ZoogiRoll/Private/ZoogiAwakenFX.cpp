@@ -383,6 +383,11 @@ void AZoogiAwakenFX::OnBallHit(UPrimitiveComponent* HitComp, AActor* OtherActor,
 		if (!Dir.Normalize()) Dir = FVector(OtherActor->GetActorLocation() - BL).GetSafeNormal2D(UE_SMALL_NUMBER, FVector::ForwardVector);
 		PlayVoid2(GetWorld(), P - Dir * 500.f, P, OtherActor);
 		UE_LOG(LogZoogi, Log, TEXT("AwakenFX: Void 2 Titan Meteor FIRED at collision %s with %s"), *P.ToString(), *OtherActor->GetName());
+		if (AZoogiGameMode* GM = GetWorld()->GetAuthGameMode<AZoogiGameMode>()) // capture runs only (-ZoogiShots=)
+		{
+			GM->TakeShot(TEXT("void2_meteor_collision"));
+			for (int32 i = 1; i <= 5; ++i) GM->TakeShotDelayed(FString::Printf(TEXT("void2_meteor_t%02d"), i * 5), i * 0.5f);
+		}
 		Finish(0.05f);
 		return;
 	}
@@ -652,6 +657,8 @@ void AZoogiAwakenFX::TickVoid(float Dt)
 	// Void 1 = gravity pull only (Evan, Oct 14): portal opens 0-0.5 s, pulls nearby orbs from 0.35 s for PullSeconds, the last
 	// FadeSeconds of which it smoothly closes. No rock projectile any more (the meteor is Void 2). Values: [ZoogiRoll.Void] (GetVoidTune).
 	if (HitAt < 0.f && Age >= 0.35f) HitAt = Age; // pull start
+	if (Ball.IsValid()) if (AZoogiGameMode* GM = GetWorld()->GetAuthGameMode<AZoogiGameMode>()) // capture runs only (-ZoogiShots=)
+		for (float Ts : { 1.f, 2.5f, 4.f, 5.f, 5.6f }) if (Age >= Ts && Age - Dt < Ts) GM->TakeShot(FString::Printf(TEXT("void1_portal_t%02d"), FMath::RoundToInt(Ts * 10.f)));
 	const FZoogiVoidTune Tune = GetVoidTune();
 	const float PullTime = Tune.PullSeconds, PullRadius = Tune.PullRadius, PullAccel = Tune.PullAccel;
 	const float OpenK = EaseBack(Age / 0.5f);
