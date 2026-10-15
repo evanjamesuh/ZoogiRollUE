@@ -1478,6 +1478,13 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		{
 			WantPivot = C0;
 			DistMul = TacResolveDist * Scale;
+			// Oct 15 Frozen Ring 2: the resolve / end view frames the whole outer ring (r2300) inside the HUD frame's
+			// viewport (~0.65 of the screen width): 1.39 alone clipped its left / right / front edges. -ZoogiR2ViewMul=
+			if (AZoogiArena::OuterOutR > 0.f)
+			{
+				static const float R2ViewMul = [] { float V = 1.3f; FParse::Value(FCommandLine::Get(), TEXT("ZoogiR2ViewMul="), V); return FMath::Clamp(V, 1.f, 2.f); }();
+				DistMul *= R2ViewMul;
+			}
 			if (G->Arena && G->Arena->IsNeonRect()) WantYaw = TacYaw = (FMath::Abs(FRotator::NormalizeAxis(Yaw - 90.f)) <= 90.f ? 90.f : -90.f);
 		}
 		WantLook = WantPivot;
