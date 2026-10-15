@@ -855,6 +855,7 @@ bool UZoogiAwakenWidget::IsOverPanels(const FVector2D& ViewportPos) const
 	const FVector2D Abs = VG.LocalToAbsolute(ViewportPos / FMath::Max(VG.Scale, 0.01f));
 	if (bAwakenShown && AwakenPanel && AwakenPanel->GetCachedGeometry().IsUnderLocation(Abs)) return true;
 	if (bAimShown && AimPanel && AimPanel->GetCachedGeometry().IsUnderLocation(Abs)) return true;
+	if (ShowsTrayAwaken() && TrayPanel->GetCachedGeometry().IsUnderLocation(Abs)) return true;
 	return false;
 }
 
@@ -866,8 +867,24 @@ bool UZoogiAwakenWidget::AbsToViewport(const FVector2D& Abs, FVector2D& OutViewp
 	return true;
 }
 
+void UZoogiAwakenWidget::SetTrayControls(const TArray<TPair<FName, int32>>& Keys, const TArray<UWidget*>& Widgets, UWidget* Panel)
+{
+	TrayControls.Reset();
+	for (int32 i = 0; i < Keys.Num() && i < Widgets.Num(); ++i) if (Widgets[i]) TrayControls.Add({ Keys[i].Key, Keys[i].Value, false, Widgets[i] });
+	TrayPanel = Panel;
+}
+
 bool UZoogiAwakenWidget::FindControl(FName Action, int32 Index, FVector2D& OutAbs) const
 {
+	if (ShowsTrayAwaken())
+		for (const FControl& C : TrayControls)
+		{
+			if (C.Action != Action || C.Index != Index || !C.Widget.IsValid() || !C.Widget->IsVisible() || !C.Widget->GetIsEnabled()) continue;
+			const FGeometry& Geo = C.Widget->GetCachedGeometry();
+			if (Geo.GetLocalSize().X <= 0.f) return false; // not laid out yet
+			OutAbs = Geo.GetAbsolutePositionAtCoordinates(FVector2D(0.5f, 0.5f));
+			return true;
+		}
 	for (const FControl& C : Controls)
 	{
 		if (C.Action != Action || C.Index != Index || !C.Widget.IsValid()) continue;
@@ -881,6 +898,13 @@ bool UZoogiAwakenWidget::FindControl(FName Action, int32 Index, FVector2D& OutAb
 
 bool UZoogiAwakenWidget::PanelPoint(bool bAimBar, const FVector2D& Frac, FVector2D& OutAbs) const
 {
+	if (!bAimBar && !bAwakenShown && ShowsTrayAwaken())
+	{
+		const FGeometry& TG = TrayPanel->GetCachedGeometry();
+		if (TG.GetLocalSize().X <= 0.f) return false;
+		OutAbs = TG.GetAbsolutePositionAtCoordinates(Frac);
+		return true;
+	}
 	const UBorder* P = bAimBar ? AimPanel.Get() : AwakenPanel.Get();
 	if (!P || !(bAimBar ? bAimShown : bAwakenShown)) return false;
 	const FGeometry& Geo = P->GetCachedGeometry();
@@ -929,12 +953,14 @@ FString UZoogiAwakenWidget::ControlUnder(const FVector2D& Abs) const
 	TArray<TSharedRef<SWindow>> Windows = S.GetInteractiveTopLevelWindows();
 	const FWidgetPath Path = S.LocateWindowUnderMouse(Abs, Windows);
 	if (!Path.IsValid()) return TEXT("no window");
-	for (const FControl& C : Controls)
-	{
-		if (!C.Widget.IsValid()) continue;
-		TSharedPtr<SWidget> SW = C.Widget->GetCachedWidget();
-		if (SW.IsValid() && Path.ContainsWidget(SW.Get())) return FString::Printf(TEXT("%s %d"), *C.Action.ToString(), C.Index);
-	}
+	for (const TArray<FControl>* L : { &TrayControls, &Controls })
+		for (const FControl& C : *L)
+		{
+			if (!C.Widget.IsValid()) continue;
+			TSharedPtr<SWidget> SW = C.Widget->GetCachedWidget();
+			if (SW.IsValid() && Path.ContainsWidget(SW.Get())) return FString::Printf(TEXT("%s %d"), *C.Action.ToString(), C.Index);
+		}
+	if (TrayPanel.IsValid() && TrayPanel->GetCachedWidget().IsValid() && Path.ContainsWidget(TrayPanel->GetCachedWidget().Get())) return TEXT("Awaken panel background");
 	if (AwakenPanel && AwakenPanel->GetCachedWidget().IsValid() && Path.ContainsWidget(AwakenPanel->GetCachedWidget().Get())) return TEXT("Awaken panel background");
 	if (AimPanel && AimPanel->GetCachedWidget().IsValid() && Path.ContainsWidget(AimPanel->GetCachedWidget().Get())) return TEXT("aim bar background");
 	return FString::Printf(TEXT("other (%s)"), *Path.Widgets.Last().Widget->GetTypeAsString());

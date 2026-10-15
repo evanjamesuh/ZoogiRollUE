@@ -57,6 +57,11 @@ public:
 	// -ZoogiUiTest helpers: real Slate mouse events (move / down / up) synthesized at a control's centre.
 	bool FindControl(FName Action, int32 Index, FVector2D& OutAbs) const;
 	bool PanelPoint(bool bAimBar, const FVector2D& Frac, FVector2D& OutAbs) const;
+	/** hud-v3 framed: the Awaken choices live in the tray (ZoogiFramedHUDWidget). It registers its stone / INFUSE / GUARD / SAVE
+	 *  buttons + the tray panel here so FindControl / ControlUnder / PanelPoint (UiTest + click swallow) see them. */
+	void SetTrayControls(const TArray<TPair<FName, int32>>& Keys, const TArray<UWidget*>& Widgets, UWidget* Panel);
+	void ClearTrayControls() { TrayControls.Reset(); TrayPanel.Reset(); }
+	bool ShowsTrayAwaken() const { return TrayPanel.IsValid() && TrayControls.Num() > 0; }
 	bool SynthClick(const FVector2D& Abs);
 	/** v3 Phase 4: real Slate touch tap (finger 0) at Abs. */
 	bool SynthTouch(const FVector2D& Abs);
@@ -112,6 +117,8 @@ protected:
 
 	struct FControl { FName Action; int32 Index = 0; bool bAim = false; TWeakObjectPtr<UWidget> Widget; };
 	TArray<FControl> Controls;
+	TArray<FControl> TrayControls;     // hud-v3 framed tray (searched first while shown)
+	TWeakObjectPtr<UWidget> TrayPanel;
 
 	UPROPERTY() TObjectPtr<UCanvasPanel> Root;
 	UPROPERTY() TObjectPtr<UBorder> AwakenPanel;

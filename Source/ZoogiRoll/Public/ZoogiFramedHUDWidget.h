@@ -8,6 +8,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
+#include "Components/SlateWrapperTypes.h"
 #include "ZoogiFramedHUDWidget.generated.h"
 
 class UCanvasPanel;
@@ -51,6 +52,7 @@ protected:
 	UFUNCTION() void OnExit();
 	UFUNCTION() void OnVolDown();
 	UFUNCTION() void OnVolUp();
+	UFUNCTION() FEventReply OnTrayHitDown(FGeometry MyGeometry, const FPointerEvent& MouseEvent);
 	UFUNCTION() void OnStone0();
 	UFUNCTION() void OnStone1();
 	UFUNCTION() void OnStone2();
@@ -82,6 +84,7 @@ private:
 public:
 	static const TCHAR* TabletFor(uint8 Artifact);
 private:
+	UPROPERTY() TObjectPtr<class UBorder> TrayHit; // Awaken tray background: swallows presses between the stones / buttons
 	UPROPERTY() TArray<TObjectPtr<UButton>> StoneBtns;
 	UPROPERTY() TArray<TObjectPtr<UButton>> ActBtns;
 	UPROPERTY() TObjectPtr<UTextBlock> MenuText;

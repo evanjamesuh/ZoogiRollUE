@@ -170,6 +170,12 @@ TSharedRef<SWidget> UZoogiFramedHUDWidget::RebuildWidget()
 			St.SetPressed(ZoogiUIStyle::RoundBrush(FLinearColor(0.f, 0.f, 0.f, 0.15f), FLinearColor::Transparent, 0.f, 8.f));
 			St.SetDisabled(ZoogiUIStyle::RoundBrush(FLinearColor(0.f, 0.f, 0.f, 0.35f), FLinearColor::Transparent, 0.f, 8.f));
 			St.SetNormalPadding(FMargin(0.f)); St.SetPressedPadding(FMargin(0.f));
+			TrayHit = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+			TrayHit->SetBrushColor(FLinearColor::Transparent);
+			TrayHit->SetVisibility(ESlateVisibility::Collapsed);
+			TrayHit->OnMouseButtonDownEvent.BindUFunction(this, GET_FUNCTION_NAME_CHECKED(UZoogiFramedHUDWidget, OnTrayHitDown));
+			TrayHit->OnMouseDoubleClickEvent.BindUFunction(this, GET_FUNCTION_NAME_CHECKED(UZoogiFramedHUDWidget, OnTrayHitDown));
+			if (UCanvasPanelSlot* S = Root->AddChildToCanvas(TrayHit)) { S->SetAutoSize(false); S->SetZOrder(20); }
 			for (int32 i = 0; i < 7; ++i)
 			{
 				UButton* B = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass());
@@ -199,7 +205,7 @@ TSharedRef<SWidget> UZoogiFramedHUDWidget::RebuildWidget()
 void UZoogiFramedHUDWidget::PlaceW(UWidget* W, const FVector2D& Pos, const FVector2D& Size, bool bShow)
 {
 	if (!W) return;
-	const ESlateVisibility Want = bShow ? (W->IsA<UButton>() || W == PauseShade ? ESlateVisibility::Visible : (W->IsA<UZoogiTeamColumnWidget>() ? ESlateVisibility::HitTestInvisible : ESlateVisibility::HitTestInvisible)) : ESlateVisibility::Collapsed;
+	const ESlateVisibility Want = bShow ? (W->IsA<UButton>() || W == PauseShade || W == TrayHit ? ESlateVisibility::Visible : (W->IsA<UZoogiTeamColumnWidget>() ? ESlateVisibility::HitTestInvisible : ESlateVisibility::HitTestInvisible)) : ESlateVisibility::Collapsed;
 	if (W->GetVisibility() != Want) W->SetVisibility(Want);
 	if (!bShow) return;
 	if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(W->Slot)) { S->SetPosition(Pos); S->SetSize(Size); }
@@ -280,6 +286,8 @@ void UZoogiFramedHUDWidget::NativeTick(const FGeometry& Geo, float Dt)
 		for (UButton* B : StoneBtns) PlaceW(B, FVector2D::ZeroVector, FVector2D::ZeroVector, false);
 		for (UButton* B : ActBtns) PlaceW(B, FVector2D::ZeroVector, FVector2D::ZeroVector, false);
 		ZoogiFramed::SetZoomButtonRect(FBox2D(ForceInit), false);
+		PlaceW(TrayHit, FVector2D::ZeroVector, FVector2D::ZeroVector, false);
+		if (APlayerController* PC = GetOwningPlayer()) if (AZoogiHUD* H = Cast<AZoogiHUD>(PC->GetHUD())) if (UZoogiAwakenWidget* AW = H->GetAwakenWidget()) AW->ClearTrayControls();
 		LastStage = LastActive = LastPhase = -1;
 		return;
 	}
@@ -649,6 +657,35 @@ void UZoogiFramedHUDWidget::TickTrayAwaken()
 	for (const auto& St : TA.Stones) StoneKeys.Add(St.Key);
 	TrayPick = TA.Pick;
 	if (ActBtns.Num() == 3) { ActBtns[0]->SetIsEnabled(TA.Stones.Num() > 0); ActBtns[1]->SetIsEnabled(TA.Stones.Num() > 0); }
+	// background hit panel around the stones + buttons, and the registration the old Awaken panel's hit-test path / UiTest use
+	FBox2D Bounds(ForceInit);
+	if (bOn) { for (const FBox2D& R : TA.StoneRects) Bounds += R; for (const FBox2D& R : TA.BtnRects) Bounds += R; }
+	const float t = ZoogiFramed::Current().T * LocalScale;
+	if (TrayHit) PlaceW(TrayHit, bOn && Bounds.bIsValid ? Bounds.Min - FVector2D(14.f, 6.f) * t : FVector2D::ZeroVector, bOn && Bounds.bIsValid ? Bounds.GetSize() + FVector2D(24.f, 12.f) * t : FVector2D::ZeroVector, bOn && Bounds.bIsValid);
+	APlayerController* PC = GetOwningPlayer();
+	AZoogiHUD* Hud = PC ? Cast<AZoogiHUD>(PC->GetHUD()) : nullptr;
+	if (UZoogiAwakenWidget* AW = Hud ? Hud->GetAwakenWidget() : nullptr)
+	{
+		if (!bOn) AW->ClearTrayControls();
+		else
+		{
+			TArray<TPair<FName, int32>> Keys; TArray<UWidget*> Ws;
+			for (int32 i = 0; i < TA.Stones.Num() && i < StoneBtns.Num(); ++i) { Keys.Add({ TEXT("AwakenPick"), TA.Stones[i].Key }); Ws.Add(StoneBtns[i]); }
+			Keys.Add({ TEXT("Infuse"), TrayPick }); Ws.Add(ActBtns[0]);
+			Keys.Add({ TEXT("Guard"), TrayPick }); Ws.Add(ActBtns[1]);
+			Keys.Add({ TEXT("Save"), 0 }); Ws.Add(ActBtns[2]);
+			AW->SetTrayControls(Keys, Ws, TrayHit);
+		}
+	}
+}
+
+FEventReply UZoogiFramedHUDWidget::OnTrayHitDown(FGeometry MyGeometry, const FPointerEvent& MouseEvent)
+{
+	// a press between the stones / buttons is swallowed (never reaches the game), like the old panel background
+	APlayerController* PC = GetOwningPlayer();
+	AZoogiHUD* Hud = PC ? Cast<AZoogiHUD>(PC->GetHUD()) : nullptr;
+	if (UZoogiAwakenWidget* AW = Hud ? Hud->GetAwakenWidget() : nullptr) AW->NotePress();
+	return FEventReply(true);
 }
 
 void UZoogiFramedHUDWidget::FireAwaken(FName Action, int32 Index)
@@ -697,7 +734,13 @@ void UZoogiFramedHUDWidget::PaintTrayAwaken(const FGeometry& Geo, FSlateWindowEl
 		if (bSel) ZoogiUIStyle::SBox(Out, Ly, Geo, C - S * 0.5f - FVector2D(6.f, 6.f) * t, S + FVector2D(12.f, 12.f) * t, FLinearColor(Row.RimColor.R, Row.RimColor.G, Row.RimColor.B, 0.35f + 0.2f * FMath::Sin(Time * 5.f)), FLinearColor::Transparent, 14.f * t, 0.f);
 		HA::Img(Out, Ly + 1, Geo, C - S * 0.5f, S, TabletFor(TA.Stones[i].Value));
 		HA::Text(Out, Ly + 3, Geo, C + FVector2D(0.f, S.Y * 0.33f), ZoogiArtifacts::Name((EZoogiArtifact)TA.Stones[i].Value).ToUpper(), FontT(8.5f), FLinearColor::White, 0.5f, 0.5f);
-		HA::Text(Out, Ly + 3, Geo, C - S * 0.5f + FVector2D(S.X * 0.11f, S.Y * 0.07f), TA.Stones[i].Key == 0 ? TEXT("N") : FString::FromInt(TA.Stones[i].Key), FontT(9.f), FLinearColor::White, 0.5f, 0.5f);
+		{
+			// key medallion: Evan's ring mark (lit on the picked stone, dimmed otherwise)
+			const FVector2D KC = C - S * 0.5f + FVector2D(S.X * 0.11f, S.Y * 0.07f);
+			const float KR = 14.f * t * Sc;
+			HA::Img(Out, Ly + 2, Geo, KC - FVector2D(KR, KR), FVector2D(KR, KR) * 2.f, TEXT("mark_cyan"), bSel ? FLinearColor::White : FLinearColor(0.55f, 0.6f, 0.7f, 0.8f));
+			HA::Text(Out, Ly + 3, Geo, KC, TA.Stones[i].Key == 0 ? TEXT("N") : FString::FromInt(TA.Stones[i].Key), FontT(9.f), FLinearColor::White, 0.5f, 0.5f);
+		}
 		if (bSel) HA::Img(Out, Ly + 4, Geo, C - S * 0.62f, S * 1.24f, TEXT("prompt_cyanbox"), FLinearColor(1.f, 1.f, 1.f, 0.8f));
 	}
 	// picked stone's texts in the free middle of the recess
