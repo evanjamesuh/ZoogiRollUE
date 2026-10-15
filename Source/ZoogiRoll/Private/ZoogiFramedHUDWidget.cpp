@@ -627,9 +627,14 @@ int32 UZoogiFramedHUDWidget::PaintBack(const FGeometry& Geo, FSlateWindowElement
 			const FLinearColor RC(0.85f, 0.7f, 1.f, 0.55f + 0.4f * Pz);
 			const bool bHovO = OrbBtn && OrbBtn->IsHovered();
 			{
-				// a real ring (outline-only rounded brush; ZoogiUIStyle::SBox's outline pass is a filled disk)
-				const FSlateRoundedBoxBrush Ring(FLinearColor::Transparent, Rr, FLinearColor::White, (bHovO ? 3.5f : 2.5f) * t);
-				FSlateDrawElement::MakeBox(Out, Ly + 7, Geo.ToPaintGeometry(FVector2f(FVector2D(Rr, Rr) * 2.f), FSlateLayoutTransform(FVector2f(OC - FVector2D(Rr, Rr)))), &Ring, ESlateDrawEffect::None, bHovO ? FLinearColor::White : RC);
+				// the ring is a circle of small dots: ZoogiUIStyle::SBox's outline pass and a rounded brush's fill (which takes the
+				// element tint) both draw a filled disk over the orb art
+				const int32 ND = 56; const float Dd = (bHovO ? 4.5f : 3.4f) * t;
+				for (int32 d = 0; d < ND; ++d)
+				{
+					const float A = 2.f * PI * d / ND + Time * 0.35f;
+					ZoogiUIStyle::SBox(Out, Ly + 7, Geo, OC + FVector2D(FMath::Cos(A), FMath::Sin(A)) * Rr - FVector2D(Dd, Dd) * 0.5f, FVector2D(Dd, Dd), bHovO ? FLinearColor::White : RC, FLinearColor::Transparent, Dd * 0.5f, 0.f);
+				}
 			}
 			for (int32 k = 0; k < 4; ++k)
 			{

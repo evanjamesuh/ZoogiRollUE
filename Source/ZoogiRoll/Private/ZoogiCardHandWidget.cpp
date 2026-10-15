@@ -1000,6 +1000,13 @@ void UZoogiCardHandWidget::TickPlaytest1(AZoogiGameMode* G, float Dt)
 						if (Pth.IsValid()) for (int32 i = FMath::Max(0, Pth.Widgets.Num() - 6); i < Pth.Widgets.Num(); ++i) Sx += Pth.Widgets[i].Widget->GetTypeAsString() + TEXT("@") + Pth.Widgets[i].Widget->GetReadableLocation() + TEXT(" > ");
 						const bool bIn = Pth.IsValid() && Cb->GetCachedWidget().IsValid() && Pth.ContainsWidget(Cb->GetCachedWidget().Get());
 						UE_LOG(LogZoogi, Log, TEXT("PT1 CONFIRM at (%.0f,%.0f) vis=%d enabled=%d button in hit path=%d: %s"), A.X, A.Y, (int32)Cb->GetVisibility(), Cb->GetIsEnabled() ? 1 : 0, bIn ? 1 : 0, *Sx);
+						FString Ch;
+						for (TSharedPtr<SWidget> Wp = Cb->GetCachedWidget(); Wp.IsValid(); Wp = Wp->GetParentWidget())
+						{
+							const FGeometry& Gx = Wp->GetTickSpaceGeometry();
+							Ch += FString::Printf(TEXT("%s[%s pos %.0f,%.0f size %.0f,%.0f clip %d] < "), *Wp->GetTypeAsString(), *Wp->GetVisibility().ToString(), Gx.GetAbsolutePosition().X, Gx.GetAbsolutePosition().Y, Gx.GetAbsoluteSize().X, Gx.GetAbsoluteSize().Y, (int32)Wp->GetClipping());
+						}
+						UE_LOG(LogZoogi, Log, TEXT("PT1 CONFIRM chain: %s"), *Ch);
 					}
 					Click(A, PtTurns % 2 == 0); }
 				PtStep = 13; PtT = 0.f;
