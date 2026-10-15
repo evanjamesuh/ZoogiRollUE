@@ -106,6 +106,12 @@ namespace
 
 	FString ZMArenaArt(int32 A)
 	{
+		// Oct 15: every tile previews its built map (top-down render of the current geometry + props, -ZoogiArenaShots -ZoogiMapShot)
+		// when Content/Data/MenuArt/<slug>_map.png is present; the painted backgrounds / tints below are the fallback.
+		static const TCHAR* MapArt[] = { TEXT("meadow_map"), TEXT("frozen_map"), TEXT("volcanic_map"), TEXT("cosmic_map"), TEXT("arabian_map"), TEXT("tomb_map"), TEXT("neon_map"), TEXT("training_map") };
+		if (A >= 0 && A < (int32)UE_ARRAY_COUNT(MapArt) && !((EZoogiArena)A == EZoogiArena::Frozen && ZoogiFrozen::Ring2On())
+			&& FPaths::FileExists(FPaths::ProjectContentDir() / TEXT("Data/MenuArt") / (FString(MapArt[A]) + TEXT(".png"))))
+			return MapArt[A];
 		switch ((EZoogiArena)A)
 		{
 		case EZoogiArena::Frozen: // Oct 15: with Ring 2 on, the tile previews the built map (top-down render of Ring 1 + bridges + Ring 2)
@@ -742,7 +748,7 @@ void UZoogiMenuRoot::BuildPlay()
 		static const TCHAR* Short[] = { TEXT("MEADOW"), TEXT("FROZEN RING"), TEXT("VOLCANIC"), TEXT("COSMIC"), TEXT("ARABIAN"), TEXT("TOMB"), TEXT("NIGHT CIRCUIT"), TEXT("TRAINING") };
 		const FString Name = a < 8 ? FString(Short[a]) : ZoogiUtil::ArenaName((EZoogiArena)a).ToUpper();
 		ImgTile(A.IsEmpty() ? nullptr : Art(A), Name, [this, a]() { Fire("Arena", a); }, X, Y, 70.f, 72.f, G->MenuArena == (EZoogiArena)a, false,
-			A.IsEmpty() ? ZMArenaTint(a) : ZMHex(TEXT("0B1E5C")), true, 16, A.IsEmpty() ? FLinearColor::White : ZMArenaTint(a));
+			A.IsEmpty() ? ZMArenaTint(a) : ZMHex(TEXT("0B1E5C")), true, 16, A.IsEmpty() || A.EndsWith(TEXT("_map")) ? FLinearColor::White : ZMArenaTint(a));
 	}
 	Panel(358.f, 276.f, 308.f, 106.f, ZMPNavy);
 	Label(TEXT("ROUNDS & RULES"), 372.f, 284.f, 200.f, 14.f, 24, ZMTLabel);

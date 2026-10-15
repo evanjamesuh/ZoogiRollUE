@@ -104,6 +104,15 @@ void AZoogiArenaShowcase::MaybeStart(UWorld* World, const FString& ArenaSlug)
 	}
 	if (ArenaSlug.Contains(TEXT("meadow")))
 		for (FPose& P : S->Poses) { P.Look *= 1.3f; P.Dist *= 1.3f; } // r19: Meadow is built 1.3x larger
+	if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiMapShot")))
+	{
+		// Oct 15 map-select previews: one straight-down view of the built arena (art orientation, screen up = -Y), framed on the
+		// play area of the map as built now (world radius: Frozen Ring 2 out circle, else the scaled knockoff radius) so the
+		// 16:9 shot's height spans ~1.2 x that radius; the square tile crop is made from its centre.
+		const float R = AZoogiArena::OuterOutR > 0.f ? AZoogiArena::OuterOutR : AZoogiArena::ActiveKnockoffR;
+		S->Poses = { FPose{ TEXT("map_top"), FVector(0, 0, 0), 270.f, 88.f, 3.6f * R, 62.f } };
+		UE_LOG(LogZoogi, Log, TEXT("Arena showcase: map shot R=%.0f dist=%.0f"), R, 3.6f * R);
+	}
 	UE_LOG(LogZoogi, Log, TEXT("Arena showcase: %d views for %s -> %s"), S->Poses.Num(), *ArenaSlug, *ShotDir);
 }
 
