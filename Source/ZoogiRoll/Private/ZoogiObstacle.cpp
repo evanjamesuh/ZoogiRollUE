@@ -371,18 +371,18 @@ void AZoogiObstacle::TickOrbTest(AZoogiGameMode* G, float Now)
 	if (S.Shot >= 0.f && Now >= S.Shot) { Shot(*S.ShotName); S.Shot = -1.f; }
 	switch (S.Step)
 	{
-	case 0: if (T > 1.5f) { Shot(TEXT("0_before")); Roll(1900.f, 420.f); UE_LOG(LogZoogi, Log, TEXT("R2ORBTEST run 1: P2 rolled r1900 -> pocket at 420 cm/s")); S.Step = 1; } break;
+	case 0: if (T > 1.5f) { Shot(TEXT("0_before")); Roll(1900.f, 700.f); UE_LOG(LogZoogi, Log, TEXT("R2ORBTEST run 1: P2 rolled r1900 -> pocket at 700 cm/s")); S.Step = 1; } break;
 	case 1:
 		if (S.NPick >= 1 && S.Shot < 0.f && S.ShotName != TEXT("1_pickup_flash")) { S.Shot = S.Pick[0] + 0.12f; S.ShotName = TEXT("1_pickup_flash"); }
 		if (T > 4.0f) { S.E1 = E; Shot(TEXT("2_after_pickup")); UE_LOG(LogZoogi, Log, TEXT("R2ORBTEST run 1 result: pickups %d, energy %.0f -> %.0f, orb %s"), S.NPick, S.E0, S.E1, bShown ? TEXT("shown") : TEXT("hidden")); S.Step = 2; }
 		break;
-	case 2: if (T > 5.0f) { Roll(1900.f, 420.f); UE_LOG(LogZoogi, Log, TEXT("R2ORBTEST run 2 (recharging): P2 rolled into the pocket again")); S.Step = 3; } break;
+	case 2: if (T > 5.0f) { Roll(1900.f, 700.f); UE_LOG(LogZoogi, Log, TEXT("R2ORBTEST run 2 (recharging): P2 rolled into the pocket again")); S.Step = 3; } break;
 	case 3:
 		if (T > 8.0f) { S.E2 = E; UE_LOG(LogZoogi, Log, TEXT("R2ORBTEST run 2 result: pickups %d, energy %.0f -> %.0f (expect no gain while recharging)"), S.NPick, S.E1, S.E2); Roll(1900.f, 0.f); S.Step = 4; }
 		break;
 	case 4:
 		if (S.Shown > 0.f && S.Shot < 0.f && S.ShotName != TEXT("3_recharged")) { S.Shot = S.Shown + 0.3f; S.ShotName = TEXT("3_recharged"); }
-		if (S.Shown > 0.f && Now > S.Shown + 1.0f) { Roll(1900.f, 420.f); UE_LOG(LogZoogi, Log, TEXT("R2ORBTEST run 3: orb back after %.2f s, P2 rolled in again"), S.Shown - S.Pick[0]); S.Step = 5; }
+		if (S.Shown > 0.f && Now > S.Shown + 1.0f) { Roll(1900.f, 700.f); UE_LOG(LogZoogi, Log, TEXT("R2ORBTEST run 3: orb back after %.2f s, P2 rolled in again"), S.Shown - S.Pick[0]); S.Step = 5; }
 		if (T > 25.f) S.Step = 5;
 		break;
 	case 5:
