@@ -38,6 +38,7 @@
 #include "Sound/SoundBase.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
 #include "ZoogiCPUBrain.h"
+#include "ZoogiPortals.h"
 
 AZoogiGameMode::AZoogiGameMode()
 {
@@ -1068,6 +1069,32 @@ void AZoogiGameMode::PlanCPUShot()
 		if (Dr < Lim) { ++NHoles; return Dr; } // a hole / drop in the floor before any wall or the edge
 		return W < E + 300.f ? 1e6f : E;      // a real wall stops it, else the edge
 	};
+	// Oct 15: boost portals (Arabian / Frozen arches) add BoostAdd to whatever rolls through them: a follow-through that would
+	// stop safely can cross one and come out fast enough to leave the court. PortalRun(): the safe run along a line once the
+	// first portal crossing is taken into account (exact for one portal: it may be reached only slow enough that the
+	// boosted speed still stops within the run, else the shooter has to stop short of it).
+	const UZoogiPortalSubsystem* PortalSys = (PW && UZoogiPortalSubsystem::Enabled()) ? PW->GetSubsystem<UZoogiPortalSubsystem>() : nullptr;
+	int32 NPortalClamp = 0;
+	auto PortalRun = [&](const FVector2D& From, float Z, const FVector2D& Dir, float Run) -> float
+	{
+		if (!PortalSys || Run <= 0.f || Run >= 1e5f) return Run;
+		float PBest = Run;
+		for (const UZoogiPortalSubsystem::FPortal& Pt : PortalSys->Portals)
+		{
+			if (!Pt.Arch.IsValid()) continue;
+			const FVector L0 = Pt.X.InverseTransformPositionNoScale(FVector(From.X, From.Y, Z));
+			const FVector LD = Pt.X.InverseTransformVectorNoScale(FVector(Dir.X, Dir.Y, 0.f));
+			if (FMath::Abs(LD.X) < 1e-3f) continue;
+			const float S = -L0.X / LD.X;
+			if (S <= 0.f || S >= PBest) continue;
+			if (FMath::Abs(L0.Y + S * LD.Y) > Pt.HalfW + ZoogiConst::ZoogiRadius) continue;
+			PBest = S;
+		}
+		if (PBest >= Run) return Run;
+		++NPortalClamp;
+		const float VOutMax = FMath::Sqrt(2.f * Decel * FMath::Max(0.f, Run - PBest)) - PortalSys->BoostAdd;
+		return VOutMax <= 0.f ? FMath::Max(0.f, PBest - 60.f) : PBest + VOutMax * VOutMax / (2.f * Decel);
+	};
 	const float MeZ = Me->BallLocation().Z;
 	static const float WallFrac = []
 	{
@@ -1156,7 +1183,7 @@ void AZoogiGameMode::PlanCPUShot()
 		const float MyRun = ShooterRun(Contact, MeZ, Dir, MyEdge, MyWall);
 		const bool bMyWalled = MyRun >= 1e5f;
 		// walled: the shooter may reach the wall at up to WallHopV, no faster (else it hops the wall)
-		const float SafeRun = bMyWalled ? MyWall + WallHopV * WallHopV / (2.f * Decel) - 60.f : MyRun - 120.f;
+		const float SafeRun = PortalRun(Contact, MeZ, Dir, bMyWalled ? MyWall + WallHopV * WallHopV / (2.f * Decel) - 60.f : MyRun - 120.f);
 		float MaxSafeFrac = 1.f;
 		if (KAfter > 0.01f)
 		{
@@ -1181,7 +1208,7 @@ void AZoogiGameMode::PlanCPUShot()
 			float BWall = 1e6f;
 			const float BRun0 = ShooterRun(B, MeZ, Dir, Arena->DistanceToEdge(B, Dir), BWall);
 			const float BRun = BRun0 < 1e5f ? BRun0 : BWall + WallHopV * WallHopV / (2.f * Decel) + 70.f; // walled: hop distance
-			const float EdgeB = BRun;
+			const float EdgeB = PortalRun(B, MeZ, Dir, BRun);
 			if (FullRoll > EdgeB - 80.f)
 			{
 				// Oct 15: a miss would roll the shooter off. Keep the full roll on court when that still knocks the target
@@ -1360,7 +1387,7 @@ void AZoogiGameMode::PlanCPUShot()
 		UE_LOG(LogZoogi, Log, TEXT("CPU P%d edge clamp: %.0f%% -> %.0f%% (follow-through stays on court)"), ActivePlayer + 1, BestFrac * 100.f, PickSafeFrac * 100.f);
 		BestFrac = PickSafeFrac;
 	}
-	if (NWalled || NRunWalled || NHoles) UE_LOG(LogZoogi, Log, TEXT("CPU P%d wall check: exit lines walled %d/%d (launch exits %d), follow-through lines walled %d/%d, floor holes on shooter lines %d, wall-hop clamps %d; pick %.0f%%"), ActivePlayer + 1, NRunWalled, NRuns, NLaunch, NWalled, NSweeps, NHoles, NHopClamp, BestFrac * 100.f);
+	if (NWalled || NRunWalled || NHoles) UE_LOG(LogZoogi, Log, TEXT("CPU P%d wall check: exit lines walled %d/%d (launch exits %d), follow-through lines walled %d/%d, floor holes on shooter lines %d, wall-hop clamps %d, portal lines %d; pick %.0f%%"), ActivePlayer + 1, NRunWalled, NRuns, NLaunch, NWalled, NSweeps, NHoles, NHopClamp, NPortalClamp, BestFrac * 100.f);
 	// Oct 8: Frozen aerial layer: with the battle map props up, a CPU sometimes plays a prop route (rail / halo / bumper) instead.
 	// No-op (and no GameRng draw) without the map layout, so every existing mode and test plans exactly as before.
 	if (UZoogiBattleStateMachine* BSM = GetWorld()->GetSubsystem<UZoogiBattleStateMachine>())
