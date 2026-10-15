@@ -149,11 +149,12 @@ protected:
 	struct FAimZoomTune
 	{
 		bool bEnabled = true, bAutoExitOnTap = true;
-		float MaxZoom = 2.6f, EnterZoom = 1.6f, WheelStep = 0.18f, KeyStep = 0.25f, PinchPower = 1.f, MinPinchPx = 30.f;
+		float MaxZoom = 2.1f, EnterZoom = 1.6f, WheelStep = 0.18f, KeyStep = 0.25f, PinchPower = 1.f, MinPinchPx = 30.f;
 		float EaseIn = 7.f, EaseOut = 4.f, PanEase = 18.f;
-		float PitchWide = 55.f, PitchClose = 38.f, PitchMin = 30.f;   // camera pitch (deg down) at 1x / MaxZoom; never below PitchMin
+		float PitchWide = 55.f, PitchClose = 40.f, PitchMin = 30.f;   // camera pitch (deg down) at 1x / MaxZoom; never below PitchMin
 		float EdgeMargin = 120.f;                                      // pan stays this far inside the knockout radius (cm)
 		float FollowRadius = 1500.f, FollowPad = 250.f, FollowLag = 2.5f; // shooter kept within FollowRadius / zoom + pad of the view centre
+		float MinHeight = 900.f;                                       // zoomed camera height floor over the court (clears pillars)
 	};
 	FAimZoomTune ZoomTune; bool bZoomCfg = false;
 	bool bZoomMode = false;

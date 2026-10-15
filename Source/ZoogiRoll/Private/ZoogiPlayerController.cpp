@@ -627,7 +627,7 @@ void AZoogiPlayerController::LoadZoomTune()
 		F(TEXT("MaxZoom"), T.MaxZoom); F(TEXT("EnterZoom"), T.EnterZoom); F(TEXT("WheelStep"), T.WheelStep); F(TEXT("KeyStep"), T.KeyStep);
 		F(TEXT("PinchPower"), T.PinchPower); F(TEXT("MinPinchPx"), T.MinPinchPx); F(TEXT("EaseIn"), T.EaseIn); F(TEXT("EaseOut"), T.EaseOut);
 		F(TEXT("PanEase"), T.PanEase); F(TEXT("PitchWide"), T.PitchWide); F(TEXT("PitchClose"), T.PitchClose); F(TEXT("PitchMin"), T.PitchMin);
-		F(TEXT("EdgeMargin"), T.EdgeMargin); F(TEXT("FollowRadius"), T.FollowRadius); F(TEXT("FollowPad"), T.FollowPad); F(TEXT("FollowLag"), T.FollowLag);
+		F(TEXT("EdgeMargin"), T.EdgeMargin); F(TEXT("FollowRadius"), T.FollowRadius); F(TEXT("FollowPad"), T.FollowPad); F(TEXT("FollowLag"), T.FollowLag); F(TEXT("MinHeight"), T.MinHeight);
 	}
 	if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiNoAimZoom"))) T.bEnabled = false;
 	T.MaxZoom = FMath::Clamp(T.MaxZoom, 1.f, 5.f);
@@ -1627,6 +1627,9 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		const float M = FMath::Clamp((ZoomCur - 1.f) / FMath::Max(ZT.EnterZoom - 1.f, 0.05f), 0.f, 1.f);            // mode blend
 		ZPitch = FMath::Max(ZT.PitchMin, FMath::Lerp(Pitch, FMath::Lerp(ZT.PitchWide, ZT.PitchClose, A), M));
 		ZPivot = Pivot + ZoomOff; ZLook = Look + ZoomOff; ZDist = Dist / ZoomCur;
+		// stay above the pillars / props: the camera never drops below MinHeight over the court while zoomed
+		if (ZoomCur > 1.001f && ZDist > 1.f && ZDist * FMath::Sin(FMath::DegreesToRadians(ZPitch)) < ZT.MinHeight)
+			ZPitch = FMath::Min(FMath::Max(Pitch, ZPitch), FMath::RadiansToDegrees(FMath::Asin(FMath::Min(ZT.MinHeight / ZDist, 0.98f))));
 		if (ZoomCur > 1.001f || !ZoomOff.IsNearlyZero()) ProbeFrom = ZPivot + FVector(0, 0, 150.f);
 	}
 	const FRotator Heading(0.f, Yaw, 0.f);
