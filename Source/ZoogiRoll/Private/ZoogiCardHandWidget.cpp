@@ -965,11 +965,11 @@ void UZoogiCardHandWidget::TickPlaytest1(AZoogiGameMode* G, float Dt)
 			if (PtT > 0.25f)
 			{
 				const FZoogiCardContext Ctx = Cards->BuildContext(G);
-				int32 Slot = INDEX_NONE;
-				for (int32 i = 0; i < S->Hand.Num() && i < 7; ++i) if (!S->Selected.Contains(S->Hand[i].InstanceId) && Cards->Rules().CanSelect(B->PlayerIndex, S->Hand[i].InstanceId, Ctx) == EZoogiCardResult::Ok) { Slot = i; break; }
-				if (Slot == INDEX_NONE || S->Selected.Num() >= 3) { PtStep = 12; PtT = 0.f; break; }
+				int32 PickSlot = INDEX_NONE;
+				for (int32 i = 0; i < S->Hand.Num() && i < 7; ++i) if (!S->Selected.Contains(S->Hand[i].InstanceId) && Cards->Rules().CanSelect(B->PlayerIndex, S->Hand[i].InstanceId, Ctx) == EZoogiCardResult::Ok) { PickSlot = i; break; }
+				if (PickSlot == INDEX_NONE || S->Selected.Num() >= 3) { PtStep = 12; PtT = 0.f; break; }
 				static const FKey Ks[7] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six, EKeys::Seven };
-				Key(Ks[Slot]); PtT = 0.f;
+				Key(Ks[PickSlot]); PtT = 0.f;
 			}
 			break;
 		case 12:

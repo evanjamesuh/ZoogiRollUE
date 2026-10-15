@@ -3,6 +3,8 @@
 // Guard covers only the next opponent attack, affinity map in ZoogiArtifacts::Affinity.
 #include "ZoogiGameMode.h"
 #include "Misc/Crc.h"
+#include "ZoogiCPUBrain.h"
+#include "ZoogiArtifacts.h"
 #include "ZoogiRoll.h"
 #include "ZoogiBall.h"
 #include "ZoogiOrb.h"
@@ -673,8 +675,6 @@ void AZoogiGameMode::CardsPlanCPUAwaken()
 //    offered (else first), Hard / Expert = affinity, else situational (near the edge: Titan > Frost, rival target:
 //    Ember > Storm, else Void > Storm). Decision only, no RNG.
 // No anime / cinematic is emitted for the pick (cinematics unchanged).
-#include "ZoogiCPUBrain.h"
-#include "ZoogiArtifacts.h"
 
 void AZoogiGameMode::CardsBuildAwakenOffers(int32 Player)
 {
