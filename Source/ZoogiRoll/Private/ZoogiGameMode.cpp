@@ -1093,6 +1093,13 @@ void AZoogiGameMode::PlanCPUShot()
 		return FMath::Clamp(V, 0.f, 3000.f);
 	}();
 	int32 NHopClamp = 0;
+	static const float ThinKeep = []
+	{
+		float K = 0.4f;
+		if (GConfig) GConfig->GetFloat(TEXT("ZoogiRoll.CPU"), TEXT("FollowThroughKeep"), K, GGameIni);
+		FParse::Value(FCommandLine::Get(), TEXT("ZoogiCPUFollowKeep="), K);
+		return FMath::Clamp(K, 0.f, 1.f);
+	}();
 	constexpr float ExitV = 300.f;    // the target should still be moving this fast at the edge (clears lips / gutters)
 	constexpr float FollowE = 0.55f;  // follow-through restitution (conservative: the shooter keeps more speed than e=0.7)
 	const float ErrMaxDeg = FMath::Max(0.f, (100.f - Me->Def.Control) / 12.f);
@@ -1138,7 +1145,9 @@ void AZoogiGameMode::PlanCPUShot()
 		// Self knock-off risk: the shooter keeps rolling after the hit (heavier shooter / lighter target = more).
 		const float VLaunch = ZoogiConst::LaunchSpeedForPull(Frac);
 		const float VHit = FMath::Sqrt(FMath::Max(0.f, VLaunch * VLaunch - 2.f * Decel * Gap));
-		const float KAfter = FMath::Max(0.f, (M1 - FollowE * C.TargetMass) / (M1 + C.TargetMass));
+		// Oct 15: an imperfect (thin / cut-variety / aim-error) contact leaves the shooter with more than the head-on share:
+		// predict the stop with at least ThinKeep of the hit speed (Frozen 7.7 m follow-throughs after "safe" 97% hits)
+		const float KAfter = FMath::Max(ThinKeep, (M1 - FollowE * C.TargetMass) / (M1 + C.TargetMass));
 		const float VAfter = VHit * KAfter;
 		const float Coast = VAfter * VAfter / (2.f * Decel);
 		const FVector2D Contact = C.P - Dir * (ZoogiConst::ZoogiRadius + C.Radius);
