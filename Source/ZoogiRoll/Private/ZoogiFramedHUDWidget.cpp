@@ -645,25 +645,25 @@ bool UZoogiFramedHUDWidget::TrayAwakenLayout(FTrayAwaken& Out) const
 	const FVector2D H0 = L.Hand.Min * s, H1 = FVector2D(L.Hand.Max.X * s, (L.Viewport.Y - L.Safe.Bottom) * s);
 	// one gap everywhere (stone to stone, stones to text, text to buttons, buttons to the recess edge); the button stack
 	// is centred on the stone row. When the recess is tight (1920) the stones shrink a little so the INFUSE / GUARD text fits.
-	const float G = 10.f * t, BG = 8.f * t;
+	const float Gap = 10.f * t, BG = 8.f * t;
 	const float THMax = FMath::Min(H1.Y - H0.Y - 10.f * t, 170.f * t);
 	float TH = THMax, TW = TH * 360.f / 506.f;
 	const float BH = FMath::Max(ZoogiHudArt::TapPx(48.f, 48.f * L.U * s), 34.f * t), BW = BH * 95.f / 24.f * 0.62f;
-	const float BX = H1.X - BW - G;
-	const float SX0 = H0.X + 14.f * t, Room = (BX - G) - SX0, InfoMin = 190.f * t;
+	const float BX = H1.X - BW - Gap;
+	const float SX0 = H0.X + 14.f * t, Room = (BX - Gap) - SX0, InfoMin = 190.f * t;
 	const int32 NS = FMath::Max(1, Out.Stones.Num());
-	if (Room - NS * (TW + G) < InfoMin)
+	if (Room - NS * (TW + Gap) < InfoMin)
 	{
-		const float TW2 = FMath::Max((Room - InfoMin) / NS - G, FMath::Max(TW * 0.72f, 56.f * t)); // stays a big tap target
+		const float TW2 = FMath::Max((Room - InfoMin) / NS - Gap, FMath::Max(TW * 0.72f, 56.f * t)); // stays a big tap target
 		if (TW2 < TW) { TW = TW2; TH = TW * 506.f / 360.f; }
 	}
 	const float SY = H0.Y + 4.f * t + FMath::RoundToFloat((THMax - TH) * 0.5f);
 	float X = SX0;
-	for (int32 i = 0; i < Out.Stones.Num(); ++i) { Out.StoneRects.Add(FBox2D(FVector2D(X, SY), FVector2D(X + TW, SY + TH))); X += TW + G; }
+	for (int32 i = 0; i < Out.Stones.Num(); ++i) { Out.StoneRects.Add(FBox2D(FVector2D(X, SY), FVector2D(X + TW, SY + TH))); X += TW + Gap; }
 	const float Stack = 3.f * BH + 2.f * BG;
 	const float BY = FMath::Max(H0.Y + 4.f * t, H0.Y + 4.f * t + (THMax - Stack) * 0.5f);
 	for (int32 i = 0; i < 3; ++i) Out.BtnRects.Add(FBox2D(FVector2D(BX, BY + i * (BH + BG)), FVector2D(BX + BW, BY + i * (BH + BG) + BH)));
-	Out.InfoX0 = X; Out.InfoX1 = BX - G; Out.InfoY = H0.Y + 8.f * t;
+	Out.InfoX0 = X; Out.InfoX1 = BX - Gap; Out.InfoY = H0.Y + 8.f * t;
 	return true;
 }
 
