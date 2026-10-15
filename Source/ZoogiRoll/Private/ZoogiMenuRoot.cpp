@@ -10,6 +10,7 @@
 #include "ZoogiProgressionSubsystem.h"
 #include "ZoogiStore.h"
 #include "ZoogiCards.h"
+#include "ZoogiFrozenLayout.h"
 #include "Misc/FileHelper.h"
 #include "ZoogiRoll.h"
 #include "Blueprint/WidgetTree.h"
@@ -107,7 +108,8 @@ namespace
 	{
 		switch ((EZoogiArena)A)
 		{
-		case EZoogiArena::Frozen: return TEXT("frozen_background");
+		case EZoogiArena::Frozen: // Oct 15: with Ring 2 on, the tile previews the built map (top-down render of Ring 1 + bridges + Ring 2)
+			return ZoogiFrozen::Ring2On() && FPaths::FileExists(FPaths::ProjectContentDir() / TEXT("Data/MenuArt/frozen_ring2_map.png")) ? TEXT("frozen_ring2_map") : TEXT("frozen_background");
 		case EZoogiArena::Meadow: case EZoogiArena::Training: return TEXT("meadows_background");
 		case EZoogiArena::Volcanic: return TEXT("lava_background");
 		case EZoogiArena::Cosmic: return TEXT("cosmos_background");
