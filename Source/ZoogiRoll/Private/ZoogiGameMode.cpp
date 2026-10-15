@@ -1161,6 +1161,42 @@ void AZoogiGameMode::PlanCPUShot()
 		return FMath::Max(0.f, Best - 60.f);
 	};
 	const float MeZ = Me->BallLocation().Z;
+	// Oct 15 CPU check evidence (Frozen): ~30% of planned orb shots never touched the target - the shooter's own path was
+	// stopped / launched by arena props (posts, arches, rails, ramps) the orb/rival-only Blocked() test can't see.
+	// One sphere sweep at rolling height from the shooter to its contact point; any blocking non-floor hit = blocked.
+	int32 NPathProp = 0;
+	auto ShotPathBlocked = [&](const FVector2D& From, const FVector2D& To) -> bool
+	{
+		if (!PW) return false;
+		const FVector2D D = To - From;
+		const float Len = D.Size() - 10.f;
+		if (Len <= 1.f) return false;
+		FCollisionObjectQueryParams OQ; OQ.AddObjectTypesToQuery(ECC_WorldStatic); OQ.AddObjectTypesToQuery(ECC_WorldDynamic);
+		FCollisionQueryParams QP(SCENE_QUERY_STAT(ZoogiCPUShotPath), false); QP.AddIgnoredActor(Me);
+		TArray<FHitResult> Hits;
+		const FVector S(From.X, From.Y, MeZ + 6.f), E = S + FVector(D.X / D.Size(), D.Y / D.Size(), 0.f) * Len;
+		PW->SweepMultiByObjectType(Hits, S, E, FQuat::Identity, OQ, FCollisionShape::MakeSphere(ZoogiConst::ZoogiRadius * 0.85f), QP);
+		for (const FHitResult& H : Hits)
+		{
+			if (H.bStartPenetrating) continue;
+			const AActor* A = H.GetActor();
+			if (Cast<AZoogiBall>(A) || Cast<AZoogiOrb>(A) || Cast<AZoogiClone>(A)) continue;
+			const UPrimitiveComponent* Cm = H.GetComponent();
+			if (!Cm || Cm->GetCollisionResponseToChannel(ECC_PhysicsBody) != ECR_Block) continue;
+			if (H.ImpactNormal.Z > 0.85f) continue; // level floor
+			++NPathProp;
+			return true;
+		}
+		return false;
+	};
+	// measured (CPU check): orbs leave a hit slower than the ideal 1D e=0.7 transfer ([ZoogiRoll.CPU] TransferScale 0.8, -ZoogiCPUTransfer=)
+	static const float TransferScale = []
+	{
+		float V = 0.8f;
+		if (GConfig) GConfig->GetFloat(TEXT("ZoogiRoll.CPU"), TEXT("TransferScale"), V, GGameIni);
+		FParse::Value(FCommandLine::Get(), TEXT("ZoogiCPUTransfer="), V);
+		return FMath::Clamp(V, 0.3f, 1.5f);
+	}();
 	static const float WallFrac = []
 	{
 		float F = 0.5f; // Oct 15: 0.7 -> 0.5 (walled lines now plan the orb's real hop speed; this is only a floor)
@@ -1334,13 +1370,14 @@ void AZoogiGameMode::PlanCPUShot()
 		float Cost = Dist * 0.5f + (LX.Kind == 0 ? LX.Dist : Edge) - C.Value * 6.f;
 		if (bExitWalled) Cost += LX.Kind == 3 ? 1100.f : 400.f; // a wall before the edge: tall = ping-pong only, low = hop it
 		if (Blocked(B, C.P, C.P)) Cost += 1500.f;
+		else if (ShotPathBlocked(B, C.P - Dir * (ZoogiConst::ZoogiRadius + C.Radius))) Cost += 1500.f;
 		// Night Circuit pads / posts: in the way of the shot, or between the target and its edge.
 		if (Arena->IsPathBlocked(B, C.P - Dir * (ZoogiConst::ZoogiRadius + C.Radius), ZoogiConst::ZoogiRadius - 5.f)) Cost += 1500.f;
 		else if (Arena->IsPathBlocked(C.P + Dir * (C.Radius + 10.f), C.P + Dir * FMath::Min(Edge, 2500.f), C.Radius - 5.f)) Cost += 700.f;
 		// Power needed to push the target ~2.5 m past the edge (1D collision, restitution ~0.7), still moving ExitV there.
 		float Need = FMath::Sqrt(LineExitV * LineExitV + 2.f * Decel * (PushRun + 250.f));
 		if (bExitWalled && LX.Kind >= 2) Need = LX.Need; // Oct 15: a low wall - reach it at the hop speed (tall: a firm ping-pong hit)
-		float Transfer = (1.f + 0.7f) * M1 / (M1 + C.TargetMass);
+		float Transfer = (1.f + 0.7f) * M1 / (M1 + C.TargetMass) * TransferScale;
 		if (bCPUUsePower && MyPower == EZoogiPower::BandageBind && Cast<AZoogiBall>(C.Actor)) Transfer *= 1.25f; // bind yank
 		const float VIn = Need / FMath::Max(Transfer, 0.3f);
 		const float Gap = FMath::Max(0.f, Dist - ZoogiConst::ZoogiRadius - C.Radius);
@@ -1436,8 +1473,9 @@ void AZoogiGameMode::PlanCPUShot()
 			if (CosCut < FMath::Cos(FMath::DegreesToRadians(55.f)) || CosCut > FMath::Cos(FMath::DegreesToRadians(4.f))) return false; // not a real cut, or too thin
 			float Cost = GDist * 0.5f + Extra - C.Value * 6.f + 20.f + NeedT * 0.35f; // small bias: straight shots are more reliable (Oct 4: 60 -> 20 for variety)
 			if (Blocked(B, Ghost, C.P)) Cost += 1500.f;
+			else if (ShotPathBlocked(B, Ghost)) Cost += 1500.f;
 			if (Arena->IsPathBlocked(B, Ghost, ZoogiConst::ZoogiRadius - 5.f)) Cost += 1500.f;
-			const float Transfer = (1.f + 0.7f) * M1 / (M1 + C.TargetMass) * CosCut;
+			const float Transfer = (1.f + 0.7f) * M1 / (M1 + C.TargetMass) * CosCut * TransferScale;
 			const float VIn = NeedT / FMath::Max(Transfer, 0.3f);
 			const float V0 = FMath::Sqrt(VIn * VIn + 2.f * Decel * GDist);
 			if (V0 > VMax) Cost += 300.f + (V0 - VMax) * 0.5f;
@@ -1708,7 +1746,7 @@ void AZoogiGameMode::PlanCPUShot()
 		UE_LOG(LogZoogi, Log, TEXT("CPU P%d edge clamp: %.0f%% -> %.0f%% (follow-through stays on court)"), ActivePlayer + 1, BestFrac * 100.f, PickSafeFrac * 100.f);
 		BestFrac = PickSafeFrac;
 	}
-	if (NWalled || NRunWalled || NHoles) UE_LOG(LogZoogi, Log, TEXT("CPU P%d wall check: exit lines walled %d/%d (launch exits %d), follow-through lines walled %d/%d, floor holes on shooter lines %d, wall-hop clamps %d, portal lines %d, hazard lines %d/%d, rim-bank plans %d, line exits drop/tall %d/%d; pick %.0f%%"), ActivePlayer + 1, NRunWalled, NRuns, NLaunch, NWalled, NSweeps, NHoles, NHopClamp, NPortalClamp, NHazClamp, Hazards.Num(), NRimBank, NLineDrop, NLineTall, BestFrac * 100.f);
+	if (NWalled || NRunWalled || NHoles) UE_LOG(LogZoogi, Log, TEXT("CPU P%d wall check: exit lines walled %d/%d (launch exits %d), follow-through lines walled %d/%d, floor holes on shooter lines %d, wall-hop clamps %d, portal lines %d, hazard lines %d/%d, rim-bank plans %d, line exits drop/tall %d/%d, shot paths blocked by props %d; pick %.0f%%"), ActivePlayer + 1, NRunWalled, NRuns, NLaunch, NWalled, NSweeps, NHoles, NHopClamp, NPortalClamp, NHazClamp, Hazards.Num(), NRimBank, NLineDrop, NLineTall, NPathProp, BestFrac * 100.f);
 	// Oct 8: Frozen aerial layer: with the battle map props up, a CPU sometimes plays a prop route (rail / halo / bumper) instead.
 	// No-op (and no GameRng draw) without the map layout, so every existing mode and test plans exactly as before.
 	if (UZoogiBattleStateMachine* BSM = GetWorld()->GetSubsystem<UZoogiBattleStateMachine>())
