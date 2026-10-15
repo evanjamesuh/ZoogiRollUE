@@ -1273,13 +1273,46 @@ void AZoogiGameMode::PlanCPUShot()
 			if (V0 > VMax) Cost += 300.f + (V0 - VMax) * 0.5f;
 			float Frac = FMath::Clamp(InvertLaunch(FMath::Min(V0, VMax)), 0.3f, 0.97f);
 			if (bCutWalled) Frac = FMath::Max(Frac, WallFrac);
-			// The shooter deflects off sideways (90 deg rule): check it doesn't follow its own line off the edge.
-			const FVector2D Tang = (Dir - CosCut * BestN).GetSafeNormal();
+			// The shooter deflects off sideways: check it doesn't follow its own line off the edge.
+			// Oct 15: mass-aware deflection (a light orb barely turns a heavy shooter - the 90 deg rule only holds for equal
+			// masses), the same stop model as straight shots (ThinKeep floor, face-on walls / wall hops, floor holes, portals)
+			// and the same edge / miss clamps. Before this, cut plans (most CPU picks) had no clamp at all.
 			const float VHit = FMath::Sqrt(FMath::Max(0.f, FMath::Square(ZoogiConst::LaunchSpeedForPull(Frac)) - 2.f * Decel * GDist));
-			const float VAfter = VHit * FMath::Sqrt(FMath::Max(0.f, 1.f - CosCut * CosCut));
-			if (!Tang.IsNearlyZero() && VAfter * VAfter / (2.f * Decel) > Arena->DistanceToEdge(Ghost, Tang) - 80.f
-				&& !Walled(Ghost, MeZ, Tang, Arena->DistanceToEdge(Ghost, Tang) + 300.f, ZoogiConst::ZoogiRadius * 0.8f)) Cost += 900.f;
-			Plans.Add({ Cost, Dir, Frac, C.Actor, false, GDist, C.Radius, Tang.IsNearlyZero() ? 0.f : FMath::Clamp((VAfter * VAfter / (2.f * Decel)) / FMath::Max(Arena->DistanceToEdge(Ghost, Tang), 1.f), 0.f, 1.f), 1.f - FMath::Clamp(Arena->DistanceToEdge(Ghost, Dir) / 1500.f, 0.f, 1.f) });
+			const FVector2D VAv = Dir - BestN * ((1.f + FollowE) * C.TargetMass / (M1 + C.TargetMass) * CosCut);
+			const FVector2D Tang = VAv.GetSafeNormal();
+			const float KCut = FMath::Max(ThinKeep, VAv.Size());
+			const float VAfter = VHit * KCut;
+			const float TEdge = Tang.IsNearlyZero() ? 1e6f : Arena->DistanceToEdge(Ghost, Tang);
+			float CutMaxSafe = 1.f, CSafe = -1.f, CMiss = -1.f;
+			if (!Tang.IsNearlyZero())
+			{
+				float TWall = 1e6f;
+				const float TRun = ShooterRun(Ghost, MeZ, Tang, TEdge, TWall);
+				CSafe = PortalRun(Ghost, MeZ, Tang, TRun >= 1e5f ? TWall + WallHopV * WallHopV / (2.f * Decel) - 60.f : TRun - 120.f);
+				const float VHitMax = FMath::Sqrt(2.f * Decel * FMath::Max(0.f, CSafe)) / FMath::Max(KCut, 0.01f);
+				CutMaxSafe = InvertLaunch(FMath::Min(FMath::Sqrt(VHitMax * VHitMax + 2.f * Decel * GDist), VMax * 1.01f));
+				if (VAfter * VAfter / (2.f * Decel) > CSafe)
+				{
+					if (CutMaxSafe >= 0.3f && CutMaxSafe >= 0.8f * Frac) Frac = CutMaxSafe; // a slightly softer cut still does it
+					else Cost += 900.f;
+				}
+			}
+			{
+				// a miss / thin contact rolls on along the aim line
+				const float FullRoll = FMath::Square(ZoogiConst::LaunchSpeedForPull(Frac)) / (2.f * Decel);
+				float BWall = 1e6f;
+				const float BRun0 = ShooterRun(B, MeZ, Dir, Arena->DistanceToEdge(B, Dir), BWall);
+				CMiss = PortalRun(B, MeZ, Dir, BRun0 < 1e5f ? BRun0 : BWall + WallHopV * WallHopV / (2.f * Decel) + 70.f);
+				if (FullRoll > CMiss - 80.f)
+				{
+					const float MissSafe = InvertLaunch(FMath::Sqrt(2.f * Decel * FMath::Max(0.f, CMiss - 150.f)));
+					if (MissSafe >= 0.3f && MissSafe >= 0.8f * Frac) { Frac = FMath::Min(Frac, MissSafe); CutMaxSafe = FMath::Min(CutMaxSafe, MissSafe); }
+					else if (Dist * FMath::Sin(FMath::DegreesToRadians(ErrMaxDeg)) > 0.5f * (ZoogiConst::ZoogiRadius + C.Radius)) Cost += 650.f;
+				}
+			}
+			FPlan Cp{ Cost, Dir, Frac, C.Actor, false, GDist, C.Radius, Tang.IsNearlyZero() ? 0.f : FMath::Clamp((VAfter * VAfter / (2.f * Decel)) / FMath::Max(TEdge, 1.f), 0.f, 1.f), 1.f - FMath::Clamp(Arena->DistanceToEdge(Ghost, Dir) / 1500.f, 0.f, 1.f) };
+			Cp.MaxSafeFrac = CutMaxSafe; Cp.DbgCoast = VAfter * VAfter / (2.f * Decel); Cp.DbgSafe = CSafe; Cp.DbgMiss = CMiss;
+			Plans.Add(Cp);
 		}
 	}
 	// Oct 14: Crystal Collapse ice walls are bank surfaces too (cards on only: no walls = no extra plans, no RNG draws).
