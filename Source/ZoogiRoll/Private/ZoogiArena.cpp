@@ -9,6 +9,7 @@
 #include "ZoogiArenaPiece.h"
 #include "ZoogiStageForming.h"
 #include "ZoogiFloorScars.h"
+#include "ZoogiFrozenLayout.h"
 #include "Misc/CommandLine.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/InstancedStaticMeshComponent.h"
@@ -83,6 +84,20 @@ static constexpr bool GNeonRect = false; // Oct 7: Night Circuit is a round disc
 bool AZoogiArena::IsOffCourt(const FVector2D& P) const
 {
 	if (GNeonRect && Theme == EZoogiArena::Neon) return FMath::Abs(P.X) > GNeonHalfX || FMath::Abs(P.Y) > GNeonHalfY;
+	// Oct 15 Frozen Ring 2 (OuterOutR > 0): the court is Ring 1 + the bridge / ramp lanes + Ring 2 out to OuterOutR;
+	// off court = past OuterOutR, or over the open crevasse between Ring 1 and Ring 2 (no lane under it)
+	if (OuterOutR > 0.f && Theme == EZoogiArena::Frozen)
+	{
+		const float R = P.Size();
+		if (R <= GetKnockoffRadius()) return false;
+		if (R > OuterOutR) return true;
+		if (R >= ZoogiFrozen::R2In) return false;
+		const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(P.Y, P.X));
+		auto OnLane = [&](float LaneYaw, float HalfW) { return FMath::Abs(FMath::Sin(FMath::DegreesToRadians(Yaw - LaneYaw))) * R < HalfW && FMath::Cos(FMath::DegreesToRadians(Yaw - LaneYaw)) > 0.f; };
+		for (float Y : ZoogiFrozen::ArchYaw) if (OnLane(Y, ZoogiFrozen::R2BridgeHalfW)) return false;
+		for (float Y : ZoogiFrozen::R2RampYaw) if (OnLane(Y, 85.f)) return false;
+		return true;
+	}
 	return P.Size() > GetKnockoffRadius();
 }
 
@@ -100,7 +115,9 @@ float AZoogiArena::DistanceToEdge(const FVector2D& P, const FVector2D& Dir) cons
 		const bool bRail = TX < TY ? FMath::Abs(E.Y) < GNeonHalfY - Mouth + Slack : FMath::Abs(E.X) < GNeonHalfX - Mouth + Slack;
 		return bRail ? T + 3000.f : T;
 	}
-	const float R = GetKnockoffRadius();
+	// Oct 15 Frozen Ring 2: from Ring 1 the nearest danger is still the crevasse rim (knock-off radius); from the bridges /
+	// Ring 2 (outside it) the edge is the outer ring-out circle (the crevasse is found by the callers' drop traces)
+	const float R = (OuterOutR > 0.f && P.SizeSquared() > FMath::Square(GetKnockoffRadius())) ? OuterOutR : GetKnockoffRadius();
 	const float PD = FVector2D::DotProduct(P, Dir);
 	const float Disc = PD * PD - (P.SizeSquared() - R * R);
 	return -PD + FMath::Sqrt(FMath::Max(0.f, Disc));

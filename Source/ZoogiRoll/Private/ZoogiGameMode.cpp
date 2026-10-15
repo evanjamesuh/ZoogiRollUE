@@ -954,6 +954,8 @@ namespace ZoogiExitMap
 			for (float R = RStart; R <= 6000.f; R += 40.f)
 			{
 				const FVector2D Q = D * R;
+				// Frozen Ring 2: past the outer ring-out circle is out even with floor below (span B / islets)
+				if (AZoogiArena::OuterOutR > 0.f && R > AZoogiArena::OuterOutR) { Ry.Type = bLow ? 1 : 0; Ry.P = Q; Ry.bLow = bLow; break; }
 				TArray<FHitResult> Dn;
 				W->LineTraceMultiByObjectType(Dn, FVector(Q.X, Q.Y, LastZ + 150.f), FVector(Q.X, Q.Y, ZoogiConst::FallOutZ - 50.f), OQ, QP);
 				float FZ = TNumericLimits<float>::Lowest();
@@ -1668,7 +1670,11 @@ void AZoogiGameMode::PlanCPUShot()
 		const float Dr = DropDist(P, Z, N, FMath::Min(Wd, Reach));
 		if (Dr < FMath::Min(Wd, Reach))
 		{
-			if (DeepFloor(P + N * (Dr + 80.f), Z) || DeepFloor(P + N * (Dr + 250.f), Z)) // every arena: bodies are out by falling (or past OuterOutR)
+			// Frozen Ring 2: the crevasse is 200 cm wide - a probe 250 cm on lands on Ring 2 and called every crevasse drop
+			// "caught"; there a drop is caught only when floor is under both +80 and +160 (a lower deck, not the crevasse)
+			const bool bCaught = bOuter ? (DeepFloor(P + N * (Dr + 80.f), Z) && DeepFloor(P + N * (Dr + 160.f), Z))
+			                            : (DeepFloor(P + N * (Dr + 80.f), Z) || DeepFloor(P + N * (Dr + 250.f), Z));
+			if (bCaught) // every arena: bodies are out by falling (or past OuterOutR)
 			{
 				++NDeckCatch; // a lower deck catches it: no score this way (ping-pong-grade line)
 				return { 2600.f, 3, Dr };
