@@ -24,6 +24,7 @@
 #include "ZoogiCardSubsystem.h"
 #include "ZoogiCardHandWidget.h"
 #include "Engine/World.h"
+#include "Engine/OverlapResult.h"
 #include "Components/PrimitiveComponent.h"
 #include "Components/SphereComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -944,7 +945,7 @@ namespace ZoogiExitMap
 		}();
 		TMap<FString, FVector2D> WallKinds; // name -> (height, count) of the first wall each ray meets
 		float RestSum = 0.f; int32 RestN = 0;
-		struct FRay { int32 Type = 3; FVector2D P; bool bLow = false; float WallH = 0.f, WallR = 0.f; FString WallName; float Z = 0.f; bool bProp = false; }; // 0 exit, 1 exit over low wall, 2 tall wall, 3 caught (floor to the end)
+		struct FRay { int32 Type = 3; FVector2D P; bool bLow = false; float WallH = 0.f, WallR = 0.f; FString WallName; float Z = 0.f; bool bProp = false; TWeakObjectPtr<const AActor> PropActor; }; // 0 exit, 1 exit over low wall, 2 tall wall, 3 caught (floor to the end)
 		auto Probe = [&](float Ang, float RStart, float ZStart) -> FRay
 		{
 			const FVector2D D = FVector2D(1.f, 0.f).GetRotated(Ang);
@@ -981,7 +982,7 @@ namespace ZoogiExitMap
 						// 130 cm sweep "low" - Frozen's 95 cm ice ricochet walls (restitution ~0.9) included - so 145/180 rays read
 						// as exits. A rolling orb (r 40) only hops a curb / lip / rail up to [ZoogiRoll.CPU] ExitMapHopWallH
 						// (35 cm: Frozen islet lips and bridge rails are 30, "hard hits hop it"), -ZoogiCPUExitHopH=
-						float WallH = 0.f, WallRr = 0.f; FString WallName;
+						float WallH = 0.f, WallRr = 0.f; FString WallName; const AActor* WallActor = nullptr;
 						for (const FHitResult& H : Hs) if (!H.bStartPenetrating && Solid(H) && FMath::Abs(H.ImpactNormal.Z) <= 0.6f)
 						{
 							const FVector2D Ip(H.ImpactPoint.X, H.ImpactPoint.Y);
@@ -993,9 +994,10 @@ namespace ZoogiExitMap
 							WallH = TopZ - LastZ; WallRr = Ip.Size();
 							WallName = H.GetActor() ? H.GetActor()->GetName() : TEXT("?");
 							if (H.GetComponent()) WallName += TEXT("/") + H.GetComponent()->GetName();
+							WallActor = H.GetActor();
 							break;
 						}
-						if (bTall || WallH > HopWallH) { Ry.Type = 2; Ry.P = Q; Ry.WallH = WallH; Ry.WallR = WallRr; Ry.WallName = WallName; Ry.Z = LastZ; break; }
+						if (bTall || WallH > HopWallH) { Ry.Type = 2; Ry.P = Q; Ry.WallH = WallH; Ry.WallR = WallRr; Ry.WallName = WallName; Ry.Z = LastZ; Ry.PropActor = WallActor; break; }
 						if (!bLow) { Ry.WallH = WallH; Ry.WallR = WallRr; Ry.WallName = WallName; }
 						bLow = true;
 					}
@@ -1030,7 +1032,30 @@ namespace ZoogiExitMap
 				if (Wd <= PropMaxW)
 					for (int32 k = i; k < j; ++k)
 					{
-						FRay R2 = Probe(k * 2.f, Rays[k].WallR + 10.f, Rays[k].Z);
+						// walk through the prop (only that actor may overlap the probe sphere); a prop pressed against a rim wall
+						// (Frozen's boulders touch the ice ring) overlaps that wall too -> the ray stays blocked
+						const FVector2D Dk = FVector2D(1.f, 0.f).GetRotated(k * 2.f);
+						float Rs = Rays[k].WallR + 10.f; bool bFree = false, bOther = false;
+						for (; Rs < Rays[k].WallR + 400.f; Rs += 10.f)
+						{
+							TArray<FOverlapResult> Ov;
+							const FVector2D Q = Dk * Rs;
+							W->OverlapMultiByObjectType(Ov, FVector(Q.X, Q.Y, Rays[k].Z + Rad + 25.f), FQuat::Identity, OQ, FCollisionShape::MakeSphere(Rad), QP);
+							bool bAny = false;
+							for (const FOverlapResult& O : Ov)
+							{
+								const UPrimitiveComponent* Oc = O.GetComponent();
+								if (!Oc || Oc->GetCollisionResponseToChannel(ECC_PhysicsBody) != ECR_Block) continue;
+								const AActor* Oa = O.GetActor();
+								if (Cast<AZoogiBall>(Oa) || Cast<AZoogiOrb>(Oa) || Cast<AZoogiClone>(Oa)) continue;
+								if (Oa && Oa == Rays[k].PropActor.Get()) { bAny = true; continue; }
+								bOther = true;
+							}
+							if (bOther) break;
+							if (!bAny) { bFree = true; break; }
+						}
+						if (!bFree) continue;
+						FRay R2 = Probe(k * 2.f, Rs, Rays[k].Z);
 						if (R2.Type <= 1) { R2.bProp = true; Rays[k] = R2; ++NProp; }
 					}
 				i = j;
