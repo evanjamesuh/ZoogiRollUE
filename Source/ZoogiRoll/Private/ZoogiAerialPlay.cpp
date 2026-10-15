@@ -377,7 +377,11 @@ void UZoogiBattleStateMachine::SpawnMapLayout()
 	if (Ring2On())
 		for (float Y : R2HaloYaw)
 		{
-			const float Zc = EnvEarly > 0.f ? FMath::Min(170.f, EnvEarly - Tune.ReachMargin) : 170.f;
+			// Oct 15 (-ZoogiR2OrbTest): at centre z 140 the hanging rim's bottom solids (r15 at z 15..45) stood in every rolling
+			// path on Ring 2 at these yaws (a Zoogi on Ring 2 is 20..120 high): it turned rolls away from the 90 / 270 pocket
+			// orbs and sat across the 0 / 180 bridge lanes - a hard blocker. The rim now clears a rolling Zoogi (bottom of the
+			// rim solids >= Ring 2 + 2 x ZoogiRadius + 10): centre R2Z + 235 = z 205; it stays an aerial-only access point.
+			const float Zc = 2.f * ZoogiConst::ZoogiRadius + 10.f + 15.f + 110.f;
 			SpawnProp(EZoogiPropKind::ResonanceHalo, FzPol(1905.f, Y, R2Z + Zc), FzPol(1.f, Y, 0.f), 110.f, true, *FString::Printf(TEXT("ring2_halo_%d"), (int32)Y));
 		}
 	// Sky Bumpers. Symmetric 6-bridge layout (Oct 9): no bumper on a bridge lane / in front of an arch any more.
