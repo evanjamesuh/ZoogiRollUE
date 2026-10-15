@@ -447,6 +447,22 @@ void AZoogiGameMode::EndTurn()
 		UE_LOG(LogZoogi, Log, TEXT("Turn end: P%d travelled %.0f cm (shot %.0f cm/s), %s, orbs left %d, %.1fs"), ActivePlayer + 1,
 			FVector::Dist2D(Shooter->bOut ? Shooter->OutLocation : Shooter->BallLocation(), ShotStart), ShotSpeed, Shooter->bOut ? TEXT("OUT") : TEXT("on court"), OrbsLeft(), PhaseTime); // Oct 15: OUT = distance to where it was ruled out (was a -1 placeholder)
 	}
+	if (ZoogiCPUCheck::bArmed)
+	{
+		ZoogiCPUCheck::bArmed = false;
+		AActor* T = ZoogiCPUCheck::Target.Get();
+		AZoogiOrb* TO = Cast<AZoogiOrb>(T);
+		if (TO)
+		{
+			const FVector2D Now2 = FVector2D(TO->GetActorLocation());
+			const FVector2D Mv = Now2 - ZoogiCPUCheck::Start;
+			const float D = Mv.Size();
+			const float Dec = Arena ? Arena->GetRollingDecel() : ZoogiConst::RollingDecel;
+			const float Ang = (D > 20.f && !ZoogiCPUCheck::Line.IsNearlyZero()) ? FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector2D::DotProduct(Mv / D, ZoogiCPUCheck::Line.GetSafeNormal()), -1.f, 1.f))) : -1.f;
+			UE_LOG(LogZoogi, Log, TEXT("CPU check P%d (%s, exit kind %d at %.0f cm): target %s moved %.0f cm (net, >= %.0f cm/s off the hit), %.0f deg off the planned line; plan assumed %.0f cm/s -> %s"),
+				ActivePlayer + 1, ZoogiCPUCheck::What, ZoogiCPUCheck::Kind, ZoogiCPUCheck::Exit, *TargetName(T), D, FMath::Sqrt(2.f * Dec * D), Ang, ZoogiCPUCheck::Need, TO->bOut ? TEXT("SCORED") : (D < 20.f ? TEXT("not hit") : TEXT("on court")));
+		}
+	}
 	EndPowers();
 	for (AZoogiBall* B : Balls) if (B->bOut) RespawnBall(B);
 	if (OrbsLeft() == 0)
@@ -860,10 +876,21 @@ void AZoogiGameMode::FireShot(const FVector2D& Velocity)
 	ShotClock = 0.f;
 	ShotStart = Ball->BallLocation();
 	ShotSpeed = Velocity.Size();
+	ZoogiCPUCheck::bArmed = Ball->bCPU && ZoogiCPUCheck::Target.IsValid() && ZoogiCPUCheck::Target.Get() == CPULock.Get();
+	if (ZoogiCPUCheck::bArmed) ZoogiCPUCheck::Start = FVector2D(ZoogiCPUCheck::Target->GetActorLocation());
 	UE_LOG(LogZoogi, Log, TEXT("P%d %s shot at %.0f cm/s from (%.0f, %.0f) dir %.0f deg, expected roll %.0f cm"), ActivePlayer + 1, *Ball->Def.Name, Velocity.Size(),
 		ShotStart.X, ShotStart.Y, FMath::RadiansToDegrees(FMath::Atan2(Velocity.Y, Velocity.X)), Velocity.SizeSquared() / (2.f * Arena->GetRollingDecel()));
 	if (AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PC->OnShotFired(Ball);
 	if (UZoogiEpisodeSubsystem* Ep = GetWorld()->GetSubsystem<UZoogiEpisodeSubsystem>()) Ep->OnShotFired(Ball); // Episode Engine: truth capture (read-only)
+}
+
+// Oct 15 CPU shot check (log only): what the planned target really did vs what the plan assumed
+namespace ZoogiCPUCheck
+{
+	static TWeakObjectPtr<AActor> Target;
+	static FVector2D Start = FVector2D::ZeroVector, Line = FVector2D::ZeroVector;
+	static float Need = -1.f, Exit = -1.f; static int32 Kind = -1; static bool bArmed = false;
+	static const TCHAR* What = TEXT("-");
 }
 
 static float InvertLaunch(float Speed)
@@ -1281,7 +1308,7 @@ void AZoogiGameMode::PlanCPUShot()
 		FParse::Value(FCommandLine::Get(), TEXT("ZoogiCPURiskSpread="), V);
 		return FMath::Clamp(V, 0.f, 3.f);
 	}();
-	struct FPlan { float Cost; FVector2D Dir; float Frac; AActor* Actor; bool bStraight; float Dist; float Radius; float Risk = 0.f; float Exposure = 0.f; bool bBank = false; float MaxSafeFrac = 1.f; float DbgCoast = -1.f; float DbgSafe = -1.f; float DbgMiss = -1.f; float DbgNeed = -1.f; bool bRimBank = false; int32 DbgKind = -1; float DbgExit = -1.f; float DbgRiskP = 0.f; }; // Risk/Exposure: tier lookahead inputs only (Oct 14); MaxSafeFrac: Oct 15 edge clamp
+	struct FPlan { float Cost; FVector2D Dir; float Frac; AActor* Actor; bool bStraight; float Dist; float Radius; float Risk = 0.f; float Exposure = 0.f; bool bBank = false; float MaxSafeFrac = 1.f; float DbgCoast = -1.f; float DbgSafe = -1.f; float DbgMiss = -1.f; float DbgNeed = -1.f; bool bRimBank = false; int32 DbgKind = -1; float DbgExit = -1.f; float DbgRiskP = 0.f; FVector2D DbgLine = FVector2D::ZeroVector; }; // Risk/Exposure: tier lookahead inputs only (Oct 14); MaxSafeFrac: Oct 15 edge clamp
 	TArray<FPlan> Plans;
 	FVector2D BestDir(-B.GetSafeNormal());
 	float BestFrac = 0.45f;
@@ -1377,6 +1404,7 @@ void AZoogiGameMode::PlanCPUShot()
 		const float CoastF = FMath::Square(VHit * KAfter) / (2.f * Decel);
 		FPlan Sp{ Cost, Dir, Frac, C.Actor, true, Dist, C.Radius, bMyWalled ? 0.f : FMath::Clamp(FMath::Min(Coast, CoastF) / FMath::Max(MyEdge, 1.f), 0.f, 1.f), bMyWalled ? 0.f : 1.f - FMath::Clamp(MyEdge / 1500.f, 0.f, 1.f) };
 		Sp.MaxSafeFrac = MaxSafeFrac; Sp.DbgKind = LX.Kind; Sp.DbgExit = LX.Dist; Sp.DbgNeed = Need; Sp.DbgCoast = FMath::Square(ZoogiConst::LaunchSpeedForPull(Frac) * KAfter) / (2.f * Decel); Sp.DbgSafe = SafeRun; Sp.DbgMiss = DbgMissRun;
+		Sp.DbgLine = Dir;
 		Plans.Add(Sp);
 	}
 	// Angled (cut) shots: aim the ghost-ball contact so the target departs along a chosen line.
@@ -1480,7 +1508,7 @@ void AZoogiGameMode::PlanCPUShot()
 			if (Frac < FracNeed * 0.9f) Cost += (FracNeed - Frac) * 1500.f; // clamped below what it takes: likely no score
 			Cost += RiskP * 900.f; // expected price of the accepted risk (-75 and a wasted turn)
 			Out = FPlan{ Cost, Dir, Frac, C.Actor, false, GDist, C.Radius, Tang.IsNearlyZero() ? 0.f : FMath::Clamp((VAfter * VAfter / (2.f * Decel)) / FMath::Max(TEdge, 1.f), 0.f, 1.f), 1.f - FMath::Clamp(Arena->DistanceToEdge(Ghost, Dir) / 1500.f, 0.f, 1.f) };
-			Out.DbgRiskP = RiskP;
+			Out.DbgRiskP = RiskP; Out.DbgLine = N;
 			Out.MaxSafeFrac = CutMaxSafe; Out.DbgCoast = VAfter * VAfter / (2.f * Decel); Out.DbgSafe = CSafe; Out.DbgMiss = CMiss; Out.DbgNeed = NeedT;
 			return true;
 		};
@@ -1644,6 +1672,9 @@ void AZoogiGameMode::PlanCPUShot()
 		BestFrac = Pick.Frac;
 		CPULock = Pick.Actor;
 		PickSafeFrac = Pick.MaxSafeFrac;
+		ZoogiCPUCheck::Target = Pick.Actor; ZoogiCPUCheck::Line = Pick.DbgLine; ZoogiCPUCheck::Need = Pick.DbgNeed; ZoogiCPUCheck::Exit = Pick.DbgExit; ZoogiCPUCheck::Kind = Pick.DbgKind;
+		ZoogiCPUCheck::What = Pick.bStraight ? TEXT("straight") : Pick.bRimBank ? TEXT("rim bank") : Pick.bBank ? TEXT("bank") : TEXT("cut");
+		ZoogiCPUCheck::bArmed = false;
 		if (Pick.DbgSafe >= 0.f) UE_LOG(LogZoogi, Log, TEXT("CPU P%d safety: follow-through ~%.0f cm vs safe run %.0f cm, miss run %.0f cm, max safe %.0f%%; exit kind %d at %.0f cm, target needs %.0f cm/s (%s), accepted risk %.2f of %.2f"), ActivePlayer + 1, Pick.DbgCoast, FMath::Min(Pick.DbgSafe, 99999.f), Pick.DbgMiss, Pick.MaxSafeFrac * 100.f, Pick.DbgKind, Pick.DbgExit, Pick.DbgNeed, Pick.bStraight ? TEXT("straight") : Pick.bRimBank ? TEXT("rim bank") : TEXT("cut"), Pick.DbgRiskP, RiskTol);
 		// Rival-only powers: don't waste a charge if the best shot ended up being an orb.
 		if (bHuntRivals && !bPowerTest && !Cast<AZoogiBall>(Pick.Actor)) bCPUUsePower = false;
@@ -1681,7 +1712,7 @@ void AZoogiGameMode::PlanCPUShot()
 	// Oct 8: Frozen aerial layer: with the battle map props up, a CPU sometimes plays a prop route (rail / halo / bumper) instead.
 	// No-op (and no GameRng draw) without the map layout, so every existing mode and test plans exactly as before.
 	if (UZoogiBattleStateMachine* BSM = GetWorld()->GetSubsystem<UZoogiBattleStateMachine>())
-		if (BSM->PlanCPUProp(ActivePlayer, BestDir, BestFrac, CPULock)) { bCPUUsePower = false; CPUPlannedCut = 0.f; } // a clean prop route, no power
+		if (BSM->PlanCPUProp(ActivePlayer, BestDir, BestFrac, CPULock)) { bCPUUsePower = false; CPUPlannedCut = 0.f; ZoogiCPUCheck::Target = nullptr; } // a clean prop route, no power
 	// -ZoogiRockTest: hard straight shot at the nearest standing rock (screenshots of cracking / shattering).
 	if (bRockTest && Arena)
 	{
