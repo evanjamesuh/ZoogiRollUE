@@ -52,7 +52,15 @@ int32 UZoogiCardWidget::NativePaint(const FPaintArgs& Args, const FGeometry& Geo
 		const float H = WS.Y * 0.86f, W = H * 360.f / 506.f;
 		ZoogiHudArt::Img(Out, Layer + 2, Geo, WP + FVector2D((WS.X - W) * 0.5f, (WS.Y - H) * 0.5f), FVector2D(W, H), Tablet, Dim);
 	}
-	ZoogiUIStyle::SBox(Out, Layer + 3, Geo, WP - FVector2D(1.f, 1.f), WS + FVector2D(2.f, 2.f), FLinearColor::Transparent, FLinearColor(Color.R, Color.G, Color.B, 0.9f) * Dim, 6.f, 2.f);
+	{
+		// thin element-colour line round the art window (4 bars: SBox fills solid under its edge, so no outline-only box)
+		const FLinearColor EC = FLinearColor(Color.R, Color.G, Color.B, 0.9f) * Dim;
+		const FVector2D A0 = WP - FVector2D(1.f, 1.f), A1 = WP + WS + FVector2D(1.f, 1.f);
+		ZoogiUIStyle::SBox(Out, Layer + 3, Geo, A0, FVector2D(A1.X - A0.X, 2.f), EC, FLinearColor::Transparent, 0.f, 0.f);
+		ZoogiUIStyle::SBox(Out, Layer + 3, Geo, FVector2D(A0.X, A1.Y - 2.f), FVector2D(A1.X - A0.X, 2.f), EC, FLinearColor::Transparent, 0.f, 0.f);
+		ZoogiUIStyle::SBox(Out, Layer + 3, Geo, A0, FVector2D(2.f, A1.Y - A0.Y), EC, FLinearColor::Transparent, 0.f, 0.f);
+		ZoogiUIStyle::SBox(Out, Layer + 3, Geo, FVector2D(A1.X - 2.f, A0.Y), FVector2D(2.f, A1.Y - A0.Y), EC, FLinearColor::Transparent, 0.f, 0.f);
+	}
 	// name plate: same bar, same font, centred (shrinks only for long names)
 	const FVector2D NP(6.f, WP.Y + WS.Y + 4.f), NS(S.X - 12.f, 28.f);
 	ZoogiUIStyle::SBox(Out, Layer + 3, Geo, NP, NS, FLinearColor(0.06f, 0.11f, 0.26f, 1.f), Gold, 6.f, 1.5f);
