@@ -611,237 +611,259 @@ void AZoogiPlayerController::PlayerTick(float DeltaTime)
 	UpdateMarkers();
 }
 
-// ------------------------------------------------------------------ aim zoom mode (Oct 14, Evan 10:28 / 10:30 PM)
-
-void AZoogiPlayerController::LoadZoomTune()
-{
-	if (bZoomCfg) return;
-	bZoomCfg = true;
-	FAimZoomTune& T = ZoomTune;
-	if (GConfig)
-	{
-		const TCHAR* S = TEXT("ZoogiRoll.AimZoom");
-		GConfig->GetBool(S, TEXT("bEnabled"), T.bEnabled, GGameIni);
-		GConfig->GetBool(S, TEXT("bAutoExitOnTap"), T.bAutoExitOnTap, GGameIni);
+// ------------------------------------------------------------------ aim zoom mode (Oct 14, Evan 10:28 / 10:30 PM)
+
+void AZoogiPlayerController::LoadZoomTune()
+{
+	if (bZoomCfg) return;
+	bZoomCfg = true;
+	FAimZoomTune& T = ZoomTune;
+	if (GConfig)
+	{
+		const TCHAR* S = TEXT("ZoogiRoll.AimZoom");
+		GConfig->GetBool(S, TEXT("bEnabled"), T.bEnabled, GGameIni);
+		GConfig->GetBool(S, TEXT("bAutoExitOnTap"), T.bAutoExitOnTap, GGameIni);
 		auto F = [&](const TCHAR* K, float& V) { GConfig->GetFloat(S, K, V, GGameIni); };
 		F(TEXT("MaxZoom"), T.MaxZoom); F(TEXT("EnterZoom"), T.EnterZoom); F(TEXT("WheelStep"), T.WheelStep); F(TEXT("KeyStep"), T.KeyStep);
 		F(TEXT("PinchPower"), T.PinchPower); F(TEXT("MinPinchPx"), T.MinPinchPx); F(TEXT("EaseIn"), T.EaseIn); F(TEXT("EaseOut"), T.EaseOut);
 		F(TEXT("PanEase"), T.PanEase); F(TEXT("PitchWide"), T.PitchWide); F(TEXT("PitchClose"), T.PitchClose); F(TEXT("PitchMin"), T.PitchMin);
-		F(TEXT("EdgeMargin"), T.EdgeMargin); F(TEXT("FollowRadius"), T.FollowRadius); F(TEXT("FollowPad"), T.FollowPad); F(TEXT("FollowLag"), T.FollowLag);
-	}
-	if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiNoAimZoom"))) T.bEnabled = false;
-	T.MaxZoom = FMath::Clamp(T.MaxZoom, 1.f, 5.f);
-	T.EnterZoom = FMath::Clamp(T.EnterZoom, 1.05f, T.MaxZoom);
-	T.PitchMin = FMath::Clamp(T.PitchMin, 15.f, 80.f);
-	T.PitchClose = FMath::Clamp(T.PitchClose, T.PitchMin, 85.f);
-	T.PitchWide = FMath::Clamp(T.PitchWide, T.PitchMin, 85.f);
-	UE_LOG(LogZoogi, Log, TEXT("AIMZOOM tune: enabled=%d max=%.2fx enter=%.2fx pitch %.0f->%.0f (min %.0f) edge %.0f follow %.0f+%.0f autoexit=%d"), T.bEnabled ? 1 : 0, T.MaxZoom, T.EnterZoom,
-		T.PitchWide, T.PitchClose, T.PitchMin, T.EdgeMargin, T.FollowRadius, T.FollowPad, T.bAutoExitOnTap ? 1 : 0);
-}
-
-bool AZoogiPlayerController::CanZoom() const
-{
-	const AZoogiGameMode* G = GM();
-	return ZoomTune.bEnabled && G && G->IsHumanAiming() && G->IsAimStep() && G->Stage == EZoogiStage::Battle;
-}
-
-void AZoogiPlayerController::SetZoomAnchor(const FVector2D& Screen)
-{
-	FVector P;
-	if (FloorPoint(Screen, P)) ZoomAnchor = FVector(P.X, P.Y, CourtZ);
-}
-
-void AZoogiPlayerController::ZoomAbout(float NewWant)
-{
-	NewWant = FMath::Clamp(NewWant, 1.f, ZoomTune.MaxZoom);
-	if (NewWant <= 1.0001f) { ZoomWant = 1.f; ZoomOffWant = FVector::ZeroVector; return; }
-	// homothety about the anchor: the anchor keeps its screen spot while the view scales
-	const FVector Eff = Pivot + ZoomOffWant;
-	const FVector NewEff = ZoomAnchor + (Eff - ZoomAnchor) * (ZoomWant / NewWant);
-	ZoomOffWant = NewEff - Pivot; ZoomOffWant.Z = 0.f;
-	ZoomWant = NewWant;
-}
-
-void AZoogiPlayerController::PanBy(const FVector2D& From, const FVector2D& To)
-{
-	FVector A, B;
-	if (!FloorPoint(From, A) || !FloorPoint(To, B)) return;
-	FVector D = A - B; D.Z = 0.f; // grab-and-slide: the floor under the finger follows it
-	ZoomOffWant += D;
-	if (PanLogN++ % 20 == 0) UE_LOG(LogZoogi, Log, TEXT("AIMZOOM pan by (%.0f, %.0f) cm -> view offset (%.0f, %.0f)"), D.X, D.Y, ZoomOffWant.X, ZoomOffWant.Y);
-}
-
-void AZoogiPlayerController::ToggleZoomMode(const TCHAR* Why)
-{
-	LoadZoomTune();
-	AZoogiGameMode* G = GM();
-	if (!bZoomMode && (!CanZoom() || !G)) { UE_LOG(LogZoogi, Log, TEXT("AIMZOOM toggle ignored (%s): not aiming"), Why); return; }
-	bZoomMode = !bZoomMode;
-	bPanDown = false; bPanMoved = false;
-	if (bZoomMode)
-	{
-		// drag-aim pauses in the mode
-		if (bDragArmed || bPendingTap) { bDragArmed = false; bPendingTap = false; DragFrac = 0.f; }
-		if (G && G->HumanDragFrac >= 0.f) G->HumanDragFrac = -1.f;
-		AActor* Lk = G && G->TargetLock.IsValid() ? G->TargetLock.Get() : nullptr;
-		if (Lk) ZoomAnchor = FVector(ActorCenter(Lk).X, ActorCenter(Lk).Y, CourtZ);
-		else if (G && G->bFreeAim) ZoomAnchor = FVector(G->FreeAimPoint.X, G->FreeAimPoint.Y, CourtZ);
-		else { int32 VX = 1920, VY = 1080; GetViewportSize(VX, VY); SetZoomAnchor(FVector2D(VX * 0.5f, VY * 0.45f)); }
-		ZoomAbout(FMath::Max(ZoomWant, ZoomTune.EnterZoom));
-	}
-	else { ZoomWant = 1.f; ZoomOffWant = FVector::ZeroVector; }
-	UE_LOG(LogZoogi, Log, TEXT("AIMZOOM mode %s (%s): zoom -> %.2fx anchor (%.0f, %.0f)"), bZoomMode ? TEXT("ON") : TEXT("OFF"), Why, ZoomWant, ZoomAnchor.X, ZoomAnchor.Y);
-}
-
-bool AZoogiPlayerController::UpdateZoomInput(AZoogiGameMode* G, bool bAimStage, const FVector2D& Mouse, float Dt)
-{
-	LoadZoomTune();
-	const FAimZoomTune& T = ZoomTune;
-	AZoogiHUD* Hud = Cast<AZoogiHUD>(GetHUD());
-	float AX = 0.f, AY = 0.f, BX = 0.f, BY = 0.f; bool bA = false, bB = false;
-	GetInputTouchState(ETouchIndex::Touch1, AX, AY, bA);
-	GetInputTouchState(ETouchIndex::Touch2, BX, BY, bB);
-	if (!(T.bEnabled && bAimStage))
-	{
-		if (bZoomMode) { bZoomMode = false; UE_LOG(LogZoogi, Log, TEXT("AIMZOOM mode OFF (aim step over)")); }
-		ZoomWant = 1.f; ZoomOffWant = FVector::ZeroVector;
-		bPinch = false; bPanDown = false;
-		if (bPinchHold && !bA && !bB) bPinchHold = false;
-		return bPinchHold;
-	}
-	if (WasInputKeyJustPressed(EKeys::Z)) ToggleZoomMode(TEXT("Z key"));
-	if (bZoomMode && WasInputKeyJustPressed(EKeys::Escape)) { ToggleZoomMode(TEXT("Esc")); return true; }
-	// two fingers: pinch zoom (enters the mode; never a drag)
-	if (bA && bB)
-	{
-		const FVector2D A(AX, AY), B(BX, BY);
-		const float D = FMath::Max(FVector2D::Distance(A, B), 1.f);
-		if (!bPinch)
-		{
-			bPinch = true; bPinchHold = true; bPanDown = false;
-			if (!bZoomMode) { bZoomMode = true; UE_LOG(LogZoogi, Log, TEXT("AIMZOOM mode ON (two fingers)")); }
-			if (bDragArmed || bPendingTap) { bDragArmed = false; bPendingTap = false; DragFrac = 0.f; UE_LOG(LogZoogi, Log, TEXT("AIMZOOM second finger: drag cancelled (no launch)")); }
-			if (G->HumanDragFrac >= 0.f) G->HumanDragFrac = -1.f;
-			PinchD0 = D; PinchZ0 = ZoomWant;
-			SetZoomAnchor((A + B) * 0.5f);
-			UE_LOG(LogZoogi, Log, TEXT("AIMZOOM pinch start at (%.0f, %.0f) span %.0f px zoom %.2fx anchor (%.0f, %.0f)"), (A.X + B.X) * 0.5f, (A.Y + B.Y) * 0.5f, D, ZoomWant, ZoomAnchor.X, ZoomAnchor.Y);
-		}
-		if (FMath::Abs(D - PinchD0) >= T.MinPinchPx)
-		{
-			const float Old = ZoomWant;
-			ZoomAbout(PinchZ0 * FMath::Pow(D / PinchD0, T.PinchPower));
-			if (!FMath::IsNearlyEqual(Old, ZoomWant, 0.05f) && ZoomLogN++ < 80) UE_LOG(LogZoogi, Log, TEXT("AIMZOOM pinch -> %.2fx (max %.2fx)"), ZoomWant, T.MaxZoom);
-		}
-		return true;
-	}
-	if (bPinch) { bPinch = false; UE_LOG(LogZoogi, Log, TEXT("AIMZOOM pinch end: zoom %.2fx"), ZoomWant); }
-	if (bPinchHold) { if (!bA && !bB) bPinchHold = false; return true; } // no drag / tap until every finger lifts
-	// mouse wheel (up enters the mode) / = - keys
-	int32 Steps = 0;
-	if (WasInputKeyJustPressed(EKeys::MouseScrollUp)) ++Steps;
-	if (WasInputKeyJustPressed(EKeys::MouseScrollDown)) --Steps;
-	if (Steps == 0) { const float Ax = GetInputAnalogKeyState(EKeys::MouseWheelAxis); if (FMath::Abs(Ax) > 0.01f) Steps = Ax > 0.f ? 1 : -1; }
-	int32 KSteps = 0;
-	if (WasInputKeyJustPressed(EKeys::Equals) || WasInputKeyJustPressed(EKeys::Add)) ++KSteps;
-	if (WasInputKeyJustPressed(EKeys::Hyphen) || WasInputKeyJustPressed(EKeys::Subtract)) --KSteps;
-	if ((Steps > 0 || KSteps > 0) && !bZoomMode) { ToggleZoomMode(Steps > 0 ? TEXT("wheel") : TEXT("key")); Steps = FMath::Max(0, Steps - 1); KSteps = FMath::Max(0, KSteps - 1); }
-	if (bZoomMode && (Steps != 0 || KSteps != 0))
-	{
-		if (Steps != 0) SetZoomAnchor(Mouse);
-		else { int32 VX = 1920, VY = 1080; GetViewportSize(VX, VY); SetZoomAnchor(FVector2D(VX * 0.5f, VY * 0.45f)); }
-		const float Old = ZoomWant;
-		ZoomAbout(ZoomWant * FMath::Pow(1.f + T.WheelStep, (float)Steps) * FMath::Pow(1.f + T.KeyStep, (float)KSteps));
-		if (ZoomLogN++ < 80) UE_LOG(LogZoogi, Log, TEXT("AIMZOOM %s %.2fx -> %.2fx (max %.2fx) toward (%.0f, %.0f)"), Steps ? TEXT("wheel") : TEXT("key"), Old, ZoomWant, T.MaxZoom, ZoomAnchor.X, ZoomAnchor.Y);
-	}
-	if (!bZoomMode) return false;
-	// one finger / LMB slide or RMB / MMB drag = pan; a still LMB / finger tap = lock the aim there
-	const bool bL = bA || IsInputKeyDown(EKeys::LeftMouseButton);
-	const bool bR = IsInputKeyDown(EKeys::RightMouseButton) || IsInputKeyDown(EKeys::MiddleMouseButton);
-	const FVector2D P = bA ? FVector2D(AX, AY) : Mouse;
-	const bool bDown = bL || bR;
-	int32 VX = 1920, VY = 1080; GetViewportSize(VX, VY);
-	const float UPx = FMath::Max(VY, 1) / 1080.f;
-	if (bDown && !bPanDown)
-	{
-		const bool bUI = Hud && Hud->IsOverUI(P);
-		bPanDown = true; bPanMoved = false; bPanTapOk = bL && !bUI;
-		PanStart = PanLast = bUI ? FVector2D(-1.f, -1.f) : P; // UI presses (the ZOOM button, columns) never pan
-	}
-	else if (bDown && bPanDown)
-	{
-		if (PanStart.X >= 0.f)
-		{
-			if (!bPanMoved && FVector2D::Distance(P, PanStart) > MinDragPx * UPx) bPanMoved = true;
-			if (bPanMoved) { PanBy(PanLast, P); PanLast = P; }
-		}
-	}
-	else if (!bDown && bPanDown)
-	{
-		bPanDown = false;
-		if (!bPanMoved && bPanTapOk && PanStart.X >= 0.f)
-		{
-			AActor* Tgt = PickTarget(PanStart.X, PanStart.Y);
-			FVector Fp = FVector::ZeroVector;
-			bool bAimed = false;
-			if (Tgt) { G->LockOn(Tgt, false); bAimed = true; }
-			else if (FloorPoint(PanStart, Fp)) { G->SetFreeAim(Fp); bAimed = true; }
-			UE_LOG(LogZoogi, Log, TEXT("AIMZOOM tap at (%.0f, %.0f): %s -> hasAim=%d"), PanStart.X, PanStart.Y, Tgt ? *Tgt->GetName() : (bAimed ? TEXT("floor point") : TEXT("nothing")), G->HasAim() ? 1 : 0);
-			if (bAimed && T.bAutoExitOnTap) ToggleZoomMode(TEXT("target tapped - drag to shoot"));
-		}
-	}
-	return true;
-}
-
-void AZoogiPlayerController::UpdatePinchTest(AZoogiGameMode* G, float Dt)
-{
-	// -ZoogiPinchTest: real touch streams through the engine's InputTouch path on P1's aim step:
-	// run 0 two-finger spread (enters zoom), run 1 one-finger slide (pans, no drag), run 2 one-finger tap (locks + exits).
-	if (!G || PinchTestRuns >= 3) return;
-	if (!(G->IsHumanAiming() && G->IsAimStep() && G->Stage == EZoogiStage::Battle)) { PinchTestT = -1.f; PinchTestPhase = 0; return; }
-	if (PinchTestT < 0.f) PinchTestT = 0.f;
-	PinchTestT += Dt;
-	int32 VX = 1920, VY = 1080; GetViewportSize(VX, VY);
-	const FVector2D C(VX * 0.5f, VY * 0.40f);
-	auto Touch = [&](uint32 H, ETouchType::Type Ty, const FVector2D& P) { InputTouch(H, Ty, P, 1.f, FDateTime::Now(), 0); };
-	const float Start = 1.5f, Len = 0.8f;
-	const int32 Run = PinchTestRuns;
-	if (PinchTestPhase == 0 && PinchTestT > Start)
-	{
-		PinchTestOff0 = ZoomOffWant;
-		if (Run == 0) { Touch(0, ETouchType::Began, C - FVector2D(60.f, 0.f)); Touch(1, ETouchType::Began, C + FVector2D(60.f, 0.f)); }
-		else Touch(0, ETouchType::Began, Run == 1 ? C : C + FVector2D(40.f, 30.f));
-		PinchTestPhase = 1;
-		UE_LOG(LogZoogi, Log, TEXT("PINCHTEST run %d (%s) start: zoom %.2fx mode=%d"), Run, Run == 0 ? TEXT("two-finger spread") : Run == 1 ? TEXT("one-finger slide") : TEXT("one-finger tap"), ZoomWant, bZoomMode ? 1 : 0);
-	}
-	else if (PinchTestPhase == 1)
-	{
-		const float A = FMath::Clamp((PinchTestT - Start) / Len, 0.f, 1.f);
-		if (Run == 0) { const float S = FMath::Lerp(60.f, 280.f, A); Touch(0, ETouchType::Moved, C - FVector2D(S, 0.f)); Touch(1, ETouchType::Moved, C + FVector2D(S, 0.f)); }
-		else if (Run == 1) Touch(0, ETouchType::Moved, C + FVector2D(220.f * A, 60.f * A));
-		if (A >= 1.f) PinchTestPhase = 2;
-	}
-	else if (PinchTestPhase == 2 && PinchTestT > Start + Len + 0.4f)
-	{
-		if (Run == 0) Touch(1, ETouchType::Ended, C + FVector2D(280.f, 0.f));
-		PinchTestPhase = 3;
-	}
-	else if (PinchTestPhase == 3 && PinchTestT > Start + Len + 0.7f)
-	{
-		Touch(0, ETouchType::Ended, Run == 0 ? C - FVector2D(280.f, 0.f) : Run == 1 ? C + FVector2D(220.f, 60.f) : C + FVector2D(40.f, 30.f));
-		PinchTestPhase = 4;
-	}
-	else if (PinchTestPhase == 4 && PinchTestT > Start + Len + 1.6f)
-	{
-		bool bOk = false;
-		if (Run == 0) bOk = bZoomMode && ZoomWant > 1.5f;
-		else if (Run == 1) bOk = bZoomMode && FVector::Dist2D(ZoomOffWant, PinchTestOff0) > 40.f;
-		else bOk = !bZoomMode && G->HasAim();
-		bOk = bOk && !bDragArmed && G->HumanDragFrac < 0.f && G->Phase == EZoogiPhase::Aiming;
-		UE_LOG(LogZoogi, Log, TEXT("PINCHTEST %s run %d: mode=%d zoom %.2fx (cur %.2fx) offset moved %.0f cm hasAim=%d dragArmed=%d pull=%.2f phase=%d"), bOk ? TEXT("PASS") : TEXT("FAIL"), Run,
-			bZoomMode ? 1 : 0, ZoomWant, ZoomCur, FVector::Dist2D(ZoomOffWant, PinchTestOff0), G->HasAim() ? 1 : 0, bDragArmed ? 1 : 0, G->HumanDragFrac, (int32)G->Phase);
-		G->TakeShot(FString::Printf(TEXT("aimzoom_test_run%d"), Run));
-		++PinchTestRuns; PinchTestPhase = 0; PinchTestT = 0.f;
-	}
+		F(TEXT("EdgeMargin"), T.EdgeMargin); F(TEXT("FollowRadius"), T.FollowRadius); F(TEXT("FollowPad"), T.FollowPad); F(TEXT("FollowLag"), T.FollowLag);
+	}
+	if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiNoAimZoom"))) T.bEnabled = false;
+	T.MaxZoom = FMath::Clamp(T.MaxZoom, 1.f, 5.f);
+	T.EnterZoom = FMath::Clamp(T.EnterZoom, 1.05f, T.MaxZoom);
+	T.PitchMin = FMath::Clamp(T.PitchMin, 15.f, 80.f);
+	T.PitchClose = FMath::Clamp(T.PitchClose, T.PitchMin, 85.f);
+	T.PitchWide = FMath::Clamp(T.PitchWide, T.PitchMin, 85.f);
+	UE_LOG(LogZoogi, Log, TEXT("AIMZOOM tune: enabled=%d max=%.2fx enter=%.2fx pitch %.0f->%.0f (min %.0f) edge %.0f follow %.0f+%.0f autoexit=%d"), T.bEnabled ? 1 : 0, T.MaxZoom, T.EnterZoom,
+		T.PitchWide, T.PitchClose, T.PitchMin, T.EdgeMargin, T.FollowRadius, T.FollowPad, T.bAutoExitOnTap ? 1 : 0);
+}
+
+bool AZoogiPlayerController::CanZoom() const
+{
+	const AZoogiGameMode* G = GM();
+	return ZoomTune.bEnabled && G && G->IsHumanAiming() && G->IsAimStep() && G->Stage == EZoogiStage::Battle;
+}
+
+void AZoogiPlayerController::SetZoomAnchor(const FVector2D& Screen)
+{
+	FVector P;
+	if (FloorPoint(Screen, P)) ZoomAnchor = FVector(P.X, P.Y, CourtZ);
+}
+
+void AZoogiPlayerController::ZoomAbout(float NewWant)
+{
+	NewWant = FMath::Clamp(NewWant, 1.f, ZoomTune.MaxZoom);
+	if (NewWant <= 1.0001f) { ZoomWant = 1.f; ZoomOffWant = FVector::ZeroVector; return; }
+	// homothety about the anchor: the anchor keeps its screen spot while the view scales
+	const FVector Eff = Pivot + ZoomOffWant;
+	const FVector NewEff = ZoomAnchor + (Eff - ZoomAnchor) * (ZoomWant / NewWant);
+	ZoomOffWant = NewEff - Pivot; ZoomOffWant.Z = 0.f;
+	ZoomWant = NewWant;
+}
+
+void AZoogiPlayerController::PanBy(const FVector2D& From, const FVector2D& To)
+{
+	FVector A, B;
+	if (!FloorPoint(From, A) || !FloorPoint(To, B)) return;
+	FVector D = A - B; D.Z = 0.f; // grab-and-slide: the floor under the finger follows it
+	ZoomOffWant += D;
+	if (PanLogN++ % 20 == 0) UE_LOG(LogZoogi, Log, TEXT("AIMZOOM pan by (%.0f, %.0f) cm -> view offset (%.0f, %.0f)"), D.X, D.Y, ZoomOffWant.X, ZoomOffWant.Y);
+}
+
+void AZoogiPlayerController::ToggleZoomMode(const TCHAR* Why)
+{
+	LoadZoomTune();
+	AZoogiGameMode* G = GM();
+	if (!bZoomMode && (!CanZoom() || !G)) { UE_LOG(LogZoogi, Log, TEXT("AIMZOOM toggle ignored (%s): not aiming"), Why); return; }
+	bZoomMode = !bZoomMode;
+	bPanDown = false; bPanMoved = false;
+	if (bZoomMode)
+	{
+		// drag-aim pauses in the mode
+		if (bDragArmed || bPendingTap) { bDragArmed = false; bPendingTap = false; DragFrac = 0.f; }
+		if (G && G->HumanDragFrac >= 0.f) G->HumanDragFrac = -1.f;
+		AActor* Lk = G && G->TargetLock.IsValid() ? G->TargetLock.Get() : nullptr;
+		if (Lk) ZoomAnchor = FVector(ActorCenter(Lk).X, ActorCenter(Lk).Y, CourtZ);
+		else if (G && G->bFreeAim) ZoomAnchor = FVector(G->FreeAimPoint.X, G->FreeAimPoint.Y, CourtZ);
+		else { int32 VX = 1920, VY = 1080; GetViewportSize(VX, VY); SetZoomAnchor(FVector2D(VX * 0.5f, VY * 0.45f)); }
+		ZoomAbout(FMath::Max(ZoomWant, ZoomTune.EnterZoom));
+	}
+	else { ZoomWant = 1.f; ZoomOffWant = FVector::ZeroVector; }
+	UE_LOG(LogZoogi, Log, TEXT("AIMZOOM mode %s (%s): zoom -> %.2fx anchor (%.0f, %.0f)"), bZoomMode ? TEXT("ON") : TEXT("OFF"), Why, ZoomWant, ZoomAnchor.X, ZoomAnchor.Y);
+}
+
+bool AZoogiPlayerController::UpdateZoomInput(AZoogiGameMode* G, bool bAimStage, const FVector2D& Mouse, float Dt)
+{
+	LoadZoomTune();
+	const FAimZoomTune& T = ZoomTune;
+	AZoogiHUD* Hud = Cast<AZoogiHUD>(GetHUD());
+	float AX = 0.f, AY = 0.f, BX = 0.f, BY = 0.f; bool bA = false, bB = false;
+	GetInputTouchState(ETouchIndex::Touch1, AX, AY, bA);
+	GetInputTouchState(ETouchIndex::Touch2, BX, BY, bB);
+	if (!(T.bEnabled && bAimStage))
+	{
+		if (bZoomMode) { bZoomMode = false; UE_LOG(LogZoogi, Log, TEXT("AIMZOOM mode OFF (aim step over)")); }
+		ZoomWant = 1.f; ZoomOffWant = FVector::ZeroVector;
+		bPinch = false; bPanDown = false;
+		if (bPinchHold && !bA && !bB) bPinchHold = false;
+		return bPinchHold;
+	}
+	if (WasInputKeyJustPressed(EKeys::Z)) ToggleZoomMode(TEXT("Z key"));
+	if (bZoomMode && WasInputKeyJustPressed(EKeys::Escape)) { ToggleZoomMode(TEXT("Esc")); return true; }
+	// two fingers: pinch zoom (enters the mode; never a drag)
+	if (bA && bB)
+	{
+		const FVector2D A(AX, AY), B(BX, BY);
+		const float D = FMath::Max(FVector2D::Distance(A, B), 1.f);
+		if (!bPinch)
+		{
+			bPinch = true; bPinchHold = true; bPanDown = false;
+			if (!bZoomMode) { bZoomMode = true; UE_LOG(LogZoogi, Log, TEXT("AIMZOOM mode ON (two fingers)")); }
+			if (bDragArmed || bPendingTap) { bDragArmed = false; bPendingTap = false; DragFrac = 0.f; UE_LOG(LogZoogi, Log, TEXT("AIMZOOM second finger: drag cancelled (no launch)")); }
+			if (G->HumanDragFrac >= 0.f) G->HumanDragFrac = -1.f;
+			PinchD0 = D; PinchZ0 = ZoomWant;
+			SetZoomAnchor((A + B) * 0.5f);
+			UE_LOG(LogZoogi, Log, TEXT("AIMZOOM pinch start at (%.0f, %.0f) span %.0f px zoom %.2fx anchor (%.0f, %.0f)"), (A.X + B.X) * 0.5f, (A.Y + B.Y) * 0.5f, D, ZoomWant, ZoomAnchor.X, ZoomAnchor.Y);
+		}
+		if (FMath::Abs(D - PinchD0) >= T.MinPinchPx)
+		{
+			const float Old = ZoomWant;
+			ZoomAbout(PinchZ0 * FMath::Pow(D / PinchD0, T.PinchPower));
+			if (!FMath::IsNearlyEqual(Old, ZoomWant, 0.05f) && ZoomLogN++ < 80) UE_LOG(LogZoogi, Log, TEXT("AIMZOOM pinch -> %.2fx (max %.2fx)"), ZoomWant, T.MaxZoom);
+		}
+		return true;
+	}
+	if (bPinch) { bPinch = false; UE_LOG(LogZoogi, Log, TEXT("AIMZOOM pinch end: zoom %.2fx"), ZoomWant); }
+	if (bPinchHold) { if (!bA && !bB) bPinchHold = false; return true; } // no drag / tap until every finger lifts
+	// mouse wheel (up enters the mode) / = - keys
+	int32 Steps = 0;
+	if (WasInputKeyJustPressed(EKeys::MouseScrollUp)) ++Steps;
+	if (WasInputKeyJustPressed(EKeys::MouseScrollDown)) --Steps;
+	if (Steps == 0) { const float Ax = GetInputAnalogKeyState(EKeys::MouseWheelAxis); if (FMath::Abs(Ax) > 0.01f) Steps = Ax > 0.f ? 1 : -1; }
+	int32 KSteps = 0;
+	if (WasInputKeyJustPressed(EKeys::Equals) || WasInputKeyJustPressed(EKeys::Add)) ++KSteps;
+	if (WasInputKeyJustPressed(EKeys::Hyphen) || WasInputKeyJustPressed(EKeys::Subtract)) --KSteps;
+	if ((Steps > 0 || KSteps > 0) && !bZoomMode) { ToggleZoomMode(Steps > 0 ? TEXT("wheel") : TEXT("key")); Steps = FMath::Max(0, Steps - 1); KSteps = FMath::Max(0, KSteps - 1); }
+	if (bZoomMode && (Steps != 0 || KSteps != 0))
+	{
+		if (Steps != 0) SetZoomAnchor(Mouse);
+		else { int32 VX = 1920, VY = 1080; GetViewportSize(VX, VY); SetZoomAnchor(FVector2D(VX * 0.5f, VY * 0.45f)); }
+		const float Old = ZoomWant;
+		ZoomAbout(ZoomWant * FMath::Pow(1.f + T.WheelStep, (float)Steps) * FMath::Pow(1.f + T.KeyStep, (float)KSteps));
+		if (ZoomLogN++ < 80) UE_LOG(LogZoogi, Log, TEXT("AIMZOOM %s %.2fx -> %.2fx (max %.2fx) toward (%.0f, %.0f)"), Steps ? TEXT("wheel") : TEXT("key"), Old, ZoomWant, T.MaxZoom, ZoomAnchor.X, ZoomAnchor.Y);
+	}
+	if (!bZoomMode) return false;
+	// one finger / LMB slide or RMB / MMB drag = pan; a still LMB / finger tap = lock the aim there
+	const bool bL = bA || IsInputKeyDown(EKeys::LeftMouseButton);
+	const bool bR = IsInputKeyDown(EKeys::RightMouseButton) || IsInputKeyDown(EKeys::MiddleMouseButton);
+	const FVector2D P = bA ? FVector2D(AX, AY) : Mouse;
+	const bool bDown = bL || bR;
+	int32 VX = 1920, VY = 1080; GetViewportSize(VX, VY);
+	const float UPx = FMath::Max(VY, 1) / 1080.f;
+	if (bDown && !bPanDown)
+	{
+		const bool bUI = Hud && Hud->IsOverUI(P);
+		bPanDown = true; bPanMoved = false; bPanTapOk = bL && !bUI;
+		PanStart = PanLast = bUI ? FVector2D(-1.f, -1.f) : P; // UI presses (the ZOOM button, columns) never pan
+	}
+	else if (bDown && bPanDown)
+	{
+		if (PanStart.X >= 0.f)
+		{
+			if (!bPanMoved && FVector2D::Distance(P, PanStart) > MinDragPx * UPx) bPanMoved = true;
+			if (bPanMoved) { PanBy(PanLast, P); PanLast = P; }
+		}
+	}
+	else if (!bDown && bPanDown)
+	{
+		bPanDown = false;
+		if (!bPanMoved && bPanTapOk && PanStart.X >= 0.f)
+		{
+			AActor* Tgt = PickTarget(PanStart.X, PanStart.Y);
+			FVector Fp = FVector::ZeroVector;
+			bool bAimed = false;
+			if (Tgt) { G->LockOn(Tgt, false); bAimed = true; }
+			else if (FloorPoint(PanStart, Fp)) { G->SetFreeAim(Fp); bAimed = true; }
+			UE_LOG(LogZoogi, Log, TEXT("AIMZOOM tap at (%.0f, %.0f): %s -> hasAim=%d"), PanStart.X, PanStart.Y, Tgt ? *Tgt->GetName() : (bAimed ? TEXT("floor point") : TEXT("nothing")), G->HasAim() ? 1 : 0);
+			if (bAimed && T.bAutoExitOnTap) ToggleZoomMode(TEXT("target tapped - drag to shoot"));
+		}
+	}
+	return true;
+}
+
+void AZoogiPlayerController::UpdatePinchTest(AZoogiGameMode* G, float Dt)
+{
+	// -ZoogiPinchTest: real touch streams through the engine's InputTouch path on P1's aim step:
+	// run 0 two-finger spread (enters zoom), run 1 one-finger slide (pans, no drag), run 2 one-finger tap (locks + exits).
+	if (!G) return;
+	// no OS input needed: pass P1's Awaken (cards kept) and, after the three runs, fire the aimed shot
+	static float AwakenT = 0.f;
+	if (G->IsHumanAiming() && G->Stage == EZoogiStage::Awaken && !G->bAwakenDone)
+	{
+		AwakenT += Dt;
+		if (AwakenT > 1.5f) { AwakenT = 0.f; UE_LOG(LogZoogi, Log, TEXT("PINCHTEST auto-commit P1 Awaken")); G->MenuAction(TEXT("CardCommit"), 0); }
+		return;
+	}
+	AwakenT = 0.f;
+	if (!(G->IsHumanAiming() && G->IsAimStep() && G->Stage == EZoogiStage::Battle)) { PinchTestT = -1.f; PinchTestPhase = 0; return; }
+	if (PinchTestRuns >= 3)
+	{
+		if (PinchTestT < 0.f) PinchTestT = 0.f;
+		PinchTestT += Dt;
+		if (PinchTestT > 1.2f && PinchTestPhase == 0)
+		{
+			PinchTestPhase = 9;
+			if (!G->HasAim()) { FVector P; int32 VX = 1920, VY = 1080; GetViewportSize(VX, VY); if (FloorPoint(FVector2D(VX * 0.5f, VY * 0.35f), P)) G->SetFreeAim(P); }
+			UE_LOG(LogZoogi, Log, TEXT("PINCHTEST launch (zoom %.2fx -> eases back after launch)"), ZoomCur);
+			G->HumanDrag(0.75f, true);
+		}
+		return;
+	}
+	if (PinchTestT < 0.f) PinchTestT = 0.f;
+	PinchTestT += Dt;
+	int32 VX = 1920, VY = 1080; GetViewportSize(VX, VY);
+	const FVector2D C(VX * 0.5f, VY * 0.40f);
+	auto Touch = [&](uint32 H, ETouchType::Type Ty, const FVector2D& P) { InputTouch(H, Ty, P, 1.f, FDateTime::Now(), 0); };
+	const float Start = 1.5f, Len = 0.8f;
+	const int32 Run = PinchTestRuns;
+	if (PinchTestPhase == 0 && PinchTestT > Start)
+	{
+		PinchTestOff0 = ZoomOffWant;
+		if (Run == 0) { Touch(0, ETouchType::Began, C - FVector2D(60.f, 0.f)); Touch(1, ETouchType::Began, C + FVector2D(60.f, 0.f)); }
+		else Touch(0, ETouchType::Began, Run == 1 ? C : C + FVector2D(40.f, 30.f));
+		PinchTestPhase = 1;
+		UE_LOG(LogZoogi, Log, TEXT("PINCHTEST run %d (%s) start: zoom %.2fx mode=%d"), Run, Run == 0 ? TEXT("two-finger spread") : Run == 1 ? TEXT("one-finger slide") : TEXT("one-finger tap"), ZoomWant, bZoomMode ? 1 : 0);
+	}
+	else if (PinchTestPhase == 1)
+	{
+		const float A = FMath::Clamp((PinchTestT - Start) / Len, 0.f, 1.f);
+		if (Run == 0) { const float S = FMath::Lerp(60.f, 280.f, A); Touch(0, ETouchType::Moved, C - FVector2D(S, 0.f)); Touch(1, ETouchType::Moved, C + FVector2D(S, 0.f)); }
+		else if (Run == 1) Touch(0, ETouchType::Moved, C + FVector2D(220.f * A, 60.f * A));
+		if (A >= 1.f) PinchTestPhase = 2;
+	}
+	else if (PinchTestPhase == 2 && PinchTestT > Start + Len + 0.4f)
+	{
+		if (Run == 0) Touch(1, ETouchType::Ended, C + FVector2D(280.f, 0.f));
+		PinchTestPhase = 3;
+	}
+	else if (PinchTestPhase == 3 && PinchTestT > Start + Len + 0.7f)
+	{
+		Touch(0, ETouchType::Ended, Run == 0 ? C - FVector2D(280.f, 0.f) : Run == 1 ? C + FVector2D(220.f, 60.f) : C + FVector2D(40.f, 30.f));
+		PinchTestPhase = 4;
+	}
+	else if (PinchTestPhase == 4 && PinchTestT > Start + Len + 1.6f)
+	{
+		bool bOk = false;
+		if (Run == 0) bOk = bZoomMode && ZoomWant > 1.5f;
+		else if (Run == 1) bOk = bZoomMode && FVector::Dist2D(ZoomOffWant, PinchTestOff0) > 40.f;
+		else bOk = !bZoomMode && G->HasAim();
+		bOk = bOk && !bDragArmed && G->HumanDragFrac < 0.f && G->Phase == EZoogiPhase::Aiming;
+		UE_LOG(LogZoogi, Log, TEXT("PINCHTEST %s run %d: mode=%d zoom %.2fx (cur %.2fx) offset moved %.0f cm hasAim=%d dragArmed=%d pull=%.2f phase=%d"), bOk ? TEXT("PASS") : TEXT("FAIL"), Run,
+			bZoomMode ? 1 : 0, ZoomWant, ZoomCur, FVector::Dist2D(ZoomOffWant, PinchTestOff0), G->HasAim() ? 1 : 0, bDragArmed ? 1 : 0, G->HumanDragFrac, (int32)G->Phase);
+		G->TakeShot(FString::Printf(TEXT("aimzoom_test_run%d"), Run));
+		++PinchTestRuns; PinchTestPhase = 0; PinchTestT = 0.f;
+	}
 }
 
 // ------------------------------------------------------------------ input
