@@ -77,6 +77,7 @@ private:
 		int32 Pick = 0;
 		bool bHuman = false;
 		float InfoX0 = 0.f, InfoX1 = 0.f, InfoY = 0.f;
+		bool bInfo = false; // room for the picked stone's INFUSE / GUARD text
 	};
 	bool TrayAwakenLayout(FTrayAwaken& Out) const;
 	void TickTrayAwaken();

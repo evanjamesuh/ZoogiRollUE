@@ -650,11 +650,11 @@ bool UZoogiFramedHUDWidget::TrayAwakenLayout(FTrayAwaken& Out) const
 	float TH = THMax, TW = TH * 360.f / 506.f;
 	const float BH = FMath::Max(ZoogiHudArt::TapPx(48.f, 48.f * L.U * s), 34.f * t), BW = BH * 95.f / 24.f * 0.62f;
 	const float BX = H1.X - BW - Gap;
-	const float SX0 = H0.X + 14.f * t, Room = (BX - Gap) - SX0, InfoMin = 190.f * t;
+	const float SX0 = H0.X + 14.f * t, Room = (BX - Gap) - SX0, InfoMin = 170.f * t;
 	const int32 NS = FMath::Max(1, Out.Stones.Num());
 	if (Room - NS * (TW + Gap) < InfoMin)
 	{
-		const float TW2 = FMath::Max((Room - InfoMin) / NS - Gap, FMath::Max(TW * 0.72f, 56.f * t)); // stays a big tap target
+		const float TW2 = FMath::Max((Room - InfoMin) / NS - Gap, FMath::Max(TW * 0.62f, 56.f * t)); // stays a big tap target
 		if (TW2 < TW) { TW = TW2; TH = TW * 506.f / 360.f; }
 	}
 	const float SY = H0.Y + 4.f * t + FMath::RoundToFloat((THMax - TH) * 0.5f);
@@ -664,6 +664,7 @@ bool UZoogiFramedHUDWidget::TrayAwakenLayout(FTrayAwaken& Out) const
 	const float BY = FMath::Max(H0.Y + 4.f * t, H0.Y + 4.f * t + (THMax - Stack) * 0.5f);
 	for (int32 i = 0; i < 3; ++i) Out.BtnRects.Add(FBox2D(FVector2D(BX, BY + i * (BH + BG)), FVector2D(BX + BW, BY + i * (BH + BG) + BH)));
 	Out.InfoX0 = X; Out.InfoX1 = BX - Gap; Out.InfoY = H0.Y + 8.f * t;
+	Out.bInfo = Out.InfoX1 - Out.InfoX0 >= 120.f * t;
 	return true;
 }
 
@@ -772,7 +773,7 @@ void UZoogiFramedHUDWidget::PaintTrayAwaken(const FGeometry& Geo, FSlateWindowEl
 	}
 	// picked stone's texts in the free middle of the recess
 	const int32 PI_ = TA.Stones.IndexOfByPredicate([&](const TPair<int32, uint8>& C) { return C.Key == TA.Pick; });
-	if (PI_ != INDEX_NONE && TA.InfoX1 - TA.InfoX0 > 160.f * t)
+	if (PI_ != INDEX_NONE && TA.bInfo)
 	{
 		const FZoogiArtifactRow& Row = ZoogiArtifacts::Get((EZoogiArtifact)TA.Stones[PI_].Value);
 		const float W = TA.InfoX1 - TA.InfoX0;
