@@ -24,6 +24,9 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "PhysicalMaterials/PhysicalMaterial.h"
+#include "Misc/ConfigCacheIni.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 
 using namespace ZoogiFrozen;
 
@@ -37,6 +40,67 @@ namespace
 	UTexture* FTex(const TCHAR* Name)
 	{
 		return LoadObject<UTexture>(nullptr, *FString::Printf(TEXT("/Game/Env/Arenas/%s.%s"), Name, Name), nullptr, LOAD_NoWarn | LOAD_Quiet);
+	}
+
+	// Oct 15 (Evan: Frozen must be scoreable, ping-pong action): knock-out gaps in the 95 cm ice ricochet ring. The 168391e
+	// exit map found only 8 one-ray slivers (~72 cm) beside the diagonal bridges. Between each pair of adjacent bridges a
+	// centred section (RimGapFrac of the bridge-to-bridge arc: 45 deg stretches -> ~4 m, 90 deg stretches -> ~8 m) of the
+	// wall is replaced by a low sloped ice lip (RimGapLipH cm, RimGapLipSlope deg): a slow roll stops / rolls back, anything
+	// with real pace rides it and drops past the court edge into the void (out below FallOutZ; nothing below catches it).
+	// The back stretch (225..315) keeps the N combo bank wall (262..300) whole: its gap sits centred in the fill arc
+	// 231.5..262 with the short-stretch width. Remaining walls keep their bank role. Reversible:
+	// [ZoogiRoll.Frozen] bOpenRimGaps (default True), -ZoogiFrozenRimGaps=Off|On; RimGapFrac / RimGapLipH / RimGapLipSlope,
+	// -ZoogiFrozenRimGapFrac= -ZoogiFrozenRimGapLipH=. Off = the exact pre-gap build (no extra pieces, same Rng draws).
+	struct FRimGapCfg { bool bOn = true; float Frac = 0.35f; float LipH = 22.f; float Slope = 30.f; };
+	const FRimGapCfg& RimGapCfg()
+	{
+		static const FRimGapCfg C = []
+		{
+			FRimGapCfg R;
+			if (GConfig)
+			{
+				GConfig->GetBool(TEXT("ZoogiRoll.Frozen"), TEXT("bOpenRimGaps"), R.bOn, GGameIni);
+				GConfig->GetFloat(TEXT("ZoogiRoll.Frozen"), TEXT("RimGapFrac"), R.Frac, GGameIni);
+				GConfig->GetFloat(TEXT("ZoogiRoll.Frozen"), TEXT("RimGapLipH"), R.LipH, GGameIni);
+				GConfig->GetFloat(TEXT("ZoogiRoll.Frozen"), TEXT("RimGapLipSlope"), R.Slope, GGameIni);
+			}
+			FString V;
+			if (FParse::Value(FCommandLine::Get(), TEXT("ZoogiFrozenRimGaps="), V)) R.bOn = !(V.Equals(TEXT("Off"), ESearchCase::IgnoreCase) || V == TEXT("0") || V.Equals(TEXT("False"), ESearchCase::IgnoreCase));
+			FParse::Value(FCommandLine::Get(), TEXT("ZoogiFrozenRimGapFrac="), R.Frac);
+			FParse::Value(FCommandLine::Get(), TEXT("ZoogiFrozenRimGapLipH="), R.LipH);
+			R.Frac = FMath::Clamp(R.Frac, 0.05f, 0.6f);
+			R.LipH = FMath::Clamp(R.LipH, 0.f, 60.f);
+			R.Slope = FMath::Clamp(R.Slope, 10.f, 60.f);
+			return R;
+		}();
+		return C;
+	}
+	// Gap arcs (deg, A0 < A1, inside 0..360, never wrapping): empty when the switch is off.
+	const TArray<FVector2D>& RimGaps()
+	{
+		static TArray<FVector2D> G;
+		static bool bInit = false;
+		if (bInit) return G;
+		bInit = true;
+		if (!RimGapCfg().bOn) return G;
+		const float B[7] = { 0.f, 45.f, 135.f, 180.f, 225.f, 315.f, 360.f };
+		for (int32 i = 0; i < 6; ++i)
+		{
+			float Mid = 0.5f * (B[i] + B[i + 1]), W = RimGapCfg().Frac * (B[i + 1] - B[i]);
+			if (Mid + 0.5f * W > WallNA0 && Mid - 0.5f * W < WallNA1)
+			{
+				Mid = 0.5f * (B[i] + BridgeWallGapDeg + WallNA0); // centred in the fill arc before the combo bank wall
+				W = RimGapCfg().Frac * 45.f;
+			}
+			G.Add(FVector2D(Mid - 0.5f * W, Mid + 0.5f * W));
+		}
+		return G;
+	}
+	bool InRimGap(float YawDeg, float Margin = 0.f)
+	{
+		const float A = FMath::Fmod(FMath::Fmod(YawDeg, 360.f) + 360.f, 360.f);
+		for (const FVector2D& G : RimGaps()) if (A >= G.X - Margin && A <= G.Y + Margin) return true;
+		return false;
 	}
 }
 
@@ -187,6 +251,7 @@ void AZoogiArena::BuildFrozen()
 			if (R < 1560.f) return -4.f;
 			// Round 3c: the snow lip dips under each bridge (the deck runs from the court edge down to the islet).
 			if (NearIsletYaw(FMath::RadiansToDegrees(A), 5.f)) return -4.f - 0.3f * (R - 1550.f);
+			if (InRimGap(FMath::RadiansToDegrees(A))) return -4.f - 0.55f * (R - 1550.f); // rim gap: the berm breaks away into a drop
 			if (R < 1650.f) return FMath::Lerp(-4.f, 34.f + 26.f * N, FMath::SmoothStep(0.f, 1.f, (R - 1560.f) / 90.f));
 			return FMath::Lerp(34.f + 26.f * N, -18.f, FMath::SmoothStep(0.f, 1.f, (R - 1650.f) / 130.f));
 		};
@@ -249,7 +314,8 @@ void AZoogiArena::BuildFrozen()
 			const float A = i * 360.f / 64 + Rng.FRandRange(-2.5f, 2.5f);
 			if (NearIsletYaw(A, 6.f)) continue;
 			const float R = Rng.FRandRange(1645.f, 1715.f);
-			Mounds.Chunk(Pol(R, A, Rng.FRandRange(18.f, 30.f)), FVector(Rng.FRandRange(55.f, 85.f), Rng.FRandRange(80.f, 130.f), Rng.FRandRange(22.f, 40.f)), Rng, 0.18f, A);
+			FZoogiMeshBuilder Skip; // rim gap: same Rng draws, mound not shown (the berm is cut there)
+			(InRimGap(A, 3.f) ? Skip : Mounds).Chunk(Pol(R, A, Rng.FRandRange(18.f, 30.f)), FVector(Rng.FRandRange(55.f, 85.f), Rng.FRandRange(80.f, 130.f), Rng.FRandRange(22.f, 40.f)), Rng, 0.18f, A);
 		}
 		AddFrozenProc(Mounds, Snow, nullptr, true);
 		// Polish r1: deep icy cliff underside (frozen_zones_aerial): a ridged inverted glacier cone of vertical ice columns
@@ -816,14 +882,95 @@ void AZoogiArena::BuildFrozen()
 			if (Forming) Forming->AddActor(P, EZoogiFormStyle::Grow, FVector::ZeroVector, 0.55f + 0.07f * i + (bCombo ? 0.f : 0.2f), 0.7f);
 		}
 	};
-	BuildWall(WallNA0, WallNA1, true);
-	BuildWall(WallWA0, WallWA1, false);
-	BuildWall(WallEA0, WallEA1, false);
+	// Rim gaps (see RimGapCfg): each wall arc minus the gap arcs; off = the original calls.
+	auto BuildWallCut = [&](float A0, float A1, bool bCombo)
+	{
+		if (RimGaps().Num() == 0) { BuildWall(A0, A1, bCombo); return; }
+		float S = A0;
+		TArray<FVector2D> G = RimGaps(); G.Sort([](const FVector2D& a, const FVector2D& b) { return a.X < b.X; });
+		for (const FVector2D& Gp : G)
+		{
+			if (Gp.Y <= S || Gp.X >= A1) continue;
+			if (Gp.X - S > 0.5f) BuildWall(S, Gp.X, bCombo);
+			S = FMath::Max(S, Gp.Y);
+		}
+		if (A1 - S > 0.5f) BuildWall(S, A1, bCombo);
+	};
+	BuildWallCut(WallNA0, WallNA1, true);
+	BuildWallCut(WallWA0, WallWA1, false);
+	BuildWallCut(WallEA0, WallEA1, false);
 	// Bridge alignment (Evan 10:49 PM): W / E arcs and the fill arcs leave every bridge a clear gap of +/- BridgeWallGapDeg.
 	// Polish r2 (Evan 9:16 PM): wall the rest of the ring edge with the same breakable ice walls (same style / height /
 	// HP / collider / forming). Symmetric layout (Oct 9 12:30 AM): only the 4 bridge gaps (45 / 135 / 225 / 315 +/- 6.5)
 	// stay open. Arcs: ZoogiFrozen::WallFillArcs.
-	for (const FVector2D& Arc : WallFillArcs) BuildWall(Arc.X, Arc.Y, false);
+	for (const FVector2D& Arc : WallFillArcs) BuildWallCut(Arc.X, Arc.Y, false);
+
+	// ---- rim gaps: low sloped ice lip + ice-edge trim + crystal posts + a soft glow line (indestructible) ----
+	if (RimGaps().Num() > 0)
+	{
+		const FRimGapCfg& Cfg = RimGapCfg();
+		UPhysicalMaterial* LipPM = ZoogiPhysics::MakeMaterial(this, 0.2f, 0.3f, false);
+		UMaterialInterface* GapGlow = ZoogiUtil::GlowMID(this, ZoogiUtil::Hex(TEXT("#8FEFFF")), 1.3f);
+		const float Th = FMath::DegreesToRadians(Cfg.Slope);
+		const float Run = Cfg.LipH > 1.f ? Cfg.LipH / FMath::Tan(Th) : 0.f;
+		const float RFoot = WallR - Run, RBack = WallR + WallThick;
+		FString GapLog;
+		int32 k = 0;
+		for (const FVector2D& Gp : RimGaps())
+		{
+			const float Ga = Gp.X, Gb = Gp.Y;
+			const int32 Segs = FMath::Max(2, FMath::CeilToInt((Gb - Ga) / 2.f));
+			AZoogiArenaPiece* P = SpawnPiece(FVector::ZeroVector, 0.f, TEXT("rimgap"), TEXT("Ice"), 100.f, true);
+			if (!P) continue;
+			FZoogiMeshBuilder Ramp, Cap, Trim, Line, Posts, Tips;
+			for (int32 s = 0; s < Segs; ++s)
+			{
+				const float Sa = FMath::Lerp(Ga, Gb, (float)s / Segs), Sb = FMath::Lerp(Ga, Gb, (float)(s + 1) / Segs), Sm = 0.5f * (Sa + Sb);
+				if (Cfg.LipH > 1.f)
+				{
+					// ice ramp face (visual) + its pitched collider box
+					Ramp.Quad(Pol(RFoot, Sa, 0.5f), Pol(RFoot, Sb, 0.5f), Pol(WallR, Sb, Cfg.LipH), Pol(WallR, Sa, Cfg.LipH), FVector(-FMath::Sin(Th) * FMath::Cos(FMath::DegreesToRadians(Sm)), -FMath::Sin(Th) * FMath::Sin(FMath::DegreesToRadians(Sm)), FMath::Cos(Th)));
+					const float L = Run / FMath::Cos(Th), T = 20.f;
+					const float Rm = WallR - 0.5f * Run + FMath::Sin(Th) * T * 0.5f, Zm = 0.5f * Cfg.LipH - FMath::Cos(Th) * T * 0.5f;
+					const float SegLen = (WallR - 0.5f * Run) * FMath::DegreesToRadians(Sb - Sa) * 1.04f;
+					P->AddColliderBox(Pol(Rm, Sm, Zm), FVector(L, SegLen, T), FRotator(Cfg.Slope, Sm, 0.f), TEXT("ZRimLip"), LipPM);
+					// flat top behind the crest (where the wall stood), down to the court floor
+					const float SegLen2 = (WallR + WallThick * 0.5f) * FMath::DegreesToRadians(Sb - Sa) * 1.04f;
+					P->AddColliderBox(Pol(WallR + WallThick * 0.5f, Sm, 0.5f * (Cfg.LipH - 20.f)), FVector(WallThick, SegLen2, Cfg.LipH + 20.f), FRotator(0.f, Sm, 0.f), TEXT("ZRimLip"), LipPM);
+				}
+			}
+			if (Cfg.LipH > 1.f)
+			{
+				Cap.ArcSlab(WallR - 1.f, RBack, Ga, Gb, -6.f, Cfg.LipH, Segs, 3.f);
+				Line.ArcSlab(WallR - 4.f, WallR + 3.f, Ga + 0.4f, Gb - 0.4f, Cfg.LipH + 1.f, Cfg.LipH + 3.f, Segs, 0.f);
+			}
+			// ice-edge trim along the court's drop edge in the gap (visual)
+			Trim.ArcSlab(1528.f, 1556.f, Ga, Gb, -10.f, 1.5f, Segs, 0.f);
+			// crystal posts at both gap ends (on the cut wall ends) with glowing tips
+			for (int32 e = 0; e < 2; ++e)
+			{
+				const float A = e == 0 ? Ga : Gb;
+				const FVector2D XY(Pol(WallR + WallThick * 0.5f, A));
+				Posts.Prism(XY, 6, 24.f, 13.f, -6.f, 150.f, A + 15.f, 0.f, false);
+				Posts.Prism(XY + FVector2D(Pol(16.f, A + (e == 0 ? -90.f : 90.f))), 5, 11.f, 4.f, -6.f, 92.f, A, 0.f, false);
+				Tips.Prism(XY, 6, 13.f, 0.f, 150.f, 186.f, A + 15.f, 0.f, false);
+				P->AddColliderCyl(XY, 24.f, -6.f, 150.f, TEXT("ZWall"), WallPM);
+			}
+			P->AddProc(Ramp, IcePane);
+			if (!Cap.IsEmpty()) P->AddProc(Cap, Snow);
+			P->AddProc(Trim, IcePane);
+			if (!Line.IsEmpty()) { UProceduralMeshComponent* Lc = P->AddProc(Line, GapGlow, false); P->MarkGlow(Lc); }
+			P->AddProc(Posts, IcePane);
+			{ UProceduralMeshComponent* Tc = P->AddProc(Tips, Rune, false); P->MarkGlow(Tc); }
+			P->RubbleKeepZ = 20.f;
+			P->FinishBuild();
+			if (Forming) Forming->AddActor(P, EZoogiFormStyle::Rise, FVector(0, 0, -200.f), 0.75f + 0.05f * k, 0.7f);
+			GapLog += FString::Printf(TEXT("%s%.1f..%.1f deg (~%.0f cm)"), GapLog.IsEmpty() ? TEXT("") : TEXT(", "), Ga, Gb, WallR * FMath::DegreesToRadians(Gb - Ga));
+			++k;
+		}
+		UE_LOG(LogZoogi, Log, TEXT("FROZEN rim gaps ON: %d gap(s) [%s], lip %.0f cm at %.0f deg (frac %.2f); -ZoogiFrozenRimGaps=Off reverts"), k, *GapLog, Cfg.LipH, Cfg.Slope, Cfg.Frac);
+	}
+	else UE_LOG(LogZoogi, Log, TEXT("FROZEN rim gaps OFF (closed ice ring)"));
 
 	// ---- rim arches (SE = Recovery Gate with a portal sheet) ----
 	for (int32 k = 0; k < (int32)UE_ARRAY_COUNT(ArchYaw); ++k)
