@@ -279,6 +279,7 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 		const float k = bFr && FL.Viewport.X > 0.f ? ViewSize.X / FL.Viewport.X : 1.f;
 		const float R = bFr ? -24.f - FL.Safe.Right * k : -24.f, Bm = bFr ? -FL.Safe.Bottom * k : 0.f;
 		(void)Bm;
+		bFramedBtns = bFr;
 		if (bFr)
 		{
 			// Oct 15 playtest: the energy orb is the Awaken control, so CONFIRM / CLEAR move to the slab strip between the
@@ -289,6 +290,8 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 			auto Put = [&](UButton* Bt, float Y1) { if (UCanvasPanelSlot* S = Bt ? Cast<UCanvasPanelSlot>(Bt->Slot) : nullptr) { S->SetPosition(FVector2D(X1 - ViewSize.X, Y1 - ViewSize.Y)); S->SetSize(FVector2D(X1 - X0, BH)); } };
 			Put(ConfirmBtn, TR.Y + 172.f * t);
 			Put(ClearBtn, TR.Y + 172.f * t - BH - 10.f * t);
+			ConfirmR = FBox2D(FVector2D(X0, TR.Y + 172.f * t - BH), FVector2D(X1, TR.Y + 172.f * t));
+			ClearR = FBox2D(FVector2D(X0, TR.Y + 172.f * t - 2.f * BH - 10.f * t), FVector2D(X1, TR.Y + 172.f * t - BH - 10.f * t));
 		}
 		else
 		{
@@ -591,8 +594,12 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 	Reacts.RemoveAll([](const FReact& R) { return R.T > 0.6f; });
 
 	const bool bBtns = bInteractive;
-	ConfirmBtn->SetVisibility(bBtns ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-	ClearBtn->SetVisibility(bBtns && S && S->Selected.Num() > 0 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	// framed: these plates are the visuals; the framed HUD's hit buttons over them take the press (see FramedBtnRects)
+	const ESlateVisibility On = bFramedBtns ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Visible;
+	bConfirmLive = bBtns && EnergyShown >= 0;
+	bClearLive = bBtns && S && S->Selected.Num() > 0;
+	ConfirmBtn->SetVisibility(bBtns ? On : ESlateVisibility::Collapsed);
+	ClearBtn->SetVisibility(bClearLive ? On : ESlateVisibility::Collapsed);
 	if (bBtns) { ConfirmText->SetText(FText::FromString(SelCost ? FString::Printf(TEXT("CONFIRM  -%d"), SelCost) : FString(TEXT("CONFIRM (PASS)")))); ConfirmBtn->SetIsEnabled(EnergyShown >= 0); }
 }
 

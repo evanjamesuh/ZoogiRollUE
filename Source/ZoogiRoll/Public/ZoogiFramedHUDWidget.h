@@ -62,6 +62,8 @@ protected:
 	UFUNCTION() void OnGuard();
 	UFUNCTION() void OnSave();
 	UFUNCTION() void OnOrb();
+	UFUNCTION() void OnCardConfirm();
+	UFUNCTION() void OnCardClear();
 
 private:
 	AZoogiGameMode* GM() const;
@@ -94,6 +96,9 @@ private:
 	UPROPERTY() TArray<TObjectPtr<UButton>> ActBtns;
 	UPROPERTY() TObjectPtr<UTextBlock> MenuText;
 	TArray<int32> StoneKeys;
+	UPROPERTY() TObjectPtr<UButton> CardConfirmHit; // cards: press-firing hit areas over the hand widget's CONFIRM / CLEAR plates
+	UPROPERTY() TObjectPtr<UButton> CardClearHit;
+	TWeakObjectPtr<class UZoogiCardHandWidget> CardHand;
 	UPROPERTY() TObjectPtr<UButton> OrbBtn; // cards: the energy orb is the Awaken control (toggles cards / tablets)
 	bool bTrayCards = false;
 	bool OrbLive() const;

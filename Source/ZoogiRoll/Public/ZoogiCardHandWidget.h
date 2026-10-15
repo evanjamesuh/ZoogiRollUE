@@ -47,6 +47,11 @@ public:
 	FVector2D GetViewSize() const { return ViewSize; }
 	bool IsInteractive() const { return bInteractive; }
 	static UZoogiCardHandWidget* Find(const UWorld* World);
+	/** Framed HUD: CONFIRM / CLEAR rects (this widget's local px) - the framed HUD lays its own press-firing hit buttons
+	 *  over them (Oct 15 playtest: this layer's buttons were missing from Slate's hit grid, so presses fell to the game). */
+	bool FramedBtnRects(FBox2D& Confirm, bool& bConfirm, FBox2D& Clear, bool& bClear) const { Confirm = ConfirmR; Clear = ClearR; bConfirm = bFramedBtns && bConfirmLive; bClear = bFramedBtns && bClearLive; return bFramedBtns; }
+	void PressConfirm() { if (bConfirmLive) OnConfirm(); }
+	void PressClear() { if (bClearLive) OnClear(); }
 
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
@@ -92,6 +97,8 @@ private:
 
 	UPROPERTY() TObjectPtr<UCanvasPanel> Root;
 	UPROPERTY() TObjectPtr<UButton> ConfirmBtn;
+	FBox2D ConfirmR = FBox2D(ForceInit), ClearR = FBox2D(ForceInit);
+	bool bFramedBtns = false, bConfirmLive = false, bClearLive = false;
 	UPROPERTY() TObjectPtr<UButton> ClearBtn;
 	UPROPERTY() TObjectPtr<UTextBlock> ConfirmText;
 	UPROPERTY() TObjectPtr<UButton> AwakenBtn;   // Oct 14 urgent: cards-mode Awaken request lives in the tray (was keyboard A only)

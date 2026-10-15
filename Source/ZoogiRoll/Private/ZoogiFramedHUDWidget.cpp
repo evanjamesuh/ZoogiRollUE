@@ -32,6 +32,7 @@
 #include "ZoogiHudArt.h"
 #include "ZoogiPlayerController.h"
 #include "ZoogiArtifacts.h"
+#include "ZoogiCardHandWidget.h"
 #include "ZoogiArtifactComponent.h"
 
 namespace
@@ -208,6 +209,23 @@ TSharedRef<SWidget> UZoogiFramedHUDWidget::RebuildWidget()
 			if (UCanvasPanelSlot* S = Root->AddChildToCanvas(OrbBtn)) { S->SetAutoSize(false); S->SetZOrder(22); }
 			OrbBtn->OnClicked.AddDynamic(this, &UZoogiFramedHUDWidget::OnOrb);
 			OrbBtn->OnPressed.AddDynamic(this, &UZoogiFramedHUDWidget::OnTrayBtnPressed);
+			for (int32 i = 0; i < 2; ++i)
+			{
+				UButton* B = WidgetTree->ConstructWidget<UZoogiButton>(UZoogiButton::StaticClass());
+				FButtonStyle Hs; // fully transparent: the hand widget draws the CONFIRM / CLEAR plates underneath
+				Hs.SetNormal(ZoogiUIStyle::RoundBrush(FLinearColor::Transparent, FLinearColor::Transparent, 0.f, 8.f));
+				Hs.SetHovered(ZoogiUIStyle::RoundBrush(FLinearColor(1.f, 1.f, 1.f, 0.10f), FLinearColor::Transparent, 0.f, 8.f));
+				Hs.SetPressed(ZoogiUIStyle::RoundBrush(FLinearColor(0.f, 0.f, 0.f, 0.15f), FLinearColor::Transparent, 0.f, 8.f));
+				Hs.SetDisabled(ZoogiUIStyle::RoundBrush(FLinearColor::Transparent, FLinearColor::Transparent, 0.f, 8.f));
+				Hs.SetNormalPadding(FMargin(0.f)); Hs.SetPressedPadding(FMargin(0.f));
+				B->SetStyle(Hs);
+				B->SetClickMethod(EButtonClickMethod::MouseDown);
+				B->SetVisibility(ESlateVisibility::Collapsed);
+				if (UCanvasPanelSlot* S = Root->AddChildToCanvas(B)) { S->SetAutoSize(false); S->SetZOrder(22); }
+				(i == 0 ? CardConfirmHit : CardClearHit) = B;
+			}
+			CardConfirmHit->OnClicked.AddDynamic(this, &UZoogiFramedHUDWidget::OnCardConfirm);
+			CardClearHit->OnClicked.AddDynamic(this, &UZoogiFramedHUDWidget::OnCardClear);
 		}
 		VolText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
 		VolText->SetFont(ZoogiUIStyle::BoldFont(18, 2.f));
@@ -303,6 +321,8 @@ void UZoogiFramedHUDWidget::NativeTick(const FGeometry& Geo, float Dt)
 		for (UButton* B : StoneBtns) PlaceW(B, FVector2D::ZeroVector, FVector2D::ZeroVector, false);
 		for (UButton* B : ActBtns) PlaceW(B, FVector2D::ZeroVector, FVector2D::ZeroVector, false);
 		PlaceW(OrbBtn, FVector2D::ZeroVector, FVector2D::ZeroVector, false);
+		PlaceW(CardConfirmHit, FVector2D::ZeroVector, FVector2D::ZeroVector, false);
+		PlaceW(CardClearHit, FVector2D::ZeroVector, FVector2D::ZeroVector, false);
 		ZoogiFramed::SetZoomButtonRect(FBox2D(ForceInit), false);
 		PlaceW(TrayHit, FVector2D::ZeroVector, FVector2D::ZeroVector, false);
 		if (APlayerController* PC = GetOwningPlayer()) if (AZoogiHUD* H = Cast<AZoogiHUD>(PC->GetHUD())) if (UZoogiAwakenWidget* AW = H->GetAwakenWidget()) AW->ClearTrayControls();
@@ -621,9 +641,9 @@ int32 UZoogiFramedHUDWidget::PaintBack(const FGeometry& Geo, FSlateWindowElement
 		// and the turn's Awaken state above it (AWAKEN: OFF / AWAKEN: <ELEMENT>)
 		if (bCards && OrbLive())
 		{
-			const FVector2D OC = TR + FVector2D(316.f, 114.f) * t;
+			const FVector2D OC = TR + FVector2D(252.f, 50.f) * t; // the swirl orb's centre (ImgRot positions by centre)
 			const float Pz = 0.5f + 0.5f * FMath::Sin(Time * 4.2f);
-			const float Rr = (68.f + 6.f * Pz) * t;
+			const float Rr = (60.f + 5.f * Pz) * t;
 			const FLinearColor RC(0.85f, 0.7f, 1.f, 0.55f + 0.4f * Pz);
 			const bool bHovO = OrbBtn && OrbBtn->IsHovered();
 			{
@@ -646,7 +666,12 @@ int32 UZoogiFramedHUDWidget::PaintBack(const FGeometry& Geo, FSlateWindowElement
 			const EZoogiArtifact Pk = G->CardAwakenPick >= 0 && G->CardAwakenPick < 3 ? (EZoogiArtifact)G->CardAwakenOffers[G->CardAwakenPick] : EZoogiArtifact::None;
 			const bool bAwOn = G->bStandbyAwaken && Pk != EZoogiArtifact::None;
 			const FString Lab = G->CardsAwakenViewOpen() ? FString(TEXT("TAP: CARDS")) : bAwOn ? FString::Printf(TEXT("AWAKEN: %s"), *ZoogiArtifacts::Name(Pk).ToUpper()) : FString(TEXT("AWAKEN: OFF"));
-			TxtT(Ly + 8, TR + FVector2D(316.f, 16.f) * t, Lab, 9.f, bAwOn ? ZoogiArtifacts::Color(Pk) : FLinearColor(0.85f, 0.8f, 0.95f), 0.5f);
+			// state label in the free slab strip left of the orb, above CLEAR / CONFIRM (never over the orb art)
+			FString L1 = Lab, L2;
+			if (Lab.Split(TEXT(": "), &L1, &L2)) L1 += TEXT(":");
+			const FLinearColor LC = bAwOn ? ZoogiArtifacts::Color(Pk) : FLinearColor(0.85f, 0.8f, 0.95f);
+			TxtT(Ly + 8, TR + FVector2D(158.f, 24.f) * t, L1, 9.f, LC, 0.5f);
+			if (!L2.IsEmpty()) TxtT(Ly + 8, TR + FVector2D(158.f, 42.f) * t, L2, 9.f, LC, 0.5f);
 		}
 		// awaken stones (artifact mode): the old central picker lives in the tray now
 		PaintTrayAwaken(Geo, Out, bOverlay ? Ly + 7 : Ly + 4, t);
@@ -761,7 +786,20 @@ void UZoogiFramedHUDWidget::TickTrayAwaken()
 	{
 		const ZoogiFramed::FLayout& FL = ZoogiFramed::Current();
 		const FVector2D TR(FL.TrayRightX0 * LocalScale, FL.Tray.Min.Y * LocalScale + 12.f * t);
-		PlaceW(OrbBtn, bOrb ? TR + FVector2D(256.f, 54.f) * t : FVector2D::ZeroVector, bOrb ? FVector2D(120.f, 120.f) * t : FVector2D::ZeroVector, bOrb);
+		// the swirl orb (centre TR+(252,50)) and the top of the energy bubble; stops above CLEAR (x < 248, y > 88)
+		PlaceW(OrbBtn, bOrb ? TR + FVector2D(192.f, -12.f) * t : FVector2D::ZeroVector, bOrb ? FVector2D(188.f, 100.f) * t : FVector2D::ZeroVector, bOrb);
+	}
+	{
+		// cards: CONFIRM / CLEAR hit areas over the hand widget's plates (hand widget px -> this widget's px)
+		if (!CardHand.IsValid()) CardHand = UZoogiCardHandWidget::Find(GetWorld());
+		FBox2D Rc(ForceInit), Rl(ForceInit); bool bC = false, bL = false;
+		UZoogiCardHandWidget* HW = CardHand.Get();
+		const float Vx = HW ? HW->GetViewSize().X : 0.f;
+		const float r = Vx > 0.f ? ZoogiFramed::Current().Viewport.X * LocalScale / Vx : 0.f;
+		if (HW && !bPaused && r > 0.f) HW->FramedBtnRects(Rc, bC, Rl, bL);
+		bC = bC && Rc.bIsValid; bL = bL && Rl.bIsValid;
+		PlaceW(CardConfirmHit, bC ? Rc.Min * r : FVector2D::ZeroVector, bC ? Rc.GetSize() * r : FVector2D::ZeroVector, bC);
+		PlaceW(CardClearHit, bL ? Rl.Min * r : FVector2D::ZeroVector, bL ? Rl.GetSize() * r : FVector2D::ZeroVector, bL);
 	}
 	if (TrayHit) PlaceW(TrayHit, bOn && Bounds.bIsValid ? Bounds.Min - FVector2D(14.f, 6.f) * t : FVector2D::ZeroVector, bOn && Bounds.bIsValid ? Bounds.GetSize() + FVector2D(24.f, 12.f) * t : FVector2D::ZeroVector, bOn && Bounds.bIsValid);
 	APlayerController* PC = GetOwningPlayer();
@@ -822,6 +860,8 @@ void UZoogiFramedHUDWidget::OnInfuse() { FireAwaken(TEXT("Infuse"), TrayPick); }
 void UZoogiFramedHUDWidget::OnGuard() { FireAwaken(TEXT("Guard"), TrayPick); }
 void UZoogiFramedHUDWidget::OnSave() { FireAwaken(bTrayCards ? TEXT("CardAwakenSkip") : TEXT("Save"), 0); }
 void UZoogiFramedHUDWidget::OnOrb() { FireAwaken(TEXT("CardAwakenView"), 0); }
+void UZoogiFramedHUDWidget::OnCardConfirm() { UE_LOG(LogZoogi, Log, TEXT("CARDUI CONFIRM pressed (framed hit)")); if (UZoogiCardHandWidget* HW = CardHand.Get()) HW->PressConfirm(); }
+void UZoogiFramedHUDWidget::OnCardClear() { UE_LOG(LogZoogi, Log, TEXT("CARDUI CLEAR pressed (framed hit)")); if (UZoogiCardHandWidget* HW = CardHand.Get()) HW->PressClear(); }
 bool UZoogiFramedHUDWidget::OrbLive() const
 {
 	const AZoogiGameMode* G = GM();
