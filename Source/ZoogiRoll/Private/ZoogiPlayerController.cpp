@@ -274,7 +274,7 @@ void AZoogiPlayerController::UpdateUiTest(float Dt)
 	if (UiConfirmFrame && GFrameCounter > UiConfirmFrame + 10)
 	{
 		// CommitLock leaves the Aim step for the Power-up beat; the shot itself fires a moment later.
-		UiCheck(!G->IsAimStep() || ShotsSeen > UiShotSnap, FString::Printf(TEXT("confirm via %s left the Aim step (BattleStep=%d, phase=%d)"), UiAct == TEXT("mouse") ? TEXT("CONFIRM button (mouse)") : TEXT("Space (key)"), (int32)G->BattleStep, (int32)G->Phase));
+		UiCheck(!G->IsAimStep() || ShotsSeen > UiShotSnap, FString::Printf(TEXT("confirm via %s left the Aim step (BattleStep=%d, phase=%d)"), UiAct == TEXT("mouse") ? TEXT("drag release (mouse)") : TEXT("Space (key)"), (int32)G->BattleStep, (int32)G->Phase));
 		UiConfirmFrame = 0;
 	}
 	if (!G->IsHumanAiming()) { SimStep = 0; return; }
@@ -848,6 +848,14 @@ void AZoogiPlayerController::HandleInput(float Dt)
 			else G->HumanDrag(DragFrac, true);
 			DragFrac = 0.f;
 		}
+	}
+	// Oct 14: Tab is the lock-cycle key, but Slate also uses it for focus navigation; once a HUD button took
+	// keyboard focus, Left / Right / Up / Down went to UI navigation instead of the aim. Keep keyboard focus on the
+	// game viewport while the human aims (not while paused, so the pause / settings menus still navigate).
+	if (FSlateApplication::IsInitialized() && !UGameplayStatics::IsGamePaused(this))
+	{
+		TSharedPtr<SWidget> Foc = FSlateApplication::Get().GetKeyboardFocusedWidget();
+		if (Foc.IsValid() && Foc->GetTypeAsString() == TEXT("SButton")) FSlateApplication::Get().SetAllUserFocusToGameViewport();
 	}
 	// Nudges: Left / Right (or A / D) = 2 deg cut, Shift = 10 deg. Up / Down = power step.
 	const int32 NudgeMul = IsInputKeyDown(EKeys::LeftShift) ? 5 : 1;

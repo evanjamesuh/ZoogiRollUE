@@ -956,8 +956,8 @@ void AZoogiHUD::DrawDragPower(AZoogiGameMode* G)
 	const FString Label = PC->bDragWouldCancel ? FString(TEXT("RELEASE = CANCEL")) : FString::Printf(TEXT("%d%%%s%s"), FMath::RoundToInt(F * 100.f), Tier.IsEmpty() ? TEXT("") : TEXT("  "), *Tier);
 	// readout beside the ring (clear of the arrow, which runs through the top of the ring), with a dark pill behind it
 	const float LX = C.X + R + 18.f * U, LY = C.Y - 20.f * U;
-	Panel(LX - 8.f * U, LY - 6.f * U, (PC->bDragWouldCancel ? 250.f : 170.f) * U, 46.f * U, FLinearColor(0.02f, 0.03f, 0.06f, 0.72f));
-	Text(Label, LX, LY, PC->bDragWouldCancel ? FLinearColor(1.f, 0.45f, 0.4f) : Gold, 0.62f, false);
+	Panel(LX - 8.f * U, LY - 8.f * U, (PC->bDragWouldCancel ? 420.f : (Tier.IsEmpty() ? 130.f : 300.f)) * U, 60.f * U, FLinearColor(0.02f, 0.03f, 0.06f, 0.72f));
+	Text(Label, LX, LY, PC->bDragWouldCancel ? FLinearColor(1.f, 0.45f, 0.4f) : Gold, 1.6f, false);
 }
 
 void AZoogiHUD::WorldArrow(const FVector& From, const FVector& To, const FLinearColor& Col, float Thick)
