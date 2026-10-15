@@ -1031,6 +1031,9 @@ void AZoogiGameMode::PlanCPUShot()
 				if (Cast<AZoogiBall>(A) || Cast<AZoogiOrb>(A) || Cast<AZoogiClone>(A)) continue;
 				const UPrimitiveComponent* Cm = H.GetComponent();
 				if (!Cm || Cm->GetCollisionResponseToChannel(ECC_PhysicsBody) != ECR_Block || FMath::Abs(H.ImpactNormal.Z) > 0.6f) continue;
+				// Oct 15: only a face-on wall stops the shooter; a glancing one (round toppings, curb ends, angled walls) deflects
+				// it along the wall - often toward the edge (Arabian) - so it doesn't count as a stop
+				if (FVector2D::DotProduct(FVector2D(H.ImpactNormal.X, H.ImpactNormal.Y).GetSafeNormal(), Dir) > -0.7f) continue;
 				D[h] = H.Distance; break;
 			}
 		}
@@ -1133,7 +1136,7 @@ void AZoogiGameMode::PlanCPUShot()
 
 	CPUPlannedCut = 0.f;
 	const EZoogiCPUTier CPUTier = ZoogiCPU::ActiveTier();
-	struct FPlan { float Cost; FVector2D Dir; float Frac; AActor* Actor; bool bStraight; float Dist; float Radius; float Risk = 0.f; float Exposure = 0.f; bool bBank = false; float MaxSafeFrac = 1.f; }; // Risk/Exposure: tier lookahead inputs only (Oct 14); MaxSafeFrac: Oct 15 edge clamp
+	struct FPlan { float Cost; FVector2D Dir; float Frac; AActor* Actor; bool bStraight; float Dist; float Radius; float Risk = 0.f; float Exposure = 0.f; bool bBank = false; float MaxSafeFrac = 1.f; float DbgCoast = -1.f; float DbgSafe = -1.f; float DbgMiss = -1.f; }; // Risk/Exposure: tier lookahead inputs only (Oct 14); MaxSafeFrac: Oct 15 edge clamp
 	TArray<FPlan> Plans;
 	FVector2D BestDir(-B.GetSafeNormal());
 	float BestFrac = 0.45f;
@@ -1200,6 +1203,7 @@ void AZoogiGameMode::PlanCPUShot()
 			else Cost += 900.f; // would follow the target off the edge (-75 and a wasted turn)
 		}
 		// a thin hit / miss (aim error) rolls the whole line: off the edge from here?
+		float DbgMissRun = -1.f;
 		// Oct 15: also when cut variety may thin the contact (artifact mode, 6-20 deg cuts): clamp only, no extra cost
 		const bool bAimMiss = Dist * FMath::Sin(FMath::DegreesToRadians(ErrMaxDeg)) > 0.5f * (ZoogiConst::ZoogiRadius + C.Radius);
 		if (bAimMiss || (bArtifactMode && Dist > 250.f))
@@ -1209,6 +1213,7 @@ void AZoogiGameMode::PlanCPUShot()
 			const float BRun0 = ShooterRun(B, MeZ, Dir, Arena->DistanceToEdge(B, Dir), BWall);
 			const float BRun = BRun0 < 1e5f ? BRun0 : BWall + WallHopV * WallHopV / (2.f * Decel) + 70.f; // walled: hop distance
 			const float EdgeB = PortalRun(B, MeZ, Dir, BRun);
+			DbgMissRun = EdgeB;
 			if (FullRoll > EdgeB - 80.f)
 			{
 				// Oct 15: a miss would roll the shooter off. Keep the full roll on court when that still knocks the target
@@ -1222,7 +1227,7 @@ void AZoogiGameMode::PlanCPUShot()
 		}
 		const float CoastF = FMath::Square(VHit * KAfter) / (2.f * Decel);
 		FPlan Sp{ Cost, Dir, Frac, C.Actor, true, Dist, C.Radius, bMyWalled ? 0.f : FMath::Clamp(FMath::Min(Coast, CoastF) / FMath::Max(MyEdge, 1.f), 0.f, 1.f), bMyWalled ? 0.f : 1.f - FMath::Clamp(MyEdge / 1500.f, 0.f, 1.f) };
-		Sp.MaxSafeFrac = MaxSafeFrac;
+		Sp.MaxSafeFrac = MaxSafeFrac; Sp.DbgCoast = FMath::Square(ZoogiConst::LaunchSpeedForPull(Frac) * KAfter) / (2.f * Decel); Sp.DbgSafe = SafeRun; Sp.DbgMiss = DbgMissRun;
 		Plans.Add(Sp);
 	}
 	// Angled (cut) shots: aim the ghost-ball contact so the target departs toward its nearest edge.
@@ -1355,6 +1360,7 @@ void AZoogiGameMode::PlanCPUShot()
 		BestFrac = Pick.Frac;
 		CPULock = Pick.Actor;
 		PickSafeFrac = Pick.MaxSafeFrac;
+		if (Pick.DbgSafe >= 0.f) UE_LOG(LogZoogi, Log, TEXT("CPU P%d safety: follow-through ~%.0f cm vs safe run %.0f cm, miss run %.0f cm, max safe %.0f%%"), ActivePlayer + 1, Pick.DbgCoast, FMath::Min(Pick.DbgSafe, 99999.f), Pick.DbgMiss, Pick.MaxSafeFrac * 100.f);
 		// Rival-only powers: don't waste a charge if the best shot ended up being an orb.
 		if (bHuntRivals && !bPowerTest && !Cast<AZoogiBall>(Pick.Actor)) bCPUUsePower = false;
 		// Cut variety (Oct 4): about half of the straight shots are played slightly off-centre (6-20 deg contact cut),
