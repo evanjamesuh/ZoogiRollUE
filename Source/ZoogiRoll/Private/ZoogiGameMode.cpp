@@ -1112,7 +1112,7 @@ void AZoogiGameMode::PlanCPUShot()
 			if (T.Kind == 1 || T.Kind == 2 || T.Kind == 5 || T.Kind == 6 || T.Kind == 7 || (T.Kind == 4 && ((T.P[0] > 0.f && T.P[0] < Decel * 0.9f) || (T.P[0] <= 0.f && T.P[1] > 0.f && T.P[1] < 0.9f)))) bHaz = true;
 		if (!bHaz) continue;
 		FVector O, E; Ob->GetActorBounds(false, O, E);
-		Hazards.Add({ FVector2D(O), FMath::Max(E.X, E.Y) });
+		Hazards.Add({ FVector2D(O), (float)FMath::Max(E.X, E.Y) });
 	}
 	int32 NHazClamp = 0;
 	auto HazardRun = [&](const FVector2D& From, const FVector2D& Dir, float Run) -> float
