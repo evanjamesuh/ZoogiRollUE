@@ -1,6 +1,7 @@
 #include "ZoogiArenaShowcase.h"
 #include "ZoogiRoll.h"
 #include "ZoogiArena.h"
+#include "ZoogiFrozenLayout.h"
 #include "EngineUtils.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
@@ -81,6 +82,25 @@ void AZoogiArenaShowcase::MaybeStart(UWorld* World, const FString& ArenaSlug)
 	{
 		S->Poses.Insert(FPose{ TEXT("match55"),  FVector(0, -100, 0), 270.f, 55.f, 5600.f, 62.f }, 0);
 		S->Poses.Insert(FPose{ TEXT("match55w"), FVector(0, -100, 0), 270.f, 55.f, 7800.f, 62.f }, 0);
+	}
+	if ((ArenaSlug.Contains(TEXT("ice")) || ArenaSlug.Contains(TEXT("frozen"))) && ZoogiFrozen::Ring2On())
+	{
+		// Oct 15 Ring 2 review: the whole outer ring + one view per plan element (camera inward of the look point = yaw outward)
+		auto RP = [](float R, float Yaw, float Z) { const float A = FMath::DegreesToRadians(Yaw); return FVector(FMath::Cos(A) * R, FMath::Sin(A) * R, Z); };
+		const FPose R2[] = {
+			{ TEXT("r2_top"),        FVector(0, 0, 0),           270.f, 88.f, 7600.f, 62.f },
+			{ TEXT("r2_34"),         FVector(0, -150, 0),        270.f, 48.f, 7400.f, 62.f },
+			{ TEXT("r2_bankwall"),   RP(2000.f, 120.f, -30.f),   120.f, 28.f, 1200.f, 70.f },
+			{ TEXT("r2_ramp"),       RP(1640.f, 67.5f, -10.f),   247.5f, 26.f, 1100.f, 70.f },
+			{ TEXT("r2_pocket_orb"), RP(2140.f, 90.f, -30.f),    90.f, 34.f, 1000.f, 70.f },
+			{ TEXT("r2_bumpers"),    RP(1905.f, 90.f, -30.f),    90.f, 40.f, 1500.f, 70.f },
+			{ TEXT("r2_deflectors"), RP(1990.f, 0.f, -30.f),     0.f, 42.f, 1200.f, 70.f },
+			{ TEXT("r2_slidelane"),  RP(1900.f, 180.f, -30.f),   180.f, 36.f, 1700.f, 70.f },
+			{ TEXT("r2_halo"),       RP(1905.f, 270.f, 140.f),   270.f, 14.f, 1300.f, 70.f },
+			{ TEXT("r2_crevasse"),   RP(1620.f, 90.f, -40.f),    90.f, 34.f, 1300.f, 70.f },
+			{ TEXT("r2_bridge"),     RP(1910.f, 45.f, -30.f),    135.f, 24.f, 1700.f, 70.f },
+		};
+		for (int32 i = UE_ARRAY_COUNT(R2) - 1; i >= 0; --i) S->Poses.Insert(R2[i], 0);
 	}
 	if (ArenaSlug.Contains(TEXT("meadow")))
 		for (FPose& P : S->Poses) { P.Look *= 1.3f; P.Dist *= 1.3f; } // r19: Meadow is built 1.3x larger

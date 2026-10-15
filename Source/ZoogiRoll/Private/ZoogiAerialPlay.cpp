@@ -372,6 +372,14 @@ void UZoogiBattleStateMachine::SpawnMapLayout()
 	// Zone 1 standing halos facing the W / E pads (radial pass axis) between the centre triangle and the orb ring
 	SpawnProp(EZoogiPropKind::ResonanceHalo, FzPol(340.f, 180.f, 0.f), FVector(-1.f, 0.f, 0.f), 150.f, false, TEXT("halo_w"));
 	SpawnProp(EZoogiPropKind::ResonanceHalo, FzPol(340.f, 0.f, 0.f), FVector(1.f, 0.f, 0.f), 150.f, false, TEXT("halo_e"));
+	// Ring 2 (plan): one aerial access point per side - a Resonance Halo above Ring 2 at yaw 0 / 90 / 180 / 270, r1905,
+	// radial axis (outbound flights thread it), R110, centre z 170 (capped by the measured reach envelope like the rail halo)
+	if (Ring2On())
+		for (float Y : R2HaloYaw)
+		{
+			const float Zc = EnvEarly > 0.f ? FMath::Min(170.f, EnvEarly - Tune.ReachMargin) : 170.f;
+			SpawnProp(EZoogiPropKind::ResonanceHalo, FzPol(1905.f, Y, R2Z + Zc), FzPol(1.f, Y, 0.f), 110.f, true, *FString::Printf(TEXT("ring2_halo_%d"), (int32)Y));
+		}
 	// Sky Bumpers. Symmetric 6-bridge layout (Oct 9): no bumper on a bridge lane / in front of an arch any more.
 	// Floor node on the camera-side axis (yaw 90, r830; was yaw 135 = on the 135 bridge radial); the hanging bumper moved
 	// off the snow-chute ramp lane (ramp + 225 bridge now share a centreline) to the open far side (yaw 255, r1300).
@@ -384,8 +392,9 @@ void UZoogiBattleStateMachine::SpawnMapLayout()
 	{
 		const bool bRed = FMath::IsNearlyEqual(IsletYaw[k], 135.f), bBlue = FMath::IsNearlyEqual(IsletYaw[k], 45.f);
 		if (!bRed && !bBlue) continue;
-		const float RB = IsletDist[k] - IsletR + 25.f;
-		const FVector L = FzPol((RA + RB) * 0.5f, IsletYaw[k], IsletTopZ * 0.5f);
+		const float RB = IsletD(k) - IsletR + 25.f;
+		// Ring 2 (plan): the gates move to span B at r2170 (inside the r2300 out line, so they get the last word)
+		const FVector L = Ring2On() ? FzPol(2170.f, IsletYaw[k], 0.5f * (R2Z + IsletTopZ)) : FzPol((RA + RB) * 0.5f, IsletYaw[k], IsletTopZ * 0.5f);
 		SpawnProp(EZoogiPropKind::Gate, L, FVector(L.X, L.Y, 0.f).GetSafeNormal(), 130.f, false, bRed ? TEXT("red") : TEXT("blue"));
 	}
 	// set dressing (visual only)

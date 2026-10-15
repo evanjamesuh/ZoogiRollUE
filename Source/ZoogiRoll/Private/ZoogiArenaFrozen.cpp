@@ -192,6 +192,9 @@ void AZoogiArena::BuildFrozen()
 	FRandomStream Rng(88);
 	FRandomStream PRng(2026); // polish r1 additions draw from their own stream: the r3c random layout stays bit-identical
 	ExtraOrbSpots.Reset();
+	// Oct 15: Ring 2 on (default) = the plan's layout moves; every random draw stays in place, so Off is bit-identical
+	const bool bR2 = Ring2On();
+	auto InRampMouth = [&](float YawDeg, float Margin) { if (!bR2) return false; for (float Y : R2RampYaw) if (FMath::Abs(FMath::FindDeltaAngleDegrees(YawDeg, Y)) <= R2RampGapDeg + Margin) return true; return false; };
 	// ---- materials (Buzzy palette: ice #7FC4EA / #BFE6F7, snow #F4FBFF, stone #CACFDC, glow #19C3E6) ----
 	const FLinearColor Cyan = ZoogiUtil::Hex(TEXT("#19C3E6"));
 	UMaterialInterface* Ice = MakeFrozenMat(TEXT("Ice"), ZoogiUtil::Hex(TEXT("#8FD3F4")), TEXT("T_FrozenIceTile"), 180.f, 0.5f, 0.18f, 0.75f, ZoogiUtil::Hex(TEXT("#4FC9F0")), 0.12f);
@@ -249,6 +252,7 @@ void AZoogiArena::BuildFrozen()
 		{
 			const float N = FMath::PerlinNoise2D(FVector2D(FMath::Cos(A) * 3.1f, FMath::Sin(A) * 3.1f)) * 0.5f + 0.5f;
 			if (R < 1560.f) return -4.f;
+			if (bR2) return -4.f - 6.f * (R - 1553.f); // Ring 2: the rim breaks away into the crevasse (r1550-1750)
 			// Round 3c: the snow lip dips under each bridge (the deck runs from the court edge down to the islet).
 			if (NearIsletYaw(FMath::RadiansToDegrees(A), 5.f)) return -4.f - 0.3f * (R - 1550.f);
 			if (InRimGap(FMath::RadiansToDegrees(A))) return -4.f - 0.55f * (R - 1550.f); // rim gap: the berm breaks away into a drop
@@ -276,7 +280,7 @@ void AZoogiArena::BuildFrozen()
 			CliffM.Quad(M0, M1, D1, D0, Out - FVector(0, 0, 0.3f));
 		}
 		AddFrozenProc(SnowM, Snow, nullptr, true);
-		AddFrozenProc(CliffM, Cliff, nullptr, true);
+		if (!bR2) AddFrozenProc(CliffM, Cliff, nullptr, true); // Ring 2 builds the crevasse's own cliff faces (r1555 / r1748)
 		// Faceted ice underside chunks + icicles hanging from the rim.
 		FZoogiMeshBuilder Under, Icicles;
 		for (int32 i = 0; i < 34; ++i)
@@ -304,7 +308,7 @@ void AZoogiArena::BuildFrozen()
 			if (NearIsletYaw(A, 6.f)) continue;
 			Drapes.Chunk(Pol(1790.f, A, -60.f - Rng.FRandRange(0.f, 60.f)), FVector(Rng.FRandRange(25.f, 40.f), Rng.FRandRange(70.f, 140.f), Rng.FRandRange(60.f, 130.f)), Rng, 0.15f, A);
 		}
-		AddFrozenProc(Drapes, Snow, nullptr, true);
+		if (!bR2) AddFrozenProc(Drapes, Snow, nullptr, true); // r1790 drapes would poke through the Ring 2 floor
 		AddFrozenProc(Under, IceUnder, nullptr, true);
 		AddFrozenProc(Icicles, IcePane, nullptr, false);
 		// Round 2: lumpy snow mounds along the lip (the art's thick snow rim), no collision.
@@ -317,7 +321,7 @@ void AZoogiArena::BuildFrozen()
 			FZoogiMeshBuilder Skip; // rim gap: same Rng draws, mound not shown (the berm is cut there)
 			(InRimGap(A, 3.f) ? Skip : Mounds).Chunk(Pol(R, A, Rng.FRandRange(18.f, 30.f)), FVector(Rng.FRandRange(55.f, 85.f), Rng.FRandRange(80.f, 130.f), Rng.FRandRange(22.f, 40.f)), Rng, 0.18f, A);
 		}
-		AddFrozenProc(Mounds, Snow, nullptr, true);
+		if (!bR2) AddFrozenProc(Mounds, Snow, nullptr, true); // the r1645-1715 berm would sit over the crevasse
 		// Polish r1: deep icy cliff underside (frozen_zones_aerial): a ridged inverted glacier cone of vertical ice columns
 		// under the rim cliff, tapering to a jagged point far below (visual only, no collision, no shadow).
 		{
@@ -883,11 +887,14 @@ void AZoogiArena::BuildFrozen()
 		}
 	};
 	// Rim gaps (see RimGapCfg): each wall arc minus the gap arcs; off = the original calls.
+	// Ring 2: plus a +/- R2RampGapDeg opening at each re-entry ramp (plan: the ramps aim straight in through the Ring 1 wall)
+	TArray<FVector2D> CutGaps = RimGaps();
+	if (bR2) for (float Y : R2RampYaw) CutGaps.Add(FVector2D(Y - R2RampGapDeg, Y + R2RampGapDeg));
 	auto BuildWallCut = [&](float A0, float A1, bool bCombo)
 	{
-		if (RimGaps().Num() == 0) { BuildWall(A0, A1, bCombo); return; }
+		if (CutGaps.Num() == 0) { BuildWall(A0, A1, bCombo); return; }
 		float S = A0;
-		TArray<FVector2D> G = RimGaps(); G.Sort([](const FVector2D& a, const FVector2D& b) { return a.X < b.X; });
+		TArray<FVector2D> G = CutGaps; G.Sort([](const FVector2D& a, const FVector2D& b) { return a.X < b.X; });
 		for (const FVector2D& Gp : G)
 		{
 			if (Gp.Y <= S || Gp.X >= A1) continue;
@@ -926,6 +933,12 @@ void AZoogiArena::BuildFrozen()
 			for (int32 s = 0; s < Segs; ++s)
 			{
 				const float Sa = FMath::Lerp(Ga, Gb, (float)s / Segs), Sb = FMath::Lerp(Ga, Gb, (float)(s + 1) / Segs), Sm = 0.5f * (Sa + Sb);
+				if (InRampMouth(Sm, 1.f)) continue; // Ring 2: a re-entry ramp comes up here - no lip in its mouth
+				if (bR2 && Cfg.LipH > 1.f)
+				{
+					Cap.ArcSlab(WallR - 1.f, RBack, Sa, Sb, -6.f, Cfg.LipH, 1, 3.f);
+					Line.ArcSlab(WallR - 4.f, WallR + 3.f, Sa, Sb, Cfg.LipH + 1.f, Cfg.LipH + 3.f, 1, 0.f);
+				}
 				if (Cfg.LipH > 1.f)
 				{
 					// ice ramp face (visual) + its pitched collider box
@@ -939,7 +952,7 @@ void AZoogiArena::BuildFrozen()
 					P->AddColliderBox(Pol(WallR + WallThick * 0.5f, Sm, 0.5f * (Cfg.LipH - 20.f)), FVector(WallThick, SegLen2, Cfg.LipH + 20.f), FRotator(0.f, Sm, 0.f), TEXT("ZRimLip"), LipPM);
 				}
 			}
-			if (Cfg.LipH > 1.f)
+			if (Cfg.LipH > 1.f && !bR2)
 			{
 				Cap.ArcSlab(WallR - 1.f, RBack, Ga, Gb, -6.f, Cfg.LipH, Segs, 3.f);
 				Line.ArcSlab(WallR - 4.f, WallR + 3.f, Ga + 0.4f, Gb - 0.4f, Cfg.LipH + 1.f, Cfg.LipH + 3.f, Segs, 0.f);
@@ -947,9 +960,15 @@ void AZoogiArena::BuildFrozen()
 			// ice-edge trim along the court's drop edge in the gap (visual)
 			Trim.ArcSlab(1528.f, 1556.f, Ga, Gb, -10.f, 1.5f, Segs, 0.f);
 			// crystal posts at both gap ends (on the cut wall ends) with glowing tips
+			float PA = Ga, PB = Gb; // Ring 2: a ramp mouth overlapping the gap end moves that post to the opening's real end
+			if (bR2) for (float Y : R2RampYaw)
+			{
+				if (Y - R2RampGapDeg < PA && Y + R2RampGapDeg >= PA) PA = Y - R2RampGapDeg;
+				if (Y + R2RampGapDeg > PB && Y - R2RampGapDeg <= PB) PB = Y + R2RampGapDeg;
+			}
 			for (int32 e = 0; e < 2; ++e)
 			{
-				const float A = e == 0 ? Ga : Gb;
+				const float A = e == 0 ? PA : PB;
 				const FVector2D XY(Pol(WallR + WallThick * 0.5f, A));
 				Posts.Prism(XY, 6, 24.f, 13.f, -6.f, 150.f, A + 15.f, 0.f, false);
 				Posts.Prism(XY + FVector2D(Pol(16.f, A + (e == 0 ? -90.f : 90.f))), 5, 11.f, 4.f, -6.f, 92.f, A, 0.f, false);
@@ -1084,6 +1103,7 @@ void AZoogiArena::BuildFrozen()
 			P->AddProc(Drift, Snow);
 			P->RubbleKeepZ = 30.f;
 			P->FinishBuild();
+			if (bR2) { P->SetActorHiddenInGame(true); P->SetActorEnableCollision(false); P->SetActorLocation(P->GetActorLocation() - FVector(0, 0, 5000.f)); ++n; continue; } // r1650-1720 = the crevasse
 			if (Forming) Forming->AddActor(P, EZoogiFormStyle::Rise, FVector(0, 0, -180.f), 0.05f + A / 360.f * 1.3f, 0.7f);
 			++n;
 		}
@@ -1153,7 +1173,7 @@ void AZoogiArena::BuildFrozen()
 	for (int32 k = 0; k < (int32)UE_ARRAY_COUNT(IsletYaw); ++k) // symmetric layout: 6 identical islets
 	{
 		const float Yaw = IsletYaw[k];
-		const FVector C = Pol(IsletDist[k], Yaw, IsletTopZ);
+		const FVector C = Pol(IsletD(k), Yaw, IsletTopZ);
 		const FVector2D U(FMath::Cos(FMath::DegreesToRadians(Yaw)), FMath::Sin(FMath::DegreesToRadians(Yaw))), Vt(-U.Y, U.X);
 		// Islet local (piece frame, yaw Yaw + 180): +X toward the court.
 		const FRotator Face(0.f, Yaw + 180.f, 0.f);
@@ -1250,8 +1270,10 @@ void AZoogiArena::BuildFrozen()
 			Fl->SetVisibility(false);
 			Fl->ComponentTags.Add(TEXT("NoCamBlock"));
 		}
-		// Arena Orb spot on the front apron, in front of the bleachers.
-		ExtraOrbSpots.Add(ToWorld(StandX0 + (IsletR - StandX0) * 0.5f, 0.f, ZoogiConst::OrbRadius + 1.f));
+		// Arena Orb spot on the front apron, in front of the bleachers. Ring 2: the apron is out-zone (r > 2300), so the spot
+		// moves onto Ring 2 at the bridge crossing (r1860, between span A and the deflector wings).
+		if (bR2) ExtraOrbSpots.Add(Pol(1860.f, Yaw, R2Z + ZoogiConst::OrbRadius + 1.f));
+		else ExtraOrbSpots.Add(ToWorld(StandX0 + (IsletR - StandX0) * 0.5f, 0.f, ZoogiConst::OrbRadius + 1.f));
 
 		// Bleachers: rows are arcs around a focus point out toward the court (gently curved like the art).
 		const float Fx = StandX0 + StandFocus;
@@ -1377,9 +1399,15 @@ void AZoogiArena::BuildFrozen()
 			}
 		}
 		// Rollable bridge from the court edge to the islet apron: deck + low rails with collision (breakable).
+		// Ring 2 (plan): span A r1535-1750 (z 0 -> -30) over the crevasse, the Ring 2 crossing is the Ring 2 floor (no rails),
+		// span B r2060-2285 (z -30 -> -60) to the islet apron; deck half width 110.
+		for (int32 Sp = 0; Sp < (bR2 ? 2 : 1); ++Sp)
 		{
-			const float RA = ZoogiConst::KnockoffRadius - 15.f, RB = IsletDist[k] - IsletR + 25.f;
-			const FVector A = Pol(RA, Yaw, 0.f), B = Pol(RB, Yaw, IsletTopZ);
+			const float RA = (bR2 && Sp == 1) ? R2Out : ZoogiConst::KnockoffRadius - 15.f;
+			const float RB = (bR2 && Sp == 0) ? R2In : IsletD(k) - IsletR + 25.f;
+			const float ZA = (bR2 && Sp == 1) ? R2Z : 0.f, ZB = (bR2 && Sp == 0) ? R2Z : IsletTopZ;
+			const float BHW = bR2 ? R2BridgeHalfW : BridgeHalfW;
+			const FVector A = Pol(RA, Yaw, ZA), B = Pol(RB, Yaw, ZB);
 			AZoogiArenaPiece* P = SpawnPiece((A + B) * 0.5f, Yaw, TEXT("bridge"), TEXT("Wood"), 110.f);
 			if (P)
 			{
@@ -1393,27 +1421,27 @@ void AZoogiArena::BuildFrozen()
 				{
 					const float X = -L * 0.5f + L * (i + 0.5f) / Np;
 					const FVector Pt = FVector(X, 0.f, Dz * (X / L)) - Nn * 3.f;
-					Planks.Box(Pt, FVector(15.f, BridgeHalfW, 3.f), Rot);
+					Planks.Box(Pt, FVector(15.f, BHW, 3.f), Rot);
 				}
-				Under.Box(-Nn * 14.f, FVector(L * 0.5f, BridgeHalfW * 0.7f, 8.f), Rot);
+				Under.Box(-Nn * 14.f, FVector(L * 0.5f, BHW * 0.7f, 8.f), Rot);
 				for (int32 s = -1; s <= 1; s += 2)
 				{
-					Rails.Box(FVector(0.f, s * (BridgeHalfW + 6.f), BridgeRailH * 0.5f) + FVector(0, 0, 0), FVector(L * 0.5f, 6.f, BridgeRailH * 0.5f), Rot);
-					Rails.Box(FVector(0.f, s * (BridgeHalfW + 6.f), BridgeRailH + 26.f), FVector(L * 0.5f, 3.f, 3.f), Rot);
+					Rails.Box(FVector(0.f, s * (BHW + 6.f), BridgeRailH * 0.5f) + FVector(0, 0, 0), FVector(L * 0.5f, 6.f, BridgeRailH * 0.5f), Rot);
+					Rails.Box(FVector(0.f, s * (BHW + 6.f), BridgeRailH + 26.f), FVector(L * 0.5f, 3.f, 3.f), Rot);
 					const int32 Npost = FMath::Max(2, FMath::RoundToInt(L / 160.f));
 					for (int32 j = 0; j <= Npost; ++j)
 					{
 						const float X = -L * 0.5f + L * j / Npost;
-						Rails.Box(FVector(X, s * (BridgeHalfW + 6.f), Dz * (X / L) + 28.f), FVector(6.f, 6.f, 28.f));
+						Rails.Box(FVector(X, s * (BHW + 6.f), Dz * (X / L) + 28.f), FVector(6.f, 6.f, 28.f));
 					}
 				}
 				P->AddProc(Planks, StandWood);
 				P->AddProc(Rails, StandRiser);
 				P->AddProc(Under, StandRiser);
 				// Deck collider (top runs A -> B, 24 thick) and the two low rail colliders.
-				P->AddColliderBox(-Nn * 12.f, FVector(L + 30.f, BridgeHalfW * 2.f, 24.f), Rot, TEXT("ZBridge"), StonePM);
+				P->AddColliderBox(-Nn * 12.f, FVector(L + 30.f, BHW * 2.f, 24.f), Rot, TEXT("ZBridge"), StonePM);
 				for (int32 s = -1; s <= 1; s += 2)
-					P->AddColliderBox(FVector(0.f, s * (BridgeHalfW + 6.f), BridgeRailH * 0.5f), FVector(L + 30.f, 12.f, BridgeRailH), Rot, TEXT("ZRail"), WallPM);
+					P->AddColliderBox(FVector(0.f, s * (BHW + 6.f), BridgeRailH * 0.5f), FVector(L + 30.f, 12.f, BridgeRailH), Rot, TEXT("ZRail"), WallPM);
 				P->RubbleKeepZ = 200.f;
 				P->FinishBuild();
 				if (Forming) Forming->AddActor(P, EZoogiFormStyle::Grow, FVector::ZeroVector, 1.3f + 0.1f * k, 0.8f);
@@ -1423,14 +1451,14 @@ void AZoogiArena::BuildFrozen()
 			const int32 Before = Built.Num();
 			// Symmetric layout: on the side away from the camera axis, half way to the next islet (mirrored east / west).
 			const float FallA = Yaw + (FMath::Cos(FMath::DegreesToRadians(Yaw)) > 0.f ? -22.5f : 22.5f);
-			AddWaterfall(Pol(IsletDist[k] - 60.f, FallA, IsletTopZ - 10.f), FallA, 120.f, 2600.f, 50.f); // r6: narrower
+			AddWaterfall(Pol(IsletD(k) - 60.f, FallA, IsletTopZ - 10.f), FallA, 120.f, 2600.f, 50.f); // r6: narrower
 			for (int32 b = Before; b < Built.Num(); ++b) if (USceneComponent* Wc = Cast<USceneComponent>(Built[b])) Wc->AttachToComponent(Pv, FAttachmentTransformRules::KeepWorldTransform);
 		}
 	}
 
 	// ---- NW snowy outcrop (terraced) with frosted trees ----
 	{
-		AZoogiArenaPiece* P = SpawnPiece(Pol(OutcropDist, OutcropYaw, -20.f), OutcropYaw, TEXT("outcrop"), TEXT("Stone"), 400.f);
+		AZoogiArenaPiece* P = SpawnPiece(Pol(bR2 ? R2OutcropDist : OutcropDist, OutcropYaw, -20.f), OutcropYaw, TEXT("outcrop"), TEXT("Stone"), 400.f);
 		if (P)
 		{
 			FZoogiMeshBuilder Rock, SnowT;
@@ -1449,23 +1477,24 @@ void AZoogiArena::BuildFrozen()
 			P->FinishBuild();
 			if (Forming) Forming->AddActor(P, EZoogiFormStyle::Rise, FVector(0, 0, -800.f), 0.0f, 1.4f);
 			for (int32 t = 0; t < 3; ++t)
-				if (UStaticMeshComponent* Tr = AddTree(SnowPine, Pol(OutcropDist, OutcropYaw, 0.f) + FVector(Rng.FRandRange(-90.f, 90.f), Rng.FRandRange(-90.f, 90.f), 190.f), Rng.FRandRange(380.f, 520.f), Rng.FRandRange(0.f, 360.f)))
+				if (UStaticMeshComponent* Tr = AddTree(SnowPine, Pol(bR2 ? R2OutcropDist : OutcropDist, OutcropYaw, 0.f) + FVector(Rng.FRandRange(-90.f, 90.f), Rng.FRandRange(-90.f, 90.f), 190.f), Rng.FRandRange(380.f, 520.f), Rng.FRandRange(0.f, 360.f)))
 					if (Forming) Forming->AddComponent(Tr, EZoogiFormStyle::Rise, FVector(0, 0, -800.f), 0.0f, 1.4f);
 		}
 	}
 	// Round 3: stronger falls (wider, much longer, two more) with mist clouds where they drop into the cloud sea.
 	{
 		// Polish r1: 6 falls (front-centre + back-right added), longer drop into the cloud sea.
-		const float Falls[6] = { FallYaw[0], FallYaw[1], 90.f, 270.f, 258.75f, 281.25f }; // symmetric layout: front trio + back trio, never under a bridge
+		const float Falls[6] = { bR2 ? R2FallYaw[0] : FallYaw[0], bR2 ? R2FallYaw[1] : FallYaw[1], 90.f, 270.f, 258.75f, 281.25f }; // symmetric layout: front trio + back trio, never under a bridge
+		const float FallR = bR2 ? 1565.f : 1775.f; // Ring 2: they pour from the Ring 1 rim into the crevasse
 		const float Wid[6] = { 130.f, 130.f, 170.f, 120.f, 100.f, 100.f }; // mirrored pairs; r6: narrower ribbons like the art
 		FZoogiMeshBuilder FallCore;
 		UTexture* Cloud = FTex(TEXT("T_FrozenCloud"));
 		for (int32 f = 0; f < 6; ++f)
 		{
-			AddWaterfall(Pol(1775.f, Falls[f], -16.f), Falls[f], Wid[f], 3800.f, 55.f);
+			AddWaterfall(Pol(FallR, Falls[f], -16.f), Falls[f], Wid[f], 3800.f, 55.f);
 			{ // r6: bright white-cyan core in front of the sheet (additive, visual only)
 				const FVector Sd = Pol(1.f, Falls[f] + 90.f) * (Wid[f] * 0.22f);
-				const FVector T0 = Pol(1775.f + 55.f + 10.f, Falls[f], -16.f - 33.f), T1 = Pol(1775.f + 55.f + 46.f, Falls[f], -16.f - 33.f - 3800.f);
+				const FVector T0 = Pol(FallR + 55.f + 10.f, Falls[f], -16.f - 33.f), T1 = Pol(FallR + 55.f + 46.f, Falls[f], -16.f - 33.f - 3800.f);
 				FallCore.Quad(T0 - Sd, T0 + Sd, T1 + Sd * 1.25f, T1 - Sd * 1.25f, Pol(1.f, Falls[f]));
 			}
 			for (int32 m = 0; m < 3; ++m)

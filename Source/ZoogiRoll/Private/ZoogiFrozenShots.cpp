@@ -37,7 +37,7 @@ namespace
 		V.Add({ TEXT("overview"), FVector(0.f, 0.f, 0.f), 270.f, 64.f, 6300.f, 62.f }); // = Buzzy damaged.png framing
 		V.Add({ TEXT("walls"), SPol(WallR, 281.f, 50.f), 281.f, 24.f, 950.f, 70.f });
 		V.Add({ TEXT("gate_arch"), SPol(ArchR, GateYaw, 110.f), GateYaw, 16.f, 1150.f, 70.f });
-		V.Add({ TEXT("stands"), SPol(IsletDist[2], IsletYaw[2], 80.f), IsletYaw[2], 22.f, 1600.f, 70.f });
+		V.Add({ TEXT("stands"), SPol(IsletD(2), IsletYaw[2], 80.f), IsletYaw[2], 22.f, 1600.f, 70.f });
 		V.Add({ TEXT("hub"), SPol(HubR, 45.f, 90.f), 45.f, 18.f, 800.f, 70.f });
 		V.Add({ TEXT("ramp_platform"), FVector(40.f, -860.f, 30.f), 270.f, 34.f, 1800.f, 70.f });
 		FVector RockAt = SPol(1400.f, RockYaw[0], 40.f);

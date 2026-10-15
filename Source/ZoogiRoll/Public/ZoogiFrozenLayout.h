@@ -74,4 +74,17 @@ namespace ZoogiFrozen
 	// NW snowy outcrop and the two rim falls.
 	constexpr float OutcropYaw = 270.f, /* symmetric layout: moved between the 225 / 315 islets */ OutcropDist = 1980.f;
 	constexpr float FallYaw[2] = { 112.5f, 67.5f }; // symmetric about the camera axis (yaw 90)
+
+	// ---- Outer action ring (Ring 2), OUTER_RING_PLAN.md. Oct 15 (Evan: "Package now, outer ring next build"): ON by default.
+	// [ZoogiRoll.Frozen] bRing2 (True), -ZoogiFrozenRing2=Off|On. Off = the pre-Ring-2 Frozen map exactly.
+	ZOOGIROLL_API bool Ring2On();
+	constexpr float R2CrevIn = 1550.f, R2In = 1750.f, R2Out = 2060.f, R2Z = -30.f, R2OutR = 2300.f;
+	constexpr float R2RampYaw[6] = { 30.f, 67.5f, 112.5f, 150.f, 240.f, 300.f };
+	constexpr float R2RampGapDeg = 4.f;                  // Ring 1 wall gap (+/-) at each re-entry ramp
+	constexpr float R2IsletDist = 2900.f;                // islets move out 150 (bridges r1535 -> r2285)
+	constexpr float R2BridgeHalfW = 110.f;
+	constexpr float R2OutcropDist = 2650.f;
+	constexpr float R2FallYaw[2] = { 100.f, 80.f };      // rim falls pour into the crevasse (were 112.5 / 67.5 = ramp yaws)
+	constexpr float R2HaloYaw[4] = { 0.f, 90.f, 180.f, 270.f }; // one aerial access point (halo) per side above Ring 2
+	inline float IsletD(int32 k) { return Ring2On() ? R2IsletDist : IsletDist[k]; }
 }

@@ -83,7 +83,7 @@ void AZoogiFrozenPlayTest::Tick(float DeltaSeconds)
 	const double T = Now - StepStart;
 	const float R = ZoogiConst::ZoogiRadius + 1.f;
 	auto Next = [&](const FString& Res) { Results.Add(Res); UE_LOG(LogZoogi, Log, TEXT("PLAYTEST %s"), *Res); ++Step; StepStart = Now; bShot = false; Before = -1; };
-	auto IsletLocal = [&](int32 k, float Lx, float Ly, float Lz) { return TPol(IsletDist[k], IsletYaw[k], IsletTopZ) + FRotator(0.f, IsletYaw[k] + 180.f, 0.f).RotateVector(FVector(Lx, Ly, Lz)); };
+	auto IsletLocal = [&](int32 k, float Lx, float Ly, float Lz) { return TPol(IsletD(k), IsletYaw[k], IsletTopZ) + FRotator(0.f, IsletYaw[k] + 180.f, 0.f).RotateVector(FVector(Lx, Ly, Lz)); };
 	switch (Step)
 	{
 	case 1: // wall: normal shot into the N ricochet wall
@@ -106,7 +106,7 @@ void AZoogiFrozenPlayTest::Tick(float DeltaSeconds)
 	}
 	case 2: // stand: normal shot from islet 0's apron into the bleachers
 	{
-		const FVector Ctr = TPol(IsletDist[0], IsletYaw[0], 0.f);
+		const FVector Ctr = TPol(IsletD(0), IsletYaw[0], 0.f);
 		if (Before < 0)
 		{
 			Before = CountDamaged(TEXT("stand"), Ctr, 900.f);
@@ -129,13 +129,13 @@ void AZoogiFrozenPlayTest::Tick(float DeltaSeconds)
 			Before = 0;
 			B->PlaceAt(TPol(1150.f, IsletYaw[1], R), IsletYaw[1]);
 			B->Launch(FVector2D(TPol(1.f, IsletYaw[1], 0.f)) * 1750.f);
-			View(TPol(IsletDist[1] - 500.f, IsletYaw[1], 0.f), IsletYaw[1] + 90.f, 30.f, 1900.f);
+			View(TPol(IsletD(1) - 500.f, IsletYaw[1], 0.f), IsletYaw[1] + 90.f, 30.f, 1900.f);
 		}
 		if (T > 2.2 && !bShot) { bShot = true; Shot(TEXT("bridge")); }
 		if (T > 4.5)
 		{
 			const FVector L = B->BallLocation();
-			const float D = FVector::Dist2D(L, TPol(IsletDist[1], IsletYaw[1], 0.f));
+			const float D = FVector::Dist2D(L, TPol(IsletD(1), IsletYaw[1], 0.f));
 			const bool bOk = !B->bOut && L.Z > IsletTopZ - 100.f && D < IsletR * IsletStretch;
 			Next(FString::Printf(TEXT("bridge: 1750 cm/s roll from r1150 -> ends at (%.0f, %.0f, %.0f), %.0f cm from the islet centre, out=%d %s"), L.X, L.Y, L.Z, D, B->bOut ? 1 : 0, bOk ? TEXT("PASS") : TEXT("FAIL")));
 		}
@@ -182,11 +182,11 @@ void AZoogiFrozenPlayTest::Tick(float DeltaSeconds)
 		const int32 k = Step - 6;
 		const float Yaw = IsletYaw[k];
 		// The islet's orb spot (ExtraOrbSpots holds one per bridged islet; take the one on this islet).
-		FVector Spot = TPol(IsletDist[k], Yaw, IsletTopZ);
+		FVector Spot = TPol(IsletD(k), Yaw, IsletTopZ);
 		float Best = 1e9f;
 		for (const FVector& S : Arena->ExtraOrbSpots)
 		{
-			const float D = FVector::Dist2D(S, TPol(IsletDist[k], Yaw, 0.f));
+			const float D = FVector::Dist2D(S, TPol(IsletD(k), Yaw, 0.f));
 			if (D < Best) { Best = D; Spot = S; }
 		}
 		if (Before < 0)

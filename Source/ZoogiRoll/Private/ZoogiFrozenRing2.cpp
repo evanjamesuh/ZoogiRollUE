@@ -20,6 +20,24 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "Misc/CommandLine.h"
+#include "Misc/ConfigCacheIni.h"
+
+// Oct 15 (Evan: "Package now, outer ring next build"): Ring 2 ON by default, with the layout moves of the plan (islets
+// r2900, two-span bridges, Ring 1 wall gaps at the 6 ramps, crevasse rim, outcrop r2650, rim falls 80 / 100) applied in
+// BuildFrozen. [ZoogiRoll.Frozen] bRing2 (True), -ZoogiFrozenRing2=Off|On (Off = the pre-Ring-2 map exactly).
+bool ZoogiFrozen::Ring2On()
+{
+	static const bool bOn = []
+	{
+		bool b = true;
+		if (GConfig) GConfig->GetBool(TEXT("ZoogiRoll.Frozen"), TEXT("bRing2"), b, GGameIni);
+		FString V;
+		if (FParse::Value(FCommandLine::Get(), TEXT("ZoogiFrozenRing2="), V)) b = !(V.Equals(TEXT("Off"), ESearchCase::IgnoreCase) || V == TEXT("0") || V.Equals(TEXT("False"), ESearchCase::IgnoreCase));
+		UE_LOG(LogZoogi, Log, TEXT("FROZEN Ring 2 (outer action ring): %s"), b ? TEXT("ON (default; -ZoogiFrozenRing2=Off reverts)") : TEXT("OFF"));
+		return b;
+	}();
+	return bOn;
+}
 
 namespace ZoogiRing2
 {
@@ -30,7 +48,7 @@ namespace ZoogiRing2
 	constexpr float PocketYaw[6] = { 22.5f, 90.f, 157.5f, 202.5f, 270.f, 337.5f };
 	constexpr float BumperYaw[6] = { 78.f, 102.f, 258.f, 282.f, 191.25f, 348.75f };
 	constexpr float PocketR = 2150.f, PocketBackR = 112.f;
-	bool Enabled() { FString V; return FParse::Value(FCommandLine::Get(), TEXT("ZoogiFrozenRing2="), V) && V.Equals(TEXT("On"), ESearchCase::IgnoreCase); } // Oct 14 11:38 (Evan): Ring 2 moves to the next build; OFF unless -ZoogiFrozenRing2=On (layout moves / Ring 1 wall gaps / lip removal not applied yet)
+	bool Enabled() { return ZoogiFrozen::Ring2On(); }
 	FVector P(float R, float Yaw, float Z) { const float A = FMath::DegreesToRadians(Yaw); return FVector(FMath::Cos(A) * R, FMath::Sin(A) * R, Z); }
 	bool NearAny(float A, const float* Ys, int32 N, float Tol) { for (int32 i = 0; i < N; ++i) if (FMath::Abs(FMath::FindDeltaAngleDegrees(A, Ys[i])) < Tol) return true; return false; }
 	// Oriented box hull (8 corners) in world cm.
