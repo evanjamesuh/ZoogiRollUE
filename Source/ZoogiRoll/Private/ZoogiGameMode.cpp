@@ -1173,7 +1173,9 @@ void AZoogiGameMode::PlanCPUShot()
 			else Cost += 900.f; // would follow the target off the edge (-75 and a wasted turn)
 		}
 		// a thin hit / miss (aim error) rolls the whole line: off the edge from here?
-		if (Dist * FMath::Sin(FMath::DegreesToRadians(ErrMaxDeg)) > 0.5f * (ZoogiConst::ZoogiRadius + C.Radius))
+		// Oct 15: also when cut variety may thin the contact (artifact mode, 6-20 deg cuts): clamp only, no extra cost
+		const bool bAimMiss = Dist * FMath::Sin(FMath::DegreesToRadians(ErrMaxDeg)) > 0.5f * (ZoogiConst::ZoogiRadius + C.Radius);
+		if (bAimMiss || (bArtifactMode && Dist > 250.f))
 		{
 			const float FullRoll = FMath::Square(ZoogiConst::LaunchSpeedForPull(Frac)) / (2.f * Decel);
 			float BWall = 1e6f;
@@ -1187,7 +1189,8 @@ void AZoogiGameMode::PlanCPUShot()
 				const float MissSafe = InvertLaunch(FMath::Sqrt(2.f * Decel * FMath::Max(0.f, EdgeB - 150.f)));
 				const float VMinOut2 = FMath::Sqrt(FMath::Square(FMath::Sqrt(2.f * Decel * (FMath::Max(0.f, PushRun) + 60.f)) / FMath::Max(Transfer, 0.3f)) + 2.f * Decel * Gap);
 				if (!bExitWalled && MissSafe >= 0.3f && ZoogiConst::LaunchSpeedForPull(MissSafe) >= VMinOut2) { Frac = FMath::Min(Frac, MissSafe); MaxSafeFrac = FMath::Min(MaxSafeFrac, MissSafe); }
-				else Cost += 650.f;
+				else if (bExitWalled && MissSafe >= 0.5f) { Frac = FMath::Min(Frac, MissSafe); MaxSafeFrac = FMath::Min(MaxSafeFrac, MissSafe); ++NHopClamp; } // walled: firm, but no full-roll hop
+				else if (bAimMiss) Cost += 650.f;
 			}
 		}
 		const float CoastF = FMath::Square(VHit * KAfter) / (2.f * Decel);
