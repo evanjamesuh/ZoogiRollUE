@@ -519,7 +519,7 @@ void AZoogiHUD::DrawMatch(AZoogiGameMode* G)
 	const bool bUmgAwaken = AwakenWidget && AwakenWidget->ShowsAwaken();
 	const bool bUmgAim = AwakenWidget && AwakenWidget->ShowsAim();
 	if (G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Awaken && G->CardsOn()) { if (!(AwakenWidget && AwakenWidget->ShowsCards()) && !UZoogiCardHandWidget::IsEnabled(G)) DrawCards(G); } // UMG card hand replaces the Canvas panel
-	else if (G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Awaken && !bUmgAwaken) DrawAwaken(G);
+	else if (G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Awaken && !bUmgAwaken && !bFramed) DrawAwaken(G); // framed: the stones live in the hud-v3 tray
 	(void)bUmgAim; // Oct 14: the aim control panel is gone (slingshot drag aim); DrawAimControls is no longer drawn
 	DrawEpisodeP5(G);
 	if (bFramed) {}
