@@ -1220,6 +1220,21 @@ void AZoogiGameMode::PlanCPUShot()
 		return Len;
 	};
 	int32 NLineDrop = 0, NLineTall = 0;
+	// Oct 15: a tall wall (still blocking 130 cm up - Frozen's 115 cm ice ricochet walls) takes a much faster shooter to hop
+	// than a low seat wall / curb: [ZoogiRoll.CPU] TallWallHopSpeed (1000 cm/s), -ZoogiCPUTallHop=
+	static const float TallHopV = []
+	{
+		float V = 1000.f;
+		if (GConfig) GConfig->GetFloat(TEXT("ZoogiRoll.CPU"), TEXT("TallWallHopSpeed"), V, GGameIni);
+		FParse::Value(FCommandLine::Get(), TEXT("ZoogiCPUTallHop="), V);
+		return FMath::Clamp(V, 0.f, 3600.f);
+	}();
+	auto HopRun = [&](const FVector2D& From, const FVector2D& Dir, float WallD) -> float
+	{
+		const bool bTall = WallAt(From, MeZ, Dir, WallD + 60.f, ZoogiConst::ZoogiRadius * 0.8f, 130.f) < WallD + 60.f;
+		const float V = bTall ? FMath::Max(TallHopV, WallHopV) : WallHopV;
+		return WallD + V * V / (2.f * Decel);
+	};
 	auto LineExit = [&](const FVector2D& P, float Z, const FVector2D& N, float Rad, float Edge) -> FLineExit
 	{
 		const float Reach = FMath::Max(Edge, 0.f) + 600.f;
@@ -1293,7 +1308,7 @@ void AZoogiGameMode::PlanCPUShot()
 		const float MyRun = ShooterRun(Contact, MeZ, Dir, MyEdge, MyWall);
 		const bool bMyWalled = MyRun >= 1e5f;
 		// walled: the shooter may reach the wall at up to WallHopV, no faster (else it hops the wall)
-		const float SafeRun = HazardRun(Contact, Dir, PortalRun(Contact, MeZ, Dir, bMyWalled ? MyWall + WallHopV * WallHopV / (2.f * Decel) - 60.f : MyRun - 120.f));
+		const float SafeRun = HazardRun(Contact, Dir, PortalRun(Contact, MeZ, Dir, bMyWalled ? HopRun(Contact, Dir, MyWall) - 60.f : MyRun - 120.f));
 		float MaxSafeFrac = 1.f;
 		if (KAfter > 0.01f)
 		{
@@ -1318,7 +1333,7 @@ void AZoogiGameMode::PlanCPUShot()
 			const float FullRoll = FMath::Square(ZoogiConst::LaunchSpeedForPull(Frac)) / (2.f * Decel);
 			float BWall = 1e6f;
 			const float BRun0 = ShooterRun(B, MeZ, Dir, Arena->DistanceToEdge(B, Dir), BWall);
-			const float BRun = BRun0 < 1e5f ? BRun0 : BWall + WallHopV * WallHopV / (2.f * Decel) + 70.f; // walled: hop distance
+			const float BRun = BRun0 < 1e5f ? BRun0 : HopRun(B, Dir, BWall) + 70.f; // walled: hop distance
 			const float EdgeB = HazardRun(B, Dir, PortalRun(B, MeZ, Dir, BRun));
 			DbgMissRun = EdgeB;
 			if (FullRoll > EdgeB - 80.f)
@@ -1385,7 +1400,7 @@ void AZoogiGameMode::PlanCPUShot()
 			{
 				float TWall = 1e6f;
 				const float TRun = ShooterRun(Ghost, MeZ, Tang, TEdge, TWall);
-				CSafe = HazardRun(Ghost, Tang, PortalRun(Ghost, MeZ, Tang, TRun >= 1e5f ? TWall + WallHopV * WallHopV / (2.f * Decel) - 60.f : TRun - 120.f));
+				CSafe = HazardRun(Ghost, Tang, PortalRun(Ghost, MeZ, Tang, TRun >= 1e5f ? HopRun(Ghost, Tang, TWall) - 60.f : TRun - 120.f));
 				const float VHitMax = FMath::Sqrt(2.f * Decel * FMath::Max(0.f, CSafe)) / FMath::Max(KCut, 0.01f);
 				CutMaxSafe = InvertLaunch(FMath::Min(FMath::Sqrt(VHitMax * VHitMax + 2.f * Decel * GDist), VMax * 1.01f));
 				if (VAfter * VAfter / (2.f * Decel) > CSafe)
@@ -1399,7 +1414,7 @@ void AZoogiGameMode::PlanCPUShot()
 				const float FullRoll = FMath::Square(ZoogiConst::LaunchSpeedForPull(Frac)) / (2.f * Decel);
 				float BWall = 1e6f;
 				const float BRun0 = ShooterRun(B, MeZ, Dir, Arena->DistanceToEdge(B, Dir), BWall);
-				CMiss = HazardRun(B, Dir, PortalRun(B, MeZ, Dir, BRun0 < 1e5f ? BRun0 : BWall + WallHopV * WallHopV / (2.f * Decel) + 70.f));
+				CMiss = HazardRun(B, Dir, PortalRun(B, MeZ, Dir, BRun0 < 1e5f ? BRun0 : HopRun(B, Dir, BWall) + 70.f));
 				if (FullRoll > CMiss - 80.f)
 				{
 					const float MissSafe = InvertLaunch(FMath::Sqrt(2.f * Decel * FMath::Max(0.f, CMiss - 150.f)));
