@@ -1010,6 +1010,63 @@ void AZoogiGameMode::PlanCPUShot()
 		}
 		return FMath::Max(Edge, 0.f); // no drop found within reach (catch floors etc.): keep the geometric edge
 	};
+	// ShooterRun(): how far the shooter can roll along a line before it rings out - the first hole / drop in the floor
+	// (Meadow's crater, gaps), or the geometric edge; 1e6 when a real wall stops it first. Down traces every 75 cm.
+	auto RealWallDist = [&](const FVector2D& From, float Z, const FVector2D& Dir, float Len, float Rad) -> float
+	{
+		if (!PW || Len <= 1.f) return Len;
+		FCollisionObjectQueryParams OQ; OQ.AddObjectTypesToQuery(ECC_WorldStatic); OQ.AddObjectTypesToQuery(ECC_WorldDynamic);
+		FCollisionQueryParams QP(SCENE_QUERY_STAT(ZoogiCPUWallDist), false); QP.AddIgnoredActor(Me);
+		float D[2] = { Len, Len };
+		for (int32 h = 0; h < 2; ++h)
+		{
+			TArray<FHitResult> Hits;
+			const FVector S(From.X, From.Y, Z + (h ? 50.f : 6.f)), E = S + FVector(Dir.X, Dir.Y, 0.f) * Len;
+			PW->SweepMultiByObjectType(Hits, S, E, FQuat::Identity, OQ, FCollisionShape::MakeSphere(Rad), QP);
+			for (const FHitResult& H : Hits)
+			{
+				if (H.bStartPenetrating) continue;
+				const AActor* A = H.GetActor();
+				if (Cast<AZoogiBall>(A) || Cast<AZoogiOrb>(A) || Cast<AZoogiClone>(A)) continue;
+				const UPrimitiveComponent* Cm = H.GetComponent();
+				if (!Cm || Cm->GetCollisionResponseToChannel(ECC_PhysicsBody) != ECR_Block || FMath::Abs(H.ImpactNormal.Z) > 0.6f) continue;
+				D[h] = H.Distance; break;
+			}
+		}
+		return FMath::Max(D[0], D[1]);
+	};
+	auto DropDist = [&](const FVector2D& From, float Z, const FVector2D& Dir, float Len) -> float
+	{
+		if (!PW) return 1e6f;
+		FCollisionObjectQueryParams OQ; OQ.AddObjectTypesToQuery(ECC_WorldStatic); OQ.AddObjectTypesToQuery(ECC_WorldDynamic);
+		FCollisionQueryParams QP(SCENE_QUERY_STAT(ZoogiCPUDrop), false); QP.AddIgnoredActor(Me);
+		for (float S = 75.f; S <= Len; S += 75.f)
+		{
+			const FVector2D Q = From + Dir * S;
+			TArray<FHitResult> Dn;
+			PW->LineTraceMultiByObjectType(Dn, FVector(Q.X, Q.Y, Z + 100.f), FVector(Q.X, Q.Y, Z - 220.f), OQ, QP);
+			bool bFloor = false;
+			for (const FHitResult& H : Dn)
+			{
+				const AActor* A = H.GetActor();
+				if (Cast<AZoogiBall>(A) || Cast<AZoogiOrb>(A) || Cast<AZoogiClone>(A)) continue;
+				const UPrimitiveComponent* Cm = H.GetComponent();
+				if (Cm && Cm->GetCollisionResponseToChannel(ECC_PhysicsBody) == ECR_Block && H.ImpactNormal.Z > 0.5f) { bFloor = true; break; }
+			}
+			if (!bFloor) return S;
+		}
+		return 1e6f;
+	};
+	int32 NHoles = 0;
+	auto ShooterRun = [&](const FVector2D& From, float Z, const FVector2D& Dir, float Edge) -> float
+	{
+		const float E = FMath::Max(Edge, 0.f);
+		const float W = RealWallDist(From, Z, Dir, E + 300.f, ZoogiConst::ZoogiRadius * 0.8f);
+		const float Lim = FMath::Min(W, E);
+		const float Dr = DropDist(From, Z, Dir, Lim);
+		if (Dr < Lim) { ++NHoles; return Dr; } // a hole / drop in the floor before any wall or the edge
+		return W < E + 300.f ? 1e6f : E;      // a real wall stops it, else the edge
+	};
 	const float MeZ = Me->BallLocation().Z;
 	static const float WallFrac = []
 	{
@@ -1075,8 +1132,9 @@ void AZoogiGameMode::PlanCPUShot()
 		const float Coast = VAfter * VAfter / (2.f * Decel);
 		const FVector2D Contact = C.P - Dir * (ZoogiConst::ZoogiRadius + C.Radius);
 		const float MyEdge = Arena->DistanceToEdge(Contact, Dir);
-		const bool bMyWalled = Walled(Contact, MeZ, Dir, MyEdge + 300.f, ZoogiConst::ZoogiRadius * 0.8f);
-		const float SafeRun = bMyWalled ? 1e6f : MyEdge - 120.f;
+		const float MyRun = ShooterRun(Contact, MeZ, Dir, MyEdge);
+		const bool bMyWalled = MyRun >= 1e5f;
+		const float SafeRun = bMyWalled ? 1e6f : MyRun - 120.f;
 		float MaxSafeFrac = 1.f;
 		if (KAfter > 0.01f && !bMyWalled)
 		{
@@ -1095,8 +1153,9 @@ void AZoogiGameMode::PlanCPUShot()
 		if (Dist * FMath::Sin(FMath::DegreesToRadians(ErrMaxDeg)) > 0.5f * (ZoogiConst::ZoogiRadius + C.Radius))
 		{
 			const float FullRoll = FMath::Square(ZoogiConst::LaunchSpeedForPull(Frac)) / (2.f * Decel);
-			const float EdgeB = Arena->DistanceToEdge(B, Dir);
-			if (FullRoll > EdgeB - 80.f && !Walled(B, MeZ, Dir, EdgeB + 300.f, ZoogiConst::ZoogiRadius * 0.8f))
+			const float BRun = ShooterRun(B, MeZ, Dir, Arena->DistanceToEdge(B, Dir));
+			const float EdgeB = BRun;
+			if (BRun < 1e5f && FullRoll > EdgeB - 80.f)
 			{
 				// Oct 15: a miss would roll the shooter off. Keep the full roll on court when that still knocks the target
 				// out; otherwise make this a less attractive plan (other targets usually exist - not timid, just safer)
@@ -1273,7 +1332,7 @@ void AZoogiGameMode::PlanCPUShot()
 		UE_LOG(LogZoogi, Log, TEXT("CPU P%d edge clamp: %.0f%% -> %.0f%% (follow-through stays on court)"), ActivePlayer + 1, BestFrac * 100.f, PickSafeFrac * 100.f);
 		BestFrac = PickSafeFrac;
 	}
-	if (NWalled || NRunWalled) UE_LOG(LogZoogi, Log, TEXT("CPU P%d wall check: exit lines walled %d/%d (launch exits %d), follow-through lines walled %d/%d; pick %.0f%%"), ActivePlayer + 1, NRunWalled, NRuns, NLaunch, NWalled, NSweeps, BestFrac * 100.f);
+	if (NWalled || NRunWalled || NHoles) UE_LOG(LogZoogi, Log, TEXT("CPU P%d wall check: exit lines walled %d/%d (launch exits %d), follow-through lines walled %d/%d, floor holes on shooter lines %d; pick %.0f%%"), ActivePlayer + 1, NRunWalled, NRuns, NLaunch, NWalled, NSweeps, NHoles, BestFrac * 100.f);
 	// Oct 8: Frozen aerial layer: with the battle map props up, a CPU sometimes plays a prop route (rail / halo / bumper) instead.
 	// No-op (and no GameRng draw) without the map layout, so every existing mode and test plans exactly as before.
 	if (UZoogiBattleStateMachine* BSM = GetWorld()->GetSubsystem<UZoogiBattleStateMachine>())
