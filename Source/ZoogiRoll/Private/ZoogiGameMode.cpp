@@ -1185,6 +1185,49 @@ void AZoogiGameMode::PlanCPUShot()
 	constexpr float ExitV = 300.f;    // the target should still be moving this fast at the edge (clears lips / gutters)
 	constexpr float FollowE = 0.55f;  // follow-through restitution (conservative: the shooter keeps more speed than e=0.7)
 	const float ErrMaxDeg = FMath::Max(0.f, (100.f - Me->Def.Control) / 12.f);
+	// Oct 15 LineExit(): what it really takes to score along a departure line (Frozen evidence: orbs hit at 15-22 m/s
+	// ricochet off the 115 cm ice walls - restitution 0.9 - and never leave; they score where the floor ends first):
+	//  Kind 0 - the floor ends (drop) before any face-on wall: just get it there (ExitV), whatever stands beyond the drop;
+	//  Kind 1 - no wall, floor continues (bridge decks / aprons): ExitRun's push / launch model;
+	//  Kind 2 - a low wall (clear at 130 cm): hop it at OrbWallHopSpeed;
+	//  Kind 3 - a tall wall (blocks at 130 cm too): no score along this line, only ping-pong.
+	struct FLineExit { float Need; int32 Kind; float Dist; };
+	auto WallAt = [&](const FVector2D& From, float Z, const FVector2D& Dir, float Len, float Rad, float H) -> float
+	{
+		if (!PW || Len <= 1.f) return Len;
+		FCollisionObjectQueryParams OQ; OQ.AddObjectTypesToQuery(ECC_WorldStatic); OQ.AddObjectTypesToQuery(ECC_WorldDynamic);
+		FCollisionQueryParams QP(SCENE_QUERY_STAT(ZoogiCPUWallAt), false); QP.AddIgnoredActor(Me);
+		TArray<FHitResult> Hits;
+		const FVector S(From.X, From.Y, Z + H), E = S + FVector(Dir.X, Dir.Y, 0.f) * Len;
+		PW->SweepMultiByObjectType(Hits, S, E, FQuat::Identity, OQ, FCollisionShape::MakeSphere(Rad), QP);
+		for (const FHitResult& Ht : Hits)
+		{
+			if (Ht.bStartPenetrating) continue;
+			const AActor* A = Ht.GetActor();
+			if (Cast<AZoogiBall>(A) || Cast<AZoogiOrb>(A) || Cast<AZoogiClone>(A)) continue;
+			const UPrimitiveComponent* Cm = Ht.GetComponent();
+			if (!Cm || Cm->GetCollisionResponseToChannel(ECC_PhysicsBody) != ECR_Block || FMath::Abs(Ht.ImpactNormal.Z) > 0.6f) continue;
+			return Ht.Distance;
+		}
+		return Len;
+	};
+	int32 NLineDrop = 0, NLineTall = 0;
+	auto LineExit = [&](const FVector2D& P, float Z, const FVector2D& N, float Rad, float Edge) -> FLineExit
+	{
+		const float Reach = FMath::Max(Edge, 0.f) + 600.f;
+		const float Wd = RealWallDist(P, Z, N, Reach, Rad * 0.8f);
+		const float Dr = DropDist(P, Z, N, FMath::Min(Wd, Reach));
+		if (Dr < FMath::Min(Wd, Reach)) { ++NLineDrop; return { FMath::Sqrt(ExitV * ExitV + 2.f * Decel * (Dr + 80.f)), 0, Dr }; }
+		if (Wd >= Reach)
+		{
+			bool bL = false;
+			const float Rn = ExitRun(P, Z, N, Edge, Rad * 0.8f, bL);
+			const float Run = FMath::Max(Edge, Rn);
+			return { FMath::Sqrt(FMath::Square(bL ? FarExitV : ExitV) + 2.f * Decel * (Run + 250.f)), 1, Run };
+		}
+		if (WallAt(P, Z, N, Wd + 60.f, Rad * 0.8f, 130.f) < Wd + 60.f) { ++NLineTall; return { FMath::Sqrt(OrbHopV * OrbHopV + 2.f * Decel * Wd), 3, Wd }; }
+		return { FMath::Sqrt(OrbHopV * OrbHopV + 2.f * Decel * Wd), 2, Wd };
+	};
 
 	CPUPlannedCut = 0.f;
 	const EZoogiCPUTier CPUTier = ZoogiCPU::ActiveTier();
@@ -1205,23 +1248,21 @@ void AZoogiGameMode::PlanCPUShot()
 		const float CZ = C.Actor ? C.Actor->GetActorLocation().Z : MeZ;
 		bool bLaunchExit = false;
 		const float Run = ExitRun(C.P, CZ, Dir, Edge, C.Radius * 0.8f, bLaunchExit);
-		const bool bExitWalled = Run < 0.f;
+		bool bExitWalled = Run < 0.f;
+		// Oct 15: the floor may end before the wall (stands / scenery beyond a drop): that line scores like an open one
+		const FLineExit LX = LineExit(C.P, CZ, Dir, C.Radius, Edge);
+		if (LX.Kind == 0) { bExitWalled = false; bLaunchExit = false; }
 		const float LineExitV = bLaunchExit ? FarExitV : ExitV;
-		const float PushRun = bExitWalled ? Edge : FMath::Max(Edge, Run); // floor that continues past the edge (bridge decks / aprons) must be crossed too
-		float Cost = Dist * 0.5f + Edge - C.Value * 6.f;
-		if (bExitWalled) Cost += 400.f; // a wall before the edge on this line: it has to hop it (Oct 15: 1100 -> 400, hop speed planned)
+		const float PushRun = LX.Kind == 0 ? FMath::Max(0.f, LX.Dist - 170.f) : (bExitWalled ? Edge : FMath::Max(Edge, Run)); // floor that continues past the edge (bridge decks / aprons) must be crossed too
+		float Cost = Dist * 0.5f + (LX.Kind == 0 ? LX.Dist : Edge) - C.Value * 6.f;
+		if (bExitWalled) Cost += LX.Kind == 3 ? 1100.f : 400.f; // a wall before the edge: tall = ping-pong only, low = hop it
 		if (Blocked(B, C.P, C.P)) Cost += 1500.f;
 		// Night Circuit pads / posts: in the way of the shot, or between the target and its edge.
 		if (Arena->IsPathBlocked(B, C.P - Dir * (ZoogiConst::ZoogiRadius + C.Radius), ZoogiConst::ZoogiRadius - 5.f)) Cost += 1500.f;
 		else if (Arena->IsPathBlocked(C.P + Dir * (C.Radius + 10.f), C.P + Dir * FMath::Min(Edge, 2500.f), C.Radius - 5.f)) Cost += 700.f;
 		// Power needed to push the target ~2.5 m past the edge (1D collision, restitution ~0.7), still moving ExitV there.
 		float Need = FMath::Sqrt(LineExitV * LineExitV + 2.f * Decel * (PushRun + 250.f));
-		if (bExitWalled)
-		{
-			// Oct 15: a face-on wall on the line - the orb must reach it fast enough to hop / break it (Frozen rim ice)
-			const float Wd = RealWallDist(C.P, CZ, Dir, Edge + 300.f, C.Radius);
-			Need = FMath::Sqrt(OrbHopV * OrbHopV + 2.f * Decel * FMath::Min(Wd, Edge));
-		}
+		if (bExitWalled && LX.Kind >= 2) Need = LX.Need; // Oct 15: a low wall - reach it at the hop speed (tall: a firm ping-pong hit)
 		float Transfer = (1.f + 0.7f) * M1 / (M1 + C.TargetMass);
 		if (bCPUUsePower && MyPower == EZoogiPower::BandageBind && Cast<AZoogiBall>(C.Actor)) Transfer *= 1.25f; // bind yank
 		const float VIn = Need / FMath::Max(Transfer, 0.3f);
@@ -1299,13 +1340,9 @@ void AZoogiGameMode::PlanCPUShot()
 	{
 		auto ExitNeed = [&](const FVector2D& P, float Z, const FVector2D& N, float Rad, float& Extra) -> float
 		{
-			const float E = Arena->DistanceToEdge(P, N);
-			bool bL = false;
-			const float Rn = ExitRun(P, Z, N, E, Rad * 0.8f, bL);
-			if (Rn >= 0.f) { Extra = bL ? 300.f : 0.f; return FMath::Sqrt(FMath::Square(bL ? FarExitV : ExitV) + 2.f * Decel * (FMath::Max(E, Rn) + 250.f)); }
-			const float Wd = RealWallDist(P, Z, N, E + 300.f, Rad);
-			if (Wd < E + 300.f) { Extra = 250.f; return FMath::Sqrt(OrbHopV * OrbHopV + 2.f * Decel * Wd); }
-			Extra = 900.f; return FMath::Sqrt(OrbHopV * OrbHopV + 2.f * Decel * E); // glancing wall only: it may slide along it
+			const FLineExit X = LineExit(P, Z, N, Rad, Arena->DistanceToEdge(P, N));
+			Extra = X.Kind == 0 ? X.Dist : X.Kind == 1 ? X.Dist + 150.f : X.Kind == 2 ? X.Dist + 400.f : 2500.f;
+			return X.Need;
 		};
 		// shoot so the target leaves along N needing NeedT; full shooter-safety model; false = not a usable cut
 		auto EvalContact = [&](const FCand& C, const FVector2D& N, float NeedT, float Extra, float Dist, FPlan& Out) -> bool
@@ -1424,7 +1461,7 @@ void AZoogiGameMode::PlanCPUShot()
 					const FVector2D Hp = C.P + N * Wd;
 					float Ex2 = 0.f;
 					const float Need2 = ExitNeed(Hp + N2 * 5.f, CZ, N2, C.Radius, Ex2);
-					if (Ex2 >= 900.f) continue;
+					if (Ex2 >= 2500.f) continue; // a bank into a tall wall is just ping-pong
 					const float KB = FMath::Sqrt(Rest * Rest * CosI * CosI + (1.f - CosI * CosI));
 					const float V1 = Need2 / FMath::Max(KB, 0.2f);
 					const float NeedOrb = FMath::Sqrt(V1 * V1 + 2.f * Decel * Wd);
@@ -1558,7 +1595,7 @@ void AZoogiGameMode::PlanCPUShot()
 		UE_LOG(LogZoogi, Log, TEXT("CPU P%d edge clamp: %.0f%% -> %.0f%% (follow-through stays on court)"), ActivePlayer + 1, BestFrac * 100.f, PickSafeFrac * 100.f);
 		BestFrac = PickSafeFrac;
 	}
-	if (NWalled || NRunWalled || NHoles) UE_LOG(LogZoogi, Log, TEXT("CPU P%d wall check: exit lines walled %d/%d (launch exits %d), follow-through lines walled %d/%d, floor holes on shooter lines %d, wall-hop clamps %d, portal lines %d, hazard lines %d/%d, rim-bank plans %d; pick %.0f%%"), ActivePlayer + 1, NRunWalled, NRuns, NLaunch, NWalled, NSweeps, NHoles, NHopClamp, NPortalClamp, NHazClamp, Hazards.Num(), NRimBank, BestFrac * 100.f);
+	if (NWalled || NRunWalled || NHoles) UE_LOG(LogZoogi, Log, TEXT("CPU P%d wall check: exit lines walled %d/%d (launch exits %d), follow-through lines walled %d/%d, floor holes on shooter lines %d, wall-hop clamps %d, portal lines %d, hazard lines %d/%d, rim-bank plans %d, line exits drop/tall %d/%d; pick %.0f%%"), ActivePlayer + 1, NRunWalled, NRuns, NLaunch, NWalled, NSweeps, NHoles, NHopClamp, NPortalClamp, NHazClamp, Hazards.Num(), NRimBank, NLineDrop, NLineTall, BestFrac * 100.f);
 	// Oct 8: Frozen aerial layer: with the battle map props up, a CPU sometimes plays a prop route (rail / halo / bumper) instead.
 	// No-op (and no GameRng draw) without the map layout, so every existing mode and test plans exactly as before.
 	if (UZoogiBattleStateMachine* BSM = GetWorld()->GetSubsystem<UZoogiBattleStateMachine>())
