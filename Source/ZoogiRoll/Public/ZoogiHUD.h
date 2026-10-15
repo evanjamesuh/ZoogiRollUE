@@ -51,6 +51,10 @@ protected:
 	void DrawCards(AZoogiGameMode* G); // v3 card Standby panel (mouse / touch buttons; keys 1-5, Enter, Backspace)
 	void DrawAimControls(AZoogiGameMode* G);
 	void DrawPreview(AZoogiGameMode* G);
+	/** Oct 15 (Evan): the free-aim reticle, drawn on every aim frame (not only with a valid preview) with a minimum screen
+	 *  size, so a high / zoomed-out camera never shrinks it away; clamped to the screen edge when off view. */
+	void DrawFreeAimReticle(AZoogiGameMode* G);
+	bool bReticleLogged = false;
 	void DrawArtifacts(AZoogiGameMode* G);
 	void DrawAnime(AZoogiGameMode* G);
 	void DrawResolve(AZoogiGameMode* G);

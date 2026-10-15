@@ -194,11 +194,28 @@ void AZoogiGameMode::CycleLock(bool bSoft)
 	LockOn(C[(Cur + 1) % C.Num()], bSoft);
 }
 
-void AZoogiGameMode::SetFreeAim(const FVector& P)
+void AZoogiGameMode::SetFreeAim(const FVector& InP)
 {
+	FVector P = InP;
 	const AZoogiBall* Me = GetActiveBall();
 	if (!Me || !IsAimStep()) return;
 	if (FVector::Dist2D(P, Me->BallLocation()) < ZoogiConst::ZoogiRadius * 1.5f) return;
+	// Oct 15 (Evan stuck cam): a tap past the ring-out edge (e.g. on the far mountains of a high view) aims at the last
+	// on-court point along the same line, so the aim point / camera / reticle never run off into the scenery
+	FVector Pc = P;
+	{
+		const FVector2D S2(Me->BallLocation().X, Me->BallLocation().Y), P2(P.X, P.Y);
+		auto Off = [this](const FVector2D& Q) { return Arena ? Arena->IsOffCourt(Q) : Q.Size() > ZoogiConst::KnockoffRadius; };
+		if (!Me->bCPU && Off(P2) && !Off(S2)) // human taps only (CPU / scripted aims unchanged: auto-run parity)
+		{
+			float Lo = 0.f, Hi = 1.f;
+			for (int32 i = 0; i < 22; ++i) { const float Mid = 0.5f * (Lo + Hi); if (Off(FMath::Lerp(S2, P2, Mid))) Hi = Mid; else Lo = Mid; }
+			const FVector2D In = FMath::Lerp(S2, P2, Lo);
+			UE_LOG(LogZoogi, Log, TEXT("P%d free aim tap (%.0f, %.0f) is off the court -> clamped to (%.0f, %.0f) on the same line"), ActivePlayer + 1, P.X, P.Y, In.X, In.Y);
+			Pc = FVector(In.X, In.Y, P.Z);
+		}
+	}
+	P = Pc;
 	TargetLock.Reset();
 	bSoftLock = false;
 	bFreeAim = true;

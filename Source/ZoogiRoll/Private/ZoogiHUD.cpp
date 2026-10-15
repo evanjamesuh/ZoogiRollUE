@@ -494,7 +494,7 @@ void AZoogiHUD::DrawMatch(AZoogiGameMode* G)
 		}
 	}
 
-	if (G->Phase == EZoogiPhase::Aiming) { if (G->bArtifactMode || G->Preview.bValid) DrawPreview(G); else DrawAim(G); }
+	if (G->Phase == EZoogiPhase::Aiming) { if (G->bArtifactMode || G->Preview.bValid) DrawPreview(G); else DrawAim(G); DrawFreeAimReticle(G); }
 	if (G->bArtifactMode) DrawArtifacts(G); else DrawPower(G);
 	DrawPopups(G);
 	DrawFlyers(G);
@@ -1061,19 +1061,51 @@ void AZoogiHUD::TrajectoryLine(const FVector* Pts, int32 Num, const FLinearColor
 	Flush(SE_BLEND_Translucent);
 }
 
+void AZoogiHUD::DrawFreeAimReticle(AZoogiGameMode* G)
+{
+	AZoogiBall* B = G->GetActiveBall();
+	if (!B || !G->bFreeAim || !G->IsAimStep()) { bReticleLogged = false; return; } // gone once the shot launches / aim clears
+	const FLinearColor PC = ZoogiUtil::PlayerColor(B->PlayerIndex);
+	const float Pulse = 0.6f + 0.4f * FMath::Sin(Time * 6.f);
+	const FVector C = G->FreeAimPoint + FVector(0, 0, 3.f);
+	WorldCircle(C, 60.f, FLinearColor(PC.R, PC.G, PC.B, 0.9f * Pulse), 3.f * U);
+	WorldCircle(C, 18.f, FLinearColor(1, 1, 1, 0.9f), 2.f * U);
+	const FVector S = Project(C, true);
+	if (S.Z <= 0.f) return;
+	const FVector E = Project(C + FVector(60.f, 0, 0), true);
+	const float Rpx = E.Z > 0.f ? FVector2D(E.X - S.X, E.Y - S.Y).Size() : 0.f;
+	const float MinR = 24.f * U;
+	const float W = Canvas->ClipX, H = Canvas->ClipY, M = 30.f * U;
+	const bool bOffView = S.X < 0.f || S.Y < 0.f || S.X > W || S.Y > H;
+	const FVector2D Ctr(FMath::Clamp(S.X, M, W - M), FMath::Clamp(S.Y, M, H - M));
+	if (Rpx < MinR || bOffView)
+	{
+		// screen-space crosshair: ring + 4 ticks, never smaller than MinR (and pinned to the edge when the point is off view)
+		const float R = MinR;
+		const FLinearColor Dark(0.02f, 0.03f, 0.06f, 0.75f), Col(FMath::Lerp(PC, FLinearColor::White, 0.35f));
+		for (int32 k = 0; k < 24; ++k)
+		{
+			const float A0 = k * UE_TWO_PI / 24.f, A1 = (k + 1) * UE_TWO_PI / 24.f;
+			const FVector2D P0 = Ctr + FVector2D(FMath::Cos(A0), FMath::Sin(A0)) * R, P1 = Ctr + FVector2D(FMath::Cos(A1), FMath::Sin(A1)) * R;
+			DrawLine(P0.X, P0.Y, P1.X, P1.Y, Dark, 5.f * U);
+			DrawLine(P0.X, P0.Y, P1.X, P1.Y, FLinearColor(Col.R, Col.G, Col.B, 0.95f * Pulse + 0.05f), 2.5f * U);
+		}
+		for (int32 k = 0; k < 4; ++k)
+		{
+			const FVector2D D(FMath::Cos(k * UE_HALF_PI), FMath::Sin(k * UE_HALF_PI));
+			DrawLine(Ctr.X + D.X * R * 0.35f, Ctr.Y + D.Y * R * 0.35f, Ctr.X + D.X * R * 1.45f, Ctr.Y + D.Y * R * 1.45f, FLinearColor::White, 2.5f * U);
+		}
+		if (!bReticleLogged) { bReticleLogged = true; UE_LOG(LogZoogi, Log, TEXT("AIMRETICLE screen-space (world ring %.0f px < %.0f px%s) at (%.0f, %.0f)"), Rpx, MinR, bOffView ? TEXT(", pinned to the edge") : TEXT(""), Ctr.X, Ctr.Y); }
+	}
+}
+
 void AZoogiHUD::DrawPreview(AZoogiGameMode* G)
 {
 	AZoogiBall* B = G->GetActiveBall();
 	if (!B) return;
 	const FLinearColor PC = ZoogiUtil::PlayerColor(B->PlayerIndex);
 	const FVector Ground(0, 0, -(ZoogiConst::ZoogiRadius - 4.f));
-	// Free-aim marker.
-	if (G->bFreeAim && G->IsAimStep())
-	{
-		const float Pulse = 0.6f + 0.4f * FMath::Sin(Time * 6.f);
-		WorldCircle(G->FreeAimPoint + FVector(0, 0, 3.f), 60.f, FLinearColor(PC.R, PC.G, PC.B, 0.9f * Pulse), 3.f * U);
-		WorldCircle(G->FreeAimPoint + FVector(0, 0, 3.f), 18.f, FLinearColor(1, 1, 1, 0.9f), 2.f * U);
-	}
+	// Free-aim marker: DrawFreeAimReticle (every aim frame, minimum screen size)
 	const FZoogiAimPreview& P = G->Preview;
 	if (!P.bValid || !G->bAimActive) return;
 	const bool bPower = G->IsPowerUpStep();

@@ -171,6 +171,12 @@ protected:
 	void LoadZoomTune();
 	bool UpdateZoomInput(class AZoogiGameMode* G, bool bAimStage, const FVector2D& Mouse, float Dt); // true = zoom mode owns the pointers
 	void UpdatePinchTest(class AZoogiGameMode* G, float Dt);
+	// Oct 15 camera watchdog (Evan's stuck high cam): restores the battle follow view when it is left far off / on another view
+	float CamBadT = 0.f, ViewBadT = 0.f; int32 CamWatchFixes = 0;
+	// -ZoogiCamStuckTest: forces a far tap + a broken high camera / foreign view target / menu cam on P1's aim and checks the return
+	bool bCamStuckTest = false; float CamStuckT = -1.f; int32 CamStuckPhase = 0; int32 CamStuckFixes0 = 0;
+	TWeakObjectPtr<AActor> CamStuckBogus;
+	void UpdateCamStuckTest(class AZoogiGameMode* G, float Dt);
 	void SetZoomAnchor(const FVector2D& Screen);
 	void ZoomAbout(float NewWant);
 	void PanBy(const FVector2D& From, const FVector2D& To);

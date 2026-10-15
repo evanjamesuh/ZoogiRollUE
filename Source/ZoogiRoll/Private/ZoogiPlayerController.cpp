@@ -181,6 +181,7 @@ void AZoogiPlayerController::BeginPlay()
 	bUiTest = FParse::Param(FCommandLine::Get(), TEXT("ZoogiUiTest"));
 	bHumanTest = bUiTest || FParse::Param(FCommandLine::Get(), TEXT("ZoogiHumanTest"));
 	bPinchTest = FParse::Param(FCommandLine::Get(), TEXT("ZoogiPinchTest"));
+	bCamStuckTest = FParse::Param(FCommandLine::Get(), TEXT("ZoogiCamStuckTest"));
 }
 
 FVector2D AZoogiPlayerController::GetCursor() const
@@ -508,7 +509,7 @@ void AZoogiPlayerController::OnBattleStep(EZoogiBattleStep Step)
 		SwingAge = 0.f;
 		bWhip = false;
 		LockPunchAge = 0.f;
-		if (G->bCinematicCam && G->AllAtRestPublic())
+		if (G->bCinematicCam && G->AllAtRestPublic() && ZoogiUtil::ReactionPauses())
 		{
 			// Slow-mo dip on the lock moment: everything is at rest, so physics outcomes are unaffected.
 			UGameplayStatics::SetGlobalTimeDilation(this, ZoogiCamTune::SlowMoScale);
@@ -534,6 +535,7 @@ void AZoogiPlayerController::OnImpact(float Strength)
 	ImpactStrength = FMath::Clamp(Strength, 0.f, 1.f);
 	AZoogiGameMode* G = GM();
 	if (G && !G->bCinematicCam) { ImpactStrength *= TacShake; return; } // tactical: light shake, no hit-stop for normal hits
+	if (!ZoogiUtil::ReactionPauses()) return; // Oct 15 (Evan): no hit-stop; the shake / FOV punch above still play
 	// Hit-stop: a few frames of near-freeze (uniform time scale, so the physics outcome is the same).
 	UGameplayStatics::SetGlobalTimeDilation(this, HitStopScale);
 	SlowMoUntil = GetWorld()->GetRealTimeSeconds() + HitStopTime * (0.5f + 0.5f * ImpactStrength);
@@ -545,6 +547,7 @@ void AZoogiPlayerController::OnPoweredHit(bool bCrit)
 	if (bMenuCam) return;
 	ImpactAge = 0.f;
 	ImpactStrength = bCrit ? 1.f : 0.7f;
+	if (!ZoogiUtil::ReactionPauses()) return; // Oct 15 (Evan): no hit-stop; shake / FOV punch still play
 	UGameplayStatics::SetGlobalTimeDilation(this, HitStopScale);
 	SlowMoUntil = GetWorld()->GetRealTimeSeconds() + HitStopTime * (bCrit ? 1.6f : 1.f);
 }
@@ -606,6 +609,7 @@ void AZoogiPlayerController::PlayerTick(float DeltaTime)
 	if (bUiTest) UpdateUiTest(Dt);
 	else if (bHumanTest) UpdateHumanTest(Dt);
 	if (bPinchTest) UpdatePinchTest(GM(), Dt);
+	if (bCamStuckTest) UpdateCamStuckTest(GM(), Dt);
 	HandleInput(Dt);
 	UpdateCamera(Dt);
 	UpdateMarkers();
@@ -810,6 +814,64 @@ bool AZoogiPlayerController::UpdateZoomInput(AZoogiGameMode* G, bool bAimStage, 
 		}
 	}
 	return true;
+}
+
+void AZoogiPlayerController::UpdateCamStuckTest(AZoogiGameMode* G, float Dt)
+{
+	// -ZoogiCamStuckTest (no OS input): on P1's first aim step, a tap far past the edge (Evan's (-1634,-2834) on Frozen Ring),
+	// then a stuck high camera (boom x4, centre 60 m off, menu orbit flag, a foreign far-above view target) held for 1.2 s;
+	// expects the tap clamped to the court, the watchdog to bring the battle view back and the aim reticle to stay drawn.
+	if (!G) return;
+	static float AwakenT = 0.f;
+	if (G->IsHumanAiming() && G->Stage == EZoogiStage::Awaken && !G->bAwakenDone)
+	{
+		AwakenT += Dt;
+		if (AwakenT > 1.5f) { AwakenT = 0.f; UE_LOG(LogZoogi, Log, TEXT("CAMSTUCK auto-commit P1 Awaken")); G->MenuAction(TEXT("CardCommit"), 0); }
+		return;
+	}
+	AwakenT = 0.f;
+	if (!(G->IsHumanAiming() && G->IsAimStep() && G->Stage == EZoogiStage::Battle)) { CamStuckT = -1.f; return; }
+	if (CamStuckT < 0.f) CamStuckT = 0.f;
+	CamStuckT += Dt;
+	if (CamStuckPhase >= 9)
+	{
+		if (CamStuckT > 1.2f && CamStuckPhase == 9) { CamStuckPhase = 10; if (!G->HasAim()) { int32 VX = 1920, VY = 1080; GetViewportSize(VX, VY); FVector P; if (FloorPoint(FVector2D(VX * 0.5f, VY * 0.35f), P)) G->SetFreeAim(P); } G->HumanDrag(0.6f, true); }
+		if (CamStuckT < 0.5f) CamStuckPhase = 9;
+		return;
+	}
+	const AZoogiBall* Me = G->GetActiveBall();
+	if (CamStuckPhase == 0 && CamStuckT > 1.5f)
+	{
+		CamStuckPhase = 1;
+		G->SetFreeAim(FVector(-1634.f, -2834.f, Me ? Me->BallLocation().Z : 0.f));
+		const bool bIn = G->bFreeAim && !(G->Arena ? G->Arena->IsOffCourt(FVector2D(G->FreeAimPoint.X, G->FreeAimPoint.Y)) : false);
+		UE_LOG(LogZoogi, Log, TEXT("CAMSTUCK %s far tap: free aim (%.0f, %.0f) on court=%d"), bIn ? TEXT("PASS") : TEXT("FAIL"), G->FreeAimPoint.X, G->FreeAimPoint.Y, bIn ? 1 : 0);
+		G->TakeShot(TEXT("camstuck_0_far_tap_clamped"));
+	}
+	else if (CamStuckPhase == 1 && CamStuckT > 3.5f)
+	{
+		CamStuckPhase = 2; CamStuckFixes0 = CamWatchFixes;
+		FActorSpawnParameters SP; SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		ACameraActor* Bogus = GetWorld()->SpawnActor<ACameraActor>(FVector(0.f, 2600.f, 7000.f), FRotator(-58.f, -90.f, 0.f), SP);
+		if (Bogus) { Bogus->GetCameraComponent()->SetFieldOfView(80.f); SetViewTarget(Bogus); CamStuckBogus = Bogus; }
+		UE_LOG(LogZoogi, Log, TEXT("CAMSTUCK breaking the camera: boom x4, centre 60 m off, menu orbit on, foreign high view target"));
+	}
+	if (CamStuckPhase == 2 || CamStuckPhase == 3)
+	{
+		if (CamStuckT < 4.7f) { Dist = FMath::Max(Dist, 4.f * 3000.f); Pivot = FVector(0.f, -6000.f, CourtZ); Look = Pivot; bMenuCam = CamStuckT < 3.6f; } // held stuck for 1.2 s
+		if (CamStuckPhase == 2 && CamStuckT > 3.9f) { CamStuckPhase = 3; G->TakeShot(TEXT("camstuck_1_broken_high_view")); }
+	}
+	if (CamStuckPhase == 3 && CamStuckT > 7.0f)
+	{
+		CamStuckPhase = 4;
+		const float D = Cam ? FVector::Dist(Cam->GetActorLocation(), Look) : 0.f;
+		const bool bOk = GetViewTarget() == Cam && !bMenuCam && CamWatchFixes > CamStuckFixes0 && D < 6000.f && FVector2D(Pivot.X, Pivot.Y).Size() < 4000.f && G->bFreeAim;
+		UE_LOG(LogZoogi, Log, TEXT("CAMSTUCK %s restored: view=%s menuCam=%d watchdog fixes=%d boom=%.0f centre (%.0f, %.0f) aim kept=%d"), bOk ? TEXT("PASS") : TEXT("FAIL"),
+			*GetNameSafe(GetViewTarget()), bMenuCam ? 1 : 0, CamWatchFixes - CamStuckFixes0, D, Pivot.X, Pivot.Y, G->bFreeAim ? 1 : 0);
+		G->TakeShot(TEXT("camstuck_2_restored"));
+		if (CamStuckBogus.IsValid()) CamStuckBogus->Destroy();
+	}
+	if (CamStuckPhase == 4 && CamStuckT > 8.0f) { CamStuckPhase = 9; CamStuckT = 0.f; }
 }
 
 void AZoogiPlayerController::UpdatePinchTest(AZoogiGameMode* G, float Dt)
@@ -1285,6 +1347,12 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		CurProfile = PMenu;
 		return;
 	}
+	if (bMenuCam && (G->Phase == EZoogiPhase::Aiming || G->Phase == EZoogiPhase::Rolling))
+	{
+		// Oct 15 watchdog: the menu orbit (whole map from far above) never survives into play
+		bMenuCam = false; ++CamWatchFixes;
+		UE_LOG(LogZoogi, Warning, TEXT("CAMWATCH menu orbit cam left on during play (phase %d) -> battle follow view"), (int32)G->Phase);
+	}
 	if (bMenuCam || G->Phase == EZoogiPhase::Menu || G->Phase == EZoogiPhase::GameOver)
 	{
 		AZoogiBall* W = CamTarget.Get();
@@ -1550,6 +1618,14 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	}
 	}
 
+	// Oct 15 (Evan stuck cam): during play the view centre / look point stay over the arena (a far aim point or a lock on
+	// something flying away can't drag the follow view out over the scenery)
+	if (G->Phase == EZoogiPhase::Aiming && !bAnimeShot && bRadial)
+	{
+		const float RMax = (G->Arena ? G->Arena->GetKnockoffRadius() : ZoogiConst::KnockoffRadius) + 250.f;
+		auto Clamp2 = [RMax](FVector& V) { const FVector2D V2(V.X, V.Y); if (V2.Size() > RMax) { const FVector2D C = V2.GetSafeNormal() * RMax; V.X = C.X; V.Y = C.Y; } };
+		Clamp2(WantPivot); Clamp2(WantLook);
+	}
 	const FProfile& P = Profiles[PIdx];
 	// Profile change: snapshot the current pose and blend to the new profile over P.Blend seconds
 	// (time-based ease, so every phase change lands in ~0.4-0.6 s regardless of the profile's tracking lags).
@@ -1661,6 +1737,40 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	const FVector Desired = ZPivot - Heading.Vector() * ZDist * FMath::Cos(Pr) + FVector(0, 0, ZDist * FMath::Sin(Pr));
 	FVector Loc = ProbeCamera(ProbeFrom, Desired, Dt);
 	Loc.Z = FMath::Max(Loc.Z, CourtZ); // and the camera never drops below the court
+	// Oct 15 camera watchdog: in play, if the boom is left far longer than this profile wants (or the view centre far
+	// from where it should be) for a moment - a special cam / zoom / blend that never came back - snap the follow state
+	// back to the battle view (zoom off) instead of staying stuck high over the map
+	if (G->Phase == EZoogiPhase::Aiming && !bAnimeShot && !bBlending)
+	{
+		const float ExpD = WantDist / FMath::Max(ZoomCur, 1.f);
+		const float GotD = FVector::Dist(Loc, ZLook);
+		const bool bFar = GotD > ExpD * 1.6f + 600.f || FVector::Dist2D(Pivot, WantPivot) > 3000.f || Loc.Z - CourtZ > ExpD * 1.5f + 800.f;
+		CamBadT = bFar ? CamBadT + Dt : 0.f;
+		if (CamBadT > 1.0f)
+		{
+			UE_LOG(LogZoogi, Warning, TEXT("CAMWATCH camera stuck off the battle view (boom %.0f vs %.0f, height %.0f, centre off %.0f cm) -> restored"), GotD, ExpD, Loc.Z - CourtZ, FVector::Dist2D(Pivot, WantPivot));
+			Dist = WantDist; Pitch = WantPitch; Pivot = WantPivot; Look = WantLook; Fov = WantFovF;
+			if (bZoomMode) UE_LOG(LogZoogi, Log, TEXT("AIMZOOM mode OFF (camera watchdog)"));
+			bZoomMode = false; bZoomArmed = false; ZoomWant = ZoomCur = 1.f; ZoomOffWant = ZoomOff = FVector::ZeroVector; ArmScale = 1.f;
+			CamBadT = 0.f; ++CamWatchFixes;
+			const FRotator H2(0.f, Yaw, 0.f); const float Pr2 = FMath::DegreesToRadians(Pitch);
+			ZPivot = Pivot; ZLook = Look;
+			Loc = Pivot - H2.Vector() * Dist * FMath::Cos(Pr2) + FVector(0, 0, Dist * FMath::Sin(Pr2));
+			Loc.Z = FMath::Max(Loc.Z, CourtZ);
+		}
+	}
+	else CamBadT = 0.f;
+	// and the view target: on the human's aim step the match camera must be the view (a special cam that never handed back)
+	if (G->Phase == EZoogiPhase::Aiming && G->IsHumanAiming() && G->IsAimStep() && !bAnimeShot && !(Anime && Anime->IsBusy()) && GetViewTarget() != Cam)
+	{
+		ViewBadT += Dt;
+		if (ViewBadT > 1.5f)
+		{
+			UE_LOG(LogZoogi, Warning, TEXT("CAMWATCH view target was %s on the aim step -> match camera restored"), *GetNameSafe(GetViewTarget()));
+			SetViewTarget(Cam); ViewBadT = 0.f; ++CamWatchFixes;
+		}
+	}
+	else ViewBadT = 0.f;
 
 	FRotator Rot = (ZLook - Loc).Rotation();
 	Rot.Roll = Dutch;
