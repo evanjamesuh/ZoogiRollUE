@@ -2060,8 +2060,8 @@ void AZoogiGameMode::Tick(float DeltaSeconds)
 				FParse::Value(FCommandLine::Get(), TEXT("ZoogiSoftBrake="), SBStart);
 				UE_LOG(LogZoogi, Log, TEXT("SETTLE tune: soft brake from %.1f s to %.0f cm/s^2 over %.1f s; slow settle below %.0f cm/s for %.1f s after %.1f s"), SBStart, SBDecel, SBRamp, SSSpeed, SSTime, SSAfter);
 			}
-			static float SlowFor = 0.f; static bool bSBLogged = false; static float LastPT = 0.f;
-			if (PhaseTime < LastPT || PhaseTime <= Dt * 1.5f) { SlowFor = 0.f; bSBLogged = false; }
+			static float SlowFor = 0.f; static bool bSBLogged = false; static float LastPT = 0.f; static float SlowSettledAt = -1.f;
+			if (PhaseTime < LastPT || PhaseTime <= Dt * 1.5f) { SlowFor = 0.f; bSBLogged = false; SlowSettledAt = -1.f; }
 			LastPT = PhaseTime;
 			const bool bPowersBusy = PullLeft > 0.f || RicochetTimer >= 0.f;
 			if (SBStart > 0.f && PhaseTime > SBStart && !bPowersBusy)
@@ -2094,6 +2094,23 @@ void AZoogiGameMode::Tick(float DeltaSeconds)
 					for (AZoogiBall* Bb : Balls) if (Bb && !Bb->bOut) Bb->SetPlanarVelocity(FVector::ZeroVector);
 					for (AZoogiOrb* Oo : Orbs) if (Oo && !Oo->bOut && Oo->Sphere) { const FVector V = Oo->Sphere->GetPhysicsLinearVelocity(); Oo->Sphere->SetPhysicsLinearVelocity(FVector(0.f, 0.f, V.Z)); Oo->Sphere->SetPhysicsAngularVelocityInRadians(FVector::ZeroVector); }
 					SlowFor = -2.f; // once per turn; the normal at-rest path resolves next frames
+					SlowSettledAt = PhaseTime;
+				}
+			}
+			// still not "at rest" 1 s after the slow settle (e.g. a body parked in a power state): resolve like the timeout
+			if (SlowSettledAt >= 0.f && PhaseTime - SlowSettledAt > 1.f && Phase == EZoogiPhase::Rolling)
+			{
+				UZoogiAnimeSubsystem* AnimeS = GetWorld()->GetSubsystem<UZoogiAnimeSubsystem>();
+				if (!(AnimeS && AnimeS->IsBusy()) && !AllAtRest())
+				{
+					UE_LOG(LogZoogi, Log, TEXT("SETTLE forced resolve at %.1f s (slow-settled at %.1f s, bodies not at rest)"), PhaseTime, SlowSettledAt);
+					SlowSettledAt = -1.f;
+					for (AZoogiBall* Bb : Balls) if (Bb && !Bb->bOut) Bb->SetPlanarVelocity(FVector::ZeroVector);
+					for (AZoogiOrb* Oo : Orbs) if (Oo && !Oo->bOut && Oo->Sphere) { Oo->Sphere->SetPhysicsLinearVelocity(FVector::ZeroVector); Oo->Sphere->SetPhysicsAngularVelocityInRadians(FVector::ZeroVector); }
+					EndPowers();
+					PullLeft = 0.f;
+					CheckKnockoffs();
+					SetStage(EZoogiStage::Resolve);
 				}
 			}
 		}
