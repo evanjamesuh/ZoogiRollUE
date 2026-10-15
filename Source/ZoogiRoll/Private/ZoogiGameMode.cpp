@@ -444,6 +444,10 @@ namespace ZoogiCPUCheck
 	static FVector2D Start = FVector2D::ZeroVector, Line = FVector2D::ZeroVector;
 	static float Need = -1.f, Exit = -1.f; static int32 Kind = -1; static bool bArmed = false;
 	static const TCHAR* What = TEXT("-");
+	// Oct 15 departure capture: the target's first ~0.1 s of motion after the hit (direction / peak speed), the plan's
+	// aim direction and cut, the shooter's speed just before contact
+	static FVector2D AimDir = FVector2D::ZeroVector, DepDir = FVector2D::ZeroVector;
+	static float CutDeg = 0.f, DepSpeed = 0.f, DepT0 = -1.f, HitSpeed = 0.f, PrevShooterSpeed = 0.f;
 }
 
 void AZoogiGameMode::EndTurn()
@@ -470,6 +474,16 @@ void AZoogiGameMode::EndTurn()
 			const float Ang = (D > 20.f && !ZoogiCPUCheck::Line.IsNearlyZero()) ? FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector2D::DotProduct(Mv / D, ZoogiCPUCheck::Line.GetSafeNormal()), -1.f, 1.f))) : -1.f;
 			UE_LOG(LogZoogi, Log, TEXT("CPU check P%d (%s, exit kind %d at %.0f cm): target %s moved %.0f cm (net, >= %.0f cm/s off the hit), %.0f deg off the planned line; plan assumed %.0f cm/s -> %s"),
 				ActivePlayer + 1, ZoogiCPUCheck::What, ZoogiCPUCheck::Kind, ZoogiCPUCheck::Exit, *TargetName(T), D, FMath::Sqrt(2.f * Dec * D), Ang, ZoogiCPUCheck::Need, TO->bOut ? TEXT("SCORED") : (D < 20.f ? TEXT("not hit") : TEXT("on court")));
+			if (ZoogiCPUCheck::DepT0 >= 0.f && !ZoogiCPUCheck::Line.IsNearlyZero())
+			{
+				// signed departure error: + = turned toward the shooter's aim direction (collision-induced throw), - = away
+				const FVector2D L = ZoogiCPUCheck::Line.GetSafeNormal(), V = ZoogiCPUCheck::DepDir;
+				float Err = FMath::RadiansToDegrees(FMath::Atan2(L.X * V.Y - L.Y * V.X, FVector2D::DotProduct(L, V)));
+				const float SideAim = L.X * ZoogiCPUCheck::AimDir.Y - L.Y * ZoogiCPUCheck::AimDir.X;
+				if (SideAim < 0.f) Err = -Err;
+				UE_LOG(LogZoogi, Log, TEXT("CPU depart P%d: cut %.1f deg, shooter hit %.0f cm/s, target left at %.0f cm/s (plan %.0f), %+.1f deg vs planned line (+ = toward aim); ratio %.2f"),
+					ActivePlayer + 1, ZoogiCPUCheck::CutDeg, ZoogiCPUCheck::HitSpeed, ZoogiCPUCheck::DepSpeed, ZoogiCPUCheck::Need, Err, ZoogiCPUCheck::HitSpeed > 1.f ? ZoogiCPUCheck::DepSpeed / ZoogiCPUCheck::HitSpeed : 0.f);
+			}
 		}
 	}
 	EndPowers();
@@ -886,7 +900,7 @@ void AZoogiGameMode::FireShot(const FVector2D& Velocity)
 	ShotStart = Ball->BallLocation();
 	ShotSpeed = Velocity.Size();
 	ZoogiCPUCheck::bArmed = Ball->bCPU && ZoogiCPUCheck::Target.IsValid() && ZoogiCPUCheck::Target.Get() == CPULock.Get();
-	if (ZoogiCPUCheck::bArmed) ZoogiCPUCheck::Start = FVector2D(ZoogiCPUCheck::Target->GetActorLocation());
+	if (ZoogiCPUCheck::bArmed) { ZoogiCPUCheck::Start = FVector2D(ZoogiCPUCheck::Target->GetActorLocation()); ZoogiCPUCheck::DepT0 = -1.f; ZoogiCPUCheck::DepSpeed = 0.f; ZoogiCPUCheck::HitSpeed = 0.f; ZoogiCPUCheck::PrevShooterSpeed = Velocity.Size(); }
 	UE_LOG(LogZoogi, Log, TEXT("P%d %s shot at %.0f cm/s from (%.0f, %.0f) dir %.0f deg, expected roll %.0f cm"), ActivePlayer + 1, *Ball->Def.Name, Velocity.Size(),
 		ShotStart.X, ShotStart.Y, FMath::RadiansToDegrees(FMath::Atan2(Velocity.Y, Velocity.X)), Velocity.SizeSquared() / (2.f * Arena->GetRollingDecel()));
 	if (AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PC->OnShotFired(Ball);
@@ -1713,6 +1727,8 @@ void AZoogiGameMode::PlanCPUShot()
 		ZoogiCPUCheck::Target = Pick.Actor; ZoogiCPUCheck::Line = Pick.DbgLine; ZoogiCPUCheck::Need = Pick.DbgNeed; ZoogiCPUCheck::Exit = Pick.DbgExit; ZoogiCPUCheck::Kind = Pick.DbgKind;
 		ZoogiCPUCheck::What = Pick.bStraight ? TEXT("straight") : Pick.bRimBank ? TEXT("rim bank") : Pick.bBank ? TEXT("bank") : TEXT("cut");
 		ZoogiCPUCheck::bArmed = false;
+		ZoogiCPUCheck::AimDir = Pick.Dir;
+		ZoogiCPUCheck::CutDeg = Pick.DbgLine.IsNearlyZero() ? 0.f : FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector2D::DotProduct(Pick.Dir.GetSafeNormal(), Pick.DbgLine.GetSafeNormal()), -1.f, 1.f)));
 		if (Pick.DbgSafe >= 0.f) UE_LOG(LogZoogi, Log, TEXT("CPU P%d safety: follow-through ~%.0f cm vs safe run %.0f cm, miss run %.0f cm, max safe %.0f%%; exit kind %d at %.0f cm, target needs %.0f cm/s (%s), accepted risk %.2f of %.2f"), ActivePlayer + 1, Pick.DbgCoast, FMath::Min(Pick.DbgSafe, 99999.f), Pick.DbgMiss, Pick.MaxSafeFrac * 100.f, Pick.DbgKind, Pick.DbgExit, Pick.DbgNeed, Pick.bStraight ? TEXT("straight") : Pick.bRimBank ? TEXT("rim bank") : TEXT("cut"), Pick.DbgRiskP, RiskTol);
 		// Rival-only powers: don't waste a charge if the best shot ended up being an orb.
 		if (bHuntRivals && !bPowerTest && !Cast<AZoogiBall>(Pick.Actor)) bCPUUsePower = false;
@@ -1942,6 +1958,80 @@ void AZoogiGameMode::Tick(float DeltaSeconds)
 			if (ShotsFired <= 4 && StepTime > 2.8f) TakeShot(FString::Printf(TEXT("s%d_5_rolling"), ShotsFired));
 			if (ShotsFired <= 6 && ShotClock > 0.9f) TakeShot(FString::Printf(TEXT("follow_shot%d"), ShotsFired));
 			if (ShotsFired <= 3 && ShotClock > 3.2f) TakeShot(FString::Printf(TEXT("follow_late_shot%d"), ShotsFired));
+		}
+		// Oct 15 CPU departure capture (log only)
+		if (ZoogiCPUCheck::bArmed)
+			if (AZoogiOrb* TO = Cast<AZoogiOrb>(ZoogiCPUCheck::Target.Get()))
+				if (TO->Sphere && !TO->bOut)
+				{
+					const FVector V3 = TO->Sphere->GetPhysicsLinearVelocity();
+					const FVector2D V2(V3.X, V3.Y);
+					if (ZoogiCPUCheck::DepT0 < 0.f)
+					{
+						if (V2.Size() > 40.f) { ZoogiCPUCheck::DepT0 = PhaseTime; ZoogiCPUCheck::HitSpeed = ZoogiCPUCheck::PrevShooterSpeed; }
+						else if (AZoogiBall* Sh = GetActiveBall()) { const FVector SV = Sh->GetBallVelocity(); ZoogiCPUCheck::PrevShooterSpeed = FVector2D(SV.X, SV.Y).Size(); }
+					}
+					if (ZoogiCPUCheck::DepT0 >= 0.f && PhaseTime - ZoogiCPUCheck::DepT0 <= 0.12f && V2.Size() > ZoogiCPUCheck::DepSpeed)
+					{
+						ZoogiCPUCheck::DepSpeed = V2.Size(); ZoogiCPUCheck::DepDir = V2.GetSafeNormal();
+					}
+				}
+		// Oct 15 (Evan: no stalls) soft settle, [ZoogiRoll.Resolve]: after SoftBrakeStart (6 s) every rolling body gets an
+		// extra planar brake ramping to SoftBrakeDecel (700 cm/s^2) over SoftBrakeRamp (3 s) - long ice ricochets die out
+		// instead of hitting the 12 s timeout; and when every body is below SlowSettleSpeed (60 cm/s) for SlowSettleTime
+		// (0.5 s) after SlowSettleAfter (3 s) the turn resolves (crawling orbs no longer hold it). Cmdline -ZoogiSoftBrake=<start>, 0 = off
+		{
+			static float SBStart = 6.f, SBDecel = 700.f, SBRamp = 3.f, SSSpeed = 60.f, SSTime = 0.5f, SSAfter = 3.f;
+			static bool bSBInit = false;
+			if (!bSBInit)
+			{
+				bSBInit = true;
+				if (GConfig)
+				{
+					const TCHAR* Sec = TEXT("ZoogiRoll.Resolve");
+					GConfig->GetFloat(Sec, TEXT("SoftBrakeStart"), SBStart, GGameIni); GConfig->GetFloat(Sec, TEXT("SoftBrakeDecel"), SBDecel, GGameIni);
+					GConfig->GetFloat(Sec, TEXT("SoftBrakeRamp"), SBRamp, GGameIni); GConfig->GetFloat(Sec, TEXT("SlowSettleSpeed"), SSSpeed, GGameIni);
+					GConfig->GetFloat(Sec, TEXT("SlowSettleTime"), SSTime, GGameIni); GConfig->GetFloat(Sec, TEXT("SlowSettleAfter"), SSAfter, GGameIni);
+				}
+				FParse::Value(FCommandLine::Get(), TEXT("ZoogiSoftBrake="), SBStart);
+				UE_LOG(LogZoogi, Log, TEXT("SETTLE tune: soft brake from %.1f s to %.0f cm/s^2 over %.1f s; slow settle below %.0f cm/s for %.1f s after %.1f s"), SBStart, SBDecel, SBRamp, SSSpeed, SSTime, SSAfter);
+			}
+			static float SlowFor = 0.f; static bool bSBLogged = false; static float LastPT = 0.f;
+			if (PhaseTime < LastPT || PhaseTime <= Dt * 1.5f) { SlowFor = 0.f; bSBLogged = false; }
+			LastPT = PhaseTime;
+			const bool bPowersBusy = PullLeft > 0.f || RicochetTimer >= 0.f;
+			if (SBStart > 0.f && PhaseTime > SBStart && !bPowersBusy)
+			{
+				const float Extra = SBDecel * FMath::Clamp((PhaseTime - SBStart) / FMath::Max(SBRamp, 0.1f), 0.f, 1.f) * Dt;
+				if (!bSBLogged) { bSBLogged = true; UE_LOG(LogZoogi, Log, TEXT("SETTLE soft brake on at %.1f s"), PhaseTime); }
+				auto Brake = [Extra](UPrimitiveComponent* S)
+				{
+					if (!S || !S->IsSimulatingPhysics()) return;
+					const FVector V = S->GetPhysicsLinearVelocity();
+					const FVector2D P(V.X, V.Y);
+					const float Sp = P.Size();
+					if (Sp < 1.f) return;
+					const FVector2D N = P * (FMath::Max(0.f, Sp - Extra) / Sp);
+					S->SetPhysicsLinearVelocity(FVector(N.X, N.Y, V.Z));
+				};
+				for (AZoogiBall* Bb : Balls) if (Bb && !Bb->bOut) Brake(Bb->Sphere);
+				for (AZoogiOrb* Oo : Orbs) if (Oo && !Oo->bOut) Brake(Oo->Sphere);
+			}
+			if (SSAfter > 0.f && PhaseTime > SSAfter && !bPowersBusy && Phase == EZoogiPhase::Rolling && SlowFor > -1.f)
+			{
+				float MaxSp = 0.f;
+				for (AZoogiBall* Bb : Balls) if (Bb && !Bb->bOut) MaxSp = FMath::Max(MaxSp, Bb->GetBallVelocity().Size());
+				for (AZoogiOrb* Oo : Orbs) if (Oo && !Oo->bOut && Oo->Sphere) MaxSp = FMath::Max(MaxSp, Oo->Sphere->GetPhysicsLinearVelocity().Size());
+				for (const AZoogiClone* Cc : Clones) if (IsValid(Cc)) MaxSp = 1e6f;
+				SlowFor = MaxSp < SSSpeed ? SlowFor + Dt : 0.f;
+				if (SlowFor >= SSTime && !AllAtRest())
+				{
+					UE_LOG(LogZoogi, Log, TEXT("SETTLE slow settle at %.1f s (all bodies below %.0f cm/s for %.1f s)"), PhaseTime, SSSpeed, SSTime);
+					for (AZoogiBall* Bb : Balls) if (Bb && !Bb->bOut) Bb->SetPlanarVelocity(FVector::ZeroVector);
+					for (AZoogiOrb* Oo : Orbs) if (Oo && !Oo->bOut && Oo->Sphere) { const FVector V = Oo->Sphere->GetPhysicsLinearVelocity(); Oo->Sphere->SetPhysicsLinearVelocity(FVector(0.f, 0.f, V.Z)); Oo->Sphere->SetPhysicsAngularVelocityInRadians(FVector::ZeroVector); }
+					SlowFor = -2.f; // once per turn; the normal at-rest path resolves next frames
+				}
+			}
 		}
 		{
 			UZoogiAnimeSubsystem* Anime = GetWorld()->GetSubsystem<UZoogiAnimeSubsystem>();
