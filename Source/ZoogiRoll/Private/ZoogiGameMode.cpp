@@ -1495,6 +1495,36 @@ void AZoogiGameMode::PlanCPUShot()
 	constexpr float ExitV = 300.f;    // the target should still be moving this fast at the edge (clears lips / gutters)
 	constexpr float FollowE = 0.55f;  // follow-through restitution (conservative: the shooter keeps more speed than e=0.7)
 	const float ErrMaxDeg = FMath::Max(0.f, (100.f - Me->Def.Control) / 12.f);
+	// Oct 15 calibration (CPU depart logs, 424 Frozen/other cuts): the Control aim error is an ANGLE, so a 12-15 m cut
+	// lands 50-90 cm off the ghost-ball point (90 cm = the whole contact width) -> 20-70 deg departure misses / no contact.
+	// Long shots now aim with a lateral error that stops growing past AimLongRef (700 cm): angle x clamp(Ref/Dist, Floor, 1).
+	// Floors per tier keep the lower tiers less precise ([ZoogiRoll.CPU] AimLongFloorEasy/Normal/Hard/Expert 1.0/0.5/0.4/0.35,
+	// -ZoogiCPUAimLongRef=, 0 = off). Same single GameRng draw, only its scale.
+	static const TArray<float> AimLongCfg = []
+	{
+		TArray<float> V = { 700.f, 1.f, 0.5f, 0.4f, 0.35f };
+		const TCHAR* K[4] = { TEXT("Easy"), TEXT("Normal"), TEXT("Hard"), TEXT("Expert") };
+		if (GConfig) GConfig->GetFloat(TEXT("ZoogiRoll.CPU"), TEXT("AimLongRef"), V[0], GGameIni);
+		FParse::Value(FCommandLine::Get(), TEXT("ZoogiCPUAimLongRef="), V[0]);
+		for (int32 i = 0; i < 4; ++i)
+		{
+			if (GConfig) GConfig->GetFloat(TEXT("ZoogiRoll.CPU"), *FString::Printf(TEXT("AimLongFloor%s"), K[i]), V[1 + i], GGameIni);
+			V[1 + i] = FMath::Clamp(V[1 + i], 0.1f, 1.f);
+		}
+		UE_LOG(LogZoogi, Log, TEXT("CPU long-shot aim: ref %.0f cm, floors Easy %.2f Normal %.2f Hard %.2f Expert %.2f"), V[0], V[1], V[2], V[3], V[4]);
+		return V;
+	}();
+	const float AimFloor = AimLongCfg[1 + FMath::Clamp((int32)ZoogiCPU::ActiveTier(), 0, 3)];
+	auto AimScale = [&](float Dist) -> float { return AimLongCfg[0] > 1.f ? FMath::Clamp(AimLongCfg[0] / FMath::Max(Dist, 1.f), AimFloor, 1.f) : 1.f; };
+	// measured throw grows with the cut (median +0.4 / +4.1 / +3.9 / +11.6 deg past the 1.5 at 10-20 / 20-30 / 30-45 / 45-60 deg cuts):
+	// [ZoogiRoll.CPU] CutThrowSlope 0.2 deg per cut degree past 12 (-ZoogiCPUThrowSlope=)
+	static const float CutThrowSlope = []
+	{
+		float V = 0.2f;
+		if (GConfig) GConfig->GetFloat(TEXT("ZoogiRoll.CPU"), TEXT("CutThrowSlope"), V, GGameIni);
+		FParse::Value(FCommandLine::Get(), TEXT("ZoogiCPUThrowSlope="), V);
+		return FMath::Clamp(V, 0.f, 0.5f);
+	}();
 	// Oct 15 LineExit(): what it really takes to score along a departure line (Frozen evidence: orbs hit at 15-22 m/s
 	// ricochet off the 115 cm ice walls - restitution 0.9 - and never leave; they score where the floor ends first):
 	//  Kind 0 - the floor ends (drop) before any face-on wall: just get it there (ExitV), whatever stands beyond the drop;
@@ -1544,6 +1574,63 @@ void AZoogiGameMode::PlanCPUShot()
 		const bool bTall = WallAt(From, MeZ, Dir, WallD + 60.f, ZoogiConst::ZoogiRadius * 0.8f, 130.f) < WallD + 60.f;
 		const float V = bTall ? FMath::Max(TallHopV, WallHopV) : WallHopV;
 		return WallD + V * V / (2.f * Decel);
+	};
+	// Oct 15 (Evan: Frozen self-OUTs ~2/match): with Frozen's rim gaps a shooter stopped by an ice wall (restitution 0.9)
+	// rebounds across the court - often into a gap. SafeRunAlong(): the shooter's safe roll along a line, now following
+	// one wall rebound (reflected line, tangential speed kept, normal x restitution) to the next drop / edge. Used for
+	// follow-through AND miss lines. [ZoogiRoll.CPU] ShooterExitCheck (True; -ZoogiCPUShooterExit=Off = the old model:
+	// a wall = stop at the hop speed, no miss-power cap). Decision-only, no GameRng draws.
+	static const bool bShooterExit = []
+	{
+		bool b = true;
+		if (GConfig) GConfig->GetBool(TEXT("ZoogiRoll.CPU"), TEXT("ShooterExitCheck"), b, GGameIni);
+		FString S;
+		if (FParse::Value(FCommandLine::Get(), TEXT("ZoogiCPUShooterExit="), S)) b = !(S == TEXT("Off") || S == TEXT("0") || S == TEXT("False") || S == TEXT("off"));
+		UE_LOG(LogZoogi, Log, TEXT("CPU shooter exit check (wall rebounds + miss-power cap): %s"), b ? TEXT("ON") : TEXT("OFF"));
+		return b;
+	}();
+	int32 NRebound = 0, NRebClamp = 0, NMissCap = 0;
+	auto SafeRunAlong = [&](const FVector2D& From, const FVector2D& Dir, float Edge, float Off, float WalledOff) -> float
+	{
+		float W = 1e6f;
+		const float R = ShooterRun(From, MeZ, Dir, Edge, W);
+		if (R < 1e5f) return HazardRun(From, Dir, PortalRun(From, MeZ, Dir, R + Off));
+		float S = HopRun(From, Dir, W) + WalledOff;
+		if (bShooterExit && PW && W < 1e5f)
+		{
+			FCollisionObjectQueryParams OQ; OQ.AddObjectTypesToQuery(ECC_WorldStatic); OQ.AddObjectTypesToQuery(ECC_WorldDynamic);
+			FCollisionQueryParams QP(SCENE_QUERY_STAT(ZoogiCPURebound), false); QP.AddIgnoredActor(Me); QP.bReturnPhysicalMaterial = true;
+			TArray<FHitResult> Hits;
+			const FVector S0(From.X, From.Y, MeZ + 6.f), E0 = S0 + FVector(Dir.X, Dir.Y, 0.f) * (W + 80.f);
+			PW->SweepMultiByObjectType(Hits, S0, E0, FQuat::Identity, OQ, FCollisionShape::MakeSphere(ZoogiConst::ZoogiRadius * 0.8f), QP);
+			for (const FHitResult& H : Hits)
+			{
+				if (H.bStartPenetrating) continue;
+				const AActor* A = H.GetActor();
+				if (Cast<AZoogiBall>(A) || Cast<AZoogiOrb>(A) || Cast<AZoogiClone>(A)) continue;
+				const UPrimitiveComponent* Cm = H.GetComponent();
+				if (!Cm || Cm->GetCollisionResponseToChannel(ECC_PhysicsBody) != ECR_Block || FMath::Abs(H.ImpactNormal.Z) > 0.6f) continue;
+				const FVector2D Nw = FVector2D(H.ImpactNormal.X, H.ImpactNormal.Y).GetSafeNormal();
+				const float CosI = -FVector2D::DotProduct(Dir, Nw);
+				if (CosI <= 0.05f) break;
+				const float E = H.PhysMaterial.IsValid() ? FMath::Clamp(0.5f * (H.PhysMaterial->Restitution + 0.7f), 0.2f, 0.95f) : 0.6f;
+				const FVector2D Out = (Dir + Nw * CosI) + Nw * (E * CosI); // tangential kept + normal x restitution
+				const float K = Out.Size();
+				if (K < 0.05f) break;
+				const FVector2D OD = Out / K;
+				const FVector2D Hp = From + Dir * FMath::Max(0.f, H.Distance - 5.f);
+				++NRebound;
+				float W2 = 1e6f;
+				const float R2 = ShooterRun(Hp, MeZ, OD, Arena->DistanceToEdge(Hp, OD), W2);
+				if (R2 >= 1e5f) break; // walled again: the second bounce bleeds it out
+				const float S2 = HazardRun(Hp, OD, PortalRun(Hp, MeZ, OD, R2 - 120.f));
+				const float VaMax = FMath::Sqrt(2.f * Decel * FMath::Max(0.f, S2)) / K;
+				const float SEq = H.Distance + VaMax * VaMax / (2.f * Decel);
+				if (SEq < S) { S = SEq; ++NRebClamp; }
+				break;
+			}
+		}
+		return HazardRun(From, Dir, PortalRun(From, MeZ, Dir, S));
 	};
 	// Oct 15 CPU depart evidence (Frozen): orbs left along the planned line at or above the planned speed and still
 	// stayed in - Frozen Ring 2 rules a body out only past OuterOutR (2300 cm) or below FallOutZ, not at the 1550 cm
@@ -1603,6 +1690,7 @@ void AZoogiGameMode::PlanCPUShot()
 	};
 
 	CPUPlannedCut = 0.f;
+	float CPUPickDist = 0.f;
 	const EZoogiCPUTier CPUTier = ZoogiCPU::ActiveTier();
 	// Oct 15 (Evan: ping-pong action) CPU risk tolerance: the self-ring-out probability a tier accepts on a cut shot when the
 	// conservative clamp would leave it too soft to score. Decision-only. [ZoogiRoll.CPU] RiskToleranceEasy/Normal/Hard/Expert
@@ -1689,7 +1777,7 @@ void AZoogiGameMode::PlanCPUShot()
 		const float MyRun = ShooterRun(Contact, MeZ, Dir, MyEdge, MyWall);
 		const bool bMyWalled = MyRun >= 1e5f;
 		// walled: the shooter may reach the wall at up to WallHopV, no faster (else it hops the wall)
-		const float SafeRun = HazardRun(Contact, Dir, PortalRun(Contact, MeZ, Dir, bMyWalled ? HopRun(Contact, Dir, MyWall) - 60.f : MyRun - 120.f));
+		const float SafeRun = bShooterExit ? SafeRunAlong(Contact, Dir, MyEdge, -120.f, -60.f) : HazardRun(Contact, Dir, PortalRun(Contact, MeZ, Dir, bMyWalled ? HopRun(Contact, Dir, MyWall) - 60.f : MyRun - 120.f));
 		float MaxSafeFrac = 1.f;
 		if (KAfter > 0.01f)
 		{
@@ -1708,16 +1796,30 @@ void AZoogiGameMode::PlanCPUShot()
 		// a thin hit / miss (aim error) rolls the whole line: off the edge from here?
 		float DbgMissRun = -1.f;
 		// Oct 15: also when cut variety may thin the contact (artifact mode, 6-20 deg cuts): clamp only, no extra cost
-		const bool bAimMiss = Dist * FMath::Sin(FMath::DegreesToRadians(ErrMaxDeg)) > 0.5f * (ZoogiConst::ZoogiRadius + C.Radius);
+		const bool bAimMiss = Dist * FMath::Sin(FMath::DegreesToRadians(ErrMaxDeg * AimScale(Dist))) > 0.5f * (ZoogiConst::ZoogiRadius + C.Radius);
 		if (bAimMiss || (bArtifactMode && Dist > 250.f))
 		{
 			const float FullRoll = FMath::Square(ZoogiConst::LaunchSpeedForPull(Frac)) / (2.f * Decel);
 			float BWall = 1e6f;
-			const float BRun0 = ShooterRun(B, MeZ, Dir, Arena->DistanceToEdge(B, Dir), BWall);
-			const float BRun = BRun0 < 1e5f ? BRun0 : HopRun(B, Dir, BWall) + 70.f; // walled: hop distance
-			const float EdgeB = HazardRun(B, Dir, PortalRun(B, MeZ, Dir, BRun));
+			float EdgeB;
+			if (bShooterExit) EdgeB = SafeRunAlong(B, Dir, Arena->DistanceToEdge(B, Dir), 0.f, 70.f);
+			else
+			{
+				const float BRun0 = ShooterRun(B, MeZ, Dir, Arena->DistanceToEdge(B, Dir), BWall);
+				const float BRun = BRun0 < 1e5f ? BRun0 : HopRun(B, Dir, BWall) + 70.f; // walled: hop distance
+				EdgeB = HazardRun(B, Dir, PortalRun(B, MeZ, Dir, BRun));
+			}
 			DbgMissRun = EdgeB;
-			if (FullRoll > EdgeB - 80.f)
+			if (bShooterExit && FullRoll > EdgeB - 80.f)
+			{
+				// Oct 15: a full miss must stop short of every exit - cap the power; a cap below what scores costs the lost score
+				const float MissSafe = InvertLaunch(FMath::Sqrt(2.f * Decel * FMath::Max(0.f, EdgeB - 150.f)));
+				const float Cap = FMath::Max(MissSafe, 0.3f);
+				if (MissSafe < 0.3f) Cost += 900.f;
+				else if (Cap < Frac * 0.9f) Cost += (Frac - Cap) * 1500.f;
+				Frac = FMath::Min(Frac, Cap); MaxSafeFrac = FMath::Min(MaxSafeFrac, Cap); ++NMissCap;
+			}
+			else if (FullRoll > EdgeB - 80.f)
 			{
 				// Oct 15: a miss would roll the shooter off. Keep the full roll on court when that still knocks the target
 				// out; otherwise make this a less attractive plan (other targets usually exist - not timid, just safer)
@@ -1762,7 +1864,9 @@ void AZoogiGameMode::PlanCPUShot()
 				const FVector2D G0 = C.P - N * (ZoogiConst::ZoogiRadius + C.Radius);
 				const FVector2D D0 = (G0 - B).GetSafeNormal();
 				const float Side = N.X * D0.Y - N.Y * D0.X;
-				if (FMath::Abs(Side) > 0.08f) NAim = N.GetRotated(Side > 0.f ? -CutThrowDeg : CutThrowDeg);
+				const float Cut0 = FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(FMath::Abs(Side), 0.f, 1.f)));
+				const float Throw = CutThrowDeg + CutThrowSlope * FMath::Max(0.f, Cut0 - 12.f);
+				if (FMath::Abs(Side) > 0.08f) NAim = N.GetRotated(Side > 0.f ? -Throw : Throw);
 			}
 			const FVector2D Ghost = C.P - NAim * (ZoogiConst::ZoogiRadius + C.Radius);
 			const FVector2D ToGhost = Ghost - B;
@@ -1801,8 +1905,12 @@ void AZoogiGameMode::PlanCPUShot()
 			if (!Tang.IsNearlyZero())
 			{
 				float TWall = 1e6f;
-				const float TRun = ShooterRun(Ghost, MeZ, Tang, TEdge, TWall);
-				CSafe = HazardRun(Ghost, Tang, PortalRun(Ghost, MeZ, Tang, TRun >= 1e5f ? HopRun(Ghost, Tang, TWall) - 60.f : TRun - 120.f));
+				if (bShooterExit) CSafe = SafeRunAlong(Ghost, Tang, TEdge, -120.f, -60.f);
+				else
+				{
+					const float TRun = ShooterRun(Ghost, MeZ, Tang, TEdge, TWall);
+					CSafe = HazardRun(Ghost, Tang, PortalRun(Ghost, MeZ, Tang, TRun >= 1e5f ? HopRun(Ghost, Tang, TWall) - 60.f : TRun - 120.f));
+				}
 				const float VHitMax = FMath::Sqrt(2.f * Decel * FMath::Max(0.f, CSafe)) / FMath::Max(KCut, 0.01f);
 				CutMaxSafe = InvertLaunch(FMath::Min(FMath::Sqrt(VHitMax * VHitMax + 2.f * Decel * GDist), VMax * 1.01f));
 				if (CutMaxSafe < 0.9f * FracNeed && KRisk < KCut - 0.01f)
@@ -1827,14 +1935,34 @@ void AZoogiGameMode::PlanCPUShot()
 				// a miss / thin contact rolls on along the aim line
 				const float FullRoll = FMath::Square(ZoogiConst::LaunchSpeedForPull(Frac)) / (2.f * Decel);
 				float BWall = 1e6f;
-				const float BRun0 = ShooterRun(B, MeZ, Dir, Arena->DistanceToEdge(B, Dir), BWall);
-				CMiss = HazardRun(B, Dir, PortalRun(B, MeZ, Dir, BRun0 < 1e5f ? BRun0 : HopRun(B, Dir, BWall) + 70.f));
+				if (bShooterExit) CMiss = SafeRunAlong(B, Dir, Arena->DistanceToEdge(B, Dir), 0.f, 70.f);
+				else
+				{
+					const float BRun0 = ShooterRun(B, MeZ, Dir, Arena->DistanceToEdge(B, Dir), BWall);
+					CMiss = HazardRun(B, Dir, PortalRun(B, MeZ, Dir, BRun0 < 1e5f ? BRun0 : HopRun(B, Dir, BWall) + 70.f));
+				}
 				const float MissSafe0 = InvertLaunch(FMath::Sqrt(2.f * Decel * FMath::Max(0.f, CMiss - 150.f)));
 				// chance the aim error misses a cut this thin entirely (uniform error +-E at the target, contact half-width R1+R2)
-				const float ErrE = Dist * FMath::Sin(FMath::DegreesToRadians(ErrMaxDeg));
+				const float ErrE = Dist * FMath::Sin(FMath::DegreesToRadians(ErrMaxDeg * AimScale(Dist)));
 				const float SinCut = FMath::Sqrt(FMath::Max(0.f, 1.f - CosCut * CosCut));
 				const float PMiss = ErrE > 1.f ? FMath::Clamp((ErrE - (ZoogiConst::ZoogiRadius + C.Radius) * (1.f - SinCut)) / (2.f * ErrE), 0.f, 1.f) : 0.f;
-				if (FullRoll > CMiss - 80.f && MissSafe0 < 0.9f * FracNeed && PMiss + RiskP <= RiskHere)
+				if (bShooterExit && FullRoll > CMiss - 80.f)
+				{
+					// Oct 15: a thin cut whose miss line leads into a gap / exit: cap the power so a full miss stops short of it
+					// (the lost score is priced below), and price the miss chance itself ([ZoogiRoll.CPU] MissExitCost 600)
+					static const float MissExitCost = []
+					{
+						float V = 600.f;
+						if (GConfig) GConfig->GetFloat(TEXT("ZoogiRoll.CPU"), TEXT("MissExitCost"), V, GGameIni);
+						FParse::Value(FCommandLine::Get(), TEXT("ZoogiCPUMissExitCost="), V);
+						return FMath::Max(0.f, V);
+					}();
+					const float Cap = FMath::Max(MissSafe0, 0.3f);
+					if (MissSafe0 < 0.3f) Cost += 900.f;
+					Cost += MissExitCost * FMath::Clamp(PMiss + 0.5f * SinCut * FMath::Clamp(GDist / 1500.f, 0.f, 1.f), 0.f, 1.f);
+					Frac = FMath::Min(Frac, Cap); CutMaxSafe = FMath::Min(CutMaxSafe, Cap); ++NMissCap;
+				}
+				else if (FullRoll > CMiss - 80.f && MissSafe0 < 0.9f * FracNeed && PMiss + RiskP <= RiskHere)
 				{
 					RiskP += PMiss; // a miss is unlikely enough: keep the scoring power
 				}
@@ -2035,6 +2163,7 @@ void AZoogiGameMode::PlanCPUShot()
 		BestFrac = Pick.Frac;
 		CPULock = Pick.Actor;
 		PickSafeFrac = Pick.MaxSafeFrac;
+		CPUPickDist = Pick.Dist;
 		ZoogiCPUCheck::Target = Pick.Actor; ZoogiCPUCheck::Line = Pick.DbgLine; ZoogiCPUCheck::Need = Pick.DbgNeed; ZoogiCPUCheck::Exit = Pick.DbgExit; ZoogiCPUCheck::Kind = Pick.DbgKind;
 		ZoogiCPUCheck::What = Pick.bStraight ? TEXT("straight") : Pick.bRimBank ? TEXT("rim bank") : Pick.bBank ? TEXT("bank") : TEXT("cut");
 		ZoogiCPUCheck::bArmed = false;
@@ -2062,7 +2191,10 @@ void AZoogiGameMode::PlanCPUShot()
 		BestFrac = FMath::Min(BestFrac, FMath::Max(0.2f, InvertLaunch(Safe)));
 	}
 	// Imperfect aim: less control = more error (ZoogiStats.control).
-	const float ErrDeg = GameRng.FRandRange(-1.f, 1.f) * (100.f - Me->Def.Control) / 12.f * (CPUTier == EZoogiCPUTier::Normal ? 1.f : ZoogiCPU::AimNoise(ZoogiCPU::TierRow(CPUTier)));
+	const float ErrRaw = GameRng.FRandRange(-1.f, 1.f) * (100.f - Me->Def.Control) / 12.f * (CPUTier == EZoogiCPUTier::Normal ? 1.f : ZoogiCPU::AimNoise(ZoogiCPU::TierRow(CPUTier)));
+	const float ErrDeg = ErrRaw * AimScale(CPUPickDist); // the picked plan's distance (0 = no plan: unscaled)
+	UE_LOG(LogZoogi, Log, TEXT("CPU aim P%d: dist %.0f cm, aim error %+.2f deg (raw %+.2f, long-shot x%.2f) = %.0f cm lateral at the target; miss caps %d, wall rebounds %d (clamped %d)"),
+		ActivePlayer + 1, CPUPickDist, ErrDeg, ErrRaw, AimScale(CPUPickDist), CPUPickDist * FMath::Sin(FMath::DegreesToRadians(FMath::Abs(ErrDeg))), NMissCap, NRebound, NRebClamp);
 	// Oct 14: Precision (x0.7) / Heavy Roll (x1.2) scale the aim error in card mode (after the GameRng draw: cards-off parity unchanged)
 	if (CardsOn()) if (UZoogiCardSubsystem* CardAim = UZoogiCardSubsystem::Get(this)) BestDir = BestDir.GetRotated(ErrDeg * (CardAim->AimErrorMul(ActivePlayer) - 1.f));
 	BestDir = BestDir.GetRotated(ErrDeg);
