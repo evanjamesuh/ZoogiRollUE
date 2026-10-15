@@ -1058,12 +1058,13 @@ void AZoogiGameMode::PlanCPUShot()
 		return 1e6f;
 	};
 	int32 NHoles = 0;
-	auto ShooterRun = [&](const FVector2D& From, float Z, const FVector2D& Dir, float Edge) -> float
+	auto ShooterRun = [&](const FVector2D& From, float Z, const FVector2D& Dir, float Edge, float& WallAt) -> float
 	{
 		const float E = FMath::Max(Edge, 0.f);
 		const float W = RealWallDist(From, Z, Dir, E + 300.f, ZoogiConst::ZoogiRadius * 0.8f);
 		const float Lim = FMath::Min(W, E);
 		const float Dr = DropDist(From, Z, Dir, Lim);
+		WallAt = W;
 		if (Dr < Lim) { ++NHoles; return Dr; } // a hole / drop in the floor before any wall or the edge
 		return W < E + 300.f ? 1e6f : E;      // a real wall stops it, else the edge
 	};
@@ -1082,6 +1083,16 @@ void AZoogiGameMode::PlanCPUShot()
 		FParse::Value(FCommandLine::Get(), TEXT("ZoogiCPULaunchExit="), V);
 		return FMath::Clamp(V, 300.f, 3600.f);
 	}();
+	// Oct 15: a shooter that reaches a low rim wall / seat wall / curb too fast hops it (Meadow "AIRBORNE" self ring-outs):
+	// walls only stop a shooter arriving slower than this ([ZoogiRoll.CPU] WallHopSpeed, -ZoogiCPUWallHop=)
+	static const float WallHopV = []
+	{
+		float V = 500.f;
+		if (GConfig) GConfig->GetFloat(TEXT("ZoogiRoll.CPU"), TEXT("WallHopSpeed"), V, GGameIni);
+		FParse::Value(FCommandLine::Get(), TEXT("ZoogiCPUWallHop="), V);
+		return FMath::Clamp(V, 0.f, 3000.f);
+	}();
+	int32 NHopClamp = 0;
 	constexpr float ExitV = 300.f;    // the target should still be moving this fast at the edge (clears lips / gutters)
 	constexpr float FollowE = 0.55f;  // follow-through restitution (conservative: the shooter keeps more speed than e=0.7)
 	const float ErrMaxDeg = FMath::Max(0.f, (100.f - Me->Def.Control) / 12.f);
@@ -1132,11 +1143,13 @@ void AZoogiGameMode::PlanCPUShot()
 		const float Coast = VAfter * VAfter / (2.f * Decel);
 		const FVector2D Contact = C.P - Dir * (ZoogiConst::ZoogiRadius + C.Radius);
 		const float MyEdge = Arena->DistanceToEdge(Contact, Dir);
-		const float MyRun = ShooterRun(Contact, MeZ, Dir, MyEdge);
+		float MyWall = 1e6f;
+		const float MyRun = ShooterRun(Contact, MeZ, Dir, MyEdge, MyWall);
 		const bool bMyWalled = MyRun >= 1e5f;
-		const float SafeRun = bMyWalled ? 1e6f : MyRun - 120.f;
+		// walled: the shooter may reach the wall at up to WallHopV, no faster (else it hops the wall)
+		const float SafeRun = bMyWalled ? MyWall + WallHopV * WallHopV / (2.f * Decel) - 60.f : MyRun - 120.f;
 		float MaxSafeFrac = 1.f;
-		if (KAfter > 0.01f && !bMyWalled)
+		if (KAfter > 0.01f)
 		{
 			// Oct 15 edge clamp: the hardest shot whose follow-through stops 1.2 m inside the edge
 			const float VHitMax = FMath::Sqrt(2.f * Decel * FMath::Max(0.f, SafeRun)) / KAfter;
@@ -1147,15 +1160,18 @@ void AZoogiGameMode::PlanCPUShot()
 			// still a knock-out if the target only needs to just clear the edge (no ExitV, 60 cm past)? then play that, softer
 			const float VMinOut = FMath::Sqrt(FMath::Square(FMath::Sqrt((bLaunchExit ? FarExitV * FarExitV * 0.8f : 0.f) + 2.f * Decel * (FMath::Max(0.f, PushRun) + 60.f)) / FMath::Max(Transfer, 0.3f)) + 2.f * Decel * Gap);
 			if (!bExitWalled && MaxSafeFrac >= 0.3f && ZoogiConst::LaunchSpeedForPull(MaxSafeFrac) >= VMinOut) Frac = MaxSafeFrac;
+			else if (bExitWalled && bMyWalled && MaxSafeFrac >= 0.5f) { Frac = MaxSafeFrac; ++NHopClamp; } // walled ping-pong: still a firm hit, just no wall hop
 			else Cost += 900.f; // would follow the target off the edge (-75 and a wasted turn)
 		}
 		// a thin hit / miss (aim error) rolls the whole line: off the edge from here?
 		if (Dist * FMath::Sin(FMath::DegreesToRadians(ErrMaxDeg)) > 0.5f * (ZoogiConst::ZoogiRadius + C.Radius))
 		{
 			const float FullRoll = FMath::Square(ZoogiConst::LaunchSpeedForPull(Frac)) / (2.f * Decel);
-			const float BRun = ShooterRun(B, MeZ, Dir, Arena->DistanceToEdge(B, Dir));
+			float BWall = 1e6f;
+			const float BRun0 = ShooterRun(B, MeZ, Dir, Arena->DistanceToEdge(B, Dir), BWall);
+			const float BRun = BRun0 < 1e5f ? BRun0 : BWall + WallHopV * WallHopV / (2.f * Decel) + 70.f; // walled: hop distance
 			const float EdgeB = BRun;
-			if (BRun < 1e5f && FullRoll > EdgeB - 80.f)
+			if (FullRoll > EdgeB - 80.f)
 			{
 				// Oct 15: a miss would roll the shooter off. Keep the full roll on court when that still knocks the target
 				// out; otherwise make this a less attractive plan (other targets usually exist - not timid, just safer)
@@ -1332,7 +1348,7 @@ void AZoogiGameMode::PlanCPUShot()
 		UE_LOG(LogZoogi, Log, TEXT("CPU P%d edge clamp: %.0f%% -> %.0f%% (follow-through stays on court)"), ActivePlayer + 1, BestFrac * 100.f, PickSafeFrac * 100.f);
 		BestFrac = PickSafeFrac;
 	}
-	if (NWalled || NRunWalled || NHoles) UE_LOG(LogZoogi, Log, TEXT("CPU P%d wall check: exit lines walled %d/%d (launch exits %d), follow-through lines walled %d/%d, floor holes on shooter lines %d; pick %.0f%%"), ActivePlayer + 1, NRunWalled, NRuns, NLaunch, NWalled, NSweeps, NHoles, BestFrac * 100.f);
+	if (NWalled || NRunWalled || NHoles) UE_LOG(LogZoogi, Log, TEXT("CPU P%d wall check: exit lines walled %d/%d (launch exits %d), follow-through lines walled %d/%d, floor holes on shooter lines %d, wall-hop clamps %d; pick %.0f%%"), ActivePlayer + 1, NRunWalled, NRuns, NLaunch, NWalled, NSweeps, NHoles, NHopClamp, BestFrac * 100.f);
 	// Oct 8: Frozen aerial layer: with the battle map props up, a CPU sometimes plays a prop route (rail / halo / bumper) instead.
 	// No-op (and no GameRng draw) without the map layout, so every existing mode and test plans exactly as before.
 	if (UZoogiBattleStateMachine* BSM = GetWorld()->GetSubsystem<UZoogiBattleStateMachine>())
