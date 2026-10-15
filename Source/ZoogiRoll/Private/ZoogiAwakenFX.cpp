@@ -5,6 +5,11 @@
 #include "ZoogiOrb.h"
 #include "ZoogiGameMode.h"
 #include "ZoogiArtifacts.h"
+#include "ZoogiArtifactComponent.h"
+#include "ZoogiTitanMeteorFX.h"
+#include "ZoogiPowerUnlockSubsystem.h"
+#include "Engine/GameInstance.h"
+#include "Misc/ConfigCacheIni.h"
 #include "Components/DecalComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -54,6 +59,43 @@ namespace
 	}
 }
 
+FZoogiVoidTune AZoogiAwakenFX::GetVoidTune()
+{
+	// [ZoogiRoll.Void] in DefaultGame.ini (Evan, Oct 14): Void 1 = gravity pull only, longer reach + stronger pull.
+	FZoogiVoidTune T;
+	if (GConfig)
+	{
+		GConfig->GetFloat(TEXT("ZoogiRoll.Void"), TEXT("PullRadius"), T.PullRadius, GGameIni);
+		GConfig->GetFloat(TEXT("ZoogiRoll.Void"), TEXT("PullAccel"), T.PullAccel, GGameIni);
+		GConfig->GetFloat(TEXT("ZoogiRoll.Void"), TEXT("PullSeconds"), T.PullSeconds, GGameIni);
+		GConfig->GetFloat(TEXT("ZoogiRoll.Void"), TEXT("MeteorSeconds"), T.MeteorSeconds, GGameIni);
+		GConfig->GetFloat(TEXT("ZoogiRoll.Void"), TEXT("FadeSeconds"), T.FadeSeconds, GGameIni);
+	}
+	T.PullRadius = FMath::Max(50.f, T.PullRadius); T.PullSeconds = FMath::Max(0.1f, T.PullSeconds); T.FadeSeconds = FMath::Clamp(T.FadeSeconds, 0.1f, T.PullSeconds); T.MeteorSeconds = FMath::Max(1.f, T.MeteorSeconds);
+	return T;
+}
+
+bool AZoogiAwakenFX::UseVoid2(UWorld* World, FName ZoogiId)
+{
+	// Void 2 (Titan Meteor) only when unlocked AND equipped on this Zoogi; anything else falls back to Void 1.
+	UGameInstance* GI = World ? World->GetGameInstance() : nullptr;
+	const UZoogiPowerUnlockSubsystem* U = GI ? GI->GetSubsystem<UZoogiPowerUnlockSubsystem>() : nullptr;
+	// test flag: -ZoogiEquip=<PowerId> overrides the equip for every Zoogi (Gameplay & UI's real subsystem has no such switch;
+	// pair it with their -ZoogiUnlockAll cheat for captures)
+	FString Forced; const bool bForced = FParse::Value(FCommandLine::Get(), TEXT("ZoogiEquip="), Forced);
+	const FName Eq = bForced ? FName(*Forced) : (U ? U->GetEquipped(ZoogiId) : NAME_None);
+	return U && U->IsUnlocked(ZoogiPowerIds::Void2TitanMeteor) && Eq == ZoogiPowerIds::Void2TitanMeteor;
+}
+
+AActor* AZoogiAwakenFX::PlayVoid2(UWorld* World, const FVector& From, const FVector& Impact, AActor* Target)
+{
+	// Presentation only (AZoogiTitanMeteorFX RULE ZERO): no collision / physics / damage, so it never breaks pillars or the
+	// arena (destruction stays off globally; Crystal Collapse remains the only exception and is not touched here).
+	FZoogiMeteorOptions O;
+	O.Target = Target;
+	return AZoogiTitanMeteorFX::PlayMeteor(World, From, Impact, GetVoidTune().MeteorSeconds, O);
+}
+
 AZoogiAwakenFX::AZoogiAwakenFX()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -76,7 +118,7 @@ void AZoogiAwakenFX::OnInfuse(UWorld* World, AZoogiBall* InBall, EZoogiArtifact 
 	if (Artifact == EZoogiArtifact::Storm) SpawnFX(World, EZoogiAwakenFX::ShockChain, G, ZoogiScale, InBall, FVector::ZeroVector);
 	if (Artifact == EZoogiArtifact::Void)
 	{
-		// Rock goes to what the shot is lined up on (aim preview contact), else the free-aim / path end, else straight ahead.
+		// Void 2 meteor strikes / Void 1 portal faces what the shot is lined up on (aim preview contact), else the free-aim / path end, else straight ahead.
 		AActor* Tgt = nullptr;
 		FVector Off(500.f, 0.f, 0.f);
 		if (const AZoogiGameMode* GM = World->GetAuthGameMode<AZoogiGameMode>())
@@ -86,7 +128,15 @@ void AZoogiAwakenFX::OnInfuse(UWorld* World, AZoogiBall* InBall, EZoogiArtifact 
 			else if (GM->bFreeAim) Off = GM->FreeAimPoint - G;
 		}
 		Off.Z = 0.f;
-		SpawnFX(World, EZoogiAwakenFX::VoidPortal, G, ZoogiScale, InBall, Off, Tgt);
+		if (UseVoid2(World, InBall->Def.Id))
+		{
+			// Evan 12:58 PM: Void 2 is ARMED here, not fired. The meteor plays at the first real collision with an orb or player
+			// during this infused shot (one per Awaken); no collision before the infusion ends = no meteor.
+			for (TActorIterator<AZoogiAwakenFX> It(World); It; ++It) if (It->Kind == EZoogiAwakenFX::MeteorArm && It->Ball == InBall) It->Finish(0.05f);
+			SpawnFX(World, EZoogiAwakenFX::MeteorArm, G, ZoogiScale, InBall, FVector::ZeroVector, Tgt);
+			UE_LOG(LogZoogi, Log, TEXT("AwakenFX: Void 2 Titan Meteor ARMED for %s (fires on the first orb/player collision)"), *InBall->Def.Name);
+		}
+		else SpawnFX(World, EZoogiAwakenFX::VoidPortal, G, ZoogiScale, InBall, Off, Tgt); // Void 1: portal + gravity pull
 	}
 }
 
@@ -200,6 +250,9 @@ void AZoogiAwakenFX::Init()
 		for (int32 k = 0; k < 4; ++k) Bolts[k].NextMove = 0.f;
 		if (AZoogiBall* B = Ball.Get()) B->Sphere->OnComponentHit.AddDynamic(this, &AZoogiAwakenFX::OnBallHit);
 		break;
+	case EZoogiAwakenFX::MeteorArm:
+		if (AZoogiBall* B = Ball.Get()) B->Sphere->OnComponentHit.AddDynamic(this, &AZoogiAwakenFX::OnBallHit);
+		break;
 	case EZoogiAwakenFX::ShockHit:
 		Quads->SetMaterial(0, MID(TEXT("MI_ZAFX_Bolt")));
 		Quads->SetMaterial(1, MID(TEXT("MI_ZAFX_Flash")));
@@ -215,15 +268,10 @@ void AZoogiAwakenFX::Init()
 		Card0 = MakeCard(TEXT("MI_ZAFX_PortalInner"));
 		Card1 = MakeCard(TEXT("MI_ZAFX_PortalRim"));
 		Card0->SetTranslucentSortPriority(1); Card1->SetTranslucentSortPriority(2);
-		Rock = MakeCard(TEXT("MI_ZAFX_Rock"), TEXT("/Game/VFX/KriptoFX/Effect5/Meshes/SM_Rock.SM_Rock"));
-		for (int32 k = 0; k < 9; ++k) Chunks.Add(MakeCard(TEXT("MI_ZAFX_Rock"), TEXT("/Game/VFX/KriptoFX/Effect5/Meshes/SM_Rock.SM_Rock")));
-		Rock->SetCastShadow(false); // its shadow read as a dark blob inside the violet spill
 		Decal2 = MakeDecal(TEXT("MI_ZAFX_Spill"), 470.f * S, 400.f * S); // broad soft wash
 		Decal2->SetUsingAbsoluteLocation(true);
 		Light = MakeLight(VoidTint, 520.f * S);
 		Light->SetUsingAbsoluteLocation(true);
-		Light2 = MakeLight(VoidTint, 600.f * S);
-		Light2->SetUsingAbsoluteLocation(true);
 		Quads->SetMaterial(1, MID(TEXT("MI_ZAFX_Mote")));
 		FVector Dir = (TargetActor.IsValid() ? TargetActor->GetActorLocation() - Ground : Param).GetSafeNormal2D();
 		if (Dir.IsNearlyZero()) Dir = FVector::ForwardVector;
@@ -317,12 +365,33 @@ void AZoogiAwakenFX::Finish(float FadeTime)
 	EndAt = Age;
 	Param.Z = FadeTime; // reuse: fade length once finished
 	if (Niagara) Niagara->Deactivate();
-	if (Ball.IsValid() && Kind == EZoogiAwakenFX::ShockChain) Ball->Sphere->OnComponentHit.RemoveDynamic(this, &AZoogiAwakenFX::OnBallHit);
+	if (Ball.IsValid() && (Kind == EZoogiAwakenFX::ShockChain || Kind == EZoogiAwakenFX::MeteorArm)) Ball->Sphere->OnComponentHit.RemoveDynamic(this, &AZoogiAwakenFX::OnBallHit);
 }
 
 void AZoogiAwakenFX::OnBallHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
 {
-	if (EndAt >= 0.f || Kind != EZoogiAwakenFX::ShockChain) return;
+	if (EndAt >= 0.f) return;
+	if (Kind == EZoogiAwakenFX::MeteorArm)
+	{
+		// real collision event: only an orb or another Zoogi counts (floor / walls / pillars don't); presentation only
+		AZoogiBall* B = Ball.Get();
+		if (!B || !OtherActor || OtherActor == B || !(OtherActor->IsA<AZoogiOrb>() || OtherActor->IsA<AZoogiBall>())) return;
+		const FVector BL = B->BallLocation();
+		const float FloorZ = BL.Z - ZoogiConst::ZoogiRadius;
+		const FVector P(Hit.ImpactPoint.X, Hit.ImpactPoint.Y, FloorZ);
+		FVector Dir = B->GetBallVelocity(); Dir.Z = 0.f;
+		if (!Dir.Normalize()) Dir = FVector(OtherActor->GetActorLocation() - BL).GetSafeNormal2D(UE_SMALL_NUMBER, FVector::ForwardVector);
+		PlayVoid2(GetWorld(), P - Dir * 500.f, P, OtherActor);
+		UE_LOG(LogZoogi, Log, TEXT("AwakenFX: Void 2 Titan Meteor FIRED at collision %s with %s"), *P.ToString(), *OtherActor->GetName());
+		if (AZoogiGameMode* GM = GetWorld()->GetAuthGameMode<AZoogiGameMode>()) // capture runs only (-ZoogiShots=)
+		{
+			GM->TakeShot(TEXT("void2_meteor_collision"));
+			for (int32 i = 1; i <= 5; ++i) GM->TakeShotDelayed(FString::Printf(TEXT("void2_meteor_t%02d"), i * 5), i * 0.5f);
+		}
+		Finish(0.05f);
+		return;
+	}
+	if (Kind != EZoogiAwakenFX::ShockChain) return;
 	if (Hit.ImpactNormal.Z > 0.65f) return; // rolling on the floor is not a collision
 	const FVector P(Hit.ImpactPoint.X, Hit.ImpactPoint.Y, Ground.Z);
 	SpawnFX(GetWorld(), EZoogiAwakenFX::ShockHit, P, S, nullptr, FVector::ZeroVector);
@@ -347,6 +416,7 @@ void AZoogiAwakenFX::Tick(float Dt)
 	case EZoogiAwakenFX::ShockChain: TickShock(Dt, Fade); break;
 	case EZoogiAwakenFX::ShockHit: TickShockHit(Dt); break;
 	case EZoogiAwakenFX::VoidPortal: TickVoid(Dt); break;
+	case EZoogiAwakenFX::MeteorArm: TickMeteorArm(); break;
 	}
 }
 
@@ -570,16 +640,34 @@ void AZoogiAwakenFX::TickShockHit(float Dt)
 		}
 }
 
+void AZoogiAwakenFX::TickMeteorArm()
+{
+	// disarm (no meteor) once the Void infusion is over: shot resolved, Zoogi out, or a 120 s safety cap
+	if (EndAt >= 0.f) return;
+	const AZoogiBall* B = Ball.Get();
+	if (!B || B->bOut || !B->Artifact || B->Artifact->Infused != EZoogiArtifact::Void || Age > 120.f)
+	{
+		UE_LOG(LogZoogi, Log, TEXT("AwakenFX: Void 2 Titan Meteor disarmed without a collision (no meteor)"));
+		Finish(0.05f);
+	}
+}
+
 void AZoogiAwakenFX::TickVoid(float Dt)
 {
-	// timeline (demo 1:18.1 ->): portal opens 0-0.5 s, rock pushes out 0.35-0.85 s, flies to the target, impact; then the
-	// portal stays open pulling orbs in (PullTime), and closes in 0.35 s.
-	constexpr float PullTime = 1.4f, PullRadius = 650.f, PullAccel = 1100.f;
+	// Void 1 = gravity pull only (Evan, Oct 14): portal opens 0-0.5 s, pulls nearby orbs from 0.35 s for PullSeconds, the last
+	// FadeSeconds of which it smoothly closes. No rock projectile any more (the meteor is Void 2). Values: [ZoogiRoll.Void] (GetVoidTune).
+	if (HitAt < 0.f && Age >= 0.35f) HitAt = Age; // pull start
+	if (Ball.IsValid()) if (AZoogiGameMode* GM = GetWorld()->GetAuthGameMode<AZoogiGameMode>()) // capture runs only (-ZoogiShots=)
+		for (float Ts : { 1.f, 2.5f, 4.f, 5.f, 5.6f }) if (Age >= Ts && Age - Dt < Ts) GM->TakeShot(FString::Printf(TEXT("void1_portal_t%02d"), FMath::RoundToInt(Ts * 10.f)));
+	const FZoogiVoidTune Tune = GetVoidTune();
+	const float PullTime = Tune.PullSeconds, PullRadius = Tune.PullRadius, PullAccel = Tune.PullAccel;
 	const float OpenK = EaseBack(Age / 0.5f);
-	const float CloseAt = HitAt >= 0.f ? HitAt + PullTime + 0.1f : 99.f;
-	const float CloseK = 1.f - FMath::Clamp((Age - CloseAt) / 0.35f, 0.f, 1.f);
+	// Evan 12:58 PM: sustain for PullSeconds (5 s default), smooth close over the last FadeSeconds; visuals and pull end together
+	const float FadeT = Tune.FadeSeconds;
+	const float CloseAt = HitAt >= 0.f ? HitAt + PullTime - FadeT : 99.f;
+	const float CloseK = 1.f - FMath::SmoothStep(0.f, 1.f, FMath::Clamp((Age - CloseAt) / FadeT, 0.f, 1.f));
 	const float K = FMath::Max(0.f, OpenK) * CloseK;
-	if (Age > CloseAt + 0.35f && EndAt < 0.f) Finish(0.05f);
+	if (Age > CloseAt + FadeT && EndAt < 0.f) Finish(0.05f);
 
 	const float D = 235.f * S; // ring diameter ~2.35 m in the demo
 	// round 12: tilted, slightly irregular oval (roll about the portal normal, wider than tall, gently breathing)
@@ -592,71 +680,9 @@ void AZoogiAwakenFX::TickVoid(float Dt)
 	if (Light) Light->SetIntensity(20.f * K);
 	if (Decal2) { Decal2->SetVisibility(K > 0.01f); if (UMaterialInstanceDynamic* M = Cast<UMaterialInstanceDynamic>(Decal2->GetDecalMaterial())) M->SetScalarParameterValue(TEXT("Fade"), K); }
 
-	// rock
-	const FVector Out = PortalC + PortalN * 95.f * S;
-	FVector To = TargetActor.IsValid() ? TargetActor->GetActorLocation() : Ground + Param;
-	if (!TargetActor.IsValid()) To.Z = Ground.Z + 55.f * S;
-	const float FlyT = FMath::Clamp(FVector::Dist(Out, To) / 1500.f, 0.35f, 0.75f);
-	const float RockSize = 0.66f * D; // round 12: the boulder fills 60-70% of the portal opening (measured on its mean extent)
-	float RockScale = 0.f;
-	FVector RockP = PortalC;
-	FRotator RockR(Age * 40.f, Age * 70.f, 0.f);
-	if (Rock && Rock->GetStaticMesh())
-	{
-		const FBoxSphereBounds Bd = Rock->GetStaticMesh()->GetBounds();
-		const float Unit = RockSize / FMath::Max(1.f, 2.f * (Bd.BoxExtent.X + Bd.BoxExtent.Y + Bd.BoxExtent.Z) / 3.f);
-		if (Age >= 0.35f && Age < 0.85f)
-		{
-			const float U = Ease((Age - 0.35f) / 0.5f);
-			// the boulder swells up inside the ring and only starts to push through (fills most of the portal, picked frame)
-			RockP = FMath::Lerp(PortalC - PortalN * 25.f * S, PortalC + PortalN * 30.f * S, U); RockScale = Unit * FMath::Lerp(0.8f, 1.f, U);
-		}
-		else if (Age >= 0.85f && HitAt < 0.f)
-		{
-			const float U = FMath::Clamp((Age - 0.85f) / FlyT, 0.f, 1.f);
-			RockP = FMath::Lerp(PortalC + PortalN * 30.f * S, To, U) + FVector(0, 0, 60.f * S * 4.f * U * (1.f - U)); RockScale = Unit;
-			RockR = FRotator(Age * 220.f, Age * 160.f, 0.f);
-			if (U >= 1.f)
-			{
-				HitAt = Age; RockTo = To;
-				Burst(GetWorld(), TEXT("NS_ZAFX_Sparks"), To, S * 1.5f);
-				Sfx(GetWorld(), TEXT("/Game/VFX/KriptoFX/Effect5/Audio/S_RockImpact.S_RockImpact"), To, 0.8f);
-				ChunkVel.SetNum(Chunks.Num());
-				for (int32 c = 0; c < Chunks.Num(); ++c)
-				{
-					const FVector Dir = (Rng.GetUnitVector() * FVector(1, 1, 0.3f) + FVector(0, 0, 0.8f)).GetSafeNormal();
-					ChunkVel[c] = Dir * Rng.FRandRange(250.f, 600.f) * S / 0.45f * 0.45f;
-					Chunks[c]->SetWorldLocation(To);
-					Chunks[c]->SetWorldScale3D(FVector(Unit * Rng.FRandRange(0.14f, 0.3f)));
-					Chunks[c]->SetWorldRotation(FRotator(Rng.FRandRange(0.f, 360.f), Rng.FRandRange(0.f, 360.f), 0.f));
-					Chunks[c]->SetVisibility(true);
-				}
-			}
-		}
-		if (HitAt >= 0.f)
-		{
-			const float A = Age - HitAt;
-			RockP = RockTo + FVector(0, 0, FMath::Max(0.f, 40.f * S * FMath::Sin(A * 6.f) * FMath::Exp(-A * 4.f)));
-			RockScale = Unit * (1.f - FMath::Clamp((A - 0.7f) / 0.6f, 0.f, 1.f));
-		}
-		Rock->SetVisibility(RockScale > 0.01f);
-		Rock->SetWorldLocationAndRotation(RockP, RockR);
-		Rock->SetWorldScale3D(FVector(FMath::Max(RockScale, 0.001f)));
-	}
-	// impact debris, flash light
 	if (HitAt >= 0.f)
 	{
 		const float A = Age - HitAt;
-		for (int32 c = 0; c < Chunks.Num() && c < ChunkVel.Num(); ++c)
-		{
-			ChunkVel[c].Z -= 980.f * Dt;
-			FVector P = Chunks[c]->GetComponentLocation() + ChunkVel[c] * Dt;
-			if (P.Z < Ground.Z + 5.f) { P.Z = Ground.Z + 5.f; ChunkVel[c] *= FVector(0.6f, 0.6f, -0.3f); }
-			Chunks[c]->SetWorldLocation(P);
-			Chunks[c]->AddWorldRotation(FRotator(200.f * Dt, 150.f * Dt, 0.f));
-		}
-		if (Light2) { Light2->SetWorldLocation(RockTo + FVector(0, 0, 60.f * S)); Light2->SetIntensity(25.f * FMath::Exp(-A * 4.f)); }
-
 		// suction: nearby orbs drawn toward the portal's floor point while it stays open
 		if (A < PullTime && GetWorld()->GetAuthGameMode<AZoogiGameMode>())
 		{
@@ -671,13 +697,13 @@ void AZoogiAwakenFX::TickVoid(float Dt)
 				const float Kp = 0.3f + 0.7f * (1.f - Dist / PullRadius);
 				O->Sphere->WakeRigidBody();
 				const FVector Vel = O->Sphere->GetPhysicsLinearVelocity();
-				O->Sphere->SetPhysicsLinearVelocity(Vel + FVector(Dv.X, Dv.Y, 0.f).GetSafeNormal() * PullAccel * Kp * Dt);
+				O->Sphere->SetPhysicsLinearVelocity(Vel + FVector(Dv.X, Dv.Y, 0.f).GetSafeNormal() * PullAccel * Kp * CloseK * Dt);
 			}
 		}
 	}
 	// suction motes spiralling into the portal (and a few drifting sparkles while it opens)
 	const bool bPull = HitAt >= 0.f && Age - HitAt < PullTime;
-	const float Rate = bPull ? 45.f : (K > 0.5f ? 10.f : 0.f);
+	const float Rate = bPull ? 45.f * CloseK : (K > 0.5f ? 10.f : 0.f);
 	MoteAcc += Rate * Dt;
 	while (MoteAcc >= 1.f) { MoteAcc -= 1.f; Motes.Add({ Age, (float)Rng.FRandRange(0.f, 2.f * PI), (float)Rng.FRandRange(1.1f, 2.2f), (float)Rng.FRandRange(-0.3f, 0.3f) }); }
 	BeginQuads();

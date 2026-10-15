@@ -17,6 +17,7 @@
 #include "MediaPlayer.h"
 #include "MediaTexture.h"
 #include "FileMediaSource.h"
+#include "Engine/GameViewportClient.h"
 
 namespace
 {
@@ -98,6 +99,7 @@ void UZoogiAnimeSubsystem::Deinitialize()
 {
 	if (bFrozen) Unfreeze();
 	if (MoviePlayer) MoviePlayer->Close();
+	Panels.Hide();
 	Super::Deinitialize();
 }
 
@@ -252,7 +254,7 @@ void UZoogiAnimeSubsystem::Emit(const FZoogiCombatEvent& E)
 		UE_LOG(LogZoogi, Log, TEXT("Anime event %s -> %s (skipped: Anime=Off)"), *E.Event.ToString(), *Id);
 		return;
 	}
-	if (bPlaying)
+	if (bActive)
 	{
 		// Same beat: a higher-priority event replaces the current one; otherwise queue (max 2) or collapse into the feed.
 		if (Age < 0.15f && Priority(E.Event) > Priority(Current.Event))
@@ -300,7 +302,7 @@ void UZoogiAnimeSubsystem::Start(const FZoogiCombatEvent& E)
 	else Caption = Ev.ToUpper().Replace(TEXT("_"), TEXT(" "));
 	SubCaption = FString::Printf(TEXT("%s   %s %s %.1fs   (%s)"), *CurrentId, *Row.Tier, bShort ? TEXT("Short") : TEXT("Full"), Length,
 		RowPtr ? (Row.Status.IsEmpty() ? TEXT("matrix") : *Row.Status) : TEXT("built-in default"));
-	bPlaying = true;
+	bActive = true;
 	Age = 0.f;
 	RealStart = FPlatformTime::Seconds();
 	if (E.bFreeze) Freeze();
@@ -308,6 +310,10 @@ void UZoogiAnimeSubsystem::Start(const FZoogiCombatEvent& E)
 	CurrentMovie = bShort ? FString() : FindMovie(E, CurrentId);
 	bMovie = !CurrentMovie.IsEmpty() && TryStartMovie(CurrentMovie);
 	bCutInShot = false;
+	PanelShots = 0;
+	// Awaken (Infuse) clip -> four comic panels along the screen edges instead of the centre card, so the Zoogi's real
+	// in-world transformation stays visible. -ZoogiAnimeCentreCard restores the old card.
+	bPanelMode = bMovie && E.Event == TEXT("Infuse") && !FParse::Param(FCommandLine::Get(), TEXT("ZoogiAnimeCentreCard"));
 	if (bMovie)
 	{
 		const float* Secs = MovieSeconds.Find(CurrentMovie);
@@ -316,6 +322,8 @@ void UZoogiAnimeSubsystem::Start(const FZoogiCombatEvent& E)
 	}
 	UE_LOG(LogZoogi, Log, TEXT("Anime START %s (%s, %s %.2fs%s%s)"), *CurrentId, *Row.Tier, bShort ? TEXT("Short") : TEXT("Full"), Length,
 		bFrozen ? TEXT(", world frozen") : TEXT(""), bMovie ? *FString::Printf(TEXT(", cut-in %s.mp4"), *CurrentMovie) : TEXT(""));
+	if (bPanelMode) Panels.Show(GetWorld()->GetGameViewport(), MovieTexture, Color, Length); else Panels.Hide();
+	SyncPlaying();
 	if (AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PC->OnAnimeStarted(Current);
 }
 
@@ -409,7 +417,7 @@ bool UZoogiAnimeSubsystem::TryStartMovie(const FString& Id)
 
 void UZoogiAnimeSubsystem::Tick(float DeltaTime)
 {
-	if (!bPlaying) return;
+	if (!bActive) return;
 	Age = (float)(FPlatformTime::Seconds() - RealStart);
 	// Screenshot runs: one capture in the middle of each of the first cut-ins (works while the world is frozen).
 	static int32 CutInShots = 0;
@@ -420,12 +428,21 @@ void UZoogiAnimeSubsystem::Tick(float DeltaTime)
 		++CutInShotsPerEvent.FindOrAdd(Current.Event);
 		if (AZoogiGameMode* G = GetWorld()->GetAuthGameMode<AZoogiGameMode>()) G->TakeShot(FString::Printf(TEXT("anime_cutin%d_%s"), ++CutInShots, *Current.Event.ToString()));
 	}
+	if (bPanelMode)
+	{
+		Panels.SetAge(Age);
+		// capture runs: three frames of the first panel sequence (panels 1-2, 1-3, all four)
+		static int32 PanelRuns = 0;
+		const float At[3] = { 0.35f, 0.62f, 0.9f };
+		if (PanelRuns < 1 && PanelShots < 3 && Age > Length * At[PanelShots])
+			if (AZoogiGameMode* G = GetWorld()->GetAuthGameMode<AZoogiGameMode>()) { G->TakeShot(FString::Printf(TEXT("anime_panels_%c"), TEXT('a') + PanelShots)); if (++PanelShots == 3) ++PanelRuns; }
+	}
 	if (Age >= Length) Finish(false);
 }
 
 void UZoogiAnimeSubsystem::Skip()
 {
-	if (bPlaying && Age >= 0.3f)
+	if (bActive && Age >= 0.3f)
 	{
 		UE_LOG(LogZoogi, Log, TEXT("Anime %s skipped by input at %.2fs"), *CurrentId, Age);
 		Finish(true);
@@ -434,8 +451,11 @@ void UZoogiAnimeSubsystem::Skip()
 
 void UZoogiAnimeSubsystem::Finish(bool bSkipped)
 {
-	if (!bPlaying) return;
-	bPlaying = false;
+	if (!bActive) return;
+	bActive = false;
+	bPanelMode = false;
+	Panels.Hide();
+	SyncPlaying();
 	if (bMovie && MoviePlayer) MoviePlayer->Close();
 	bMovie = false;
 	CurrentMovie.Reset();
@@ -495,7 +515,7 @@ void UZoogiAnimeSubsystem::Unfreeze()
 void UZoogiAnimeSubsystem::ResetMatch()
 {
 	Queue.Reset();
-	if (bPlaying) Finish(true);
+	if (bActive) Finish(true);
 	Queue.Reset();
 	FullPlays.Reset();
 }
@@ -523,5 +543,5 @@ FString UZoogiAnimeSubsystem::PlayMenuMovie(int32 Step)
 
 void UZoogiAnimeSubsystem::StopMenuMovie()
 {
-	if (MoviePlayer && !bPlaying) MoviePlayer->Close();
+	if (MoviePlayer && !bActive) MoviePlayer->Close();
 }

@@ -1,0 +1,19 @@
+# Void 1 (gravity pull only) + Void 2 (Titan Meteor) check captures (Oct 14). ev AFX_Orb <t> <pos> 1 0,0,0 spawns a physics orb.
+shot void1_pull
+cam -1100,-500,1100 0,0,0 80
+prop 0,0,0 180
+ev AFX_Orb 0 300,250,0 1 0,0,0
+ev AFX_Orb 0 -350,420,0 1 0,0,0
+ev AFX_Orb 0 520,-380,0 1 0,0,0
+ev AFX_Orb 0 -600,-300,0 1 0,0,0
+ev AFX_Orb 0 750,300,0 1 0,0,0
+ev AFX_Orb 0 -200,-850,0 1 0,0,0
+ev AFX_Orb 0 900,-100,0 1 0,0,0
+ev AFX_Orb 0 1300,600,0 1 0,0,0
+ev AFX_Void 0.3 0,0,0 1 -450,60,0
+times 0.25,0.9,1.5,2.1,2.7,3.2
+shot void2_meteor
+cam -2200,-900,800 300,0,300 91
+prop 400,0,0 180
+ev AFX_Void2 0 0,0,0 1 400,0,0
+times 0.4,1.0,1.6,1.85,2.0,2.3,2.6
