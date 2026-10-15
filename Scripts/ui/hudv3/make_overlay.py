@@ -36,6 +36,11 @@ for dy in (0, 255):
         y0, y1, x0, x1 = 236 + dy, 304 + dy, 16 + dx, 220 + dx
         ring = np.concatenate([res[y0-4:y0, x0:x1].reshape(-1, 3), res[y1:y1+4, x0:x1].reshape(-1, 3)])
         flat(x0, y0, x1, y1, tuple(int(v) for v in np.median(ring, 0)))
+# CAM / MENU labels -> plain plate (drawn live, bigger, with icons): per-row fill from the plate's own label-free ends
+for (x0, x1, l0, l1, r0, r1) in [(1136, 1224, 1129, 1134, 1226, 1231), (1264, 1340, 1258, 1263, 1341, 1346)]:
+    for y in range(14, 39):
+        c = np.median(np.concatenate([res[y, l0:l1], res[y, r0:r1]]), 0)
+        res[y, x0:x1] = np.clip(c + rng.normal(0, 2, (x1 - x0, 3)), 0, 255).astype(np.uint8)
 a = np.full((H, W), 255, np.uint8)
 a[68:560, 242:1134] = 0      # arena window
 a[0:35, 425:952] = 0         # phase pills (drawn live, active one glows)

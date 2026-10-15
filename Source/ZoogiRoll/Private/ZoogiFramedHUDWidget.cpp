@@ -114,9 +114,17 @@ TSharedRef<SWidget> UZoogiFramedHUDWidget::RebuildWidget()
 			St.SetDisabled(ZoogiUIStyle::RoundBrush(FLinearColor(0.f, 0.f, 0.f, 0.3f), FLinearColor::Transparent, 0.f, 10.f));
 			St.SetNormalPadding(FMargin(0.f)); St.SetPressedPadding(FMargin(0.f, 2.f, 0.f, 0.f));
 			CamBtn->SetStyle(St); MenuBtn->SetStyle(St);
-			MenuText->SetColorAndOpacity(FSlateColor(FLinearColor(0.05f, 0.08f, 0.22f)));
-			MenuText->SetShadowColorAndOpacity(FLinearColor(1.f, 1.f, 1.f, 0.25f)); MenuText->SetShadowOffset(FVector2D(0.f, 1.f));
-			MenuText->SetFont(ZoogiUIStyle::BoldFont(16, 0.f));
+			// clearer header buttons (Evan 6:55 PM): bigger bright labels with a dark outline; icons are painted on the plates
+			for (UTextBlock* T : { CamText.Get(), MenuText.Get() })
+			{
+				FSlateFontInfo F = ZoogiUIStyle::BoldFont(19, 2.5f);
+				F.OutlineSettings.OutlineColor = FLinearColor(0.02f, 0.03f, 0.08f, 1.f);
+				T->SetFont(F);
+				T->SetColorAndOpacity(FSlateColor(FLinearColor(1.f, 1.f, 0.97f)));
+				T->SetShadowColorAndOpacity(FLinearColor(0.f, 0.f, 0.f, 0.6f)); T->SetShadowOffset(FVector2D(0.f, 2.f));
+			}
+			MenuText->SetText(FText::FromString(TEXT("    MENU")));
+			{ FSlateFontInfo F = CamText->GetFont(); F.Size = 16; CamText->SetFont(F); }
 		}
 		CamBtn->OnClicked.AddDynamic(this, &UZoogiFramedHUDWidget::OnCam);
 		MenuBtn->OnClicked.AddDynamic(this, &UZoogiFramedHUDWidget::OnPause);
@@ -273,10 +281,10 @@ void UZoogiFramedHUDWidget::NativeTick(const FGeometry& Geo, float Dt)
 	{
 		const float t = L.T * s, X1 = (L.Viewport.X - L.Safe.Right) * s, Y0 = L.Safe.Top * s;
 		const float BH = FMath::Max(34.f * t, ZoogiHudArt::TapPx(48.f, 48.f * u)), BY = Y0 + 26.f * t - BH * 0.5f;
-		PlaceW(MenuBtn, FVector2D(X1 - 282.f * t + 156.f * t, BY), FVector2D(107.f * t, BH), true);
-		PlaceW(CamBtn, FVector2D(X1 - 282.f * t + 26.f * t, BY), FVector2D(120.f * t, BH), true);
+		PlaceW(MenuBtn, FVector2D(X1 - 126.f * t, BY), FVector2D(FMath::Max(104.f * t, BH), BH), true);
+		PlaceW(CamBtn, FVector2D(X1 - 255.f * t, BY), FVector2D(FMath::Max(117.f * t, BH), BH), true);
 	}
-	CamText->SetText(FText::FromString(G->bCinematicCam ? TEXT("CAM: CINE") : TEXT("CAM: TACT")));
+	CamText->SetText(FText::FromString(G->bCinematicCam ? TEXT("      CAM: CINE") : TEXT("      CAM: TACT"))); // leading space = room for the camera icon
 	CamBtn->SetIsEnabled(G->Phase != EZoogiPhase::GameOver && G->Phase != EZoogiPhase::Forming); // disabled state when the camera style can't matter
 	// pause / menu overlay
 	const FVector2D V = Geo.GetLocalSize();
@@ -448,6 +456,25 @@ int32 UZoogiFramedHUDWidget::PaintBack(const FGeometry& Geo, FSlateWindowElement
 		Strip(Xm + BW * 0.5f, MX1 - Xm - BW * 0.5f, 952.f, 966.f, 0.f, 74.f);
 		Strip(MX0, MX1 - MX0, 380.f, 966.f, 74.f, 768.f);
 		Strip(X1 - RW, RW, 966.f, 1376.f);
+	}
+
+	// header buttons (Evan 6:55 PM "top right menu could be clearer"): gold MENU edge glow + brighter plate, camera / menu icons
+	if (bOverlay)
+	{
+		const float CY = Y0 + 26.5f * t;
+		const FLinearColor Ink(0.02f, 0.03f, 0.08f, 1.f), Bright(1.f, 1.f, 0.97f, 1.f);
+		const FVector2D MP(X1 - 126.f * t, Y0 + 11.f * t), MS(104.f * t, 31.f * t);
+		const float Gw = 0.55f + 0.25f * FMath::Sin(Time * 3.f);
+		ZoogiUIStyle::SBox(Out, Ly + 6, Geo, MP - FVector2D(5.f, 5.f) * t, MS + FVector2D(10.f, 10.f) * t, FLinearColor(1.f, 0.78f, 0.25f, 0.18f * Gw), FLinearColor(1.f, 0.82f, 0.3f, 0.9f * Gw), 9.f * t, 2.5f * t);
+		ZoogiUIStyle::SBox(Out, Ly + 6, Geo, MP, MS, FLinearColor(0.95f, 0.62f, 0.08f, 0.22f), FLinearColor(1.f, 0.88f, 0.45f, 0.9f), 7.f * t, 1.5f * t); // deeper gold, bright rim
+		// hamburger icon (3 bars, bright with a dark outline)
+		for (int32 i = 0; i < 3; ++i)
+			ZoogiUIStyle::SBox(Out, Ly + 7, Geo, FVector2D(MP.X + 12.f * t, CY - 7.f * t + i * 6.f * t), FVector2D(17.f * t, 3.6f * t), Bright, Ink, 1.8f * t, 1.2f * t);
+		// camera icon on the CAM plate: body, viewfinder bump, lens
+		const FVector2D CI(X1 - 255.f * t + 9.f * t, CY - 5.f * t);
+		ZoogiUIStyle::SBox(Out, Ly + 7, Geo, CI + FVector2D(3.f, -2.5f) * t, FVector2D(6.f, 3.5f) * t, Bright, Ink, 1.5f * t, 1.2f * t);
+		ZoogiUIStyle::SBox(Out, Ly + 7, Geo, CI, FVector2D(16.f, 11.f) * t, Bright, Ink, 2.5f * t, 1.3f * t);
+		ZoogiUIStyle::SBox(Out, Ly + 8, Geo, CI + FVector2D(4.5f, 2.f) * t, FVector2D(7.f, 7.f) * t, FLinearColor(0.15f, 0.55f, 0.85f, 1.f), Ink, 3.5f * t, 1.1f * t);
 	}
 
 	// 3) top bar: title plate (round / orbs), phase pills + active player / map plate, CAM / MENU plate
