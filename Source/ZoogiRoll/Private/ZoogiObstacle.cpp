@@ -266,7 +266,14 @@ void AZoogiObstacle::Tick(float Dt)
 			const bool bWas = T.Inside.Contains(B);
 			if (bIn && !bWas)
 			{
-				T.Inside.Add(B, B->RollingDecel);
+				// Oct 15: one obstacle's zone pieces (Arabian carpet lanes = 4 overlapping segments, x0.4 decel, x1.15 speed each)
+				// act once: the first piece entered owns the saved decel, later pieces are no-ops (was 450 -> 1 -> 0 compounding)
+				bool bOtherPiece = false;
+				if (T.Kind == 4)
+					for (const FZoogiObsTrigger& O : Triggers)
+						if (&O != &T && O.Kind == 4 && O.Inside.Contains(B)) { bOtherPiece = true; break; }
+				T.Inside.Add(B, bOtherPiece ? -1.f : B->RollingDecel);
+				if (bOtherPiece) continue;
 				if (T.Kind == 4) { if (T.P[0] > 0.f) B->RollingDecel = T.P[0]; else if (T.P[1] > 0.f) B->RollingDecel *= T.P[1]; }
 				const bool bLauncher = T.Kind == 1 || T.Kind == 2 || T.Kind == 5 || T.Kind == 6 || T.Kind == 7;
 				if (T.Cool.FindRef(B) <= Now && (!bLauncher || ZoogiRelaunch::Allow(this, B, G->TurnCounter, Now, *ObsName.ToString()))) { Fire(T, B, Now); T.Cool.Add(B, Now + FMath::Max(T.Kind == 3 ? 0.f : (T.Kind == 4 ? T.P[3] : T.P[2]), 0.05f)); }
@@ -274,8 +281,16 @@ void AZoogiObstacle::Tick(float Dt)
 			else if (!bIn && bWas)
 			{
 				const float Base = T.Inside.FindRef(B);
-				if (T.Kind == 4) B->RollingDecel = Base; // leave the zone: back to the decel it had
 				T.Inside.Remove(B);
+				if (T.Kind == 4 && Base >= 0.f)
+				{
+					// leave the zone: back to the decel it had - unless still on another piece of it (hand the saved decel over)
+					FZoogiObsTrigger* Next = nullptr;
+					for (FZoogiObsTrigger& O : Triggers)
+						if (O.Kind == 4 && O.Inside.Contains(B)) { Next = &O; break; }
+					if (Next) Next->Inside.Add(B, Base);
+					else B->RollingDecel = Base;
+				}
 			}
 		}
 	}

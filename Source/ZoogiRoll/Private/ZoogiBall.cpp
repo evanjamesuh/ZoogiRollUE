@@ -506,6 +506,21 @@ void AZoogiBall::Tick(float DeltaSeconds)
 	TickRollSound();
 	if (bOut) return;
 	PrevVelocity = GetBallVelocity();
+	// Oct 15: a floor on rolling resistance - no zone / artifact stacking may leave a Zoogi sliding forever
+	// (Arabian carpet lane decel 0 -> 12 s resolve timeout). [ZoogiRoll.Physics] MinRollingDecel (40 cm/s^2), -ZoogiMinDecel=
+	static const float MinDecel = []
+	{
+		float V = 40.f;
+		if (GConfig) GConfig->GetFloat(TEXT("ZoogiRoll.Physics"), TEXT("MinRollingDecel"), V, GGameIni);
+		FParse::Value(FCommandLine::Get(), TEXT("ZoogiMinDecel="), V);
+		UE_LOG(LogZoogi, Log, TEXT("ROLLING floor: min rolling decel %.0f cm/s^2"), V);
+		return FMath::Max(0.f, V);
+	}();
+	if (RollingDecel < MinDecel)
+	{
+		UE_LOG(LogZoogi, Warning, TEXT("ROLLING floor: P%d decel %.1f -> %.0f"), PlayerIndex + 1, RollingDecel, MinDecel);
+		RollingDecel = MinDecel;
+	}
 	ZoogiPhysics::ApplyRolling(Sphere, ZoogiConst::ZoogiRadius, RollingDecel, DeltaSeconds, ZoogiConst::FullLaunchSpeed);
 	TickHookDemo(DeltaSeconds);
 	TickVisualHooks(DeltaSeconds);
