@@ -228,6 +228,7 @@ public:
 	void SkipStageForming();
 	bool bFormingCombo = false;
 	float FormTimeScale = 1.f;      // -ZoogiFormSlow=4 (forming shots)
+	bool bElevatorsPlayed = false;  // spawn elevators started this match (presentation only)
 	bool bNoForming = false;        // -ZoogiNoForm
 	bool bFormShots = false;        // -ZoogiFormShots: frames of the forming intro + pillar rise close-ups
 	bool bDamageShots = false;      // -ZoogiDamageShots: every piece type through its damage states

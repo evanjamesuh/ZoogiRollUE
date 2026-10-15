@@ -349,6 +349,7 @@ bool AZoogiGameMode::BeginStageForming(bool bCombo)
 	FormPass = 0;
 	FormCamMode = 0;
 	Arena->BeginForming(FormTimeScale);
+	bElevatorsPlayed = false;
 	Phase = EZoogiPhase::Forming;
 	PhaseTime = 0.f;
 	FormShotIdx = 0;
@@ -1189,6 +1190,8 @@ void AZoogiGameMode::Tick(float DeltaSeconds)
 	{
 	case EZoogiPhase::Forming:
 		if (bFormShots) TickFormShots();
+		// spawn elevators rise over the last ~1.25 s of the stage intro (wide forming camera), landing as the first turn starts
+		if (!bElevatorsPlayed && FormPass == 0 && Arena && Arena->Forming && PhaseTime >= Arena->Forming->GetLength() * FormTimeScale - 1.25f) { bElevatorsPlayed = true; AZoogiSpawnElevator::PlayAll(this); }
 		if (!Arena || !Arena->IsForming())
 		{
 			UE_LOG(LogZoogi, Log, TEXT("STAGE FORMED after %.2f s: colliders live, first turn"), PhaseTime);
@@ -1205,7 +1208,7 @@ void AZoogiGameMode::Tick(float DeltaSeconds)
 			if (bFormShots) TakeShot(TEXT("pillar_99_settled"));
 			FormCamMode = 0;
 			if (bFormingCombo) ComboBeginTeamTurn(0); else BeginTurn(0);
-			AZoogiSpawnElevator::PlayAll(this); // spawn elevators rise once the stage has formed (presentation only)
+			if (!bElevatorsPlayed) { bElevatorsPlayed = true; AZoogiSpawnElevator::PlayAll(this); } // (forming skipped early)
 		}
 		break;
 	case EZoogiPhase::Aiming:

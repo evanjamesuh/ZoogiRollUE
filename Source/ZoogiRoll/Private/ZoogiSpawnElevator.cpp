@@ -216,7 +216,7 @@ void AZoogiSpawnElevator::Tick(float Dt)
 		Proxies.Reset(); ProxyComps.Reset();
 	}
 	if (AZoogiGameMode* GM = GetWorld()->GetAuthGameMode<AZoogiGameMode>()) // capture runs (-ZoogiShots): first pad only
-		if (Delay == 0.f) { static const float ShotT[] = { 0.1f, 0.35f, 0.6f, 0.85f, 1.0f, 1.2f }; if (Shot < 6 && T >= ShotT[Shot]) GM->TakeShot(FString::Printf(TEXT("elevator_%d_t%03d"), Shot, FMath::RoundToInt(ShotT[Shot++] * 100.f))); }
+		if (Delay == 0.f) { static const float ShotT[] = { 0.1f, 0.35f, 0.6f, 0.85f, 1.0f, 1.2f }; if (Shot < 6 && T >= ShotT[Shot]) { GM->TakeShot(FString::Printf(TEXT("elevator_%d_t%03d"), Shot, FMath::RoundToInt(ShotT[Shot] * 100.f))); ++Shot; } }
 	if (T > 2.2f) Destroy();
 }
 
