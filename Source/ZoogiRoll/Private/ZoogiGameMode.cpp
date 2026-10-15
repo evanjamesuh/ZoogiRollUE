@@ -941,20 +941,26 @@ void AZoogiGameMode::PlanCPUShot()
 		++NSweeps;
 		FCollisionObjectQueryParams OQ; OQ.AddObjectTypesToQuery(ECC_WorldStatic); OQ.AddObjectTypesToQuery(ECC_WorldDynamic);
 		FCollisionQueryParams QP(SCENE_QUERY_STAT(ZoogiCPUExit), false); QP.AddIgnoredActor(Me);
-		TArray<FHitResult> Hits;
-		const FVector S(From.X, From.Y, Z + 6.f), E = S + FVector(Dir.X, Dir.Y, 0.f) * Len;
-		PW->SweepMultiByObjectType(Hits, S, E, FQuat::Identity, OQ, FCollisionShape::MakeSphere(Rad), QP);
-		for (const FHitResult& H : Hits)
+		// a real wall blocks the line at rolling height AND 50 cm higher (low curbs / lips / ramps a fast roller rides over
+		// don't count - Arabian Nights: shooters "stopped" by curbs in the model rolled off in the game)
+		auto Hit = [&](float Up)
 		{
-			if (H.bStartPenetrating) continue;
-			const AActor* A = H.GetActor();
-			if (Cast<AZoogiBall>(A) || Cast<AZoogiOrb>(A) || Cast<AZoogiClone>(A)) continue;
-			const UPrimitiveComponent* Cm = H.GetComponent();
-			if (!Cm || Cm->GetCollisionResponseToChannel(ECC_PhysicsBody) != ECR_Block) continue;
-			if (FMath::Abs(H.ImpactNormal.Z) > 0.6f) continue; // floor / ramps / bridge decks
-			++NWalled;
-			return true;
-		}
+			TArray<FHitResult> Hits;
+			const FVector S(From.X, From.Y, Z + Up), E = S + FVector(Dir.X, Dir.Y, 0.f) * Len;
+			PW->SweepMultiByObjectType(Hits, S, E, FQuat::Identity, OQ, FCollisionShape::MakeSphere(Rad), QP);
+			for (const FHitResult& H : Hits)
+			{
+				if (H.bStartPenetrating) continue;
+				const AActor* A = H.GetActor();
+				if (Cast<AZoogiBall>(A) || Cast<AZoogiOrb>(A) || Cast<AZoogiClone>(A)) continue;
+				const UPrimitiveComponent* Cm = H.GetComponent();
+				if (!Cm || Cm->GetCollisionResponseToChannel(ECC_PhysicsBody) != ECR_Block) continue;
+				if (FMath::Abs(H.ImpactNormal.Z) > 0.6f) continue; // floor / ramps / bridge decks
+				return true;
+			}
+			return false;
+		};
+		if (Hit(6.f) && Hit(50.f)) { ++NWalled; return true; }
 		return false;
 	};
 	// ExitRun(): follows the target's departure line over the real floor (down traces every 50 cm, the floor height
@@ -1090,7 +1096,15 @@ void AZoogiGameMode::PlanCPUShot()
 		{
 			const float FullRoll = FMath::Square(ZoogiConst::LaunchSpeedForPull(Frac)) / (2.f * Decel);
 			const float EdgeB = Arena->DistanceToEdge(B, Dir);
-			if (FullRoll > EdgeB - 80.f && !Walled(B, MeZ, Dir, EdgeB + 300.f, ZoogiConst::ZoogiRadius * 0.8f)) Cost += 300.f;
+			if (FullRoll > EdgeB - 80.f && !Walled(B, MeZ, Dir, EdgeB + 300.f, ZoogiConst::ZoogiRadius * 0.8f))
+			{
+				// Oct 15: a miss would roll the shooter off. Keep the full roll on court when that still knocks the target
+				// out; otherwise make this a less attractive plan (other targets usually exist - not timid, just safer)
+				const float MissSafe = InvertLaunch(FMath::Sqrt(2.f * Decel * FMath::Max(0.f, EdgeB - 150.f)));
+				const float VMinOut2 = FMath::Sqrt(FMath::Square(FMath::Sqrt(2.f * Decel * (FMath::Max(0.f, PushRun) + 60.f)) / FMath::Max(Transfer, 0.3f)) + 2.f * Decel * Gap);
+				if (!bExitWalled && MissSafe >= 0.3f && ZoogiConst::LaunchSpeedForPull(MissSafe) >= VMinOut2) { Frac = FMath::Min(Frac, MissSafe); MaxSafeFrac = FMath::Min(MaxSafeFrac, MissSafe); }
+				else Cost += 650.f;
+			}
 		}
 		const float CoastF = FMath::Square(VHit * KAfter) / (2.f * Decel);
 		FPlan Sp{ Cost, Dir, Frac, C.Actor, true, Dist, C.Radius, bMyWalled ? 0.f : FMath::Clamp(FMath::Min(Coast, CoastF) / FMath::Max(MyEdge, 1.f), 0.f, 1.f), bMyWalled ? 0.f : 1.f - FMath::Clamp(MyEdge / 1500.f, 0.f, 1.f) };
