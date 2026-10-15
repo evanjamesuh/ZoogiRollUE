@@ -811,7 +811,7 @@ void AZoogiPlayerController::HandleInput(float Dt)
 		else
 		{
 			AimAt(HoverTarget.Get(), Ptr);
-			if (G->HasAim() && bPtrDown && !bSimClick) { bDragArmed = true; bPendingTap = false; // scripted clicks never start a drag DragStart = DragNow = Ptr; DragFrac = 0.f; bDragWouldCancel = true; }
+			if (G->HasAim() && bPtrDown && !bSimClick) { bDragArmed = true; bPendingTap = false; DragStart = DragNow = Ptr; DragFrac = 0.f; bDragWouldCancel = true; } // scripted clicks never start a drag
 		}
 	}
 	// slingshot: hold + drag BACK (away from the shot direction) = force, release = launch; back near zero / onto the Zoogi = cancel
