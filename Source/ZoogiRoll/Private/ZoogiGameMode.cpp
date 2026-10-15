@@ -24,6 +24,7 @@
 #include "ZoogiCardSubsystem.h"
 #include "ZoogiCardHandWidget.h"
 #include "Engine/World.h"
+#include "Components/PrimitiveComponent.h"
 #include "Components/SphereComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
@@ -927,12 +928,47 @@ void AZoogiGameMode::PlanCPUShot()
 		return false;
 	};
 
+	// Oct 15 (Evan: more action, no stalls) - the edge model now sees the real arena collision:
+	// Walled(): a sphere sweep against the arena's static geometry (rim walls, arches, lips, stands) along a line;
+	// a wall before the ring-out edge means a straight push won't carry the target out there (Frozen Ring's rim) and
+	// that the shooter's own follow-through on that line is stopped (no self ring-out). Arenas without walls on the
+	// line are unaffected. No GameRng draws here (decision-making only).
+	UWorld* PW = GetWorld();
+	int32 NSweeps = 0, NWalled = 0;
+	auto Walled = [&](const FVector2D& From, float Z, const FVector2D& Dir, float Len, float Rad) -> bool
+	{
+		if (!PW || Len <= 1.f) return false;
+		++NSweeps;
+		FCollisionObjectQueryParams OQ; OQ.AddObjectTypesToQuery(ECC_WorldStatic); OQ.AddObjectTypesToQuery(ECC_WorldDynamic);
+		FCollisionQueryParams QP(SCENE_QUERY_STAT(ZoogiCPUExit), false); QP.AddIgnoredActor(Me);
+		TArray<FHitResult> Hits;
+		const FVector S(From.X, From.Y, Z + 6.f), E = S + FVector(Dir.X, Dir.Y, 0.f) * Len;
+		PW->SweepMultiByObjectType(Hits, S, E, FQuat::Identity, OQ, FCollisionShape::MakeSphere(Rad), QP);
+		for (const FHitResult& H : Hits)
+		{
+			if (H.bStartPenetrating) continue;
+			const AActor* A = H.GetActor();
+			if (Cast<AZoogiBall>(A) || Cast<AZoogiOrb>(A) || Cast<AZoogiClone>(A)) continue;
+			const UPrimitiveComponent* Cm = H.GetComponent();
+			if (!Cm || Cm->GetCollisionResponseToChannel(ECC_PhysicsBody) != ECR_Block) continue;
+			if (FMath::Abs(H.ImpactNormal.Z) > 0.6f) continue; // floor / ramps / bridge decks
+			++NWalled;
+			return true;
+		}
+		return false;
+	};
+	const float MeZ = Me->BallLocation().Z;
+	constexpr float ExitV = 300.f;    // the target should still be moving this fast at the edge (clears lips / gutters)
+	constexpr float FollowE = 0.55f;  // follow-through restitution (conservative: the shooter keeps more speed than e=0.7)
+	const float ErrMaxDeg = FMath::Max(0.f, (100.f - Me->Def.Control) / 12.f);
+
 	CPUPlannedCut = 0.f;
 	const EZoogiCPUTier CPUTier = ZoogiCPU::ActiveTier();
-	struct FPlan { float Cost; FVector2D Dir; float Frac; AActor* Actor; bool bStraight; float Dist; float Radius; float Risk = 0.f; float Exposure = 0.f; bool bBank = false; }; // Risk/Exposure: tier lookahead inputs only (Oct 14)
+	struct FPlan { float Cost; FVector2D Dir; float Frac; AActor* Actor; bool bStraight; float Dist; float Radius; float Risk = 0.f; float Exposure = 0.f; bool bBank = false; float MaxSafeFrac = 1.f; }; // Risk/Exposure: tier lookahead inputs only (Oct 14); MaxSafeFrac: Oct 15 edge clamp
 	TArray<FPlan> Plans;
 	FVector2D BestDir(-B.GetSafeNormal());
 	float BestFrac = 0.45f;
+	float PickSafeFrac = 1.f;
 	const float M1 = Me->Def.MassRatio();
 	const float VMax = ZoogiConst::LaunchSpeedForPull(1.f);
 	for (const FCand& C : Cands)
@@ -942,29 +978,59 @@ void AZoogiGameMode::PlanCPUShot()
 		if (Dist < 1.f) continue;
 		const FVector2D Dir = D / Dist;
 		const float Edge = Arena->DistanceToEdge(C.P, Dir);
+		const float CZ = C.Actor ? C.Actor->GetActorLocation().Z : MeZ;
+		const bool bExitWalled = Walled(C.P, CZ, Dir, Edge + 300.f, C.Radius * 0.8f);
 		float Cost = Dist * 0.5f + Edge - C.Value * 6.f;
+		if (bExitWalled) Cost += 1100.f; // a wall before the edge on this line: the push won't carry it out here
 		if (Blocked(B, C.P, C.P)) Cost += 1500.f;
 		// Night Circuit pads / posts: in the way of the shot, or between the target and its edge.
 		if (Arena->IsPathBlocked(B, C.P - Dir * (ZoogiConst::ZoogiRadius + C.Radius), ZoogiConst::ZoogiRadius - 5.f)) Cost += 1500.f;
 		else if (Arena->IsPathBlocked(C.P + Dir * (C.Radius + 10.f), C.P + Dir * FMath::Min(Edge, 2500.f), C.Radius - 5.f)) Cost += 700.f;
-		// Power needed to push the target ~2.5 m past the edge (1D collision, restitution ~0.7).
-		const float Need = FMath::Sqrt(2.f * Decel * (Edge + 250.f));
+		// Power needed to push the target ~2.5 m past the edge (1D collision, restitution ~0.7), still moving ExitV there.
+		const float Need = FMath::Sqrt(ExitV * ExitV + 2.f * Decel * (Edge + 250.f));
 		float Transfer = (1.f + 0.7f) * M1 / (M1 + C.TargetMass);
 		if (bCPUUsePower && MyPower == EZoogiPower::BandageBind && Cast<AZoogiBall>(C.Actor)) Transfer *= 1.25f; // bind yank
 		const float VIn = Need / FMath::Max(Transfer, 0.3f);
 		const float Gap = FMath::Max(0.f, Dist - ZoogiConst::ZoogiRadius - C.Radius);
 		const float V0 = FMath::Sqrt(VIn * VIn + 2.f * Decel * Gap);
 		if (V0 > VMax) Cost += 300.f + (V0 - VMax) * 0.5f; // can't knock it off from here: less attractive
-		const float Frac = FMath::Clamp(InvertLaunch(FMath::Min(V0, VMax)), 0.3f, 0.97f);
+		float Frac = FMath::Clamp(InvertLaunch(FMath::Min(V0, VMax)), 0.3f, 0.97f);
+		if (bExitWalled) Frac = FMath::Max(Frac, 0.6f); // walled line: a confident ping-pong hit, not a dribble into the wall
 		// Self knock-off risk: the shooter keeps rolling after the hit (heavier shooter / lighter target = more).
 		const float VLaunch = ZoogiConst::LaunchSpeedForPull(Frac);
 		const float VHit = FMath::Sqrt(FMath::Max(0.f, VLaunch * VLaunch - 2.f * Decel * Gap));
-		const float VAfter = FMath::Max(0.f, VHit * (M1 - 0.7f * C.TargetMass) / (M1 + C.TargetMass));
+		const float KAfter = FMath::Max(0.f, (M1 - FollowE * C.TargetMass) / (M1 + C.TargetMass));
+		const float VAfter = VHit * KAfter;
 		const float Coast = VAfter * VAfter / (2.f * Decel);
 		const FVector2D Contact = C.P - Dir * (ZoogiConst::ZoogiRadius + C.Radius);
 		const float MyEdge = Arena->DistanceToEdge(Contact, Dir);
-		if (Coast > MyEdge - 80.f) Cost += 900.f; // would follow the target off the edge (-75 and a wasted turn)
-		Plans.Add({ Cost, Dir, Frac, C.Actor, true, Dist, C.Radius, FMath::Clamp(Coast / FMath::Max(MyEdge, 1.f), 0.f, 1.f), 1.f - FMath::Clamp(MyEdge / 1500.f, 0.f, 1.f) });
+		const bool bMyWalled = Walled(Contact, MeZ, Dir, MyEdge + 300.f, ZoogiConst::ZoogiRadius * 0.8f);
+		const float SafeRun = bMyWalled ? 1e6f : MyEdge - 120.f;
+		float MaxSafeFrac = 1.f;
+		if (KAfter > 0.01f && !bMyWalled)
+		{
+			// Oct 15 edge clamp: the hardest shot whose follow-through stops 1.2 m inside the edge
+			const float VHitMax = FMath::Sqrt(2.f * Decel * FMath::Max(0.f, SafeRun)) / KAfter;
+			MaxSafeFrac = InvertLaunch(FMath::Min(FMath::Sqrt(VHitMax * VHitMax + 2.f * Decel * Gap), VMax * 1.01f));
+		}
+		if (Coast > SafeRun)
+		{
+			// still a knock-out if the target only needs to just clear the edge (no ExitV, 60 cm past)? then play that, softer
+			const float VMinOut = FMath::Sqrt(FMath::Square(FMath::Sqrt(2.f * Decel * (FMath::Max(0.f, Edge) + 60.f)) / FMath::Max(Transfer, 0.3f)) + 2.f * Decel * Gap);
+			if (!bExitWalled && MaxSafeFrac >= 0.3f && ZoogiConst::LaunchSpeedForPull(MaxSafeFrac) >= VMinOut) Frac = MaxSafeFrac;
+			else Cost += 900.f; // would follow the target off the edge (-75 and a wasted turn)
+		}
+		// a thin hit / miss (aim error) rolls the whole line: off the edge from here?
+		if (Dist * FMath::Sin(FMath::DegreesToRadians(ErrMaxDeg)) > 0.5f * (ZoogiConst::ZoogiRadius + C.Radius))
+		{
+			const float FullRoll = FMath::Square(ZoogiConst::LaunchSpeedForPull(Frac)) / (2.f * Decel);
+			const float EdgeB = Arena->DistanceToEdge(B, Dir);
+			if (FullRoll > EdgeB - 80.f && !Walled(B, MeZ, Dir, EdgeB + 300.f, ZoogiConst::ZoogiRadius * 0.8f)) Cost += 300.f;
+		}
+		const float CoastF = FMath::Square(VHit * KAfter) / (2.f * Decel);
+		FPlan Sp{ Cost, Dir, Frac, C.Actor, true, Dist, C.Radius, bMyWalled ? 0.f : FMath::Clamp(FMath::Min(Coast, CoastF) / FMath::Max(MyEdge, 1.f), 0.f, 1.f), bMyWalled ? 0.f : 1.f - FMath::Clamp(MyEdge / 1500.f, 0.f, 1.f) };
+		Sp.MaxSafeFrac = MaxSafeFrac;
+		Plans.Add(Sp);
 	}
 	// Angled (cut) shots: aim the ghost-ball contact so the target departs toward its nearest edge.
 	// The target leaves along the contact normal; a cut of c degrees transfers ~cos(c) of the head-on push.
@@ -976,13 +1042,18 @@ void AZoogiGameMode::PlanCPUShot()
 			const float Dist = D.Size();
 			if (Dist < 150.f) continue;
 			const FVector2D Straight = D / Dist;
-			float BestEdge = TNumericLimits<float>::Max();
+			float BestEdge = TNumericLimits<float>::Max(), BestScore = TNumericLimits<float>::Max();
 			FVector2D BestN = Straight;
+			bool bCutWalled = false;
+			const float CZ = C.Actor ? C.Actor->GetActorLocation().Z : MeZ;
 			for (int32 k = -5; k <= 5; ++k)
 			{
 				const FVector2D N = Straight.GetRotated(k * 9.f);
 				const float E = Arena->DistanceToEdge(C.P, N);
-				if (E < BestEdge) { BestEdge = E; BestN = N; }
+				// Oct 15: a departure line that runs into a wall before the edge is no exit (Frozen Ring: aim it through a gap)
+				const bool bW = E < BestScore && Walled(C.P, CZ, N, E + 300.f, C.Radius * 0.8f);
+				const float Sc = E + (bW ? 2500.f : 0.f);
+				if (Sc < BestScore) { BestScore = Sc; BestEdge = E; BestN = N; bCutWalled = bW; }
 			}
 			const FVector2D Ghost = C.P - BestN * (ZoogiConst::ZoogiRadius + C.Radius);
 			const FVector2D ToGhost = Ghost - B;
@@ -991,11 +1062,11 @@ void AZoogiGameMode::PlanCPUShot()
 			const FVector2D Dir = ToGhost / GDist;
 			const float CosCut = FVector2D::DotProduct(Dir, BestN);
 			if (CosCut < FMath::Cos(FMath::DegreesToRadians(50.f)) || CosCut > FMath::Cos(FMath::DegreesToRadians(4.f))) continue; // not a real cut, or too thin
-			float Cost = GDist * 0.5f + BestEdge - C.Value * 6.f + 20.f; // small bias: straight shots are more reliable (Oct 4: 60 -> 20 for variety)
+			float Cost = GDist * 0.5f + BestEdge - C.Value * 6.f + 20.f + (bCutWalled ? 1100.f : 0.f); // small bias: straight shots are more reliable (Oct 4: 60 -> 20 for variety)
 			if (Blocked(B, Ghost, C.P)) Cost += 1500.f;
 			if (Arena->IsPathBlocked(B, Ghost, ZoogiConst::ZoogiRadius - 5.f)) Cost += 1500.f;
 			else if (Arena->IsPathBlocked(C.P + BestN * (C.Radius + 10.f), C.P + BestN * FMath::Min(BestEdge, 2500.f), C.Radius - 5.f)) Cost += 700.f;
-			const float Need = FMath::Sqrt(2.f * Decel * (BestEdge + 250.f));
+			const float Need = FMath::Sqrt(ExitV * ExitV + 2.f * Decel * (BestEdge + 250.f));
 			const float Transfer = (1.f + 0.7f) * M1 / (M1 + C.TargetMass) * CosCut;
 			const float VIn = Need / FMath::Max(Transfer, 0.3f);
 			const float V0 = FMath::Sqrt(VIn * VIn + 2.f * Decel * GDist);
@@ -1005,7 +1076,8 @@ void AZoogiGameMode::PlanCPUShot()
 			const FVector2D Tang = (Dir - CosCut * BestN).GetSafeNormal();
 			const float VHit = FMath::Sqrt(FMath::Max(0.f, FMath::Square(ZoogiConst::LaunchSpeedForPull(Frac)) - 2.f * Decel * GDist));
 			const float VAfter = VHit * FMath::Sqrt(FMath::Max(0.f, 1.f - CosCut * CosCut));
-			if (!Tang.IsNearlyZero() && VAfter * VAfter / (2.f * Decel) > Arena->DistanceToEdge(Ghost, Tang) - 80.f) Cost += 900.f;
+			if (!Tang.IsNearlyZero() && VAfter * VAfter / (2.f * Decel) > Arena->DistanceToEdge(Ghost, Tang) - 80.f
+				&& !Walled(Ghost, MeZ, Tang, Arena->DistanceToEdge(Ghost, Tang) + 300.f, ZoogiConst::ZoogiRadius * 0.8f)) Cost += 900.f;
 			Plans.Add({ Cost, Dir, Frac, C.Actor, false, GDist, C.Radius, Tang.IsNearlyZero() ? 0.f : FMath::Clamp((VAfter * VAfter / (2.f * Decel)) / FMath::Max(Arena->DistanceToEdge(Ghost, Tang), 1.f), 0.f, 1.f), 1.f - FMath::Clamp(Arena->DistanceToEdge(Ghost, Dir) / 1500.f, 0.f, 1.f) });
 		}
 	}
@@ -1086,6 +1158,7 @@ void AZoogiGameMode::PlanCPUShot()
 		BestDir = Pick.Dir;
 		BestFrac = Pick.Frac;
 		CPULock = Pick.Actor;
+		PickSafeFrac = Pick.MaxSafeFrac;
 		// Rival-only powers: don't waste a charge if the best shot ended up being an orb.
 		if (bHuntRivals && !bPowerTest && !Cast<AZoogiBall>(Pick.Actor)) bCPUUsePower = false;
 		// Cut variety (Oct 4): about half of the straight shots are played slightly off-centre (6-20 deg contact cut),
@@ -1112,6 +1185,13 @@ void AZoogiGameMode::PlanCPUShot()
 	if (CardsOn()) if (UZoogiCardSubsystem* CardAim = UZoogiCardSubsystem::Get(this)) BestDir = BestDir.GetRotated(ErrDeg * (CardAim->AimErrorMul(ActivePlayer) - 1.f));
 	BestDir = BestDir.GetRotated(ErrDeg);
 	BestFrac = FMath::Clamp(BestFrac * GameRng.FRandRange(0.96f, 1.04f), 0.25f, 1.f);
+	// Oct 15 edge clamp (after the GameRng draws): the cut-variety boost / power jitter never push the follow-through off
+	if (BestFrac > PickSafeFrac && PickSafeFrac >= 0.3f)
+	{
+		UE_LOG(LogZoogi, Log, TEXT("CPU P%d edge clamp: %.0f%% -> %.0f%% (follow-through stays on court)"), ActivePlayer + 1, BestFrac * 100.f, PickSafeFrac * 100.f);
+		BestFrac = PickSafeFrac;
+	}
+	if (NWalled) UE_LOG(LogZoogi, Log, TEXT("CPU P%d wall check: %d of %d lines hit arena walls before the edge"), ActivePlayer + 1, NWalled, NSweeps);
 	// Oct 8: Frozen aerial layer: with the battle map props up, a CPU sometimes plays a prop route (rail / halo / bumper) instead.
 	// No-op (and no GameRng draw) without the map layout, so every existing mode and test plans exactly as before.
 	if (UZoogiBattleStateMachine* BSM = GetWorld()->GetSubsystem<UZoogiBattleStateMachine>())
