@@ -1036,7 +1036,7 @@ namespace ZoogiExitMap
 						// (Frozen's boulders touch the ice ring) overlaps that wall too -> the ray stays blocked
 						const FVector2D Dk = FVector2D(1.f, 0.f).GetRotated(k * 2.f);
 						float Rs = Rays[k].WallR + 10.f; bool bFree = false, bOther = false;
-						for (; Rs < Rays[k].WallR + 400.f; Rs += 10.f)
+						for (; Rs < Rays[k].WallR + PropMaxW + 100.f; Rs += 10.f) // depth cap: Frozen's hex platform is ~470 cm across
 						{
 							TArray<FOverlapResult> Ov;
 							const FVector2D Q = Dk * Rs;
