@@ -134,6 +134,9 @@ public:
 	void SimDrag(const FVector2D& From, const FVector2D& To, float Seconds);
 protected:
 	bool bPtrWasDown = false;
+	bool bPendingTap = false;
+	FVector2D TapPos = FVector2D::ZeroVector;
+	TWeakObjectPtr<AActor> TapTarget;
 	float MaxDragDistancePx = 260.f, MaxDragForce = 1.f, MinDragPx = 22.f, CancelOnZoogiPx = 46.f;
 	bool bDragCfgLoaded = false;
 	// scripted drag

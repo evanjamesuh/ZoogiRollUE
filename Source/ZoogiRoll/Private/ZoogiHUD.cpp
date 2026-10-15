@@ -524,7 +524,7 @@ void AZoogiHUD::DrawMatch(AZoogiGameMode* G)
 	DrawEpisodeP5(G);
 	if (bFramed) {}
 	else if (Letterbox < 0.3f && G->bComboMode) Text(TEXT("2v2 COMBO   Awaken: card + I / G / S   Battle: Q switch Zoogi, click target / floor, A/D cut, 1 CONTROL 2 DRIVE 3 LAUNCH, SPACE confirm   Follow-Up: F accept / X skip   C camera"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.88f, 1.f, 0.9f), 0.36f, false, false);
-	else if (Letterbox < 0.3f && G->CardsOn()) Text(TEXT("Standby: click cards (1-5) + COMMIT (Enter), Backspace clears   Aim: click target or floor, A/D cut, Up/Down force CONTROL/DRIVE/LAUNCH, SPACE confirm   C camera"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.88f, 1.f, 0.9f), 0.36f, false, false);
+	else if (Letterbox < 0.3f && G->CardsOn()) Text(TEXT("Standby: click cards (1-5) + COMMIT (Enter), Backspace clears   Aim: tap target or floor, drag back for power, release to launch   C camera"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.88f, 1.f, 0.9f), 0.36f, false, false);
 	else if (Letterbox < 0.3f) Text(TEXT("Awaken: click a card + INFUSE / GUARD / SAVE (I/G/S)   Aim: click target or floor, A/D cut, Up/Down power, SPACE confirm   RMB/Esc cancel   C camera   Ctrl+R restart"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.88f, 1.f, 0.9f), 0.36f, false, false);
 	if (!bFramed) Button(TEXT("MENU"), W - 150.f * U, 24.f * U, 126.f * U, 46.f * U, "Menu", 0, GOrbBlue);
 	if (!bFramed) Button(G->bCinematicCam ? TEXT("CAM: CINE") : TEXT("CAM: TACT"), W - 340.f * U, 24.f * U, 176.f * U, 46.f * U, "CamStyle", 0, FLinearColor(0.6f, 0.9f, 0.6f), G->bCinematicCam);
@@ -954,7 +954,10 @@ void AZoogiHUD::DrawDragPower(AZoogiGameMode* G)
 	}
 	const FString Tier = G->bComboMode ? FString(AZoogiGameMode::ForceName(G->ComboForce)) : FString();
 	const FString Label = PC->bDragWouldCancel ? FString(TEXT("RELEASE = CANCEL")) : FString::Printf(TEXT("%d%%%s%s"), FMath::RoundToInt(F * 100.f), Tier.IsEmpty() ? TEXT("") : TEXT("  "), *Tier);
-	Text(Label, C.X, C.Y - R - 34.f * U, PC->bDragWouldCancel ? Dim : Gold, 0.55f, true);
+	// readout beside the ring (clear of the arrow, which runs through the top of the ring), with a dark pill behind it
+	const float LX = C.X + R + 18.f * U, LY = C.Y - 20.f * U;
+	Panel(LX - 8.f * U, LY - 6.f * U, (PC->bDragWouldCancel ? 250.f : 170.f) * U, 46.f * U, FLinearColor(0.02f, 0.03f, 0.06f, 0.72f));
+	Text(Label, LX, LY, PC->bDragWouldCancel ? FLinearColor(1.f, 0.45f, 0.4f) : Gold, 0.62f, false);
 }
 
 void AZoogiHUD::WorldArrow(const FVector& From, const FVector& To, const FLinearColor& Col, float Thick)

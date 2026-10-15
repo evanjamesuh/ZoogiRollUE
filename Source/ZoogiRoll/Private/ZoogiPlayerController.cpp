@@ -644,7 +644,12 @@ void AZoogiPlayerController::HandleInput(float Dt)
 
 	// UMG controls (Awaken panel, aim bar) swallow their presses in Slate; as a second guard, a press the UI
 	// took this frame / last frame, or any press with the cursor over a UMG panel, never reaches world picking.
-	const bool bRawLMB = WasInputKeyJustPressed(EKeys::LeftMouseButton);
+	// Oct 14 root cause of "can't click": DefaultInput has bUseMouseForTouch=True, so in a packaged build the mouse
+	// arrives as Touch1 and WasInputKeyJustPressed(LeftMouseButton) never fires - world picks never ran. Treat a
+	// Touch1 / held-LMB press edge as the press too.
+	float PreTX = 0.f, PreTY = 0.f; bool bPreTouch = false;
+	GetInputTouchState(ETouchIndex::Touch1, PreTX, PreTY, bPreTouch);
+	const bool bRawLMB = WasInputKeyJustPressed(EKeys::LeftMouseButton) || ((IsInputKeyDown(EKeys::LeftMouseButton) || bPreTouch) && !bPtrWasDown);
 	if (bRawLMB) LastRawLMBFrame = GFrameCounter;
 	const bool bOverUI = Hud && Hud->IsOverUI(Mouse);
 	const bool bUIClick = Hud && Hud->UIConsumedClick();
@@ -670,7 +675,7 @@ void AZoogiPlayerController::HandleInput(float Dt)
 	const FVector2D Ptr = bTouch ? FVector2D(TchX, TchY) : Mouse;
 	const bool bPtrPress = bPtrDown && !bPtrWasDown, bPtrRelease = !bPtrDown && bPtrWasDown;
 	bPtrWasDown = bPtrDown;
-	const bool bTouchPress = bTouch && bPtrPress && !(Hud && Hud->IsOverUI(Ptr));
+	const bool bTouchPress = bTouch && bPtrPress && !bLMB && !(Hud && Hud->IsOverUI(Ptr)); // bLMB already covers the press
 
 	// Buttons (menu, results, in-match corner buttons).
 	if (bLMB && Hud)
@@ -786,18 +791,28 @@ void AZoogiPlayerController::HandleInput(float Dt)
 	const bool bPtrOverUI = Hud && Hud->IsOverUI(Ptr);
 	HoverTarget = (bPtrOverUI || bDragArmed) ? nullptr : PickTarget(Ptr.X, Ptr.Y);
 	const bool bClick = ((bLMB || bSimClick) && !bOverUI && !bUIClick) || bTouchPress;
+	auto AimAt = [&](AActor* T, const FVector2D& At)
+	{
+		if (T) { G->LockOn(T, false); UE_LOG(LogZoogi, Log, TEXT("INPUT aim click: target %s -> hasAim=%d"), *T->GetName(), G->HasAim() ? 1 : 0); return; } // tap an orb / a player
+		FVector P = FVector::ZeroVector;
+		const bool bFloor = FloorPoint(At, P);
+		if (bFloor) G->SetFreeAim(P); // tap the floor: free (angled) aim at that point
+		UE_LOG(LogZoogi, Log, TEXT("INPUT aim click: floor=%d at (%.0f, %.0f) -> hasAim=%d"), bFloor ? 1 : 0, P.X, P.Y, G->HasAim() ? 1 : 0);
+	};
 	if (bClick)
 	{
-		if (HoverTarget.IsValid()) G->LockOn(HoverTarget.Get(), false); // tap an orb / a player = aim at it (force comes from the drag)
+		if (G->HasAim() && bPtrDown && !bSimClick)
+		{
+			// already aimed: this press is a drag (keeps the aim, the camera stays put) unless it is released without
+			// moving, in which case it is a tap and re-aims at the press point on release
+			bDragArmed = true; bPendingTap = true; TapPos = Ptr; TapTarget = HoverTarget;
+			DragStart = DragNow = Ptr; DragFrac = 0.f; bDragWouldCancel = true;
+		}
 		else
 		{
-			FVector P = FVector::ZeroVector;
-			const bool bFloor = FloorPoint(Ptr, P);
-			if (bFloor) G->SetFreeAim(P); // click the floor: free (angled) aim at that point
-			UE_LOG(LogZoogi, Log, TEXT("INPUT aim click: floor=%d at (%.0f, %.0f) -> hasAim=%d"), bFloor ? 1 : 0, P.X, P.Y, G->HasAim() ? 1 : 0);
+			AimAt(HoverTarget.Get(), Ptr);
+			if (G->HasAim() && bPtrDown) { bDragArmed = true; bPendingTap = false; DragStart = DragNow = Ptr; DragFrac = 0.f; bDragWouldCancel = true; }
 		}
-		if (HoverTarget.IsValid()) UE_LOG(LogZoogi, Log, TEXT("INPUT aim click: target %s -> hasAim=%d"), *HoverTarget->GetName(), G->HasAim() ? 1 : 0);
-		if (G->HasAim() && bPtrDown) { bDragArmed = true; DragStart = DragNow = Ptr; DragFrac = 0.f; bDragWouldCancel = true; }
 	}
 	// slingshot: hold + drag BACK (away from the shot direction) = force, release = launch; back near zero / onto the Zoogi = cancel
 	if (bDragArmed)
@@ -812,6 +827,7 @@ void AZoogiPlayerController::HandleInput(float Dt)
 		bool bProj = Me && !SDir.IsNearlyZero() && ProjectWorldLocationToScreen(Me->BallLocation(), BallS) && ProjectWorldLocationToScreen(Me->BallLocation() + FVector(SDir * 200.f, 0.f), AheadS);
 		const FVector2D Fwd = bProj ? (AheadS - BallS).GetSafeNormal() : FVector2D(0.f, -1.f);
 		if (bPtrDown) DragNow = Ptr;
+		if (bPendingTap && FVector2D::Distance(DragNow, DragStart) > MinDragPx * UPx) bPendingTap = false;
 		const float BackPx = FMath::Max(0.f, -FVector2D::DotProduct(DragNow - DragStart, Fwd));
 		DragFrac = FMath::Min(BackPx / (MaxDragDistancePx * UPx), 1.f) * MaxDragForce;
 		bDragWouldCancel = BackPx < MinDragPx * UPx || (bProj && FVector2D::Distance(DragNow, BallS) < CancelOnZoogiPx * UPx);
@@ -820,6 +836,13 @@ void AZoogiPlayerController::HandleInput(float Dt)
 		if (bPtrRelease || !bPtrDown)
 		{
 			bDragArmed = false;
+			if (bPendingTap)
+			{
+				bPendingTap = false; DragFrac = 0.f;
+				if (G->HumanDragFrac >= 0.f) G->HumanDragFrac = -1.f;
+				AimAt(TapTarget.Get(), TapPos);
+				return;
+			}
 			UE_LOG(LogZoogi, Log, TEXT("INPUT drag release: back %.0f px of %.0f -> pull %.0f%%%s"), BackPx, MaxDragDistancePx * UPx, DragFrac * 100.f, bDragWouldCancel ? TEXT(" (cancel: aim kept)") : TEXT(""));
 			if (bDragWouldCancel) G->HumanDragCancel();
 			else G->HumanDrag(DragFrac, true);

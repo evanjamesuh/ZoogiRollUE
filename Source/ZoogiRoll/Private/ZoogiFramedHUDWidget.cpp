@@ -374,14 +374,14 @@ FString UZoogiFramedHUDWidget::PromptText(const AZoogiGameMode* G)
 	}
 	if (B->bCPU) return G->TargetLock.IsValid() ? FString::Printf(TEXT("CPU is targeting %s"), *G->TargetName(G->TargetLock.Get())) : TEXT("CPU is choosing a target");
 	if (G->IsPowerUpStep()) return TEXT("POWER UP - launching!");
-	if (G->HasAim()) return FString::Printf(TEXT("Aiming at %s. A/D cut, Up/Down force, SPACE or CONFIRM to launch"), G->bFreeAim ? TEXT("FLOOR POINT") : *G->TargetName(G->TargetLock.Get()).ToUpper());
-	return TEXT("Click a rival or orb in the arena to lock on, or click the floor to aim at a point");
+	if (G->HasAim()) return FString::Printf(TEXT("Aiming at %s. Press, hold and DRAG BACK to set power - release launches (drag back to the Zoogi cancels)"), G->bFreeAim ? TEXT("FLOOR POINT") : *G->TargetName(G->TargetLock.Get()).ToUpper());
+	return TEXT("Tap a rival or orb to lock on, or the floor to aim - then drag back like a slingshot");
 }
 
 FString UZoogiFramedHUDWidget::HintText(const AZoogiGameMode* G) const
 {
 	if (G && G->bComboMode) return TEXT("Awaken: card + I/G/S   Battle: Q switch, click target, A/D cut, 1-3 force, SPACE   Follow-Up F/X   C camera   Esc menu");
-	if (G && G->CardsOn()) return TEXT("Standby: cards 1-5 + Enter, Backspace clears   Aim: click target / floor, A/D cut, Up/Down force, SPACE   RMB cancel   C camera");
+	if (G && G->CardsOn()) return TEXT("Standby: cards 1-5 + Enter, Backspace clears   Aim: tap target / floor, drag back + release to launch (A/D cut)   RMB cancel   C camera");
 	return TEXT("Awaken: card + I/G/S   Aim: click target / floor, A/D cut, Up/Down power, SPACE   RMB cancel   C camera   Ctrl+R restart");
 }
 
