@@ -990,7 +990,18 @@ void UZoogiCardHandWidget::TickPlaytest1(AZoogiGameMode* G, float Dt)
 				UE_LOG(LogZoogi, Log, TEXT("PT1 %s BEFORE CONFIRM: hand=[%s ] selected=[%s ] draw=%d discard=%d shown discard=%d"), *Tag, *Ids(HandIds(S)), *Ids(S->Selected), S->DrawPile.Num(), S->Discard.Num(), DiscardCount);
 				PtShots = Ids(S->Selected);
 				for (int32 Id : S->Selected) PtGone.Add(Id);
-				if (UButton* Cb = ConfirmBtn.Get()) { const FVector2D A = Cb->GetCachedGeometry().GetAbsolutePositionAtCoordinates(FVector2D(0.5f, 0.5f)); UE_LOG(LogZoogi, Log, TEXT("PT1 CONFIRM %s"), PtTurns % 2 ? TEXT("mouse click") : TEXT("touch tap")); Click(A, PtTurns % 2 == 0); }
+				if (UButton* Cb = ConfirmBtn.Get()) { const FVector2D A = Cb->GetCachedGeometry().GetAbsolutePositionAtCoordinates(FVector2D(0.5f, 0.5f)); UE_LOG(LogZoogi, Log, TEXT("PT1 CONFIRM %s"), PtTurns % 2 ? TEXT("mouse click") : TEXT("touch tap"));
+					{
+						// what Slate hits at the CONFIRM centre (diagnostic)
+						FSlateApplication& Sa = FSlateApplication::Get();
+						TArray<TSharedRef<SWindow>> Wins = Sa.GetInteractiveTopLevelWindows();
+						const FWidgetPath Pth = Sa.LocateWindowUnderMouse(A, Wins);
+						FString Sx;
+						if (Pth.IsValid()) for (int32 i = FMath::Max(0, Pth.Widgets.Num() - 6); i < Pth.Widgets.Num(); ++i) Sx += Pth.Widgets[i].Widget->GetTypeAsString() + TEXT("@") + Pth.Widgets[i].Widget->GetReadableLocation() + TEXT(" > ");
+						const bool bIn = Pth.IsValid() && Cb->GetCachedWidget().IsValid() && Pth.ContainsWidget(Cb->GetCachedWidget().Get());
+						UE_LOG(LogZoogi, Log, TEXT("PT1 CONFIRM at (%.0f,%.0f) vis=%d enabled=%d button in hit path=%d: %s"), A.X, A.Y, (int32)Cb->GetVisibility(), Cb->GetIsEnabled() ? 1 : 0, bIn ? 1 : 0, *Sx);
+					}
+					Click(A, PtTurns % 2 == 0); }
 				PtStep = 13; PtT = 0.f;
 			}
 			break;
@@ -1015,7 +1026,7 @@ void UZoogiCardHandWidget::TickPlaytest1(AZoogiGameMode* G, float Dt)
 	if (G->Stage == EZoogiStage::Battle && G->IsAimStep() && PtStep >= 13 && PtStep < 20)
 	{
 		if (PtStep < 15) { PtStep = 15; PtT = 0.f; }
-		if (PtStep == 15 && PtT > 0.62f)
+		if (PtStep == 15 && PtT > 0.62f && (G->HasAim() || PtT > 3.f)) // after the HumanTest aim click (zoom mode would turn that click into a pan)
 		{
 			FVector2D Z; const bool bAim0 = G->HasAim();
 			if (ZoomAbs(Z)) { Click(Z, PtTurns % 2 == 1); Check(PC->IsZoomMode(), FString::Printf(TEXT("%s: ZOOM at the aim step -> zoom mode ON"), *Tag)); Check(G->HasAim() == bAim0, TEXT("aim-step ZOOM press did not fall through")); }
