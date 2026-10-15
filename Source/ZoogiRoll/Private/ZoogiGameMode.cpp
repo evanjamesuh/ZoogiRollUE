@@ -1362,7 +1362,7 @@ void AZoogiGameMode::PlanCPUShot()
 		const float Dr = DropDist(P, Z, N, FMath::Min(Wd, Reach));
 		if (Dr < FMath::Min(Wd, Reach))
 		{
-			if (bOuter && (DeepFloor(P + N * (Dr + 80.f), Z) || DeepFloor(P + N * (Dr + 250.f), Z)))
+			if (DeepFloor(P + N * (Dr + 80.f), Z) || DeepFloor(P + N * (Dr + 250.f), Z)) // every arena: bodies are out by falling (or past OuterOutR)
 			{
 				++NDeckCatch; // a lower deck catches it: no score this way (ping-pong-grade line)
 				return { 2600.f, 3, Dr };
