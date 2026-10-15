@@ -1203,6 +1203,20 @@ void AZoogiGameMode::PlanCPUShot()
 		}
 		return false;
 	};
+	static const float CutFullBias = []
+	{
+		float V = 500.f;
+		if (GConfig) GConfig->GetFloat(TEXT("ZoogiRoll.CPU"), TEXT("CutFullnessBias"), V, GGameIni);
+		FParse::Value(FCommandLine::Get(), TEXT("ZoogiCPUCutBias="), V);
+		return FMath::Max(0.f, V);
+	}();
+	static const float CutThrowDeg = []
+	{
+		float V = 1.5f;
+		if (GConfig) GConfig->GetFloat(TEXT("ZoogiRoll.CPU"), TEXT("CutThrowDeg"), V, GGameIni);
+		FParse::Value(FCommandLine::Get(), TEXT("ZoogiCPUThrow="), V);
+		return FMath::Clamp(V, -10.f, 10.f);
+	}();
 	// measured (CPU check): orbs leave a hit slower than the ideal 1D e=0.7 transfer ([ZoogiRoll.CPU] TransferScale 0.8, -ZoogiCPUTransfer=)
 	static const float TransferScale = []
 	{
@@ -1312,12 +1326,49 @@ void AZoogiGameMode::PlanCPUShot()
 		const float V = bTall ? FMath::Max(TallHopV, WallHopV) : WallHopV;
 		return WallD + V * V / (2.f * Decel);
 	};
+	// Oct 15 CPU depart evidence (Frozen): orbs left along the planned line at or above the planned speed and still
+	// stayed in - Frozen Ring 2 rules a body out only past OuterOutR (2300 cm) or below FallOutZ, not at the 1550 cm
+	// knock-off ring, and most "drops" land on a lower deck. So with an outer ring-out radius the line must reach that
+	// circle, and a drop only scores when nothing below catches the body (deep trace to FallOutZ).
+	int32 NDeckCatch = 0;
+	auto DeepFloor = [&](const FVector2D& Q, float Z) -> bool
+	{
+		if (!PW) return false;
+		FCollisionObjectQueryParams OQ; OQ.AddObjectTypesToQuery(ECC_WorldStatic); OQ.AddObjectTypesToQuery(ECC_WorldDynamic);
+		FCollisionQueryParams QP(SCENE_QUERY_STAT(ZoogiCPUDeep), false); QP.AddIgnoredActor(Me);
+		TArray<FHitResult> Dn;
+		PW->LineTraceMultiByObjectType(Dn, FVector(Q.X, Q.Y, Z + 60.f), FVector(Q.X, Q.Y, ZoogiConst::FallOutZ - 50.f), OQ, QP);
+		for (const FHitResult& H : Dn)
+		{
+			const AActor* A = H.GetActor();
+			if (Cast<AZoogiBall>(A) || Cast<AZoogiOrb>(A) || Cast<AZoogiClone>(A)) continue;
+			const UPrimitiveComponent* Cm = H.GetComponent();
+			if (Cm && Cm->GetCollisionResponseToChannel(ECC_PhysicsBody) == ECR_Block && H.ImpactNormal.Z > 0.5f) return true;
+		}
+		return false;
+	};
+	auto OuterDist = [](const FVector2D& P, const FVector2D& N) -> float
+	{
+		const float R = AZoogiArena::OuterOutR;
+		const float PD = FVector2D::DotProduct(P, N);
+		return -PD + FMath::Sqrt(FMath::Max(0.f, PD * PD - (P.SizeSquared() - R * R)));
+	};
 	auto LineExit = [&](const FVector2D& P, float Z, const FVector2D& N, float Rad, float Edge) -> FLineExit
 	{
+		const bool bOuter = AZoogiArena::OuterOutR > 0.f;
+		if (bOuter) Edge = FMath::Max(Edge, OuterDist(P, N));
 		const float Reach = FMath::Max(Edge, 0.f) + 600.f;
 		const float Wd = RealWallDist(P, Z, N, Reach, Rad * 0.8f);
 		const float Dr = DropDist(P, Z, N, FMath::Min(Wd, Reach));
-		if (Dr < FMath::Min(Wd, Reach)) { ++NLineDrop; return { FMath::Sqrt(DropExitV * DropExitV + 2.f * Decel * (Dr + 150.f)), 0, Dr }; }
+		if (Dr < FMath::Min(Wd, Reach))
+		{
+			if (bOuter && (DeepFloor(P + N * (Dr + 80.f), Z) || DeepFloor(P + N * (Dr + 250.f), Z)))
+			{
+				++NDeckCatch; // a lower deck catches it: no score this way (ping-pong-grade line)
+				return { 2600.f, 3, Dr };
+			}
+			++NLineDrop; return { FMath::Sqrt(DropExitV * DropExitV + 2.f * Decel * (Dr + 150.f)), 0, Dr };
+		}
 		if (Wd >= Reach)
 		{
 			bool bL = false;
@@ -1379,10 +1430,12 @@ void AZoogiGameMode::PlanCPUShot()
 		// Oct 15: the floor may end before the wall (stands / scenery beyond a drop): that line scores like an open one
 		const FLineExit LX = LineExit(C.P, CZ, Dir, C.Radius, Edge);
 		if (LX.Kind == 0) { bExitWalled = false; bLaunchExit = false; }
+		const bool bOuterRule = AZoogiArena::OuterOutR > 0.f; // Oct 15: Frozen - the line model (outer ring-out / deep drops) decides
+		if (bOuterRule) { bExitWalled = LX.Kind >= 2; bLaunchExit = false; }
 		const float LineExitV = bLaunchExit ? FarExitV : ExitV;
 		const float PushRun = LX.Kind == 0 ? FMath::Max(0.f, LX.Dist - 170.f) : (bExitWalled ? Edge : FMath::Max(Edge, Run)); // floor that continues past the edge (bridge decks / aprons) must be crossed too
-		float Cost = Dist * 0.5f + (LX.Kind == 0 ? LX.Dist : Edge) - C.Value * 6.f;
-		if (bExitWalled) Cost += LX.Kind == 3 ? 1100.f : 400.f; // a wall before the edge: tall = ping-pong only, low = hop it
+		float Cost = Dist * 0.5f + (LX.Kind == 0 || bOuterRule ? LX.Dist : Edge) - C.Value * 6.f;
+		if (bExitWalled) Cost += LX.Kind == 3 ? 1100.f : (bOuterRule ? 900.f : 400.f); // a wall before the edge: tall = ping-pong only, low = hop it (Frozen: rarely clears, CPU depart log)
 		if (Blocked(B, C.P, C.P)) Cost += 1500.f;
 		else if (ShotPathBlocked(B, C.P - Dir * (ZoogiConst::ZoogiRadius + C.Radius))) Cost += 1500.f;
 		// Night Circuit pads / posts: in the way of the shot, or between the target and its edge.
@@ -1390,6 +1443,7 @@ void AZoogiGameMode::PlanCPUShot()
 		else if (Arena->IsPathBlocked(C.P + Dir * (C.Radius + 10.f), C.P + Dir * FMath::Min(Edge, 2500.f), C.Radius - 5.f)) Cost += 700.f;
 		// Power needed to push the target ~2.5 m past the edge (1D collision, restitution ~0.7), still moving ExitV there.
 		float Need = FMath::Sqrt(LineExitV * LineExitV + 2.f * Decel * (PushRun + 250.f));
+		if (bOuterRule && LX.Kind <= 1) Need = LX.Need;
 		if (bExitWalled && LX.Kind >= 2) Need = LX.Need; // Oct 15: a low wall - reach it at the hop speed (tall: a firm ping-pong hit)
 		float Transfer = (1.f + 0.7f) * M1 / (M1 + C.TargetMass) * TransferScale;
 		if (bCPUUsePower && MyPower == EZoogiPower::BandageBind && Cast<AZoogiBall>(C.Actor)) Transfer *= 1.25f; // bind yank
@@ -1472,20 +1526,30 @@ void AZoogiGameMode::PlanCPUShot()
 		{
 			const FLineExit X = LineExit(P, Z, N, Rad, Arena->DistanceToEdge(P, N));
 			LastKind = X.Kind; LastDist = X.Dist;
-			Extra = X.Kind == 0 ? X.Dist : X.Kind == 1 ? X.Dist + 150.f : X.Kind == 2 ? X.Dist + 400.f : 2500.f;
+			Extra = X.Kind == 0 ? X.Dist : X.Kind == 1 ? X.Dist + 150.f : X.Kind == 2 ? X.Dist + (AZoogiArena::OuterOutR > 0.f ? 900.f : 400.f) : 2500.f;
 			return X.Need;
 		};
 		// shoot so the target leaves along N needing NeedT; full shooter-safety model; false = not a usable cut
 		auto EvalContact = [&](const FCand& C, const FVector2D& N, float NeedT, float Extra, float Dist, FPlan& Out) -> bool
 		{
-			const FVector2D Ghost = C.P - N * (ZoogiConst::ZoogiRadius + C.Radius);
+			// Oct 15 calibration (CPU depart log, Frozen, 40 hits): targets leave ~+1.7 deg toward the shooter's aim
+			// (collision throw); aim the contact normal that much the other way ([ZoogiRoll.CPU] CutThrowDeg 1.5)
+			FVector2D NAim = N;
+			{
+				const FVector2D G0 = C.P - N * (ZoogiConst::ZoogiRadius + C.Radius);
+				const FVector2D D0 = (G0 - B).GetSafeNormal();
+				const float Side = N.X * D0.Y - N.Y * D0.X;
+				if (FMath::Abs(Side) > 0.08f) NAim = N.GetRotated(Side > 0.f ? -CutThrowDeg : CutThrowDeg);
+			}
+			const FVector2D Ghost = C.P - NAim * (ZoogiConst::ZoogiRadius + C.Radius);
 			const FVector2D ToGhost = Ghost - B;
 			const float GDist = ToGhost.Size();
 			if (GDist < 1.f) return false;
 			const FVector2D Dir = ToGhost / GDist;
-			const float CosCut = FVector2D::DotProduct(Dir, N);
+			const float CosCut = FVector2D::DotProduct(Dir, NAim);
 			if (CosCut < FMath::Cos(FMath::DegreesToRadians(55.f)) || CosCut > FMath::Cos(FMath::DegreesToRadians(4.f))) return false; // not a real cut, or too thin
 			float Cost = GDist * 0.5f + Extra - C.Value * 6.f + 20.f + NeedT * 0.35f; // small bias: straight shots are more reliable (Oct 4: 60 -> 20 for variety)
+			Cost += (1.f - CosCut) * CutFullBias; // Oct 15: prefer fuller hits ([ZoogiRoll.CPU] CutFullnessBias 500: +~150 at 45 deg)
 			if (Blocked(B, Ghost, C.P)) Cost += 1500.f;
 			else if (ShotPathBlocked(B, Ghost)) Cost += 1500.f;
 			if (Arena->IsPathBlocked(B, Ghost, ZoogiConst::ZoogiRadius - 5.f)) Cost += 1500.f;
@@ -1497,7 +1561,7 @@ void AZoogiGameMode::PlanCPUShot()
 			const float FracNeed = Frac;
 			const float VHit = FMath::Sqrt(FMath::Max(0.f, FMath::Square(ZoogiConst::LaunchSpeedForPull(Frac)) - 2.f * Decel * GDist));
 			// mass-aware shooter deflection + the same stop model as straight shots
-			const FVector2D VAv = Dir - N * ((1.f + FollowE) * C.TargetMass / (M1 + C.TargetMass) * CosCut);
+			const FVector2D VAv = Dir - NAim * ((1.f + FollowE) * C.TargetMass / (M1 + C.TargetMass) * CosCut);
 			const FVector2D Tang = VAv.GetSafeNormal();
 			const float KCut = FMath::Max(ThinKeep, VAv.Size());
 			const float VAfter = VHit * KCut;
@@ -1762,7 +1826,7 @@ void AZoogiGameMode::PlanCPUShot()
 		UE_LOG(LogZoogi, Log, TEXT("CPU P%d edge clamp: %.0f%% -> %.0f%% (follow-through stays on court)"), ActivePlayer + 1, BestFrac * 100.f, PickSafeFrac * 100.f);
 		BestFrac = PickSafeFrac;
 	}
-	if (NWalled || NRunWalled || NHoles) UE_LOG(LogZoogi, Log, TEXT("CPU P%d wall check: exit lines walled %d/%d (launch exits %d), follow-through lines walled %d/%d, floor holes on shooter lines %d, wall-hop clamps %d, portal lines %d, hazard lines %d/%d, rim-bank plans %d, line exits drop/tall %d/%d, shot paths blocked by props %d; pick %.0f%%"), ActivePlayer + 1, NRunWalled, NRuns, NLaunch, NWalled, NSweeps, NHoles, NHopClamp, NPortalClamp, NHazClamp, Hazards.Num(), NRimBank, NLineDrop, NLineTall, NPathProp, BestFrac * 100.f);
+	if (NWalled || NRunWalled || NHoles) UE_LOG(LogZoogi, Log, TEXT("CPU P%d wall check: exit lines walled %d/%d (launch exits %d), follow-through lines walled %d/%d, floor holes on shooter lines %d, wall-hop clamps %d, portal lines %d, hazard lines %d/%d, rim-bank plans %d, line exits drop/tall/deck-caught %d/%d/%d, shot paths blocked by props %d; pick %.0f%%"), ActivePlayer + 1, NRunWalled, NRuns, NLaunch, NWalled, NSweeps, NHoles, NHopClamp, NPortalClamp, NHazClamp, Hazards.Num(), NRimBank, NLineDrop, NLineTall, NDeckCatch, NPathProp, BestFrac * 100.f);
 	// Oct 8: Frozen aerial layer: with the battle map props up, a CPU sometimes plays a prop route (rail / halo / bumper) instead.
 	// No-op (and no GameRng draw) without the map layout, so every existing mode and test plans exactly as before.
 	if (UZoogiBattleStateMachine* BSM = GetWorld()->GetSubsystem<UZoogiBattleStateMachine>())
