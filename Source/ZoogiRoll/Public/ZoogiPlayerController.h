@@ -158,6 +158,7 @@ protected:
 	};
 	FAimZoomTune ZoomTune; bool bZoomCfg = false;
 	bool bZoomMode = false;
+	bool bZoomArmed = false;                     // ZOOM pressed during the human's Awaken / standby step: on at the aim step
 	float ZoomWant = 1.f, ZoomCur = 1.f;         // boom distance divisor (1 = normal view)
 	FVector ZoomAnchor = FVector::ZeroVector;    // world floor point kept under the fingers / cursor while zooming
 	FVector ZoomOff = FVector::ZeroVector, ZoomOffWant = FVector::ZeroVector; // view-centre shift from zoom + pan
@@ -176,9 +177,16 @@ protected:
 public:
 	float GetAimZoom() const { return ZoomCur; }
 	bool IsZoomMode() const { return bZoomMode; }
+	/** Single source for the HUD ZOOM button: on while the mode is on (any entry path: button, wheel, keys, pinch) or
+	 *  armed from the Awaken / standby step (turns on when the aim step starts). */
+	bool IsZoomShownOn() const { return bZoomMode || bZoomArmed; }
 	bool CanZoom() const;
-	/** HUD ZOOM button / Z key. */
+	/** The ZOOM button is usable (shown): the human's Awaken / standby step (arms the mode) or the aim step (toggles it). */
+	bool CanShowZoom() const;
+	/** HUD ZOOM button / Z key: flips what the button shows. */
 	void ToggleZoomMode(const TCHAR* Why);
+	/** Explicit on / off (on outside the aim step = armed for it). */
+	void SetZoomMode(bool bOn, const TCHAR* Why);
 protected:
 	uint64 UiSnapFrame = 0;
 	int32 UiPass = 0, UiFail = 0;

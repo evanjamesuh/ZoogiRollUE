@@ -98,6 +98,7 @@ private:
 	UPROPERTY() TObjectPtr<UButton> CamBtn;
 	UPROPERTY() TObjectPtr<UButton> ZoomBtn;      // Oct 14 aim ZOOM mode toggle (arena window, bottom-left; touch-sized)
 	UPROPERTY() TObjectPtr<UTextBlock> ZoomText;
+	bool bZoomShownOn = false, bZoomLabelInit = false; // what the ZOOM button currently shows (mirrors the controller each tick)
 	UPROPERTY() TObjectPtr<UTextBlock> CamText;
 	UPROPERTY() TObjectPtr<UButton> MenuBtn;
 	UPROPERTY() TObjectPtr<UBorder> PauseShade;

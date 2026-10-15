@@ -671,12 +671,32 @@ void AZoogiPlayerController::PanBy(const FVector2D& From, const FVector2D& To)
 	if (PanLogN++ % 20 == 0) UE_LOG(LogZoogi, Log, TEXT("AIMZOOM pan by (%.0f, %.0f) cm -> view offset (%.0f, %.0f)"), D.X, D.Y, ZoomOffWant.X, ZoomOffWant.Y);
 }
 
+bool AZoogiPlayerController::CanShowZoom() const
+{
+	const AZoogiGameMode* G = GM();
+	return ZoomTune.bEnabled && G && G->IsHumanAiming() && (G->Stage == EZoogiStage::Awaken || G->IsAimStep());
+}
+
 void AZoogiPlayerController::ToggleZoomMode(const TCHAR* Why)
+{
+	SetZoomMode(!IsZoomShownOn(), Why);
+}
+
+void AZoogiPlayerController::SetZoomMode(bool bOn, const TCHAR* Why)
 {
 	LoadZoomTune();
 	AZoogiGameMode* G = GM();
-	if (!bZoomMode && (!CanZoom() || !G)) { UE_LOG(LogZoogi, Log, TEXT("AIMZOOM toggle ignored (%s): not aiming"), Why); return; }
-	bZoomMode = !bZoomMode;
+	if (!bOn && bZoomArmed && !bZoomMode) { bZoomArmed = false; UE_LOG(LogZoogi, Log, TEXT("AIMZOOM disarmed (%s)"), Why); return; }
+	if (bOn == bZoomMode) return;
+	if (bOn && (!CanZoom() || !G))
+	{
+		// Awaken / standby step: the button still works - it arms the mode, which turns on as the aim step starts
+		if (CanShowZoom()) { bZoomArmed = true; UE_LOG(LogZoogi, Log, TEXT("AIMZOOM armed (%s): on when the aim step starts"), Why); }
+		else UE_LOG(LogZoogi, Log, TEXT("AIMZOOM toggle ignored (%s): not aiming"), Why);
+		return;
+	}
+	bZoomArmed = false;
+	bZoomMode = bOn;
 	bPanDown = false; bPanMoved = false;
 	if (bZoomMode)
 	{
@@ -744,7 +764,7 @@ bool AZoogiPlayerController::UpdateZoomInput(AZoogiGameMode* G, bool bAimStage, 
 	int32 KSteps = 0;
 	if (WasInputKeyJustPressed(EKeys::Equals) || WasInputKeyJustPressed(EKeys::Add)) ++KSteps;
 	if (WasInputKeyJustPressed(EKeys::Hyphen) || WasInputKeyJustPressed(EKeys::Subtract)) --KSteps;
-	if ((Steps > 0 || KSteps > 0) && !bZoomMode) { ToggleZoomMode(Steps > 0 ? TEXT("wheel") : TEXT("key")); Steps = FMath::Max(0, Steps - 1); KSteps = FMath::Max(0, KSteps - 1); }
+	if ((Steps > 0 || KSteps > 0) && !bZoomMode) { SetZoomMode(true, Steps > 0 ? TEXT("wheel") : TEXT("key")); Steps = FMath::Max(0, Steps - 1); KSteps = FMath::Max(0, KSteps - 1); }
 	if (bZoomMode && (Steps != 0 || KSteps != 0))
 	{
 		if (Steps != 0) SetZoomAnchor(Mouse);
@@ -1603,6 +1623,8 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		const FAimZoomTune& ZT = ZoomTune;
 		const bool bAimZoom = ZT.bEnabled && !bAnimeShot && G->IsHumanAiming() && G->IsAimStep() && G->Stage == EZoogiStage::Battle;
 		if (!bAimZoom) { if (bZoomMode) UE_LOG(LogZoogi, Log, TEXT("AIMZOOM mode OFF (camera left the aim step)")); bZoomMode = false; ZoomWant = 1.f; ZoomOffWant = FVector::ZeroVector; }
+		if (bZoomArmed && !G->IsHumanAiming()) { bZoomArmed = false; UE_LOG(LogZoogi, Log, TEXT("AIMZOOM disarmed (turn over)")); }
+		if (bZoomArmed && bAimZoom) SetZoomMode(true, TEXT("armed in the Awaken step"));
 		const float Ease = ZoomWant >= ZoomCur ? ZT.EaseIn : ZT.EaseOut;
 		ZoomCur = Damp(ZoomCur, ZoomWant, Ease, Dt);
 		if (FMath::Abs(ZoomCur - ZoomWant) < 0.002f) ZoomCur = ZoomWant;

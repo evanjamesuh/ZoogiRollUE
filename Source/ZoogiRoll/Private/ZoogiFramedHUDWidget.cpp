@@ -213,7 +213,16 @@ void UZoogiFramedHUDWidget::SetPaused(bool bPause)
 	UE_LOG(LogZoogi, Log, TEXT("FRAMED %s"), bPause ? TEXT("paused (menu open)") : TEXT("resumed"));
 }
 
-void UZoogiFramedHUDWidget::OnZoom() { if (AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetOwningPlayer())) PC->ToggleZoomMode(TEXT("HUD ZOOM button")); }
+void UZoogiFramedHUDWidget::OnZoom()
+{
+	// the click does what the button showed (ON -> off, ZOOM -> on), then the label re-reads the controller at once
+	AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetOwningPlayer());
+	if (!PC) return;
+	UE_LOG(LogZoogi, Log, TEXT("AIMZOOM HUD button click (showed %s)"), bZoomShownOn ? TEXT("ON") : TEXT("ZOOM"));
+	PC->SetZoomMode(!bZoomShownOn, TEXT("HUD ZOOM button"));
+	bZoomShownOn = PC->IsZoomShownOn();
+	if (ZoomText) ZoomText->SetText(FText::FromString(bZoomShownOn ? TEXT("ZOOM: ON") : TEXT("ZOOM")));
+}
 void UZoogiFramedHUDWidget::OnCam() { if (AZoogiGameMode* G = GM()) G->MenuAction(TEXT("CamStyle"), 0); }
 void UZoogiFramedHUDWidget::OnPause() { SetPaused(!bPaused); }
 void UZoogiFramedHUDWidget::OnResume() { SetPaused(false); }
@@ -297,13 +306,16 @@ void UZoogiFramedHUDWidget::NativeTick(const FGeometry& Geo, float Dt)
 	// Oct 14 aim ZOOM toggle: bottom-left of the arena window while the human aims (>= 48 dp, also clickable)
 	{
 		AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetOwningPlayer());
-		const bool bShowZ = PC && !bPaused && (PC->CanZoom() || PC->IsZoomMode());
+		const bool bShowZ = PC && !bPaused && (PC->CanShowZoom() || PC->IsZoomShownOn());
 		const float t = L.T * s;
 		const float ZH = FMath::Max(40.f * t, ZoogiHudArt::TapPx(48.f, 48.f * u)), ZW = FMath::Max(132.f * t, ZH * 2.4f);
 		const FVector2D ZP(L.Arena.Min.X * s + 14.f * t, L.Arena.Max.Y * s - ZH - 14.f * t);
 		PlaceW(ZoomBtn, ZP, FVector2D(ZW, ZH), bShowZ);
-		if (bShowZ && ZoomText) ZoomText->SetText(FText::FromString(PC->IsZoomMode() ? TEXT("ZOOM: ON") : TEXT("ZOOM")));
-		if (ZoomBtn && bShowZ) ZoomBtn->SetRenderOpacity(PC->IsZoomMode() ? 1.f : 0.85f);
+		// single source: the controller's mode (button, wheel, = -, Z, pinch all land there); reset when the mode ends
+		const bool bOnNow = PC && PC->IsZoomShownOn();
+		if (ZoomText && (bOnNow != bZoomShownOn || !bZoomLabelInit)) { ZoomText->SetText(FText::FromString(bOnNow ? TEXT("ZOOM: ON") : TEXT("ZOOM"))); bZoomLabelInit = true; }
+		bZoomShownOn = bOnNow;
+		if (ZoomBtn && bShowZ) ZoomBtn->SetRenderOpacity(bOnNow ? 1.f : 0.85f);
 		ZoogiFramed::SetZoomButtonRect(s > 0.f ? FBox2D(ZP / s, (ZP + FVector2D(ZW, ZH)) / s) : FBox2D(ForceInit), bShowZ);
 	}
 	CamText->SetText(FText::FromString(G->bCinematicCam ? TEXT("      CAM: CINE") : TEXT("      CAM: TACT"))); // leading space = room for the camera icon
