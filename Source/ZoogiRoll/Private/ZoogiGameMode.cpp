@@ -915,7 +915,7 @@ void AZoogiGameMode::FireShot(const FVector2D& Velocity)
 // open angles form an exit (angle range, points, width), low-wall exits count half. Generic: every arena.
 namespace ZoogiExitMap
 {
-	struct FExit { float A0 = 0.f, A1 = 0.f; TArray<FVector2D> Pts; float WidthCm = 0.f; bool bLowWall = false; float Rel = 0.f; float WallH = 0.f, WallR = 0.f; FString WallName; };
+	struct FExit { float A0 = 0.f, A1 = 0.f; TArray<FVector2D> Pts; float WidthCm = 0.f; bool bLowWall = false; float Rel = 0.f; float WallH = 0.f, WallR = 0.f; FString WallName; bool bProp = false; };
 	static TArray<FExit> Exits;
 	static TWeakObjectPtr<const AActor> BuiltFor;
 	static int32 NOpen = 0, NTall = 0, NLow = 0, NCaught = 0, NRays = 0; static float WallRest = -1.f;
@@ -944,16 +944,13 @@ namespace ZoogiExitMap
 		}();
 		TMap<FString, FVector2D> WallKinds; // name -> (height, count) of the first wall each ray meets
 		float RestSum = 0.f; int32 RestN = 0;
-		struct FRay { int32 Type = 3; FVector2D P; bool bLow = false; float WallH = 0.f, WallR = 0.f; FString WallName; }; // 0 exit, 1 exit over low wall, 2 tall wall, 3 caught (floor to the end)
-		TArray<FRay> Rays;
-		for (int32 a = 0; a < 180; ++a)
+		struct FRay { int32 Type = 3; FVector2D P; bool bLow = false; float WallH = 0.f, WallR = 0.f; FString WallName; float Z = 0.f; bool bProp = false; }; // 0 exit, 1 exit over low wall, 2 tall wall, 3 caught (floor to the end)
+		auto Probe = [&](float Ang, float RStart, float ZStart) -> FRay
 		{
-			++NRays;
-			const float Ang = a * 2.f;
 			const FVector2D D = FVector2D(1.f, 0.f).GetRotated(Ang);
-			float LastZ = CourtZ; bool bLow = false; FRay Ry;
-			FVector2D Prev = D * R0;
-			for (float R = R0; R <= 6000.f; R += 40.f)
+			float LastZ = ZStart; bool bLow = false; FRay Ry;
+			FVector2D Prev = D * RStart;
+			for (float R = RStart; R <= 6000.f; R += 40.f)
 			{
 				const FVector2D Q = D * R;
 				TArray<FHitResult> Dn;
@@ -961,7 +958,7 @@ namespace ZoogiExitMap
 				float FZ = TNumericLimits<float>::Lowest();
 				for (const FHitResult& H : Dn) if (Solid(H) && H.ImpactNormal.Z > 0.5f) { FZ = H.ImpactPoint.Z; break; }
 				// wall between the last step and this one at rolling height
-				if (R > R0)
+				if (R > RStart)
 				{
 					TArray<FHitResult> Hs;
 					const FVector S(Prev.X, Prev.Y, LastZ + Rad + 25.f), E(Q.X, Q.Y, LastZ + Rad + 25.f);
@@ -998,7 +995,7 @@ namespace ZoogiExitMap
 							if (H.GetComponent()) WallName += TEXT("/") + H.GetComponent()->GetName();
 							break;
 						}
-						if (bTall || WallH > HopWallH) { Ry.Type = 2; Ry.P = Q; Ry.WallH = WallH; Ry.WallR = WallRr; Ry.WallName = WallName; break; }
+						if (bTall || WallH > HopWallH) { Ry.Type = 2; Ry.P = Q; Ry.WallH = WallH; Ry.WallR = WallRr; Ry.WallName = WallName; Ry.Z = LastZ; break; }
 						if (!bLow) { Ry.WallH = WallH; Ry.WallR = WallRr; Ry.WallName = WallName; }
 						bLow = true;
 					}
@@ -1006,13 +1003,48 @@ namespace ZoogiExitMap
 				if (FZ == TNumericLimits<float>::Lowest()) { Ry.Type = bLow ? 1 : 0; Ry.P = Q; Ry.bLow = bLow; break; }
 				LastZ = FZ; Prev = Q;
 			}
+			return Ry;
+		};
+		TArray<FRay> Rays;
+		for (int32 a = 0; a < 180; ++a) { ++NRays; Rays.Add(Probe(a * 2.f, R0, CourtZ)); }
+		// Oct 15 (d47): rays probe from the court centre, so a small prop inside the court (Frozen's ice boulders, the hex
+		// platform) hid the rim gap behind it although orbs roll round it. A run of tall-wall rays blocked well inside the
+		// rim (< 0.9 x knock-off radius, similar radius, arc <= [ZoogiRoll.CPU] ExitMapPropMaxW 520 cm) is a prop: those
+		// rays are probed again from just inside it; exits found behind props count 0.7x reliability.
+		{
+			static const float PropMaxW = []
+			{
+				float V = 520.f;
+				if (GConfig) GConfig->GetFloat(TEXT("ZoogiRoll.CPU"), TEXT("ExitMapPropMaxW"), V, GGameIni);
+				FParse::Value(FCommandLine::Get(), TEXT("ZoogiCPUExitPropW="), V);
+				return FMath::Clamp(V, 0.f, 3000.f);
+			}();
+			const float InnerR = Arena->GetKnockoffRadius() * 0.9f;
+			auto Inner = [&](int32 i) { return Rays[i].Type == 2 && Rays[i].WallR > 1.f && Rays[i].WallR < InnerR; };
+			int32 NProp = 0;
+			for (int32 i = 0; i < 180; )
+			{
+				if (!Inner(i)) { ++i; continue; }
+				int32 j = i; float Wd = 0.f;
+				while (j < 180 && Inner(j) && (j == i || FMath::Abs(Rays[j].WallR - Rays[j - 1].WallR) < 150.f)) { Wd += Rays[j].WallR * FMath::DegreesToRadians(2.f); ++j; }
+				if (Wd <= PropMaxW)
+					for (int32 k = i; k < j; ++k)
+					{
+						FRay R2 = Probe(k * 2.f, Rays[k].WallR + 10.f, Rays[k].Z);
+						if (R2.Type <= 1) { R2.bProp = true; Rays[k] = R2; ++NProp; }
+					}
+				i = j;
+			}
+			if (NProp) UE_LOG(LogZoogi, Log, TEXT("EXITMAP %d ray(s) re-probed past small props inside the court"), NProp);
+		}
+		for (FRay& Ry : Rays)
+		{
 			if (Ry.Type == 0) ++NOpen; else if (Ry.Type == 1) ++NLow; else if (Ry.Type == 2) ++NTall; else ++NCaught;
 			if (!Ry.WallName.IsEmpty())
 			{
 				FString Key = Ry.WallName; int32 Sl; if (Key.FindChar(TEXT('/'), Sl)) Key = Key.Mid(Sl + 1);
 				FVector2D& K = WallKinds.FindOrAdd(Key); K.X += Ry.WallH; K.Y += 1.f;
 			}
-			Rays.Add(Ry);
 		}
 		WallRest = RestN ? RestSum / RestN : -1.f;
 		{
@@ -1032,7 +1064,7 @@ namespace ZoogiExitMap
 			if (bExit)
 			{
 				if (!bIn) { Cur = FExit(); Cur.A0 = i * 2.f; bIn = true; }
-				Cur.A1 = i * 2.f; Cur.Pts.Add(Rays[i].P); Cur.bLowWall |= Rays[i].bLow;
+				Cur.A1 = i * 2.f; Cur.Pts.Add(Rays[i].P); Cur.bLowWall |= Rays[i].bLow; Cur.bProp |= Rays[i].bProp;
 				if (Rays[i].bLow && Cur.WallName.IsEmpty()) { Cur.WallH = Rays[i].WallH; Cur.WallR = Rays[i].WallR; Cur.WallName = Rays[i].WallName; }
 			}
 			else if (bIn)
@@ -1041,7 +1073,7 @@ namespace ZoogiExitMap
 				float Wd = 0.f;
 				for (const FVector2D& P : Cur.Pts) Wd += P.Size() * FMath::DegreesToRadians(2.f);
 				Cur.WidthCm = Wd;
-				Cur.Rel = FMath::Clamp(Wd / 600.f, 0.15f, 1.f) * (Cur.bLowWall ? 0.5f : 1.f);
+				Cur.Rel = FMath::Clamp(Wd / 600.f, 0.15f, 1.f) * (Cur.bLowWall ? 0.5f : 1.f) * (Cur.bProp ? 0.7f : 1.f);
 				Exits.Add(Cur);
 			}
 		}
@@ -1050,8 +1082,8 @@ namespace ZoogiExitMap
 		for (const FExit& X : Exits)
 		{
 			const FVector2D M = X.Pts[X.Pts.Num() / 2];
-			UE_LOG(LogZoogi, Log, TEXT("EXITMAP exit %.0f..%.0f deg, %d ray(s), ~%.0f cm wide, at r~%.0f (%.0f, %.0f)%s, reliability %.2f%s"),
-				X.A0, X.A1, X.Pts.Num(), X.WidthCm, M.Size(), M.X, M.Y, X.bLowWall ? TEXT(", over a low wall") : TEXT(""), X.Rel,
+			UE_LOG(LogZoogi, Log, TEXT("EXITMAP exit %.0f..%.0f deg, %d ray(s), ~%.0f cm wide, at r~%.0f (%.0f, %.0f)%s%s, reliability %.2f%s"),
+				X.A0, X.A1, X.Pts.Num(), X.WidthCm, M.Size(), M.X, M.Y, X.bLowWall ? TEXT(", over a low wall") : TEXT(""), X.bProp ? TEXT(", partly behind a prop") : TEXT(""), X.Rel,
 				X.bLowWall ? *FString::Printf(TEXT(" [wall %s at r~%.0f, ~%.0f cm above the floor]"), *X.WallName, X.WallR, X.WallH) : TEXT(""));
 		}
 		// compact per-ray dump for plotting (type digit per 2 deg)
