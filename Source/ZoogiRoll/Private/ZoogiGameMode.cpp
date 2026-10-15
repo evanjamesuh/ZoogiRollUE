@@ -1254,7 +1254,34 @@ void AZoogiGameMode::PlanCPUShot()
 
 	CPUPlannedCut = 0.f;
 	const EZoogiCPUTier CPUTier = ZoogiCPU::ActiveTier();
-	struct FPlan { float Cost; FVector2D Dir; float Frac; AActor* Actor; bool bStraight; float Dist; float Radius; float Risk = 0.f; float Exposure = 0.f; bool bBank = false; float MaxSafeFrac = 1.f; float DbgCoast = -1.f; float DbgSafe = -1.f; float DbgMiss = -1.f; float DbgNeed = -1.f; bool bRimBank = false; int32 DbgKind = -1; float DbgExit = -1.f; }; // Risk/Exposure: tier lookahead inputs only (Oct 14); MaxSafeFrac: Oct 15 edge clamp
+	// Oct 15 (Evan: ping-pong action) CPU risk tolerance: the self-ring-out probability a tier accepts on a cut shot when the
+	// conservative clamp would leave it too soft to score. Decision-only. [ZoogiRoll.CPU] RiskToleranceEasy/Normal/Hard/Expert
+	// (0.05 / 0.12 / 0.2 / 0.25), cmdline -ZoogiCPURiskEasy= ... or -ZoogiCPURisk= (all tiers)
+	static const TArray<float> RiskTolTable = []
+	{
+		TArray<float> R = { 0.05f, 0.12f, 0.2f, 0.25f };
+		const TCHAR* K[4] = { TEXT("Easy"), TEXT("Normal"), TEXT("Hard"), TEXT("Expert") };
+		float All = -1.f;
+		FParse::Value(FCommandLine::Get(), TEXT("ZoogiCPURisk="), All);
+		for (int32 i = 0; i < 4; ++i)
+		{
+			if (GConfig) GConfig->GetFloat(TEXT("ZoogiRoll.CPU"), *FString::Printf(TEXT("RiskTolerance%s"), K[i]), R[i], GGameIni);
+			FParse::Value(FCommandLine::Get(), *FString::Printf(TEXT("ZoogiCPURisk%s="), K[i]), R[i]);
+			if (All >= 0.f) R[i] = All;
+			R[i] = FMath::Clamp(R[i], 0.f, 0.5f);
+		}
+		UE_LOG(LogZoogi, Log, TEXT("CPU risk tolerance: Easy %.2f Normal %.2f Hard %.2f Expert %.2f"), R[0], R[1], R[2], R[3]);
+		return R;
+	}();
+	const float RiskTol = RiskTolTable[FMath::Clamp((int32)CPUTier, 0, 3)];
+	static const float RiskSpread = []
+	{
+		float V = 1.6f;
+		if (GConfig) GConfig->GetFloat(TEXT("ZoogiRoll.CPU"), TEXT("RiskSpread"), V, GGameIni);
+		FParse::Value(FCommandLine::Get(), TEXT("ZoogiCPURiskSpread="), V);
+		return FMath::Clamp(V, 0.f, 3.f);
+	}();
+	struct FPlan { float Cost; FVector2D Dir; float Frac; AActor* Actor; bool bStraight; float Dist; float Radius; float Risk = 0.f; float Exposure = 0.f; bool bBank = false; float MaxSafeFrac = 1.f; float DbgCoast = -1.f; float DbgSafe = -1.f; float DbgMiss = -1.f; float DbgNeed = -1.f; bool bRimBank = false; int32 DbgKind = -1; float DbgExit = -1.f; float DbgRiskP = 0.f; }; // Risk/Exposure: tier lookahead inputs only (Oct 14); MaxSafeFrac: Oct 15 edge clamp
 	TArray<FPlan> Plans;
 	FVector2D BestDir(-B.GetSafeNormal());
 	float BestFrac = 0.45f;
@@ -1396,6 +1423,13 @@ void AZoogiGameMode::PlanCPUShot()
 			const float VAfter = VHit * KCut;
 			const float TEdge = Tang.IsNearlyZero() ? 1e6f : Arena->DistanceToEdge(Ghost, Tang);
 			float CutMaxSafe = 1.f, CSafe = -1.f, CMiss = -1.f;
+			float RiskP = 0.f; // accepted self-ring-out probability (risk tolerance)
+			// expected follow-through from the cut-angle energy split (KCut keeps the ThinKeep worst case); a tier leans toward
+			// the expected value as its risk tolerance grows (0.25 -> fully expected)
+			const float KExp = FMath::Max(0.05f, VAv.Size());
+			// plus the contact-variability spread: accepting probability r of an over-long follow-through = planning with a
+			// (1 - RiskSpread * r) smaller keep ([ZoogiRoll.CPU] RiskSpread 1.6, -ZoogiCPURiskSpread=)
+			const float KRisk = FMath::Lerp(KCut, FMath::Min(KCut, KExp), FMath::Clamp(RiskTol * 4.f, 0.f, 1.f)) * FMath::Max(0.2f, 1.f - RiskSpread * RiskTol);
 			if (!Tang.IsNearlyZero())
 			{
 				float TWall = 1e6f;
@@ -1403,7 +1437,19 @@ void AZoogiGameMode::PlanCPUShot()
 				CSafe = HazardRun(Ghost, Tang, PortalRun(Ghost, MeZ, Tang, TRun >= 1e5f ? HopRun(Ghost, Tang, TWall) - 60.f : TRun - 120.f));
 				const float VHitMax = FMath::Sqrt(2.f * Decel * FMath::Max(0.f, CSafe)) / FMath::Max(KCut, 0.01f);
 				CutMaxSafe = InvertLaunch(FMath::Min(FMath::Sqrt(VHitMax * VHitMax + 2.f * Decel * GDist), VMax * 1.01f));
-				if (VAfter * VAfter / (2.f * Decel) > CSafe)
+				if (CutMaxSafe < 0.9f * FracNeed && KRisk < KCut - 0.01f)
+				{
+					// too soft to score when clamped: accept the tier's risk (only up to what the shot needs)
+					const float VHitMaxR = FMath::Sqrt(2.f * Decel * FMath::Max(0.f, CSafe)) / FMath::Max(KRisk, 0.01f);
+					const float CutMaxSafeR = InvertLaunch(FMath::Min(FMath::Sqrt(VHitMaxR * VHitMaxR + 2.f * Decel * GDist), VMax * 1.01f));
+					const float Cap = FMath::Max(CutMaxSafe, FMath::Min(FracNeed, CutMaxSafeR));
+					if (Cap > CutMaxSafe + 0.005f)
+					{
+						RiskP += RiskTol * FMath::Clamp((Cap - CutMaxSafe) / FMath::Max(CutMaxSafeR - CutMaxSafe, 0.01f), 0.f, 1.f);
+						CutMaxSafe = Cap;
+					}
+				}
+				if (VAfter * VAfter / (2.f * Decel) > CSafe && Frac > CutMaxSafe)
 				{
 					if (CutMaxSafe >= 0.3f && CutMaxSafe >= 0.8f * Frac) Frac = CutMaxSafe; // a slightly softer cut still does it
 					else Cost += 900.f;
@@ -1415,15 +1461,26 @@ void AZoogiGameMode::PlanCPUShot()
 				float BWall = 1e6f;
 				const float BRun0 = ShooterRun(B, MeZ, Dir, Arena->DistanceToEdge(B, Dir), BWall);
 				CMiss = HazardRun(B, Dir, PortalRun(B, MeZ, Dir, BRun0 < 1e5f ? BRun0 : HopRun(B, Dir, BWall) + 70.f));
-				if (FullRoll > CMiss - 80.f)
+				const float MissSafe0 = InvertLaunch(FMath::Sqrt(2.f * Decel * FMath::Max(0.f, CMiss - 150.f)));
+				// chance the aim error misses a cut this thin entirely (uniform error +-E at the target, contact half-width R1+R2)
+				const float ErrE = Dist * FMath::Sin(FMath::DegreesToRadians(ErrMaxDeg));
+				const float SinCut = FMath::Sqrt(FMath::Max(0.f, 1.f - CosCut * CosCut));
+				const float PMiss = ErrE > 1.f ? FMath::Clamp((ErrE - (ZoogiConst::ZoogiRadius + C.Radius) * (1.f - SinCut)) / (2.f * ErrE), 0.f, 1.f) : 0.f;
+				if (FullRoll > CMiss - 80.f && MissSafe0 < 0.9f * FracNeed && PMiss + RiskP <= RiskTol)
 				{
-					const float MissSafe = InvertLaunch(FMath::Sqrt(2.f * Decel * FMath::Max(0.f, CMiss - 150.f)));
+					RiskP += PMiss; // a miss is unlikely enough: keep the scoring power
+				}
+				else if (FullRoll > CMiss - 80.f)
+				{
+					const float MissSafe = MissSafe0;
 					if (MissSafe >= 0.3f && MissSafe >= 0.8f * Frac) { Frac = FMath::Min(Frac, MissSafe); CutMaxSafe = FMath::Min(CutMaxSafe, MissSafe); }
 					else if (Dist * FMath::Sin(FMath::DegreesToRadians(ErrMaxDeg)) > 0.5f * (ZoogiConst::ZoogiRadius + C.Radius)) Cost += 650.f;
 				}
 			}
 			if (Frac < FracNeed * 0.9f) Cost += (FracNeed - Frac) * 1500.f; // clamped below what it takes: likely no score
+			Cost += RiskP * 900.f; // expected price of the accepted risk (-75 and a wasted turn)
 			Out = FPlan{ Cost, Dir, Frac, C.Actor, false, GDist, C.Radius, Tang.IsNearlyZero() ? 0.f : FMath::Clamp((VAfter * VAfter / (2.f * Decel)) / FMath::Max(TEdge, 1.f), 0.f, 1.f), 1.f - FMath::Clamp(Arena->DistanceToEdge(Ghost, Dir) / 1500.f, 0.f, 1.f) };
+			Out.DbgRiskP = RiskP;
 			Out.MaxSafeFrac = CutMaxSafe; Out.DbgCoast = VAfter * VAfter / (2.f * Decel); Out.DbgSafe = CSafe; Out.DbgMiss = CMiss; Out.DbgNeed = NeedT;
 			return true;
 		};
@@ -1587,7 +1644,7 @@ void AZoogiGameMode::PlanCPUShot()
 		BestFrac = Pick.Frac;
 		CPULock = Pick.Actor;
 		PickSafeFrac = Pick.MaxSafeFrac;
-		if (Pick.DbgSafe >= 0.f) UE_LOG(LogZoogi, Log, TEXT("CPU P%d safety: follow-through ~%.0f cm vs safe run %.0f cm, miss run %.0f cm, max safe %.0f%%; exit kind %d at %.0f cm, target needs %.0f cm/s (%s)"), ActivePlayer + 1, Pick.DbgCoast, FMath::Min(Pick.DbgSafe, 99999.f), Pick.DbgMiss, Pick.MaxSafeFrac * 100.f, Pick.DbgKind, Pick.DbgExit, Pick.DbgNeed, Pick.bStraight ? TEXT("straight") : Pick.bRimBank ? TEXT("rim bank") : TEXT("cut"));
+		if (Pick.DbgSafe >= 0.f) UE_LOG(LogZoogi, Log, TEXT("CPU P%d safety: follow-through ~%.0f cm vs safe run %.0f cm, miss run %.0f cm, max safe %.0f%%; exit kind %d at %.0f cm, target needs %.0f cm/s (%s), accepted risk %.2f of %.2f"), ActivePlayer + 1, Pick.DbgCoast, FMath::Min(Pick.DbgSafe, 99999.f), Pick.DbgMiss, Pick.MaxSafeFrac * 100.f, Pick.DbgKind, Pick.DbgExit, Pick.DbgNeed, Pick.bStraight ? TEXT("straight") : Pick.bRimBank ? TEXT("rim bank") : TEXT("cut"), Pick.DbgRiskP, RiskTol);
 		// Rival-only powers: don't waste a charge if the best shot ended up being an orb.
 		if (bHuntRivals && !bPowerTest && !Cast<AZoogiBall>(Pick.Actor)) bCPUUsePower = false;
 		// Cut variety (Oct 4): about half of the straight shots are played slightly off-centre (6-20 deg contact cut),
