@@ -1007,6 +1007,15 @@ void UZoogiCardHandWidget::TickPlaytest1(AZoogiGameMode* G, float Dt)
 							Ch += FString::Printf(TEXT("%s[%s pos %.0f,%.0f size %.0f,%.0f clip %d] < "), *Wp->GetTypeAsString(), *Wp->GetVisibility().ToString(), Gx.GetAbsolutePosition().X, Gx.GetAbsolutePosition().Y, Gx.GetAbsoluteSize().X, Gx.GetAbsoluteSize().Y, (int32)Wp->GetClipping());
 						}
 						UE_LOG(LogZoogi, Log, TEXT("PT1 CONFIRM chain: %s"), *Ch);
+						FString Pr;
+						for (float Y = A.Y - 120.f; Y <= A.Y + 20.f; Y += 10.f)
+						{
+							const FWidgetPath P2 = Sa.LocateWindowUnderMouse(FVector2D(A.X, Y), Wins);
+							Pr += FString::Printf(TEXT("y%.0f:%s "), Y, P2.IsValid() ? *P2.Widgets.Last().Widget->GetTypeAsString() : TEXT("-"));
+						}
+						if (UButton* Cl = ClearBtn.Get()) { const FGeometry Gc = Cl->GetCachedGeometry(); Pr += FString::Printf(TEXT(" | CLEAR vis=%d at %.0f,%.0f"), (int32)Cl->GetVisibility(), Gc.GetAbsolutePosition().X, Gc.GetAbsolutePosition().Y); }
+						if (TSharedPtr<SWindow> Wn = FSlateApplication::Get().FindWidgetWindow(Cb->GetCachedWidget().ToSharedRef())) Pr += FString::Printf(TEXT(" | window pos %.0f,%.0f size %.0f,%.0f"), Wn->GetPositionInScreen().X, Wn->GetPositionInScreen().Y, Wn->GetSizeInScreen().X, Wn->GetSizeInScreen().Y);
+						UE_LOG(LogZoogi, Log, TEXT("PT1 CONFIRM probe: %s"), *Pr);
 					}
 					Click(A, PtTurns % 2 == 0); }
 				PtStep = 13; PtT = 0.f;
