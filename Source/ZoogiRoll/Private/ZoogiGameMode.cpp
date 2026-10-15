@@ -437,6 +437,15 @@ void AZoogiGameMode::BeginTurn(int32 PlayerIdx)
 	if (AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PC->OnTurnStarted(Ball);
 }
 
+// Oct 15 CPU shot check (log only): what the planned target really did vs what the plan assumed
+namespace ZoogiCPUCheck
+{
+	static TWeakObjectPtr<AActor> Target;
+	static FVector2D Start = FVector2D::ZeroVector, Line = FVector2D::ZeroVector;
+	static float Need = -1.f, Exit = -1.f; static int32 Kind = -1; static bool bArmed = false;
+	static const TCHAR* What = TEXT("-");
+}
+
 void AZoogiGameMode::EndTurn()
 {
 	if (bComboMode) { ComboEndTurn(); return; }
@@ -882,15 +891,6 @@ void AZoogiGameMode::FireShot(const FVector2D& Velocity)
 		ShotStart.X, ShotStart.Y, FMath::RadiansToDegrees(FMath::Atan2(Velocity.Y, Velocity.X)), Velocity.SizeSquared() / (2.f * Arena->GetRollingDecel()));
 	if (AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PC->OnShotFired(Ball);
 	if (UZoogiEpisodeSubsystem* Ep = GetWorld()->GetSubsystem<UZoogiEpisodeSubsystem>()) Ep->OnShotFired(Ball); // Episode Engine: truth capture (read-only)
-}
-
-// Oct 15 CPU shot check (log only): what the planned target really did vs what the plan assumed
-namespace ZoogiCPUCheck
-{
-	static TWeakObjectPtr<AActor> Target;
-	static FVector2D Start = FVector2D::ZeroVector, Line = FVector2D::ZeroVector;
-	static float Need = -1.f, Exit = -1.f; static int32 Kind = -1; static bool bArmed = false;
-	static const TCHAR* What = TEXT("-");
 }
 
 static float InvertLaunch(float Speed)
