@@ -122,6 +122,7 @@ namespace ZoogiHudArt
 		if (T.IsEmpty()) return;
 		FVector2D Q = P;
 		if (AlignX != 0.f || AlignY != 0.f) { const FVector2D M = Measure(T, F); Q.X -= M.X * AlignX; Q.Y -= M.Y * AlignY; }
+		Q = FVector2D(FMath::RoundToFloat(Q.X), FMath::RoundToFloat(Q.Y)); // whole pixels: crisper labels (centred text landed on half pixels)
 		ZoogiUIStyle::SText(Out, L, G, Q, T, F, C);
 	}
 

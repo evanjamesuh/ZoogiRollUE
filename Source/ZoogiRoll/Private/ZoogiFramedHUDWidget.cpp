@@ -643,13 +643,27 @@ bool UZoogiFramedHUDWidget::TrayAwakenLayout(FTrayAwaken& Out) const
 	Out.bHuman = !B->bCPU;
 	const float s = LocalScale, t = L.T * s;
 	const FVector2D H0 = L.Hand.Min * s, H1 = FVector2D(L.Hand.Max.X * s, (L.Viewport.Y - L.Safe.Bottom) * s);
-	const float TH = FMath::Min(H1.Y - H0.Y - 10.f * t, 170.f * t), TW = TH * 360.f / 506.f;
-	float X = H0.X + 14.f * t;
-	for (int32 i = 0; i < Out.Stones.Num(); ++i) { Out.StoneRects.Add(FBox2D(FVector2D(X, H0.Y + 4.f * t), FVector2D(X + TW, H0.Y + 4.f * t + TH))); X += TW + 10.f * t; }
+	// one gap everywhere (stone to stone, stones to text, text to buttons, buttons to the recess edge); the button stack
+	// is centred on the stone row. When the recess is tight (1920) the stones shrink a little so the INFUSE / GUARD text fits.
+	const float G = 10.f * t, BG = 8.f * t;
+	const float THMax = FMath::Min(H1.Y - H0.Y - 10.f * t, 170.f * t);
+	float TH = THMax, TW = TH * 360.f / 506.f;
 	const float BH = FMath::Max(ZoogiHudArt::TapPx(48.f, 48.f * L.U * s), 34.f * t), BW = BH * 95.f / 24.f * 0.62f;
-	const float BX = H1.X - BW - 10.f * t, BY = H0.Y + 6.f * t;
-	for (int32 i = 0; i < 3; ++i) Out.BtnRects.Add(FBox2D(FVector2D(BX, BY + i * (BH + 6.f * t)), FVector2D(BX + BW, BY + i * (BH + 6.f * t) + BH)));
-	Out.InfoX0 = X; Out.InfoX1 = BX - 10.f * t; Out.InfoY = H0.Y + 8.f * t;
+	const float BX = H1.X - BW - G;
+	const float SX0 = H0.X + 14.f * t, Room = (BX - G) - SX0, InfoMin = 190.f * t;
+	const int32 NS = FMath::Max(1, Out.Stones.Num());
+	if (Room - NS * (TW + G) < InfoMin)
+	{
+		const float TW2 = FMath::Max((Room - InfoMin) / NS - G, FMath::Max(TW * 0.72f, 56.f * t)); // stays a big tap target
+		if (TW2 < TW) { TW = TW2; TH = TW * 506.f / 360.f; }
+	}
+	const float SY = H0.Y + 4.f * t + FMath::RoundToFloat((THMax - TH) * 0.5f);
+	float X = SX0;
+	for (int32 i = 0; i < Out.Stones.Num(); ++i) { Out.StoneRects.Add(FBox2D(FVector2D(X, SY), FVector2D(X + TW, SY + TH))); X += TW + G; }
+	const float Stack = 3.f * BH + 2.f * BG;
+	const float BY = FMath::Max(H0.Y + 4.f * t, H0.Y + 4.f * t + (THMax - Stack) * 0.5f);
+	for (int32 i = 0; i < 3; ++i) Out.BtnRects.Add(FBox2D(FVector2D(BX, BY + i * (BH + BG)), FVector2D(BX + BW, BY + i * (BH + BG) + BH)));
+	Out.InfoX0 = X; Out.InfoX1 = BX - G; Out.InfoY = H0.Y + 8.f * t;
 	return true;
 }
 
@@ -764,7 +778,7 @@ void UZoogiFramedHUDWidget::PaintTrayAwaken(const FGeometry& Geo, FSlateWindowEl
 		const float W = TA.InfoX1 - TA.InfoX0;
 		HA::Img(Out, Ly + 1, Geo, FVector2D(TA.InfoX0 + 4.f * t, TA.InfoY), FVector2D(20.f, 28.f) * t, TabletFor(TA.Stones[PI_].Value)); // element badge = Evan's element tablet (4:06 PM)
 		HA::Text(Out, Ly + 3, Geo, FVector2D(TA.InfoX0 + 34.f * t, TA.InfoY + 14.f * t), FString::Printf(TEXT("AWAKEN  %s%s"), *ZoogiArtifacts::Name((EZoogiArtifact)TA.Stones[PI_].Value).ToUpper(), TA.bHuman ? TEXT("") : TEXT("  (CPU deciding)")), FontT(10.f), HA::GoldText, 0.f, 0.5f);
-		auto Para = [&](const FString& Head, const FString& Body, float Y, const FLinearColor& HC)
+		auto Para = [&](const FString& Head, const FString& Body, float Y, const FLinearColor& HC) -> float
 		{
 			HA::Text(Out, Ly + 3, Geo, FVector2D(TA.InfoX0, Y), Head, FontT(8.5f), HC);
 			TArray<FString> Words; Body.ParseIntoArrayWS(Words);
@@ -772,13 +786,14 @@ void UZoogiFramedHUDWidget::PaintTrayAwaken(const FGeometry& Geo, FSlateWindowEl
 			for (const FString& Wd : Words)
 			{
 				const FString Try = Line.IsEmpty() ? Wd : Line + TEXT(" ") + Wd;
-				if (!Line.IsEmpty() && HA::Measure(Try, F).X > W) { HA::Text(Out, Ly + 3, Geo, FVector2D(TA.InfoX0, LY), Line, F, FLinearColor(0.88f, 0.9f, 0.95f)); LY += 12.f * t; Line = Wd; if (LY > TA.InfoY + 160.f * t) return; }
+				if (!Line.IsEmpty() && HA::Measure(Try, F).X > W) { HA::Text(Out, Ly + 3, Geo, FVector2D(TA.InfoX0, LY), Line, F, FLinearColor(0.88f, 0.9f, 0.95f)); LY += 12.f * t; Line = Wd; if (LY > TA.InfoY + 160.f * t) return LY; }
 				else Line = Try;
 			}
 			HA::Text(Out, Ly + 3, Geo, FVector2D(TA.InfoX0, LY), Line, F, FLinearColor(0.88f, 0.9f, 0.95f));
+			return LY + 12.f * t;
 		};
-		Para(TEXT("INFUSE"), Row.InfuseText, TA.InfoY + 36.f * t, FLinearColor(1.f, 0.7f, 0.35f));
-		Para(TEXT("GUARD"), Row.GuardText, TA.InfoY + 96.f * t, FLinearColor(0.55f, 0.85f, 1.f));
+		const float GY = Para(TEXT("INFUSE"), Row.InfuseText, TA.InfoY + 36.f * t, FLinearColor(1.f, 0.7f, 0.35f));
+		Para(TEXT("GUARD"), Row.GuardText, FMath::Max(TA.InfoY + 96.f * t, GY + 8.f * t), FLinearColor(0.55f, 0.85f, 1.f));
 	}
 	if (!TA.bHuman) return;
 	const TCHAR* Lbl[3] = { TEXT("INFUSE"), TEXT("GUARD"), TEXT("SAVE") };
@@ -789,7 +804,8 @@ void UZoogiFramedHUDWidget::PaintTrayAwaken(const FGeometry& Geo, FSlateWindowEl
 		const float Sq = bPr ? 0.94f : (bHov ? 1.04f : 1.f);
 		const FVector2D S = R.GetSize() * Sq, P = R.GetCenter() - S * 0.5f;
 		if (bHov && !bPr) HA::Img(Out, Ly + 1, Geo, P - S * FVector2D(0.3f, 0.25f), S * FVector2D(1.6f, 1.5f), TEXT("pill_on"), FLinearColor(1.f, 1.f, 1.f, 0.8f));
-		HA::Img(Out, Ly + 2, Geo, P, S, i == 0 ? TEXT("pill_done") : TEXT("pill_off"));
-		HA::Text(Out, Ly + 3, Geo, R.GetCenter(), Lbl[i], FontT(9.5f), FLinearColor::White, 0.5f, 0.5f);
+		const bool bOn = !ActBtns.IsValidIndex(i) || ActBtns[i]->GetIsEnabled();
+		HA::Img(Out, Ly + 2, Geo, P, S, i == 0 ? TEXT("pill_done") : TEXT("pill_off"), bOn ? FLinearColor::White : FLinearColor(0.55f, 0.6f, 0.7f, 0.7f));
+		HA::Text(Out, Ly + 3, Geo, R.GetCenter(), Lbl[i], FontT(10.f), bOn ? FLinearColor::White : FLinearColor(0.7f, 0.74f, 0.82f, 0.8f), 0.5f, 0.5f);
 	}
 }
