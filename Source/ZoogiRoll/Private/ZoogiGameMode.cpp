@@ -200,6 +200,9 @@ void AZoogiGameMode::MenuAction(FName Action, int32 Index)
 	else if (Action == "CardClear") CardsClear();
 	else if (Action == "CardCommit") CardsCommit();
 	else if (Action == "CardAwaken") CardsToggleAwaken();
+	else if (Action == "CardAwakenView") CardsAwakenView(Index);
+	else if (Action == "CardAwakenPick") CardsAwakenPick(Index);
+	else if (Action == "CardAwakenSkip") CardsAwakenSkip();
 	else if (Action == "EpisodeSkip") { if (UZoogiEpisodeDirector* D = UZoogiEpisodeDirector::Get(this)) D->SkipCurrent(); }
 	else if (Action == "AimNudge") NudgeAim(Index);
 	else if (Action == "AimPower") AimPowerStep = FMath::Clamp(Index, 0, 3);

@@ -18,6 +18,7 @@ void AZoogiGameMode::CardsBeginStandby()
 	C->BeginStandby(this);
 	AwakenChoiceText.Reset();
 	bStandbyAwaken = false;
+	bCardAwakenView = false; CardAwakenPick = -1; // Choose-your-Awaken: a fresh pick every turn
 	if (AZoogiBall* B = GetActiveBall())
 		if (const FZoogiCardPlayerState* S = C->Rules().Player(B->PlayerIndex))
 			AddPopup(FString::Printf(TEXT("STANDBY  %d CARDS  %d ENERGY"), S->Hand.Num(), S->Energy), B->BallLocation() + FVector(0, 0, 150.f), FLinearColor(0.6f, 0.85f, 1.f));
@@ -35,9 +36,9 @@ void AZoogiGameMode::CardsToggle(int32 Slot)
 void AZoogiGameMode::CardsToggleAwaken()
 {
 	// Episode Awakening (Air Reaction entitlement) stays independent of the cards: its own toggle, no Card Energy, no card.
-	if (!CardsOn() || Stage != EZoogiStage::Awaken || bAwakenDone || !IsHumanAiming()) return;
-	bStandbyAwaken = !bStandbyAwaken;
-	UE_LOG(LogZoogi, Log, TEXT("CARDS standby awakening request %s"), bStandbyAwaken ? TEXT("ON") : TEXT("off"));
+	// Oct 15 playtest: the Awaken control (energy orb / keyboard A) toggles the tray between the cards and the 3 Awaken
+	// tablets; picking a tablet turns Awakening ON for this turn, SKIP turns it OFF.
+	CardsAwakenView(0);
 }
 
 void AZoogiGameMode::CardsClear()
@@ -47,6 +48,7 @@ void AZoogiGameMode::CardsClear()
 
 bool AZoogiGameMode::CardsCommit()
 {
+	bCardAwakenView = false; // committing always shows the cards again
 	UZoogiCardSubsystem* C = UZoogiCardSubsystem::Get(this);
 	if (!C || !CardsOn() || Phase != EZoogiPhase::Aiming || Stage != EZoogiStage::Awaken || bAwakenDone) return false;
 	FString Choice;

@@ -331,6 +331,19 @@ public:
 	void CardsClear();
 	bool CardsCommit();
 	void CardsToggleAwaken();
+	// ---- Choose-your-Awaken (Evan playtest, Oct 15): after the draw the tray shows 3 Awaken stone tablets; the pick
+	// infuses that element for this turn and requests Episode Awakening; SKIP = no Awaken. Offers = 3 of the 5 classic
+	// artifact elements (Ember / Storm / Frost / Titan / Void), shuffled by a (turn, player) hash - never a GameRng draw.
+	bool bCardAwakenView = false;       // the tray shows the 3 tablets instead of the cards (orb / A toggles)
+	int32 CardAwakenPick = -1;          // offer index picked this turn (-1 = none / skipped)
+	int32 CardAwakenOfferTurn = -1;     // turn the offers were built for
+	uint8 CardAwakenOffers[3] = { 0, 0, 0 }; // EZoogiArtifact
+	void CardsBuildAwakenOffers(int32 Player);
+	void CardsAwakenView(int32 Mode);   // 0 toggle, 1 open (auto, with the CHOOSE YOUR AWAKEN call), 2 close
+	bool CardsAwakenPick(int32 Offer);
+	void CardsAwakenSkip();
+	bool CardsAwakenViewOpen() const;
+	bool CardsApplyAwakenPick(int32 Offer, const TCHAR* Who);
 	void CardsPlanCPU();
 	float CardsComboGainMul() const;
 	float CardsEpisodeGainMul() const;

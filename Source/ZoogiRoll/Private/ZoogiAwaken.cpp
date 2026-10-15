@@ -637,6 +637,110 @@ void AZoogiGameMode::CardsPlanCPUAwaken()
 	for (const AZoogiBall* O : Balls) if (O && O != B && O->Score >= B->Score) bLeader = false;
 	const bool bStocked = B->Artifact && B->Artifact->Hand.Num() >= 1;
 	const TCHAR* Why = bRival ? TEXT("rival target") : Edge < 450.f ? TEXT("near the edge") : (bLeader && U1 < 0.5f) ? TEXT("protecting the lead") : U2 < 0.2f ? TEXT("playing safe") : bStocked ? TEXT("hand stocked") : nullptr;
-	if (Why && Stage == EZoogiStage::Awaken) { bStandbyAwaken = true; UE_LOG(LogZoogi, Log, TEXT("CARDS standby awakening request ON (CPU)")); }
+	if (Why && Stage == EZoogiStage::Awaken)
+	{
+		bStandbyAwaken = true; UE_LOG(LogZoogi, Log, TEXT("CARDS standby awakening request ON (CPU)"));
+		// Choose-your-Awaken: the CPU picks one of the same 3 offered tablets; the tier changes only the decision (no RNG)
+		CardsBuildAwakenOffers(B->PlayerIndex);
+		auto Find = [&](EZoogiArtifact X) { for (int32 i = 0; i < 3; ++i) if ((EZoogiArtifact)CardAwakenOffers[i] == X) return i; return -1; };
+		const EZoogiCPUTier Tier = ZoogiCPU::ActiveTier();
+		int32 Pick = 0;
+		if (Tier != EZoogiCPUTier::Easy)
+		{
+			const int32 Aff = Find(ZoogiArtifacts::Affinity(B->Def.Id));
+			if (Aff >= 0) Pick = Aff;
+			else if (Tier == EZoogiCPUTier::Hard || Tier == EZoogiCPUTier::Expert)
+			{
+				const EZoogiArtifact Pref[2] = { Edge < 450.f ? EZoogiArtifact::Titan : bRival ? EZoogiArtifact::Ember : EZoogiArtifact::Void, Edge < 450.f ? EZoogiArtifact::Frost : EZoogiArtifact::Storm };
+				for (EZoogiArtifact X : Pref) { const int32 k = Find(X); if (k >= 0) { Pick = k; break; } }
+			}
+		}
+		CardsApplyAwakenPick(Pick, Tier == EZoogiCPUTier::Easy ? TEXT("CPU easy") : Tier == EZoogiCPUTier::Normal ? TEXT("CPU normal") : Tier == EZoogiCPUTier::Hard ? TEXT("CPU hard") : TEXT("CPU expert"));
+	}
 	UE_LOG(LogZoogi, Log, TEXT("CPU P%d Standby Awakening: %s (%s, edge %.0f cm)"), B->PlayerIndex + 1, Why ? TEXT("REQUEST") : TEXT("no"), Why ? Why : TEXT("orb target, saving"), Edge);
+}
+
+// =====================================================================================================================
+// Choose-your-Awaken (Evan playtest, Oct 15 7:56 AM). After the Standby draw the tray announces CHOOSE YOUR AWAKEN and
+// shows 3 stone tablets (the hud-v3 tray tablet art). Design (documented in Saved/cpu_tuning_progress.md):
+//  - the options are the classic artifact elements Ember / Storm / Frost / Titan / Void (all five are available to every
+//    Zoogi; progression unlocks powers, not elements); each turn offers 3 of them, shuffled by a (turn, player) hash -
+//    no GameRng draw, so the shot / card RNG stream is unchanged by the offer;
+//  - picking a tablet = that element is Infused for this turn's shot (same artifact effects as the classic INFUSE) and the
+//    Standby Awakening request is ON (OnAwakenObserved applies the ActivationRule); SKIP = no element, request OFF;
+//  - the energy orb (or A) toggles the tray between the cards and the tablets; 1-3 pick while the tablets show;
+//  - CPUs pick by tier when CardsPlanCPUAwaken requests Awakening: Easy = first offer, Normal = affinity element when
+//    offered (else first), Hard / Expert = affinity, else situational (near the edge: Titan > Frost, rival target:
+//    Ember > Storm, else Void > Storm). Decision only, no RNG.
+// No anime / cinematic is emitted for the pick (cinematics unchanged).
+#include "ZoogiCPUBrain.h"
+#include "ZoogiArtifacts.h"
+
+void AZoogiGameMode::CardsBuildAwakenOffers(int32 Player)
+{
+	if (CardAwakenOfferTurn == TurnCounter * 8 + Player) return;
+	CardAwakenOfferTurn = TurnCounter * 8 + Player;
+	EZoogiArtifact All[5] = { EZoogiArtifact::Ember, EZoogiArtifact::Storm, EZoogiArtifact::Frost, EZoogiArtifact::Titan, EZoogiArtifact::Void };
+	uint32 H = FCrc::MemCrc32(&TurnCounter, sizeof(TurnCounter), (uint32)(Player + 1) * 0x9E3779B9u ^ 0xA11CE5u);
+	for (int32 i = 4; i > 0; --i) { H = H * 1664525u + 1013904223u; const int32 j = (int32)((H >> 8) % (uint32)(i + 1)); Swap(All[i], All[j]); }
+	for (int32 i = 0; i < 3; ++i) CardAwakenOffers[i] = (uint8)All[i];
+	UE_LOG(LogZoogi, Log, TEXT("CARDS awaken offers P%d turn=%d: %s / %s / %s"), Player + 1, TurnCounter,
+		*ZoogiArtifacts::Name(All[0]), *ZoogiArtifacts::Name(All[1]), *ZoogiArtifacts::Name(All[2]));
+}
+
+bool AZoogiGameMode::CardsAwakenViewOpen() const
+{
+	return bCardAwakenView && CardsOn() && Phase == EZoogiPhase::Aiming && Stage == EZoogiStage::Awaken && !bAwakenDone && IsHumanAiming();
+}
+
+void AZoogiGameMode::CardsAwakenView(int32 Mode)
+{
+	AZoogiBall* B = GetActiveBall();
+	if (!B || !CardsOn() || Stage != EZoogiStage::Awaken || bAwakenDone || !IsHumanAiming()) { UE_LOG(LogZoogi, Log, TEXT("CARDS awaken view %d ignored (not the human's Standby)"), Mode); return; }
+	CardsBuildAwakenOffers(B->PlayerIndex);
+	const bool bWas = bCardAwakenView;
+	bCardAwakenView = Mode == 1 ? true : Mode == 2 ? false : !bCardAwakenView;
+	if (bCardAwakenView && Mode == 1)
+	{
+		BigText = TEXT("CHOOSE YOUR AWAKEN"); BigColor = FLinearColor(0.75f, 0.5f, 1.f); BigAge = 0.f;
+	}
+	UE_LOG(LogZoogi, Log, TEXT("CARDS awaken view %s -> %s (pick %d, awaken %s)"), Mode == 1 ? TEXT("auto-open") : Mode == 2 ? TEXT("close") : TEXT("toggle"),
+		bCardAwakenView ? TEXT("TABLETS") : TEXT("CARDS"), CardAwakenPick, bStandbyAwaken ? TEXT("ON") : TEXT("off"));
+	(void)bWas;
+}
+
+bool AZoogiGameMode::CardsApplyAwakenPick(int32 Offer, const TCHAR* Who)
+{
+	AZoogiBall* B = GetActiveBall();
+	if (!B || !B->Artifact || Offer < 0 || Offer > 2) return false;
+	CardsBuildAwakenOffers(B->PlayerIndex);
+	const EZoogiArtifact A = (EZoogiArtifact)CardAwakenOffers[Offer];
+	CardAwakenPick = Offer;
+	bStandbyAwaken = true;
+	B->Artifact->SetInfused(A);
+	const FLinearColor C = ZoogiArtifacts::Color(A);
+	const bool bAff = ZoogiArtifacts::Affinity(B->Def.Id) == A;
+	AddPopup(FString::Printf(TEXT("AWAKEN  %s%s"), *ZoogiArtifacts::Name(A).ToUpper(), bAff ? TEXT("  (AFFINITY)") : TEXT("")), B->BallLocation() + FVector(0, 0, 190.f), C);
+	AddFeed(FString::Printf(TEXT("P%d %s  awaken %s%s"), B->PlayerIndex + 1, *B->Def.Name, *ZoogiArtifacts::Name(A), bAff ? TEXT("  (affinity!)") : TEXT("")), C);
+	AZoogiFX::Spawn(GetWorld(), B->BallLocation(), C, 200.f, 0.6f, false, 10.f, B);
+	UE_LOG(LogZoogi, Log, TEXT("CARDS awaken pick P%d (%s): tablet %d = %s%s -> infused, standby awakening ON"), B->PlayerIndex + 1, Who, Offer + 1, *ZoogiArtifacts::Name(A), bAff ? TEXT(" (affinity)") : TEXT(""));
+	return true;
+}
+
+bool AZoogiGameMode::CardsAwakenPick(int32 Offer)
+{
+	if (!CardsOn() || Stage != EZoogiStage::Awaken || bAwakenDone || !IsHumanAiming()) return false;
+	if (!CardsApplyAwakenPick(Offer, TEXT("human"))) return false;
+	bCardAwakenView = false; // back to the cards
+	return true;
+}
+
+void AZoogiGameMode::CardsAwakenSkip()
+{
+	AZoogiBall* B = GetActiveBall();
+	if (!B || !CardsOn() || Stage != EZoogiStage::Awaken || bAwakenDone || !IsHumanAiming()) return;
+	bStandbyAwaken = false; CardAwakenPick = -1; bCardAwakenView = false;
+	if (B->Artifact) B->Artifact->ClearInfused();
+	AddPopup(TEXT("NO AWAKEN"), B->BallLocation() + FVector(0, 0, 190.f), FLinearColor(0.7f, 0.75f, 0.85f));
+	UE_LOG(LogZoogi, Log, TEXT("CARDS awaken skip P%d -> standby awakening off"), B->PlayerIndex + 1);
 }

@@ -1088,7 +1088,13 @@ void AZoogiPlayerController::HandleInput(float Dt)
 	{
 		// v3 Standby: 1-5 toggle cards, Enter / Space commit, Backspace clear
 		static const FKey CardKeys[7] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six, EKeys::Seven }; // Oct 14: hand cap 7
-		for (int32 i = 0; i < 7; ++i) if (WasInputKeyJustPressed(CardKeys[i])) G->MenuAction(TEXT("CardToggle"), i);
+		if (G->CardsAwakenViewOpen())
+		{
+			// Choose-your-Awaken tablets on show: 1-3 pick a tablet, 0 / X skips
+			for (int32 i = 0; i < 3; ++i) if (WasInputKeyJustPressed(CardKeys[i])) G->MenuAction(TEXT("CardAwakenPick"), i);
+			if (WasInputKeyJustPressed(EKeys::Zero) || WasInputKeyJustPressed(EKeys::X)) G->MenuAction(TEXT("CardAwakenSkip"), 0);
+		}
+		else for (int32 i = 0; i < 7; ++i) if (WasInputKeyJustPressed(CardKeys[i])) G->MenuAction(TEXT("CardToggle"), i);
 		if (WasInputKeyJustPressed(EKeys::Enter) || WasInputKeyJustPressed(EKeys::SpaceBar)) G->MenuAction(TEXT("CardCommit"), 0);
 		if (WasInputKeyJustPressed(EKeys::BackSpace)) G->MenuAction(TEXT("CardClear"), 0);
 		if (WasInputKeyJustPressed(EKeys::A)) G->MenuAction(TEXT("CardAwaken"), 0);
