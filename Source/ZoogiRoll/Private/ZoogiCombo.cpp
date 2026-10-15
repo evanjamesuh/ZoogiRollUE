@@ -1050,6 +1050,7 @@ namespace
 	float RingOutScore(const AZoogiGameMode* G, const AZoogiBall* Me, const AActor* T, float Cut, float Speed)
 	{
 		const FVector2D S(Me->BallLocation()), P(CPos(T));
+		if (G->Arena && G->Arena->IsOffCourt(P)) return 1e6f; // Oct 15: beyond the ring-out edge (Frozen islet orbs): not a planned line
 		const float TR = Cast<AZoogiOrb>(T) ? ZoogiConst::OrbRadius : ZoogiConst::ZoogiRadius;
 		const float RR = ZoogiConst::ZoogiRadius + TR;
 		const FVector2D D0 = (P - S).GetSafeNormal();

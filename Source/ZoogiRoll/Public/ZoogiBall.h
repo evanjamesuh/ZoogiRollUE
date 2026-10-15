@@ -47,6 +47,8 @@ public:
 	void Launch(const FVector2D& PlanarVelocity);
 	void PlaceAt(const FVector& Location, float FacingYaw);
 	void SetOut();
+	/** Oct 15: where the Zoogi was when it was ruled out (turn-end log measures the real distance travelled). */
+	FVector OutLocation = FVector::ZeroVector;
 	void SetActiveTurn(bool bActive);
 
 	bool IsAtRest() const;

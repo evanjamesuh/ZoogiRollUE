@@ -442,7 +442,7 @@ void AZoogiGameMode::EndTurn()
 		int32 Moved = 0;
 		for (AZoogiOrb* O : Orbs) if (O && !O->bOut && O->GetVelocity().Size() >= 0.f) ++Moved;
 		UE_LOG(LogZoogi, Log, TEXT("Turn end: P%d travelled %.0f cm (shot %.0f cm/s), %s, orbs left %d, %.1fs"), ActivePlayer + 1,
-			Shooter->bOut ? -1.f : FVector::Dist2D(Shooter->BallLocation(), ShotStart), ShotSpeed, Shooter->bOut ? TEXT("OUT") : TEXT("on court"), OrbsLeft(), PhaseTime);
+			FVector::Dist2D(Shooter->bOut ? Shooter->OutLocation : Shooter->BallLocation(), ShotStart), ShotSpeed, Shooter->bOut ? TEXT("OUT") : TEXT("on court"), OrbsLeft(), PhaseTime); // Oct 15: OUT = distance to where it was ruled out (was a -1 placeholder)
 	}
 	EndPowers();
 	for (AZoogiBall* B : Balls) if (B->bOut) RespawnBall(B);
@@ -898,6 +898,16 @@ void AZoogiGameMode::PlanCPUShot()
 	const EZoogiPower MyPower = Me->Def.PowerKind;
 	const bool bHuntRivals = bCPUUsePower && (MyPower == EZoogiPower::ShadowStun || MyPower == EZoogiPower::StaticShock || MyPower == EZoogiPower::BandageBind || MyPower == EZoogiPower::RuneSeal);
 	for (AZoogiBall* Other : Balls) if (Other && Other != Me && !Other->bOut && !IsAlly(Me, Other)) Cands.Add({ FVector2D(Other->BallLocation()), bHuntRivals ? 100.f : 40.f, Other->Def.MassRatio(), ZoogiConst::ZoogiRadius, Other });
+	// Oct 15 fix ("travelled -1 cm, OUT" on Frozen Ring): targets beyond the ring-out edge (the Frozen islet orbs on the
+	// bleacher aprons, a rival standing on an islet) gave a negative DistanceToEdge -> the cheapest plan and a NaN power
+	// -> a full-power shot straight over the bridge, and the shooter flew off the islet (contacts=0). The edge model
+	// can't plan those, so the CPU skips them (humans can still play them). Only changes plans on arenas that have
+	// off-court targets (Frozen islets); the GameRng draw sequence is unchanged.
+	{
+		int32 NSkip = 0;
+		for (int32 i = Cands.Num() - 1; i >= 0; --i) if (Arena && Arena->IsOffCourt(Cands[i].P)) { Cands.RemoveAt(i); ++NSkip; }
+		if (NSkip) UE_LOG(LogZoogi, Log, TEXT("CPU P%d skips %d off-court target(s) (beyond the ring-out edge %.0f cm: islet orbs / rivals)"), ActivePlayer + 1, NSkip, Arena->GetKnockoffRadius());
+	}
 
 	auto Blocked = [&](const FVector2D& From, const FVector2D& To, const FVector2D& Ignore)
 	{

@@ -441,6 +441,7 @@ void AZoogiBall::SetOut()
 	{
 		const FVector V = PrevVelocity.SizeSquared() > 1.f ? PrevVelocity : GetBallVelocity();
 		AZoogiArenaPiece::RingOutCrash(GetWorld(), BallLocation(), V, 50.f, this);
+		OutLocation = BallLocation();
 	}
 	bOut = true;
 	Sphere->SetSimulatePhysics(false);
