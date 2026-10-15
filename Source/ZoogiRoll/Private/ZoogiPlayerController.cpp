@@ -1630,7 +1630,9 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		// stay above the pillars / props: the camera never drops below MinHeight over the court while zoomed
 		if (ZoomCur > 1.001f && ZDist > 1.f && ZDist * FMath::Sin(FMath::DegreesToRadians(ZPitch)) < ZT.MinHeight)
 			ZPitch = FMath::Min(FMath::Max(Pitch, ZPitch), FMath::RadiansToDegrees(FMath::Asin(FMath::Min(ZT.MinHeight / ZDist, 0.98f))));
-		if (ZoomCur > 1.001f || !ZoomOff.IsNearlyZero()) ProbeFrom = ZPivot + FVector(0, 0, 150.f);
+		// zoomed: probe the boom from high above the view centre, so pillars / props between the shooter and the aim point
+		// don't pull the camera in against them (it stays >= MinHeight, over the props)
+		if (ZoomCur > 1.001f || !ZoomOff.IsNearlyZero()) ProbeFrom = ZPivot + FVector(0, 0, FMath::Max(150.f, ZT.MinHeight * 0.85f));
 	}
 	const FRotator Heading(0.f, Yaw, 0.f);
 	const float Pr = FMath::DegreesToRadians(ZPitch);
