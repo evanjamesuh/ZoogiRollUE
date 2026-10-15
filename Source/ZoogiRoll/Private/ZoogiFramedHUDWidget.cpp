@@ -6,6 +6,7 @@
 #include "ZoogiBall.h"
 #include "ZoogiHUD.h"
 #include "ZoogiAwakenWidget.h"
+#include "ZoogiMenuWidget.h"
 #include "ZoogiTypes.h"
 #include "ZoogiRoll.h"
 #include "ZoogiUIStyle.h"
@@ -178,7 +179,7 @@ TSharedRef<SWidget> UZoogiFramedHUDWidget::RebuildWidget()
 			if (UCanvasPanelSlot* S = Root->AddChildToCanvas(TrayHit)) { S->SetAutoSize(false); S->SetZOrder(20); }
 			for (int32 i = 0; i < 7; ++i)
 			{
-				UButton* B = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass());
+				UButton* B = WidgetTree->ConstructWidget<UZoogiButton>(UZoogiButton::StaticClass()); // non-focusable like the old Awaken panel's buttons (a focusable SButton lost its press to the viewport focus keeper)
 				B->SetStyle(St);
 				B->SetVisibility(ESlateVisibility::Collapsed);
 				if (UCanvasPanelSlot* S = Root->AddChildToCanvas(B)) { S->SetAutoSize(false); S->SetZOrder(21); }
