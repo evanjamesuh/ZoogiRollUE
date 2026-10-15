@@ -32,6 +32,7 @@ public:
 
 	void Build(EZoogiArena InTheme);
 	EZoogiArena GetTheme() const { return Theme; }
+	const TArray<TObjectPtr<class AZoogiObstacle>>& GetObstacles() const { return Obstacles; } // Oct 15: CPU hazard planning
 	/** Rolling deceleration for marbles on this floor (ice is slippery). */
 	float GetRollingDecel() const;
 	FVector GetSpawnPoint(int32 PlayerIndex) const;

@@ -39,6 +39,7 @@
 #include "PhysicalMaterials/PhysicalMaterial.h"
 #include "ZoogiCPUBrain.h"
 #include "ZoogiPortals.h"
+#include "ZoogiObstacle.h"
 
 AZoogiGameMode::AZoogiGameMode()
 {
@@ -1098,6 +1099,40 @@ void AZoogiGameMode::PlanCPUShot()
 		const float VOutMax = FMath::Sqrt(2.f * Decel * FMath::Max(0.f, Run - PBest)) - PortalSys->BoostAdd;
 		return VOutMax <= 0.f ? FMath::Max(0.f, PBest - 60.f) : PBest + VOutMax * VOutMax / (2.f * Decel);
 	};
+	// Oct 15: speed-adding obstacles (bumpers with BounceGain > 1, boost / launch / heading-snap / min-speed / multiplier
+	// pads, low-friction zones - Arabian's toppings) send a shooter far past any decel estimate (5-6 m rolls on 14 m/s
+	// shots in the cards-off runs). A follow-through / miss line that reaches one is only safe up to it.
+	struct FHaz { FVector2D C; float R; };
+	TArray<FHaz> Hazards;
+	for (const TObjectPtr<AZoogiObstacle>& Ob : Arena->GetObstacles())
+	{
+		if (!Ob || Ob->IsHidden()) continue;
+		bool bHaz = Ob->BounceGain > 1.001f;
+		for (const FZoogiObsTrigger& T : Ob->Triggers)
+			if (T.Kind == 1 || T.Kind == 2 || T.Kind == 5 || T.Kind == 6 || T.Kind == 7 || (T.Kind == 4 && ((T.P[0] > 0.f && T.P[0] < Decel * 0.9f) || (T.P[0] <= 0.f && T.P[1] > 0.f && T.P[1] < 0.9f)))) bHaz = true;
+		if (!bHaz) continue;
+		FVector O, E; Ob->GetActorBounds(false, O, E);
+		Hazards.Add({ FVector2D(O), FMath::Max(E.X, E.Y) });
+	}
+	int32 NHazClamp = 0;
+	auto HazardRun = [&](const FVector2D& From, const FVector2D& Dir, float Run) -> float
+	{
+		if (Hazards.Num() == 0 || Run <= 0.f) return Run;
+		float Best = Run;
+		for (const FHaz& H : Hazards)
+		{
+			const FVector2D Rel = H.C - From;
+			const float Along = FVector2D::DotProduct(Rel, Dir);
+			const float R = H.R + ZoogiConst::ZoogiRadius;
+			const float Perp2 = Rel.SizeSquared() - Along * Along;
+			if (Perp2 > R * R || Along + R < 0.f) continue;
+			const float S = Along - FMath::Sqrt(FMath::Max(0.f, R * R - Perp2));
+			if (S < Best) Best = FMath::Max(S, 0.f);
+		}
+		if (Best >= Run) return Run;
+		++NHazClamp;
+		return FMath::Max(0.f, Best - 60.f);
+	};
 	const float MeZ = Me->BallLocation().Z;
 	static const float WallFrac = []
 	{
@@ -1186,7 +1221,7 @@ void AZoogiGameMode::PlanCPUShot()
 		const float MyRun = ShooterRun(Contact, MeZ, Dir, MyEdge, MyWall);
 		const bool bMyWalled = MyRun >= 1e5f;
 		// walled: the shooter may reach the wall at up to WallHopV, no faster (else it hops the wall)
-		const float SafeRun = PortalRun(Contact, MeZ, Dir, bMyWalled ? MyWall + WallHopV * WallHopV / (2.f * Decel) - 60.f : MyRun - 120.f);
+		const float SafeRun = HazardRun(Contact, Dir, PortalRun(Contact, MeZ, Dir, bMyWalled ? MyWall + WallHopV * WallHopV / (2.f * Decel) - 60.f : MyRun - 120.f));
 		float MaxSafeFrac = 1.f;
 		if (KAfter > 0.01f)
 		{
@@ -1212,7 +1247,7 @@ void AZoogiGameMode::PlanCPUShot()
 			float BWall = 1e6f;
 			const float BRun0 = ShooterRun(B, MeZ, Dir, Arena->DistanceToEdge(B, Dir), BWall);
 			const float BRun = BRun0 < 1e5f ? BRun0 : BWall + WallHopV * WallHopV / (2.f * Decel) + 70.f; // walled: hop distance
-			const float EdgeB = PortalRun(B, MeZ, Dir, BRun);
+			const float EdgeB = HazardRun(B, Dir, PortalRun(B, MeZ, Dir, BRun));
 			DbgMissRun = EdgeB;
 			if (FullRoll > EdgeB - 80.f)
 			{
@@ -1288,7 +1323,7 @@ void AZoogiGameMode::PlanCPUShot()
 			{
 				float TWall = 1e6f;
 				const float TRun = ShooterRun(Ghost, MeZ, Tang, TEdge, TWall);
-				CSafe = PortalRun(Ghost, MeZ, Tang, TRun >= 1e5f ? TWall + WallHopV * WallHopV / (2.f * Decel) - 60.f : TRun - 120.f);
+				CSafe = HazardRun(Ghost, Tang, PortalRun(Ghost, MeZ, Tang, TRun >= 1e5f ? TWall + WallHopV * WallHopV / (2.f * Decel) - 60.f : TRun - 120.f));
 				const float VHitMax = FMath::Sqrt(2.f * Decel * FMath::Max(0.f, CSafe)) / FMath::Max(KCut, 0.01f);
 				CutMaxSafe = InvertLaunch(FMath::Min(FMath::Sqrt(VHitMax * VHitMax + 2.f * Decel * GDist), VMax * 1.01f));
 				if (VAfter * VAfter / (2.f * Decel) > CSafe)
@@ -1302,7 +1337,7 @@ void AZoogiGameMode::PlanCPUShot()
 				const float FullRoll = FMath::Square(ZoogiConst::LaunchSpeedForPull(Frac)) / (2.f * Decel);
 				float BWall = 1e6f;
 				const float BRun0 = ShooterRun(B, MeZ, Dir, Arena->DistanceToEdge(B, Dir), BWall);
-				CMiss = PortalRun(B, MeZ, Dir, BRun0 < 1e5f ? BRun0 : BWall + WallHopV * WallHopV / (2.f * Decel) + 70.f);
+				CMiss = HazardRun(B, Dir, PortalRun(B, MeZ, Dir, BRun0 < 1e5f ? BRun0 : BWall + WallHopV * WallHopV / (2.f * Decel) + 70.f));
 				if (FullRoll > CMiss - 80.f)
 				{
 					const float MissSafe = InvertLaunch(FMath::Sqrt(2.f * Decel * FMath::Max(0.f, CMiss - 150.f)));
@@ -1426,7 +1461,7 @@ void AZoogiGameMode::PlanCPUShot()
 		UE_LOG(LogZoogi, Log, TEXT("CPU P%d edge clamp: %.0f%% -> %.0f%% (follow-through stays on court)"), ActivePlayer + 1, BestFrac * 100.f, PickSafeFrac * 100.f);
 		BestFrac = PickSafeFrac;
 	}
-	if (NWalled || NRunWalled || NHoles) UE_LOG(LogZoogi, Log, TEXT("CPU P%d wall check: exit lines walled %d/%d (launch exits %d), follow-through lines walled %d/%d, floor holes on shooter lines %d, wall-hop clamps %d, portal lines %d; pick %.0f%%"), ActivePlayer + 1, NRunWalled, NRuns, NLaunch, NWalled, NSweeps, NHoles, NHopClamp, NPortalClamp, BestFrac * 100.f);
+	if (NWalled || NRunWalled || NHoles) UE_LOG(LogZoogi, Log, TEXT("CPU P%d wall check: exit lines walled %d/%d (launch exits %d), follow-through lines walled %d/%d, floor holes on shooter lines %d, wall-hop clamps %d, portal lines %d, hazard lines %d/%d; pick %.0f%%"), ActivePlayer + 1, NRunWalled, NRuns, NLaunch, NWalled, NSweeps, NHoles, NHopClamp, NPortalClamp, NHazClamp, Hazards.Num(), BestFrac * 100.f);
 	// Oct 8: Frozen aerial layer: with the battle map props up, a CPU sometimes plays a prop route (rail / halo / bumper) instead.
 	// No-op (and no GameRng draw) without the map layout, so every existing mode and test plans exactly as before.
 	if (UZoogiBattleStateMachine* BSM = GetWorld()->GetSubsystem<UZoogiBattleStateMachine>())
