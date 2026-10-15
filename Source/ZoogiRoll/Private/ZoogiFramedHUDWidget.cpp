@@ -438,7 +438,7 @@ FString UZoogiFramedHUDWidget::PromptText(const AZoogiGameMode* G)
 	{
 		if (G->bAwakenDone) return G->AwakenChoiceText.IsEmpty() ? TEXT("Awaken done") : G->AwakenChoiceText;
 		if (B->bCPU) return TEXT("CPU is awakening...");
-		return G->CardsOn() ? TEXT("AWAKEN: play cards (drag onto a target or 1-5), tap AWAKEN to awaken (A), then CONFIRM - CONFIRM alone skips") : TEXT("Pick a card, then INFUSE / GUARD / SAVE");
+		return G->CardsOn() ? TEXT("STANDBY: tap the orb (A) to choose your Awaken, play cards (drag onto a target or 1-7), then CONFIRM") : TEXT("Pick a card, then INFUSE / GUARD / SAVE");
 	}
 	if (B->bCPU) return G->TargetLock.IsValid() ? FString::Printf(TEXT("CPU is targeting %s"), *G->TargetName(G->TargetLock.Get())) : TEXT("CPU is choosing a target");
 	if (G->IsPowerUpStep()) return TEXT("POWER UP - launching!");
@@ -626,7 +626,11 @@ int32 UZoogiFramedHUDWidget::PaintBack(const FGeometry& Geo, FSlateWindowElement
 			const float Rr = (68.f + 6.f * Pz) * t;
 			const FLinearColor RC(0.85f, 0.7f, 1.f, 0.55f + 0.4f * Pz);
 			const bool bHovO = OrbBtn && OrbBtn->IsHovered();
-			ZoogiUIStyle::SBox(Out, Ly + 7, Geo, OC - FVector2D(Rr, Rr), FVector2D(Rr, Rr) * 2.f, FLinearColor::Transparent, bHovO ? FLinearColor::White : RC, Rr, (bHovO ? 3.5f : 2.5f) * t);
+			{
+				// a real ring (outline-only rounded brush; ZoogiUIStyle::SBox's outline pass is a filled disk)
+				const FSlateRoundedBoxBrush Ring(FLinearColor::Transparent, Rr, FLinearColor::White, (bHovO ? 3.5f : 2.5f) * t);
+				FSlateDrawElement::MakeBox(Out, Ly + 7, Geo.ToPaintGeometry(FVector2f(FVector2D(Rr, Rr) * 2.f), FSlateLayoutTransform(FVector2f(OC - FVector2D(Rr, Rr)))), &Ring, ESlateDrawEffect::None, bHovO ? FLinearColor::White : RC);
+			}
 			for (int32 k = 0; k < 4; ++k)
 			{
 				const FVector2D D = k == 0 ? FVector2D(1, 0) : k == 1 ? FVector2D(-1, 0) : k == 2 ? FVector2D(0, 1) : FVector2D(0, -1);
@@ -637,7 +641,7 @@ int32 UZoogiFramedHUDWidget::PaintBack(const FGeometry& Geo, FSlateWindowElement
 			const EZoogiArtifact Pk = G->CardAwakenPick >= 0 && G->CardAwakenPick < 3 ? (EZoogiArtifact)G->CardAwakenOffers[G->CardAwakenPick] : EZoogiArtifact::None;
 			const bool bAwOn = G->bStandbyAwaken && Pk != EZoogiArtifact::None;
 			const FString Lab = G->CardsAwakenViewOpen() ? FString(TEXT("TAP: CARDS")) : bAwOn ? FString::Printf(TEXT("AWAKEN: %s"), *ZoogiArtifacts::Name(Pk).ToUpper()) : FString(TEXT("AWAKEN: OFF"));
-			TxtT(Ly + 8, TR + FVector2D(316.f, 30.f) * t, Lab, 9.f, bAwOn ? ZoogiArtifacts::Color(Pk) : FLinearColor(0.85f, 0.8f, 0.95f), 0.5f);
+			TxtT(Ly + 8, TR + FVector2D(316.f, 16.f) * t, Lab, 9.f, bAwOn ? ZoogiArtifacts::Color(Pk) : FLinearColor(0.85f, 0.8f, 0.95f), 0.5f);
 		}
 		// awaken stones (artifact mode): the old central picker lives in the tray now
 		PaintTrayAwaken(Geo, Out, bOverlay ? Ly + 7 : Ly + 4, t);

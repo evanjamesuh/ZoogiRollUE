@@ -32,6 +32,7 @@
 #include "ZoogiFramedLayout.h"
 #include "ZoogiHudArt.h"
 #include "ZoogiHUD.h"
+#include "ZoogiMenuWidget.h"
 #include "ZoogiAwakenWidget.h"
 #include "ZoogiPlayerController.h"
 #include "ZoogiArtifactComponent.h"
@@ -108,7 +109,10 @@ TSharedRef<SWidget> UZoogiCardHandWidget::RebuildWidget()
 		WidgetTree->RootWidget = Root;
 		auto MakeBtn = [&](const TCHAR* Label, const FLinearColor& C, UTextBlock*& OutText) -> UButton*
 		{
-			UButton* B = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass());
+			// Oct 15 playtest: non-focusable, fires on the press (a plain focusable UButton lost the CONFIRM press to the
+			// viewport focus keeper under synthetic mouse input - same fix as the tray controls); touch keeps tap = down + up
+			UButton* B = WidgetTree->ConstructWidget<UZoogiButton>(UZoogiButton::StaticClass());
+			B->SetClickMethod(EButtonClickMethod::MouseDown);
 				B->SetStyle(ZoogiUIStyle::ButtonStyle(C, true)); // uistyle: chunky saturated plate + navy outline (was the default gray UButton)
 			UTextBlock* T = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
 			T->SetText(FText::FromString(Label));
@@ -930,10 +934,17 @@ void UZoogiCardHandWidget::TickPlaytest1(AZoogiGameMode* G, float Dt)
 			}
 			break;
 		case 9:
-			if (PtT > 0.9f)
 			{
-				Check(PC->GetAimZoom() > 1.2f, FString::Printf(TEXT("camera zoomed in (%.2fx)"), PC->GetAimZoom()));
-				G->TakeShot(Tag + TEXT("_5_zoom_standby"));
+				static int32 ZShotTurn = -1; // shot first, switch off a beat later (the shot is grabbed at the end of the frame)
+				if (PtT > 0.9f && ZShotTurn != PtTurns)
+				{
+					ZShotTurn = PtTurns;
+					Check(PC->GetAimZoom() > 1.2f, FString::Printf(TEXT("camera zoomed in (%.2fx)"), PC->GetAimZoom()));
+					G->TakeShot(Tag + TEXT("_5_zoom_standby"));
+				}
+			}
+			if (PtT > 1.3f)
+			{
 				FVector2D Z; if (ZoomAbs(Z)) Click(Z, false);
 				PtStep = 10; PtT = 0.f;
 			}
@@ -987,7 +998,12 @@ void UZoogiCardHandWidget::TickPlaytest1(AZoogiGameMode* G, float Dt)
 	}
 	if (PtStep == 13 && PtT > 0.9f)
 	{
-		Check(S->bCommitted || G->bAwakenDone, FString::Printf(TEXT("%s: CONFIRM committed"), *Tag));
+		static int32 FallTurn = -1;
+		if (FallTurn != PtTurns)
+		{
+			Check(S->bCommitted || G->bAwakenDone, FString::Printf(TEXT("%s: CONFIRM (%s) committed"), *Tag, PtTurns % 2 ? TEXT("mouse") : TEXT("touch")));
+			if (!S->bCommitted && !G->bAwakenDone) { FallTurn = PtTurns; Key(EKeys::Enter); PtT = 0.4f; return; } // keep the run going (Enter)
+		}
 		int32 Back = 0; for (int32 Id : TrayInstanceIds()) if (PtGone.Contains(Id)) ++Back;
 		UE_LOG(LogZoogi, Log, TEXT("PT1 %s AFTER CONFIRM: hand=[%s ] committed=%d draw=%d discard=%d shown discard=%d tray=[%s ]"), *Tag, *Ids(HandIds(S)), S->Committed.Num(), S->DrawPile.Num(), S->Discard.Num(), DiscardCount, *Ids(TrayInstanceIds()));
 		Check(Back == 0, FString::Printf(TEXT("%s: played cards [%s ] stay gone after CONFIRM (tray has none of them)"), *Tag, *PtShots));
