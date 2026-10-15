@@ -104,6 +104,8 @@ namespace
 	}
 }
 
+const TArray<FVector2D>& ZoogiFrozen::RimGapArcs() { return RimGaps(); }
+
 UMaterialInterface* AZoogiArena::FrozenMat(FName Key) const
 {
 	if (const TObjectPtr<UMaterialInterface>* M = FrozenMats.Find(Key)) return M->Get();

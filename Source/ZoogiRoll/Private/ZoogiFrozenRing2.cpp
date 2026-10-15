@@ -160,6 +160,32 @@ void AZoogiArena::BuildFrozenRing2()
 		AddIce(335.f, 385.f, R2In, R2Out); AddIce(155.f, 205.f, R2In, R2Out); AddIce(240.f, 300.f, R2In + 15.f, 1905.f);
 	}
 	if (AZoogiObstacle* O = Spawn(TEXT("Ring2_Curb"))) O->BuildCollider(CurbH_, 1.f, FloorPMr);
+	// Oct 15 (Evan: through a rim gap = into the crevasse = out): a fast body leaving a Ring 1 rim gap at deck height can
+	// carry the 200 cm crevasse and land on Ring 2 (curb top -15). Opposite each rim gap the crevasse's outer lip rises to
+	// z +20 (dead ice, restitution 0.15) so it meets the far face and drops in. Ramp mouths (+-5 deg) stay open: those
+	// are meant to land on Ring 2. Ring 2 bodies there meet a 50 cm lip instead of the 15 cm curb.
+	{
+		TArray<TArray<FVector>> BH;
+		FZoogiMeshBuilder Bv;
+		UPhysicalMaterial* DeadPM = ZoogiPhysics::MakeMaterial(this, 0.4f, 0.15f, false);
+		for (const FVector2D& G : ZoogiFrozen::RimGapArcs())
+		{
+			float A = G.X - 1.f;
+			while (A < G.Y + 1.f)
+			{
+				auto InRamp = [](float Y) { for (float Ry : RampYaw) if (FMath::Abs(FMath::FindDeltaAngleDegrees(Y, Ry)) < 5.f) return true; return false; };
+				if (InRamp(A)) { A += 0.5f; continue; }
+				float B = A; while (B < G.Y + 1.f && !InRamp(B)) B += 0.5f;
+				if (B - A >= 1.f)
+				{
+					ArcHulls(BH, R2In - 2.f, R2In + CurbW, A, B, R2Z, 20.f, 3.f);
+					Bv.ArcSlab(R2In - 2.f, R2In + CurbW, A, B, R2Z, 20.f, FMath::Max(2, FMath::CeilToInt((B - A) / 3.f)));
+				}
+				A = B;
+			}
+		}
+		if (BH.Num()) { Vis(Bv, IcePane); if (AZoogiObstacle* O = Spawn(TEXT("Ring2_CrevasseLip"))) O->BuildCollider(BH, 1.f, DeadPM); }
+	}
 	if (AZoogiObstacle* O = Spawn(TEXT("Ring2_BankWalls"))) O->BuildCollider(WallH_, 1.f, WallPMr);
 
 	// ---- 6 orb pockets: alcove floor + concave back wall (r112 around r2150, h70), outer orb in an 8 cm cup -> Episode Energy

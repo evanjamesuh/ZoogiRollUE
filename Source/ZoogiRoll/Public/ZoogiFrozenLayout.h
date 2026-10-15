@@ -86,5 +86,6 @@ namespace ZoogiFrozen
 	constexpr float R2OutcropDist = 2650.f;
 	constexpr float R2FallYaw[2] = { 100.f, 80.f };      // rim falls pour into the crevasse (were 112.5 / 67.5 = ramp yaws)
 	constexpr float R2HaloYaw[4] = { 0.f, 90.f, 180.f, 270.f }; // one aerial access point (halo) per side above Ring 2
+	ZOOGIROLL_API const TArray<FVector2D>& RimGapArcs(); // Ring 1 rim gap arcs (deg A0..A1), empty when -ZoogiFrozenRimGaps=Off
 	inline float IsletD(int32 k) { return Ring2On() ? R2IsletDist : IsletDist[k]; }
 }
