@@ -53,6 +53,7 @@ protected:
 	UFUNCTION() void OnVolDown();
 	UFUNCTION() void OnVolUp();
 	UFUNCTION() FEventReply OnTrayHitDown(FGeometry MyGeometry, const FPointerEvent& MouseEvent);
+	UFUNCTION() void OnTrayBtnPressed();
 	UFUNCTION() void OnStone0();
 	UFUNCTION() void OnStone1();
 	UFUNCTION() void OnStone2();

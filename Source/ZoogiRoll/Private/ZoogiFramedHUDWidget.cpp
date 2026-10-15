@@ -181,6 +181,9 @@ TSharedRef<SWidget> UZoogiFramedHUDWidget::RebuildWidget()
 			{
 				UButton* B = WidgetTree->ConstructWidget<UZoogiButton>(UZoogiButton::StaticClass()); // non-focusable like the old Awaken panel's buttons (a focusable SButton lost its press to the viewport focus keeper)
 				B->SetStyle(St);
+				// a mouse press picks / acts at once (no hover-on-release requirement, which a stale Slate hover state broke);
+				// touch keeps tap = down + up over the control
+				B->SetClickMethod(EButtonClickMethod::MouseDown);
 				B->SetVisibility(ESlateVisibility::Collapsed);
 				if (UCanvasPanelSlot* S = Root->AddChildToCanvas(B)) { S->SetAutoSize(false); S->SetZOrder(21); }
 				(i < 4 ? StoneBtns : ActBtns).Add(B);
@@ -192,6 +195,8 @@ TSharedRef<SWidget> UZoogiFramedHUDWidget::RebuildWidget()
 			ActBtns[0]->OnClicked.AddDynamic(this, &UZoogiFramedHUDWidget::OnInfuse);
 			ActBtns[1]->OnClicked.AddDynamic(this, &UZoogiFramedHUDWidget::OnGuard);
 			ActBtns[2]->OnClicked.AddDynamic(this, &UZoogiFramedHUDWidget::OnSave);
+			for (UButton* B : StoneBtns) { B->OnPressed.AddDynamic(this, &UZoogiFramedHUDWidget::OnTrayBtnPressed); }
+			for (UButton* B : ActBtns) B->OnPressed.AddDynamic(this, &UZoogiFramedHUDWidget::OnTrayBtnPressed);
 		}
 		VolText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
 		VolText->SetFont(ZoogiUIStyle::BoldFont(18, 2.f));
@@ -696,6 +701,13 @@ void UZoogiFramedHUDWidget::FireAwaken(FName Action, int32 Index)
 	if (UZoogiAwakenWidget* AW = Hud ? Hud->GetAwakenWidget() : nullptr) AW->Fire(Action, Index); // same path as the old panel (logs, click swallow)
 	else if (AZoogiGameMode* G = GM()) G->MenuAction(Action, Index);
 	StonePop = 0.f;
+}
+void UZoogiFramedHUDWidget::OnTrayBtnPressed()
+{
+	// like the old panel's buttons: a press on a tray control is a consumed UI press (never a world click)
+	APlayerController* PC = GetOwningPlayer();
+	AZoogiHUD* Hud = PC ? Cast<AZoogiHUD>(PC->GetHUD()) : nullptr;
+	if (UZoogiAwakenWidget* AW = Hud ? Hud->GetAwakenWidget() : nullptr) AW->NotePress();
 }
 void UZoogiFramedHUDWidget::OnStone0() { if (StoneKeys.IsValidIndex(0)) FireAwaken(TEXT("AwakenPick"), StoneKeys[0]); }
 void UZoogiFramedHUDWidget::OnStone1() { if (StoneKeys.IsValidIndex(1)) FireAwaken(TEXT("AwakenPick"), StoneKeys[1]); }
