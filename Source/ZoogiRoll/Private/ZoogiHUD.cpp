@@ -520,7 +520,7 @@ void AZoogiHUD::DrawMatch(AZoogiGameMode* G)
 	const bool bUmgAim = AwakenWidget && AwakenWidget->ShowsAim();
 	if (G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Awaken && G->CardsOn()) { if (!(AwakenWidget && AwakenWidget->ShowsCards()) && !UZoogiCardHandWidget::IsEnabled(G)) DrawCards(G); } // UMG card hand replaces the Canvas panel
 	else if (G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Awaken && !bUmgAwaken) DrawAwaken(G);
-	if (G->IsHumanAiming() && G->IsAimStep() && !bUmgAim) DrawAimControls(G);
+	(void)bUmgAim; // Oct 14: the aim control panel is gone (slingshot drag aim); DrawAimControls is no longer drawn
 	DrawEpisodeP5(G);
 	if (bFramed) {}
 	else if (Letterbox < 0.3f && G->bComboMode) Text(TEXT("2v2 COMBO   Awaken: card + I / G / S   Battle: Q switch Zoogi, click target / floor, A/D cut, 1 CONTROL 2 DRIVE 3 LAUNCH, SPACE confirm   Follow-Up: F accept / X skip   C camera"), 24.f * U, H - 36.f * U, FLinearColor(0.7f, 0.88f, 1.f, 0.9f), 0.36f, false, false);

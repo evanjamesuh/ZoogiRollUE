@@ -405,15 +405,14 @@ void AZoogiPlayerController::UpdateUiTest(float Dt)
 
 	if (SimStep == 0 && T > 0.6f)
 	{
-		if (bMouse) BackgroundClick(true, FVector2D(0.006f, 0.25f)); // left of << and above the button row
+		// Oct 14: no aim bar any more (slingshot drag aim) - nothing to background-click
 		SimStep = 1;
 	}
 	else if (SimStep == 1 && T > 0.9f)
 	{
 		if (bMouse)
 		{
-			UiCheck(LastRawLMBFrame < UiSnapFrame, TEXT("aim-bar background press swallowed by Slate (no LMB reached the game)"));
-			UiCheck(!G->HasAim() && !G->bFreeAim, TEXT("aim-bar background press made no floor aim / lock"));
+			UiCheck(!G->HasAim() && !G->bFreeAim, TEXT("no aim before the world click"));
 			// Lock through the world pick (the same targeting code a real click uses).
 			bool bFound = false;
 			for (AActor* A : G->TargetCandidates())
@@ -430,23 +429,22 @@ void AZoogiPlayerController::UpdateUiTest(float Dt)
 	{
 		UiCheck(G->HasAim(), FString::Printf(TEXT("turn %d: lock via %s"), SimTurn, bMouse ? TEXT("world click") : TEXT("Tab (key)")));
 		UiSnapCut = G->AimCutDeg;
-		if (bMouse) ClickCtl(TEXT("AimNudge"), 5);
-		else PressKey(EKeys::Right);
+		PressKey(EKeys::Right); // the << < > >> buttons are gone; nudge stays on the keys
 		SimStep = 3;
 	}
 	else if (SimStep == 3 && T > 1.6f)
 	{
-		UiCheck(FMath::Abs(G->AimCutDeg - UiSnapCut) > 0.5f, FString::Printf(TEXT("nudge via %s: cut %.1f -> %.1f deg"), bMouse ? TEXT(">> button") : TEXT("Right key"), UiSnapCut, G->AimCutDeg));
+		UiCheck(FMath::Abs(G->AimCutDeg - UiSnapCut) > 0.5f, FString::Printf(TEXT("nudge via %s: cut %.1f -> %.1f deg"), TEXT("Right key"), UiSnapCut, G->AimCutDeg));
 		UiSnapPower = G->AimPowerStep;
-		if (bMouse) ClickCtl(TEXT("AimPower"), 3);
+		if (bMouse) G->HumanDrag(0.9f, false); // drag-back pull (the OS-level drag is covered by ui.ps1 drag)
 		else PressKey(EKeys::Up);
 		SimStep = 4;
 	}
 	else if (SimStep == 4 && T > 1.9f)
 	{
 		const int32 Want = bMouse ? 3 : FMath::Min(UiSnapPower + 1, 3);
-		UiCheck(G->AimPowerStep == Want, FString::Printf(TEXT("power via %s: step %d -> %d"), bMouse ? TEXT("FULL button") : TEXT("Up key"), UiSnapPower, G->AimPowerStep));
-		if (bMouse) HoverCtl(TEXT("AimConfirm"), 0);
+		if (bMouse) UiCheck(G->HumanDragFrac > 0.85f, FString::Printf(TEXT("power via drag pull: %.0f%%"), G->HumanDragFrac * 100.f));
+		else UiCheck(G->AimPowerStep == Want, FString::Printf(TEXT("power via Up key: step %d -> %d"), UiSnapPower, G->AimPowerStep));
 		SimStep = 5;
 	}
 	else if (SimStep == 5 && T > 2.15f)
@@ -458,7 +456,7 @@ void AZoogiPlayerController::UpdateUiTest(float Dt)
 	{
 		UiShotSnap = ShotsSeen;
 		UiAct = bMouse ? TEXT("mouse") : TEXT("key");
-		if (bMouse) ClickCtl(TEXT("AimConfirm"), 0);
+		if (bMouse) G->HumanDrag(0.9f, true); // drag release launches
 		else PressKey(EKeys::SpaceBar);
 		UiConfirmFrame = GFrameCounter;
 		SimStep = 7;
