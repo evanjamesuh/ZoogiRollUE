@@ -127,6 +127,11 @@ namespace ZoogiUtil
 	/** Oct 8 (Evan 9:16 PM): round sparkles on/around the Zoogis (fast-roll Niagara spark bursts, Awakened aura bursts + the round artifact
 	 *  orbiter motes/rings). [ZoogiRoll.Characters] ZoogiSparkles=True|False; -ZoogiSparkles / -ZoogiNoSparkles override. Visual only. */
 	ZOOGIROLL_API bool ShowZoogiSparkles();
+	/** Oct 15 (Evan 12:07 AM): "remove reaction pauses for the time being" - every collision-time pause / freeze / hit-stop /
+	 *  slow-mo / wait (Episode presentation holds incl. the Air Reaction hold, anime freeze frames, camera hit-stop and lock
+	 *  slow-mo) is skipped while this is false, so physics runs at full speed. Air Reactions still happen live (no wait).
+	 *  [ZoogiRoll.Awakening] bReactionPauses=False (default); -ZoogiReactionPauses=On|Off overrides for one run. */
+	ZOOGIROLL_API bool ReactionPauses();
 	/** Oct 8 (Evan 9:16 PM): breakable arena pieces / rocks toughness. [ZoogiRoll.Arena] BreakToughness (1.0 = old tuning,
 	 *  clamped 0.5..3): AZoogiArenaPiece max HP and AZoogiRock crack / shatter speeds scale by it; indestructible pillars ignore it.
 	 *  -ZoogiBreakToughness=<x> overrides for one run. */

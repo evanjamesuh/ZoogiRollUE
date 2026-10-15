@@ -23,6 +23,20 @@ bool ZoogiUtil::ShowZoogiSparkles()
 	return Cached == 1;
 }
 
+bool ZoogiUtil::ReactionPauses()
+{
+	static int32 Cached = -1;
+	if (Cached < 0)
+	{
+		bool b = false;
+		if (GConfig) GConfig->GetBool(TEXT("ZoogiRoll.Awakening"), TEXT("bReactionPauses"), b, GGameIni);
+		FString V;
+		if (FParse::Value(FCommandLine::Get(), TEXT("ZoogiReactionPauses="), V)) b = V.Equals(TEXT("On"), ESearchCase::IgnoreCase) || V == TEXT("1") || V.Equals(TEXT("True"), ESearchCase::IgnoreCase);
+		Cached = b ? 1 : 0;
+	}
+	return Cached == 1;
+}
+
 float ZoogiUtil::BreakToughness()
 {
 	static float Cached = -1.f;

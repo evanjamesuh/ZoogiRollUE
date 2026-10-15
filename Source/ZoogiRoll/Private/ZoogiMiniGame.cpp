@@ -384,6 +384,24 @@ void UZoogiBattleStateMachine::TickMiniGame(float RealDt)
 	UWorld* W = GetWorld();
 	UZoogiEpisodeSubsystem* Ep = Episode();
 	if (!W || !Ep) { FinishMiniGame(EZoogiChallengeResult::Cancelled, TEXT("no_episode")); return; }
+	if (AirHoldToken == 0 && !ZoogiUtil::ReactionPauses())
+	{
+		// Oct 15 (Evan): no reaction pauses - the reaction runs live while physics keeps going: the CPU answers at once,
+		// a human gets a short real-time window (AirReactionMaxWait) instead of a frozen prompt
+		AirHoldToken = -1;
+		M->bInputOpen = true;
+		if (M->bCPU) M->CPUDelay = 0.f;
+		AirPendingWait = 0.f;
+		UE_LOG(LogZoogi, Log, TEXT("BATTLE minigame AirReaction live P%d (no pause) input=%s window=%.2fs"), M->Owner + 1, M->bCPU ? TEXT("cpu") : TEXT("human"), M->bCPU ? FMath::Max(Tune.AirReactionMaxWait, 0.1f) : FMath::Max(Tune.AirReactionMaxWait, 1.5f));
+	}
+	if (AirHoldToken < 0)
+	{
+		AirPendingWait += RealDt;
+		const EZoogiChallengeResult R = M->TickInput(this, RealDt);
+		if (R != EZoogiChallengeResult::Pending) FinishMiniGame(R, TEXT("input (live)"));
+		else if (AirPendingWait > (M->bCPU ? FMath::Max(Tune.AirReactionMaxWait, 0.1f) : FMath::Max(Tune.AirReactionMaxWait, 1.5f))) FinishMiniGame(EZoogiChallengeResult::Timeout, TEXT("live_window_over"));
+		return;
+	}
 	if (AirHoldToken == 0)
 	{
 		// wait until the game's own hit-stop / slow-mo is over, then hold the real world (gameplay hold, any mode)
@@ -413,7 +431,7 @@ void UZoogiBattleStateMachine::FinishMiniGame(EZoogiChallengeResult R, const FSt
 	ActiveMiniGame = nullptr;
 	UZoogiMiniGameAirReaction* M = Cast<UZoogiMiniGameAirReaction>(Base);
 	if (!M) return;
-	if (AirHoldToken != 0) { if (UZoogiEpisodeSubsystem* Ep = Episode()) Ep->ReleaseHold(AirHoldToken); }
+	if (AirHoldToken > 0) { if (UZoogiEpisodeSubsystem* Ep = Episode()) Ep->ReleaseHold(AirHoldToken); }
 	AirHoldToken = 0;
 	FString Applied = TEXT("-");
 	if (R == EZoogiChallengeResult::Success && M->Choice != EZoogiAirChoice::None)

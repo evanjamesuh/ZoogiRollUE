@@ -341,6 +341,12 @@ void UZoogiEpisodeSubsystem::ShowEpilogue()
 int32 UZoogiEpisodeSubsystem::BeginHold(float MaxSeconds, const TCHAR* Reason, bool bGameplay)
 {
 	if (bFrozen || (!bGameplay && (Mode == EZoogiEpisodeMode::Off || bPresentationSuppressed))) return 0;
+	if (!ZoogiUtil::ReactionPauses())
+	{
+		// Oct 15 (Evan): no reaction pauses - the world keeps running (callers treat 0 as "no hold" and skip their freeze)
+		UE_LOG(LogZoogi, Log, TEXT("EPISODE hold skipped action=%d reason=%s (reaction pauses off)"), Truth.ActionId, Reason ? Reason : TEXT("-"));
+		return 0;
+	}
 	FreezeWorld();
 	if (!bFrozen) return 0;
 	HoldToken = NextHoldToken++;

@@ -474,6 +474,7 @@ void UZoogiAnimeSubsystem::Freeze()
 {
 	AZoogiGameMode* G = GetWorld()->GetAuthGameMode<AZoogiGameMode>();
 	if (!G || bFrozen) return;
+	if (!ZoogiUtil::ReactionPauses()) { UE_LOG(LogZoogi, Log, TEXT("Anime freeze skipped (reaction pauses off): the cut-in plays over the running game")); return; }
 	Snaps.Reset();
 	auto Add = [this](UPrimitiveComponent* C)
 	{
