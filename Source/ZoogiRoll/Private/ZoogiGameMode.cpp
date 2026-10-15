@@ -2379,6 +2379,7 @@ void AZoogiGameMode::Tick(float DeltaSeconds)
 		break;
 	case EZoogiPhase::Aiming:
 	{
+		if (AZoogiObstacle::bOrbTestHold) break; // -ZoogiR2OrbTest: turn flow held while the scripted pocket-orb runs play
 		AZoogiBall* Ball = GetActiveBall();
 		if (Ball && Ball->bCPU && bCPUPlanned && !bArtifactMode) CPUPowerTick();
 		TickStages(Dt);

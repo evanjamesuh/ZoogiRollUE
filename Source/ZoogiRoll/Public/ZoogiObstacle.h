@@ -33,6 +33,9 @@ class ZOOGIROLL_API AZoogiObstacle : public AActor
 public:
 	AZoogiObstacle();
 	virtual void Tick(float DeltaSeconds) override;
+	/** Dev test -ZoogiR2OrbTest (Frozen Ring 2 pocket orb): while true the game mode holds the turn flow in Aiming. */
+	static inline bool bOrbTestHold = false;
+	void TickOrbTest(class AZoogiGameMode* G, float Now);
 
 	FName ObsName;
 	float BounceGain = 0.f, MaxOut = 0.f;

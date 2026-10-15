@@ -12,6 +12,29 @@
 #include "Engine/World.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
+#include "ZoogiFX.h"
+#include "ZoogiEpisodeEnergyComponent.h"
+#include "Camera/CameraActor.h"
+#include "Camera/CameraComponent.h"
+#include "GameFramework/PlayerController.h"
+#include "Misc/Paths.h"
+#include "UnrealClient.h"
+
+// Oct 15 dev test -ZoogiR2OrbTest (Frozen Ring 2 outer pocket orb at yaw 90): once the first turn reaches Aiming the turn flow
+// is held and P2 is rolled from Ring 2 (r1900) into the pocket orb three times: (1) pickup, (2) again 3 s later while
+// recharging (must not pay), (3) again after the orb is back (12 s recharge). Logs R2ORBTEST lines (energy before/after,
+// measured recharge, orb visibility) and, with -ZoogiShots=<dir>, screenshots from a fixed camera on the pocket.
+namespace ZoogiR2OrbTest
+{
+	struct FState
+	{
+		int32 Step = -1; float T0 = 0.f, Pick[2] = { -1.f, -1.f }, Shown = -1.f, Shot = -1.f; FString ShotName;
+		float E0 = 0.f, E1 = 0.f, E2 = 0.f, E3 = 0.f; FVector Home = FVector::ZeroVector; int32 NPick = 0;
+		TWeakObjectPtr<ACameraActor> Cam; TWeakObjectPtr<AActor> PrevView;
+	};
+	FState S;
+	bool On() { static const bool b = FParse::Param(FCommandLine::Get(), TEXT("ZoogiR2OrbTest")); return b; }
+}
 
 namespace ZoogiRelaunch
 {
@@ -222,6 +245,10 @@ void AZoogiObstacle::Fire(FZoogiObsTrigger& T, AZoogiBall* B, float Now)
 		const float Got = En ? En->Gain(T.P[0], FName(TEXT("obstacle_orb")), 0) : 0.f;
 		T.RechargeAt = Now + T.P[1];
 		SetOrbShown(false);
+		// Oct 15: pickup flash (energy-blue sphere + ground ring) - was only the orb hiding
+		AZoogiFX::Spawn(GetWorld(), GetActorLocation(), FLinearColor(0.45f, 0.9f, 1.f), 150.f, 0.55f, false, 8.f);
+		AZoogiFX::Spawn(GetWorld(), GetActorLocation() - FVector(0, 0, 30.f), FLinearColor(0.45f, 0.9f, 1.f), 190.f, 0.7f, true, 6.f);
+		if (ZoogiR2OrbTest::On() && ZoogiR2OrbTest::S.Step >= 0 && ZoogiR2OrbTest::S.NPick < 2) ZoogiR2OrbTest::S.Pick[ZoogiR2OrbTest::S.NPick++] = Now;
 		UE_LOG(LogZoogi, Log, TEXT("OBSTACLE %s energy P%d +%.0f (%s), recharge %.0f s"), *ObsName.ToString(), B->PlayerIndex + 1, Got, En ? TEXT("episode energy") : TEXT("no energy component"), T.P[1]);
 		break;
 	}
@@ -240,7 +267,13 @@ void AZoogiObstacle::Tick(float Dt)
 	if (!G) return;
 	const float Now = W->GetTimeSeconds();
 	for (FZoogiObsTrigger& T : Triggers)
-		if (T.Kind == 3 && T.RechargeAt > 0.f && Now >= T.RechargeAt) { T.RechargeAt = -1.f; SetOrbShown(true); }
+		if (T.Kind == 3 && T.RechargeAt > 0.f && Now >= T.RechargeAt)
+		{
+			T.RechargeAt = -1.f; SetOrbShown(true);
+			AZoogiFX::Spawn(GetWorld(), GetActorLocation() - FVector(0, 0, 30.f), FLinearColor(0.45f, 0.9f, 1.f), 110.f, 0.5f, true, 4.f); // recharged: small ring
+			if (ZoogiR2OrbTest::On() && ZoogiR2OrbTest::S.Step >= 0 && ZoogiR2OrbTest::S.Shown < 0.f) ZoogiR2OrbTest::S.Shown = Now;
+		}
+	if (ZoogiR2OrbTest::On() && ObsName == FName(TEXT("Ring2_OuterOrb_90"))) TickOrbTest(G, Now);
 	for (TWeakObjectPtr<AZoogiBall>& WB : PendingGain)
 	{
 		AZoogiBall* B = WB.Get();
@@ -293,5 +326,79 @@ void AZoogiObstacle::Tick(float Dt)
 				}
 			}
 		}
+	}
+}
+
+void AZoogiObstacle::TickOrbTest(AZoogiGameMode* G, float Now)
+{
+	using namespace ZoogiR2OrbTest;
+	if (S.Step >= 99 || G->Balls.Num() < 2 || !G->Balls[1]) return;
+	AZoogiBall* B = G->Balls[1];
+	UZoogiEpisodeEnergyComponent* En = B->FindComponentByClass<UZoogiEpisodeEnergyComponent>();
+	const float E = En ? En->Value : -1.f;
+	const FZoogiObsTrigger* Tr = Triggers.Num() ? &Triggers[0] : nullptr;
+	const bool bShown = Tr && Tr->RechargeAt < 0.f;
+	auto Roll = [&](float R, float Speed)
+	{
+		const float Z = -30.f + (B->Sphere ? B->Sphere->GetScaledSphereRadius() : 50.f) + 3.f;
+		B->Sphere->SetWorldLocation(FVector(0.f, R, Z), false, nullptr, ETeleportType::TeleportPhysics);
+		B->Sphere->SetPhysicsLinearVelocity(FVector(0.f, Speed, 0.f));
+		B->Sphere->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector);
+	};
+	FString Dir; FParse::Value(FCommandLine::Get(), TEXT("ZoogiShots="), Dir);
+	auto Shot = [&](const TCHAR* Name)
+	{
+		if (Dir.IsEmpty()) return;
+		const FString P = FPaths::Combine(Dir, FString::Printf(TEXT("r2orb_%s.png"), Name));
+		FScreenshotRequest::RequestScreenshot(P, true, false);
+		UE_LOG(LogZoogi, Log, TEXT("R2ORBTEST screenshot %s (energy P2 %.0f, orb %s)"), *P, E, bShown ? TEXT("shown") : TEXT("hidden"));
+	};
+	if (S.Cam.IsValid())
+		if (APlayerController* PC = GetWorld()->GetFirstPlayerController()) if (PC->GetViewTarget() != S.Cam.Get()) PC->SetViewTarget(S.Cam.Get());
+	if (S.Step < 0)
+	{
+		if (G->Phase != EZoogiPhase::Aiming) return;
+		if (APlayerController* PC = GetWorld()->GetFirstPlayerController()) S.PrevView = PC->GetViewTarget();
+		S.Step = 0; S.T0 = Now; bOrbTestHold = true; S.Home = B->BallLocation(); S.E0 = E;
+		const FVector Look(0.f, 2120.f, -30.f), Loc = Look + FVector(0.f, -900.f, 620.f);
+		if (ACameraActor* C = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), FTransform((Look - Loc).Rotation(), Loc)))
+		{ C->GetCameraComponent()->bConstrainAspectRatio = false; C->GetCameraComponent()->SetFieldOfView(70.f); S.Cam = C; }
+		Roll(1900.f, 0.f);
+		UE_LOG(LogZoogi, Log, TEXT("R2ORBTEST start: P2 energy %.0f, orb %s, turn flow held"), E, bShown ? TEXT("shown") : TEXT("hidden"));
+		return;
+	}
+	const float T = Now - S.T0;
+	if (S.Shot >= 0.f && Now >= S.Shot) { Shot(*S.ShotName); S.Shot = -1.f; }
+	switch (S.Step)
+	{
+	case 0: if (T > 1.5f) { Shot(TEXT("0_before")); Roll(1900.f, 420.f); UE_LOG(LogZoogi, Log, TEXT("R2ORBTEST run 1: P2 rolled r1900 -> pocket at 420 cm/s")); S.Step = 1; } break;
+	case 1:
+		if (S.NPick >= 1 && S.Shot < 0.f && S.ShotName != TEXT("1_pickup_flash")) { S.Shot = S.Pick[0] + 0.12f; S.ShotName = TEXT("1_pickup_flash"); }
+		if (T > 4.0f) { S.E1 = E; Shot(TEXT("2_after_pickup")); UE_LOG(LogZoogi, Log, TEXT("R2ORBTEST run 1 result: pickups %d, energy %.0f -> %.0f, orb %s"), S.NPick, S.E0, S.E1, bShown ? TEXT("shown") : TEXT("hidden")); S.Step = 2; }
+		break;
+	case 2: if (T > 5.0f) { Roll(1900.f, 420.f); UE_LOG(LogZoogi, Log, TEXT("R2ORBTEST run 2 (recharging): P2 rolled into the pocket again")); S.Step = 3; } break;
+	case 3:
+		if (T > 8.0f) { S.E2 = E; UE_LOG(LogZoogi, Log, TEXT("R2ORBTEST run 2 result: pickups %d, energy %.0f -> %.0f (expect no gain while recharging)"), S.NPick, S.E1, S.E2); Roll(1900.f, 0.f); S.Step = 4; }
+		break;
+	case 4:
+		if (S.Shown > 0.f && S.Shot < 0.f && S.ShotName != TEXT("3_recharged")) { S.Shot = S.Shown + 0.3f; S.ShotName = TEXT("3_recharged"); }
+		if (S.Shown > 0.f && Now > S.Shown + 1.0f) { Roll(1900.f, 420.f); UE_LOG(LogZoogi, Log, TEXT("R2ORBTEST run 3: orb back after %.2f s, P2 rolled in again"), S.Shown - S.Pick[0]); S.Step = 5; }
+		if (T > 25.f) S.Step = 5;
+		break;
+	case 5:
+		if (S.NPick >= 2 && S.Shot < 0.f && S.ShotName != TEXT("4_second_pickup")) { S.Shot = S.Pick[1] + 0.12f; S.ShotName = TEXT("4_second_pickup"); }
+		if (T > 30.f || (S.NPick >= 2 && Now > S.Pick[1] + 2.f))
+		{
+			S.E3 = E;
+			const float Rech = S.Shown > 0.f ? S.Shown - S.Pick[0] : -1.f;
+			const bool bPass = S.NPick == 2 && FMath::IsNearlyEqual(S.E1 - S.E0, 10.f, 0.5f) && FMath::IsNearlyEqual(S.E2, S.E1, 0.5f) && FMath::IsNearlyEqual(S.E3 - S.E2, 10.f, 0.5f) && FMath::Abs(Rech - 12.f) < 0.25f;
+			UE_LOG(LogZoogi, Log, TEXT("R2ORBTEST result=%s pickups=%d energy %.0f -> %.0f (run1 %+.0f) -> %.0f (run2 while recharging %+.0f) -> %.0f (run3 %+.0f) recharge measured %.2f s (expect 12)"),
+				bPass ? TEXT("PASS") : TEXT("FAIL"), S.NPick, S.E0, S.E1, S.E1 - S.E0, S.E2, S.E2 - S.E1, S.E3, S.E3 - S.E2, Rech);
+			B->Sphere->SetWorldLocation(S.Home, false, nullptr, ETeleportType::TeleportPhysics); B->Sphere->SetPhysicsLinearVelocity(FVector::ZeroVector);
+			if (APlayerController* PC = GetWorld()->GetFirstPlayerController()) if (S.PrevView.IsValid()) PC->SetViewTarget(S.PrevView.Get());
+			if (S.Cam.IsValid()) S.Cam->Destroy();
+			bOrbTestHold = false; S.Step = 99;
+		}
+		break;
 	}
 }
