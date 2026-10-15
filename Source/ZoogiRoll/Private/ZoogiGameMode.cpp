@@ -915,7 +915,7 @@ void AZoogiGameMode::FireShot(const FVector2D& Velocity)
 // open angles form an exit (angle range, points, width), low-wall exits count half. Generic: every arena.
 namespace ZoogiExitMap
 {
-	struct FExit { float A0 = 0.f, A1 = 0.f; TArray<FVector2D> Pts; float WidthCm = 0.f; bool bLowWall = false; float Rel = 0.f; };
+	struct FExit { float A0 = 0.f, A1 = 0.f; TArray<FVector2D> Pts; float WidthCm = 0.f; bool bLowWall = false; float Rel = 0.f; float WallH = 0.f, WallR = 0.f; FString WallName; };
 	static TArray<FExit> Exits;
 	static TWeakObjectPtr<const AActor> BuiltFor;
 	static int32 NOpen = 0, NTall = 0, NLow = 0, NCaught = 0, NRays = 0; static float WallRest = -1.f;
@@ -932,11 +932,19 @@ namespace ZoogiExitMap
 		BuiltFor = Arena;
 		if (!W || !Arena) return;
 		FCollisionObjectQueryParams OQ; OQ.AddObjectTypesToQuery(ECC_WorldStatic); OQ.AddObjectTypesToQuery(ECC_WorldDynamic);
-		FCollisionQueryParams QP(SCENE_QUERY_STAT(ZoogiExitMap), false);
+		FCollisionQueryParams QP(SCENE_QUERY_STAT(ZoogiExitMap), false); QP.bReturnPhysicalMaterial = true;
 		const float R0 = Arena->GetKnockoffRadius() * 0.5f;
 		const float Rad = ZoogiConst::OrbRadius * 0.8f;
+		static const float HopWallH = []
+		{
+			float V = 35.f;
+			if (GConfig) GConfig->GetFloat(TEXT("ZoogiRoll.CPU"), TEXT("ExitMapHopWallH"), V, GGameIni);
+			FParse::Value(FCommandLine::Get(), TEXT("ZoogiCPUExitHopH="), V);
+			return FMath::Clamp(V, 0.f, 130.f);
+		}();
+		TMap<FString, FVector2D> WallKinds; // name -> (height, count) of the first wall each ray meets
 		float RestSum = 0.f; int32 RestN = 0;
-		struct FRay { int32 Type = 3; FVector2D P; bool bLow = false; }; // 0 exit, 1 exit over low wall, 2 tall wall, 3 caught (floor to the end)
+		struct FRay { int32 Type = 3; FVector2D P; bool bLow = false; float WallH = 0.f, WallR = 0.f; FString WallName; }; // 0 exit, 1 exit over low wall, 2 tall wall, 3 caught (floor to the end)
 		TArray<FRay> Rays;
 		for (int32 a = 0; a < 180; ++a)
 		{
@@ -972,7 +980,26 @@ namespace ZoogiExitMap
 						W->SweepMultiByObjectType(Ht, S2, E2, FQuat::Identity, OQ, FCollisionShape::MakeSphere(Rad), QP);
 						bool bTall = false;
 						for (const FHitResult& H : Ht) if (!H.bStartPenetrating && Solid(H) && FMath::Abs(H.ImpactNormal.Z) <= 0.6f) { bTall = true; break; }
-						if (bTall) { Ry.Type = 2; Ry.P = Q; break; }
+						// Oct 15 (d45): measure the wall's top above the floor the body rolls on. 9ded57d called every wall under the
+						// 130 cm sweep "low" - Frozen's 95 cm ice ricochet walls (restitution ~0.9) included - so 145/180 rays read
+						// as exits. A rolling orb (r 40) only hops a curb / lip / rail up to [ZoogiRoll.CPU] ExitMapHopWallH
+						// (35 cm: Frozen islet lips and bridge rails are 30, "hard hits hop it"), -ZoogiCPUExitHopH=
+						float WallH = 0.f, WallRr = 0.f; FString WallName;
+						for (const FHitResult& H : Hs) if (!H.bStartPenetrating && Solid(H) && FMath::Abs(H.ImpactNormal.Z) <= 0.6f)
+						{
+							const FVector2D Ip(H.ImpactPoint.X, H.ImpactPoint.Y);
+							const FVector2D In = Ip + D * 6.f;
+							TArray<FHitResult> Tp;
+							float TopZ = LastZ + 300.f;
+							W->LineTraceMultiByObjectType(Tp, FVector(In.X, In.Y, LastZ + 300.f), FVector(In.X, In.Y, LastZ - 50.f), OQ, QP);
+							for (const FHitResult& T : Tp) if (Solid(T) && T.ImpactNormal.Z > 0.5f) { TopZ = T.ImpactPoint.Z; break; }
+							WallH = TopZ - LastZ; WallRr = Ip.Size();
+							WallName = H.GetActor() ? H.GetActor()->GetName() : TEXT("?");
+							if (H.GetComponent()) WallName += TEXT("/") + H.GetComponent()->GetName();
+							break;
+						}
+						if (bTall || WallH > HopWallH) { Ry.Type = 2; Ry.P = Q; Ry.WallH = WallH; Ry.WallR = WallRr; Ry.WallName = WallName; break; }
+						if (!bLow) { Ry.WallH = WallH; Ry.WallR = WallRr; Ry.WallName = WallName; }
 						bLow = true;
 					}
 				}
@@ -980,9 +1007,19 @@ namespace ZoogiExitMap
 				LastZ = FZ; Prev = Q;
 			}
 			if (Ry.Type == 0) ++NOpen; else if (Ry.Type == 1) ++NLow; else if (Ry.Type == 2) ++NTall; else ++NCaught;
+			if (!Ry.WallName.IsEmpty())
+			{
+				FString Key = Ry.WallName; int32 Sl; if (Key.FindChar(TEXT('/'), Sl)) Key = Key.Mid(Sl + 1);
+				FVector2D& K = WallKinds.FindOrAdd(Key); K.X += Ry.WallH; K.Y += 1.f;
+			}
 			Rays.Add(Ry);
 		}
 		WallRest = RestN ? RestSum / RestN : -1.f;
+		{
+			FString WS;
+			for (const TPair<FString, FVector2D>& K : WallKinds) WS += FString::Printf(TEXT("%s%s ~%.0f cm x%.0f"), WS.IsEmpty() ? TEXT("") : TEXT("; "), *K.Key, K.Value.X / K.Value.Y, K.Value.Y);
+			UE_LOG(LogZoogi, Log, TEXT("EXITMAP walls (first wall per ray, height above the floor; hop limit %.0f cm): %s"), HopWallH, WS.IsEmpty() ? TEXT("none") : *WS);
+		}
 		// cluster consecutive exit rays (wrapping at 360)
 		int32 Start = 0;
 		while (Start < 180 && Rays[Start].Type <= 1) ++Start; // begin after a non-exit so wrapped runs stay whole
@@ -996,6 +1033,7 @@ namespace ZoogiExitMap
 			{
 				if (!bIn) { Cur = FExit(); Cur.A0 = i * 2.f; bIn = true; }
 				Cur.A1 = i * 2.f; Cur.Pts.Add(Rays[i].P); Cur.bLowWall |= Rays[i].bLow;
+				if (Rays[i].bLow && Cur.WallName.IsEmpty()) { Cur.WallH = Rays[i].WallH; Cur.WallR = Rays[i].WallR; Cur.WallName = Rays[i].WallName; }
 			}
 			else if (bIn)
 			{
@@ -1012,8 +1050,9 @@ namespace ZoogiExitMap
 		for (const FExit& X : Exits)
 		{
 			const FVector2D M = X.Pts[X.Pts.Num() / 2];
-			UE_LOG(LogZoogi, Log, TEXT("EXITMAP exit %.0f..%.0f deg, %d ray(s), ~%.0f cm wide, at r~%.0f (%.0f, %.0f)%s, reliability %.2f"),
-				X.A0, X.A1, X.Pts.Num(), X.WidthCm, M.Size(), M.X, M.Y, X.bLowWall ? TEXT(", over a low wall") : TEXT(""), X.Rel);
+			UE_LOG(LogZoogi, Log, TEXT("EXITMAP exit %.0f..%.0f deg, %d ray(s), ~%.0f cm wide, at r~%.0f (%.0f, %.0f)%s, reliability %.2f%s"),
+				X.A0, X.A1, X.Pts.Num(), X.WidthCm, M.Size(), M.X, M.Y, X.bLowWall ? TEXT(", over a low wall") : TEXT(""), X.Rel,
+				X.bLowWall ? *FString::Printf(TEXT(" [wall %s at r~%.0f, ~%.0f cm above the floor]"), *X.WallName, X.WallR, X.WallH) : TEXT(""));
 		}
 		// compact per-ray dump for plotting (type digit per 2 deg)
 		FString S; for (const FRay& Ry : Rays) S.AppendChar(TCHAR('0' + Ry.Type));
