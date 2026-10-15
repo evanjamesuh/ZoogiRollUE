@@ -61,3 +61,13 @@ protected:
 	float SafeLaunch(const FVector& P, FVector& H, float Up) const;
 	static constexpr float MaxBoost = 2200.f; // tuning: no trigger pushes a Zoogi past this planar speed
 };
+
+// Oct 15 (Evan): relaunch guard for anything that launches / boosts a Zoogi or orb (obstacle launch / boost pads, fountains,
+// Frozen boost portals). The same pad may not relaunch the same object within Cooldown seconds, nor more than MaxPerTurn times
+// in one turn - an upward fountain whose ball falls back onto it relaunched one Zoogi 9x in a turn (12 s resolve timeout).
+// Config [ZoogiRoll.Relaunch] Cooldown=1.5 MaxPerTurn=2 (MaxPerTurn 0 = no cap); -ZoogiRelaunchCool= / -ZoogiRelaunchMax= override.
+namespace ZoogiRelaunch
+{
+	ZOOGIROLL_API bool Allow(const UObject* Pad, const AActor* Who, int32 Turn, double Now, const TCHAR* PadName);
+	ZOOGIROLL_API int32 Blocked();
+}

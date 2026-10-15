@@ -10,6 +10,49 @@
 #include "PhysicsEngine/BodySetup.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
+
+namespace ZoogiRelaunch
+{
+	struct FState { double Last = -1e9; int32 Turn = -1; int32 Count = 0; };
+	static TMap<TPair<const void*, const void*>, FState> GState;
+	static int32 GBlocked = 0;
+	static double GLastNow = 0.0;
+	static void Tune(float& Cool, int32& Max)
+	{
+		static float C = -1.f; static int32 M = -1;
+		if (C < 0.f)
+		{
+			C = 1.5f; M = 2;
+			if (GConfig) { GConfig->GetFloat(TEXT("ZoogiRoll.Relaunch"), TEXT("Cooldown"), C, GGameIni); GConfig->GetInt(TEXT("ZoogiRoll.Relaunch"), TEXT("MaxPerTurn"), M, GGameIni); }
+			FParse::Value(FCommandLine::Get(), TEXT("ZoogiRelaunchCool="), C);
+			FParse::Value(FCommandLine::Get(), TEXT("ZoogiRelaunchMax="), M);
+			C = FMath::Max(C, 0.f); M = FMath::Max(M, 0);
+			UE_LOG(LogZoogi, Log, TEXT("RELAUNCH guard cooldown=%.2fs max/turn=%d"), C, M);
+		}
+		Cool = C; Max = M;
+	}
+	bool Allow(const UObject* Pad, const AActor* Who, int32 Turn, double Now, const TCHAR* PadName)
+	{
+		if (Now < GLastNow) GState.Reset(); // new world / match
+		GLastNow = Now;
+		float Cool; int32 Max; Tune(Cool, Max);
+		FState& S = GState.FindOrAdd(TPair<const void*, const void*>(Pad, Who));
+		if (S.Turn != Turn) { S.Turn = Turn; S.Count = 0; }
+		const bool bCool = Now - S.Last < Cool;
+		const bool bCap = Max > 0 && S.Count >= Max;
+		if (bCool || bCap)
+		{
+			++GBlocked;
+			UE_LOG(LogZoogi, Log, TEXT("RELAUNCH blocked %s -> %s (%s, %d this turn, %.2fs since last)"), PadName, *GetNameSafe(Who), bCap ? TEXT("max per turn") : TEXT("cooldown"), S.Count, Now - S.Last);
+			return false;
+		}
+		S.Last = Now; ++S.Count;
+		return true;
+	}
+	int32 Blocked() { return GBlocked; }
+}
 
 AZoogiObstacle::AZoogiObstacle()
 {
@@ -225,7 +268,8 @@ void AZoogiObstacle::Tick(float Dt)
 			{
 				T.Inside.Add(B, B->RollingDecel);
 				if (T.Kind == 4) { if (T.P[0] > 0.f) B->RollingDecel = T.P[0]; else if (T.P[1] > 0.f) B->RollingDecel *= T.P[1]; }
-				if (T.Cool.FindRef(B) <= Now) { Fire(T, B, Now); T.Cool.Add(B, Now + FMath::Max(T.Kind == 3 ? 0.f : (T.Kind == 4 ? T.P[3] : T.P[2]), 0.05f)); }
+				const bool bLauncher = T.Kind == 1 || T.Kind == 2 || T.Kind == 5 || T.Kind == 6 || T.Kind == 7;
+				if (T.Cool.FindRef(B) <= Now && (!bLauncher || ZoogiRelaunch::Allow(this, B, G->TurnCounter, Now, *ObsName.ToString()))) { Fire(T, B, Now); T.Cool.Add(B, Now + FMath::Max(T.Kind == 3 ? 0.f : (T.Kind == 4 ? T.P[3] : T.P[2]), 0.05f)); }
 			}
 			else if (!bIn && bWas)
 			{

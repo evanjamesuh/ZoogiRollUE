@@ -7,6 +7,7 @@
 #include "ZoogiArenaPiece.h"
 #include "ZoogiFrozenLayout.h"
 #include "ZoogiTypes.h"
+#include "ZoogiObstacle.h"
 #include "ZoogiRoll.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
@@ -561,6 +562,7 @@ void UZoogiPortalSubsystem::Tick(float DeltaTime)
 			const FVector2D V2(V.X, V.Y);
 			const float S = V2.Size();
 			if (S < MinSpeed || S >= MaxSpeed) continue;
+			if (P.Arch.IsValid() && !ZoogiRelaunch::Allow(P.Arch.Get(), Ob.A, G->TurnCounter, Now, *P.Name)) continue; // Oct 15 relaunch guard
 			const float NewS = FMath::Min(S + BoostAdd, MaxSpeed);
 			const FVector2D D = V2 / S;
 			const FVector VOut(D.X * NewS, D.Y * NewS, V.Z);
