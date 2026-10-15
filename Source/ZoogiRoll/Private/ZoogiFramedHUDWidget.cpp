@@ -370,7 +370,7 @@ FString UZoogiFramedHUDWidget::PromptText(const AZoogiGameMode* G)
 	{
 		if (G->bAwakenDone) return G->AwakenChoiceText.IsEmpty() ? TEXT("Awaken done") : G->AwakenChoiceText;
 		if (B->bCPU) return TEXT("CPU is awakening...");
-		return G->CardsOn() ? TEXT("Drag cards onto a target (or press 1-5), then CONFIRM. CLEAR resets") : TEXT("Pick a card, then INFUSE / GUARD / SAVE");
+		return G->CardsOn() ? TEXT("AWAKEN: play cards (drag onto a target or 1-5), tap AWAKEN to awaken (A), then CONFIRM - CONFIRM alone skips") : TEXT("Pick a card, then INFUSE / GUARD / SAVE");
 	}
 	if (B->bCPU) return G->TargetLock.IsValid() ? FString::Printf(TEXT("CPU is targeting %s"), *G->TargetName(G->TargetLock.Get())) : TEXT("CPU is choosing a target");
 	if (G->IsPowerUpStep()) return TEXT("POWER UP - launching!");

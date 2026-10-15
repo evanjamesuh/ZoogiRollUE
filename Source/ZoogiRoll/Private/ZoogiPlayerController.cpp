@@ -651,6 +651,28 @@ void AZoogiPlayerController::HandleInput(float Dt)
 	const bool bOverUI = Hud && Hud->IsOverUI(Mouse);
 	const bool bUIClick = Hud && Hud->UIConsumedClick();
 	const bool bLMB = bRawLMB && !bOverUI && !bUIClick;
+	if (bRawLMB && G->Phase == EZoogiPhase::Aiming) // Oct 14 urgent: one line per press, so "can't click" reports are diagnosable
+		UE_LOG(LogZoogi, Log, TEXT("INPUT lmb at (%.0f, %.0f) raw (%.0f, %.0f) stage=%d step=%d humanAim=%d aimStep=%d panels=%d outsideArena=%d uiClick=%d -> world=%d"),
+			Mouse.X, Mouse.Y, RMX, RMY, (int32)G->Stage, (int32)G->BattleStep, G->IsHumanAiming() ? 1 : 0, G->IsAimStep() ? 1 : 0,
+			(Hud && Hud->AwakenWidgetOverPanels(Mouse)) ? 1 : 0, ZoogiFramed::IsOutsideArena(GetWorld(), Mouse) ? 1 : 0, bUIClick ? 1 : 0, bLMB ? 1 : 0);
+
+	// Oct 14 drag aim: one pointer for mouse and touch (Touch1), with press / release edges
+	if (!bDragCfgLoaded && GConfig)
+	{
+		bDragCfgLoaded = true;
+		GConfig->GetFloat(TEXT("ZoogiRoll.Aim"), TEXT("MaxDragDistancePx"), MaxDragDistancePx, GGameIni);
+		GConfig->GetFloat(TEXT("ZoogiRoll.Aim"), TEXT("MaxDragForce"), MaxDragForce, GGameIni);
+		GConfig->GetFloat(TEXT("ZoogiRoll.Aim"), TEXT("MinDragPx"), MinDragPx, GGameIni);
+		GConfig->GetFloat(TEXT("ZoogiRoll.Aim"), TEXT("CancelOnZoogiPx"), CancelOnZoogiPx, GGameIni);
+		MaxDragForce = FMath::Clamp(MaxDragForce, 0.1f, 1.f);
+	}
+	float TchX = 0.f, TchY = 0.f; bool bTouch = false;
+	GetInputTouchState(ETouchIndex::Touch1, TchX, TchY, bTouch);
+	const bool bPtrDown = IsInputKeyDown(EKeys::LeftMouseButton) || bTouch;
+	const FVector2D Ptr = bTouch ? FVector2D(TchX, TchY) : Mouse;
+	const bool bPtrPress = bPtrDown && !bPtrWasDown, bPtrRelease = !bPtrDown && bPtrWasDown;
+	bPtrWasDown = bPtrDown;
+	const bool bTouchPress = bTouch && bPtrPress && !(Hud && Hud->IsOverUI(Ptr));
 
 	// Buttons (menu, results, in-match corner buttons).
 	if (bLMB && Hud)
@@ -701,8 +723,8 @@ void AZoogiPlayerController::HandleInput(float Dt)
 	}
 	if (WasInputKeyJustPressed(EKeys::R) && IsInputKeyDown(EKeys::LeftControl)) { G->StartMatch(); return; }
 	// Oct 14 fantasy cards: a click mid-roll redirects a Precision homing shot (up to 2x) / fires the Recovery Roll dash
-	if (bLMB && G->CardsOn() && !bAwaken)
-		if (UZoogiCardSubsystem* CS = UZoogiCardSubsystem::Get(this)) { FVector Pt; if (FloorPoint(Mouse, Pt) && CS->FantasyTap(G, Pt)) return; }
+	if ((bLMB || bTouchPress) && G->CardsOn() && !bAwaken && !bDragArmed)
+		if (UZoogiCardSubsystem* CS = UZoogiCardSubsystem::Get(this)) { FVector Pt; if (FloorPoint(Ptr, Pt) && CS->FantasyTap(G, Pt)) return; }
 	if (WasInputKeyJustPressed(EKeys::C)) G->MenuAction(TEXT("CamStyle"), 0);
 
 	// Classic powers (-ZoogiClassicPowers): E / Q.
@@ -759,22 +781,51 @@ void AZoogiPlayerController::HandleInput(float Dt)
 	if (!bPickStage)
 	{
 		HoverTarget.Reset();
+		if (bDragArmed) { bDragArmed = false; DragFrac = 0.f; }
 		return;
 	}
 
-	HoverTarget = bOverUI ? nullptr : PickTarget(Mouse.X, Mouse.Y);
-	const bool bClick = (bLMB || bSimClick) && !bOverUI && !bUIClick;
+	const bool bPtrOverUI = Hud && Hud->IsOverUI(Ptr);
+	HoverTarget = (bPtrOverUI || bDragArmed) ? nullptr : PickTarget(Ptr.X, Ptr.Y);
+	const bool bClick = ((bLMB || bSimClick) && !bOverUI && !bUIClick) || bTouchPress;
 	if (bClick)
 	{
-		if (HoverTarget.IsValid())
-		{
-			if (HoverTarget.Get() == G->TargetLock.Get() && !G->bSoftLock && !G->bFreeAim) G->CommitLock(); // click the locked target again = confirm
-			else G->LockOn(HoverTarget.Get(), false);
-		}
+		if (HoverTarget.IsValid()) G->LockOn(HoverTarget.Get(), false); // tap an orb / a player = aim at it (force comes from the drag)
 		else
 		{
-			FVector P;
-			if (FloorPoint(Mouse, P)) G->SetFreeAim(P); // click the floor: free (angled) aim at that point
+			FVector P = FVector::ZeroVector;
+			const bool bFloor = FloorPoint(Ptr, P);
+			if (bFloor) G->SetFreeAim(P); // click the floor: free (angled) aim at that point
+			UE_LOG(LogZoogi, Log, TEXT("INPUT aim click: floor=%d at (%.0f, %.0f) -> hasAim=%d"), bFloor ? 1 : 0, P.X, P.Y, G->HasAim() ? 1 : 0);
+		}
+		if (HoverTarget.IsValid()) UE_LOG(LogZoogi, Log, TEXT("INPUT aim click: target %s -> hasAim=%d"), *HoverTarget->GetName(), G->HasAim() ? 1 : 0);
+		if (G->HasAim() && bPtrDown) { bDragArmed = true; DragStart = DragNow = Ptr; DragFrac = 0.f; bDragWouldCancel = true; }
+	}
+	// slingshot: hold + drag BACK (away from the shot direction) = force, release = launch; back near zero / onto the Zoogi = cancel
+	if (bDragArmed)
+	{
+		AZoogiBall* Me = G->GetActiveBall();
+		int32 VX = 1920, VY = 1080; GetViewportSize(VX, VY);
+		const float UPx = FMath::Max(VY, 1) / 1080.f;
+		FVector2D BallS = FVector2D::ZeroVector, AheadS = FVector2D::ZeroVector;
+		float Fr = 0.f, Imp = 0.f;
+		const FVector2D Sv = G->ComputeShotVelocity(Fr, Imp);
+		const FVector2D SDir = Sv.GetSafeNormal();
+		bool bProj = Me && !SDir.IsNearlyZero() && ProjectWorldLocationToScreen(Me->BallLocation(), BallS) && ProjectWorldLocationToScreen(Me->BallLocation() + FVector(SDir * 200.f, 0.f), AheadS);
+		const FVector2D Fwd = bProj ? (AheadS - BallS).GetSafeNormal() : FVector2D(0.f, -1.f);
+		if (bPtrDown) DragNow = Ptr;
+		const float BackPx = FMath::Max(0.f, -FVector2D::DotProduct(DragNow - DragStart, Fwd));
+		DragFrac = FMath::Min(BackPx / (MaxDragDistancePx * UPx), 1.f) * MaxDragForce;
+		bDragWouldCancel = BackPx < MinDragPx * UPx || (bProj && FVector2D::Distance(DragNow, BallS) < CancelOnZoogiPx * UPx);
+		if (bDragWouldCancel) { if (G->HumanDragFrac >= 0.f) G->HumanDragFrac = -1.f; }
+		else G->HumanDrag(DragFrac, false);
+		if (bPtrRelease || !bPtrDown)
+		{
+			bDragArmed = false;
+			UE_LOG(LogZoogi, Log, TEXT("INPUT drag release: back %.0f px of %.0f -> pull %.0f%%%s"), BackPx, MaxDragDistancePx * UPx, DragFrac * 100.f, bDragWouldCancel ? TEXT(" (cancel: aim kept)") : TEXT(""));
+			if (bDragWouldCancel) G->HumanDragCancel();
+			else G->HumanDrag(DragFrac, true);
+			DragFrac = 0.f;
 		}
 	}
 	// Nudges: Left / Right (or A / D) = 2 deg cut, Shift = 10 deg. Up / Down = power step.

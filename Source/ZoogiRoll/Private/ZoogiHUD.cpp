@@ -127,6 +127,8 @@ void AZoogiHUD::UpdateAwakenWidget(AZoogiGameMode* G, bool bHide)
 	AwakenWidget->Refresh(FApp::GetDeltaTime(), bHide);
 }
 
+bool AZoogiHUD::AwakenWidgetOverPanels(const FVector2D& P) const { return AwakenWidget && AwakenWidget->IsOverPanels(P); }
+
 bool AZoogiHUD::UIConsumedClick() const
 {
 	return AwakenWidget && AwakenWidget->ConsumedClickRecently();
@@ -165,6 +167,7 @@ void AZoogiHUD::DrawHUD()
 
 	if (CanvasMenuMode < 0) CanvasMenuMode = FParse::Param(FCommandLine::Get(), TEXT("ZoogiCanvasMenu")) ? 1 : 0;
 	UpdateAwakenWidget(G, G->Phase == EZoogiPhase::Menu || G->Phase == EZoogiPhase::Forming);
+	if (G->Phase == EZoogiPhase::Aiming) DrawDragPower(G);
 	if (G->Phase == EZoogiPhase::Menu)
 	{
 		if (CanvasMenuMode == 0 && PlayerOwner)
@@ -922,6 +925,37 @@ static void AwakenLineColors(EZoogiArtifact Inf, FLinearColor& Fill, FLinearColo
 }
 // The player's own Zoogi after launch / contact: always blue.
 static const FLinearColor ZoogiBlueFill(0.25f, 0.6f, 1.f), ZoogiBlueGlow(0.08f, 0.3f, 1.f);
+
+void AZoogiHUD::DrawDragPower(AZoogiGameMode* G)
+{
+	const AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(PlayerOwner);
+	AZoogiBall* Me = G ? G->GetActiveBall() : nullptr;
+	if (!PC || !Me || !Canvas || !PC->bDragArmed || !G->IsAimStep()) return;
+	float Fr = 0.f, Imp = 0.f;
+	const FVector2D Dir = G->ComputeShotVelocity(Fr, Imp).GetSafeNormal();
+	if (Dir.IsNearlyZero()) return;
+	const float F = PC->bDragWouldCancel ? 0.f : PC->DragFrac;
+	const FLinearColor Gold(1.f, 0.855f, 0.553f, 1.f), GoldGlow(1.f, 0.95f, 0.75f, 1.f), Dim(0.6f, 0.6f, 0.65f, 0.8f);
+	const FVector From = Me->BallLocation() + FVector(0, 0, 10.f);
+	const FVector To = From + FVector(Dir * (ZoogiConst::ZoogiRadius * 1.3f + 160.f + 900.f * F), 0.f);
+	const FVector Pts[2] = { From, To };
+	TrajectoryLine(Pts, 2, PC->bDragWouldCancel ? Dim : Gold, PC->bDragWouldCancel ? Dim : GoldGlow, 0.9f + 1.1f * F, 1.f, true);
+	// power ring around the Zoogi (fills clockwise with the pull) + readout
+	const FVector C3 = Project(Me->BallLocation(), true);
+	if (C3.Z <= 0.f) return;
+	const FVector2D C(C3.X, C3.Y);
+	const float R = 58.f * U;
+	const int32 Seg = 48;
+	for (int32 i = 0; i < Seg; ++i)
+	{
+		const float A0 = -UE_HALF_PI + UE_TWO_PI * i / Seg, A1 = -UE_HALF_PI + UE_TWO_PI * (i + 1) / Seg;
+		const bool bOn = (float)(i + 1) / Seg <= F + 0.001f;
+		Canvas->K2_DrawLine(C + FVector2D(FMath::Cos(A0), FMath::Sin(A0)) * R, C + FVector2D(FMath::Cos(A1), FMath::Sin(A1)) * R, (bOn ? 6.f : 2.f) * U, bOn ? Gold : FLinearColor(0.1f, 0.1f, 0.14f, 0.7f));
+	}
+	const FString Tier = G->bComboMode ? FString(AZoogiGameMode::ForceName(G->ComboForce)) : FString();
+	const FString Label = PC->bDragWouldCancel ? FString(TEXT("RELEASE = CANCEL")) : FString::Printf(TEXT("%d%%%s%s"), FMath::RoundToInt(F * 100.f), Tier.IsEmpty() ? TEXT("") : TEXT("  "), *Tier);
+	Text(Label, C.X, C.Y - R - 34.f * U, PC->bDragWouldCancel ? Dim : Gold, 0.55f, true);
+}
 
 void AZoogiHUD::WorldArrow(const FVector& From, const FVector& To, const FLinearColor& Col, float Thick)
 {

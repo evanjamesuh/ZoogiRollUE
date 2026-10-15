@@ -122,6 +122,22 @@ protected:
 	void UpdateUiTest(float Dt);
 	void UiCheck(bool bOk, const FString& What);
 	uint64 LastRawLMBFrame = 0;
+public:
+	// Oct 14 (Evan 6:52 PM) slingshot drag aim: press on a target / the floor sets the aim, hold + drag BACK sets the
+	// force, release launches. Mouse and touch. [ZoogiRoll.Aim] MaxDragDistancePx (1080p px for full pull),
+	// MaxDragForce (pull fraction cap), MinDragPx (below = no launch, aim kept), CancelOnZoogiPx.
+	bool bDragArmed = false;
+	float DragFrac = 0.f;         // live pull fraction (0..MaxDragForce)
+	FVector2D DragStart = FVector2D::ZeroVector, DragNow = FVector2D::ZeroVector;
+	bool bDragWouldCancel = false;
+	/** Scripted drag for -ZoogiDragTest (no OS input): screen positions in viewport px. */
+	void SimDrag(const FVector2D& From, const FVector2D& To, float Seconds);
+protected:
+	bool bPtrWasDown = false;
+	float MaxDragDistancePx = 260.f, MaxDragForce = 1.f, MinDragPx = 22.f, CancelOnZoogiPx = 46.f;
+	bool bDragCfgLoaded = false;
+	// scripted drag
+	bool bSimDragOn = false; FVector2D SimDragFrom = FVector2D::ZeroVector, SimDragTo = FVector2D::ZeroVector; float SimDragT = 0.f, SimDragDur = 0.f; int32 SimDragPhase = 0;
 	uint64 UiSnapFrame = 0;
 	int32 UiPass = 0, UiFail = 0;
 	int32 ShotsSeen = 0, UiShotSnap = -1;

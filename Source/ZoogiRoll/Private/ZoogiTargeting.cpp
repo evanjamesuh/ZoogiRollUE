@@ -222,6 +222,29 @@ bool AZoogiGameMode::HasAim() const
 	return (TargetLock.IsValid() && !bSoftLock) || bFreeAim;
 }
 
+bool AZoogiGameMode::HumanDrag(float Frac, bool bLaunch)
+{
+	const AZoogiBall* Me = GetActiveBall();
+	if (!Me || Me->bCPU || !IsAimStep() || !HasAim()) return false;
+	Frac = FMath::Clamp(Frac, 0.f, 1.f);
+	if (bComboMode)
+	{
+		// the old force tiers on the drag range (same thresholds the CPU uses): CONTROL is continuous, DRIVE / LAUNCH snap
+		const EZoogiForce F = Frac <= ZoogiComboTune::ControlMaxFrac + 0.03f ? EZoogiForce::Control : (Frac <= 0.78f ? EZoogiForce::Drive : EZoogiForce::Launch);
+		if (bLaunch) ComboSetForce(F); else ComboForce = F;
+	}
+	HumanDragFrac = Frac;
+	if (!bLaunch) return false;
+	UE_LOG(LogZoogi, Log, TEXT("INPUT drag launch P%d: pull %.0f%%%s"), ActivePlayer + 1, Frac * 100.f, bComboMode ? *FString::Printf(TEXT(" -> %s"), ForceName(ComboForce)) : TEXT(""));
+	return CommitLock();
+}
+
+void AZoogiGameMode::HumanDragCancel()
+{
+	if (HumanDragFrac >= 0.f) UE_LOG(LogZoogi, Log, TEXT("INPUT drag cancelled P%d (aim kept)"), ActivePlayer + 1);
+	HumanDragFrac = -1.f;
+}
+
 bool AZoogiGameMode::CommitLock()
 {
 	if (!IsAimStep() || !HasAim()) return false;
@@ -291,6 +314,7 @@ FVector2D AZoogiGameMode::ComputeShotVelocity(float& OutFraction, float& OutImpa
 	{
 		// 2v2 Combo: the chosen force sets the speed (CONTROL soft / stop on the point, DRIVE standard, LAUNCH max).
 		OutFraction = ComboForceFraction(BaseFrac);
+		if (HumanDragFrac >= 0.f && ComboForce == EZoogiForce::Control) OutFraction = FMath::Clamp(HumanDragFrac, 0.12f, ZoogiComboTune::ControlMaxFrac); // drag: CONTROL follows the pull
 		const FVector2D CV = Dir * ZoogiConst::LaunchSpeedForPull(OutFraction);
 		if (!bFreeAim && TargetLock.IsValid())
 		{
@@ -299,8 +323,9 @@ FVector2D AZoogiGameMode::ComputeShotVelocity(float& OutFraction, float& OutImpa
 		}
 		return CV;
 	}
-	const FVector2D V = PowerStepVelocity(Dir, BaseFrac, OutFraction);
-	if (AimPowerStep > 0 && !bFreeAim && TargetLock.IsValid())
+	FVector2D V = PowerStepVelocity(Dir, BaseFrac, OutFraction);
+	if (HumanDragFrac >= 0.f) { OutFraction = FMath::Clamp(HumanDragFrac, 0.08f, 1.f); V = Dir * ZoogiConst::LaunchSpeedForPull(OutFraction); } // drag: the pull sets the speed
+	if ((AimPowerStep > 0 || HumanDragFrac >= 0.f) && !bFreeAim && TargetLock.IsValid())
 	{
 		const float Gap = FMath::Max(0.f, FVector::Dist2D(TargetPos(TargetLock.Get()), Me->BallLocation()) - ZoogiConst::ZoogiRadius - TargetRadius(TargetLock.Get()));
 		OutImpactSpeed = FMath::Sqrt(FMath::Max(0.f, V.SizeSquared() - 2.f * Decel * Gap));

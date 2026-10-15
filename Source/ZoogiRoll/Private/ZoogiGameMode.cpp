@@ -394,6 +394,7 @@ void AZoogiGameMode::BeginTurn(int32 PlayerIdx)
 	bFreeAim = false;
 	AimCutDeg = 0.f;
 	AimPowerStep = 0;
+	HumanDragFrac = -1.f;
 	bInfusedContact = false;
 	bLastHitCrit = false;
 	ContactImpactSpeed = 0.f;

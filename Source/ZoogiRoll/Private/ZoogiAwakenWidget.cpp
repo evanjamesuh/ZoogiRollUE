@@ -599,7 +599,7 @@ void UZoogiAwakenWidget::Refresh(float DeltaSeconds, bool bHideAll)
 	{
 		AZoogiBall* B = G->GetActiveBall();
 		bWantAwaken = G->Stage == EZoogiStage::Awaken && !G->bAwakenDone && B && B->Artifact && !G->CardsOn() && !ZoogiFramed::IsActive(GetWorld()); // v3: Canvas card panel instead; hud-v3: framed = stones in the tray
-		bWantAim = G->IsHumanAiming() && G->IsAimStep();
+		bWantAim = false; // Oct 14 (Evan 6:52 PM): the aim bar is gone - aim = tap a target / the floor, force = drag back and release (AZoogiPlayerController drag aim)
 		bWantCards = G->CardsOn() && G->Stage == EZoogiStage::Awaken && !G->bAwakenDone && B && G->IsHumanAiming() && !UZoogiCardHandWidget::IsEnabled(G); // cardui: -ZoogiCardHandUI hand replaces this panel
 	}
 	FillPendingCards();

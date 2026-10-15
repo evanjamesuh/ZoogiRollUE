@@ -297,6 +297,8 @@ public:
 	float AimCutDeg = 0.f;
 	/** 0 = auto (distance-scaled), 1 soft, 2 medium, 3 full. */
 	int32 AimPowerStep = 0;
+	/** Oct 14 drag aim (human only): pull fraction from the slingshot drag (-1 = none). Combo maps it onto CONTROL / DRIVE / LAUNCH. */
+	float HumanDragFrac = -1.f;
 	FZoogiAimPreview Preview;
 	void SetFreeAim(const FVector& GroundPoint);
 	void NudgeAim(int32 Steps);
@@ -386,6 +388,9 @@ public:
 	void CycleLock(bool bSoft);
 	/** Space / click on the locked target during Main: start the Battle stage. */
 	bool CommitLock();
+	/** Human drag aim: live power while dragging (bLaunch false) or release = launch (bLaunch true). Returns true when launched. */
+	bool HumanDrag(float Frac, bool bLaunch);
+	void HumanDragCancel();
 	/** Shot straight at the locked target: speed scales with distance (capped at full power). */
 	FVector2D LockShotVelocity(float& OutFraction, float& OutImpactSpeed) const;
 	FString TargetName(const AActor* A) const;

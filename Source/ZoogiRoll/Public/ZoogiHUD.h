@@ -30,6 +30,7 @@ public:
 	UZoogiAwakenWidget* GetAwakenWidget() const { return AwakenWidget; }
 	/** A UMG control / panel took a mouse press this frame (or the last): the controller must not world-pick it. */
 	bool UIConsumedClick() const;
+	bool AwakenWidgetOverPanels(const FVector2D& ViewportPos) const;
 	/** Viewport pixel position over a visible UMG panel (no hover / pick through it). */
 	bool IsOverUI(const FVector2D& ViewportPos) const;
 
@@ -60,6 +61,8 @@ protected:
 	void Gem(uint8 Artifact, float CX, float CY, float R, float Alpha = 1.f);
 	void WorldCircle(const FVector& C, float Radius, const FLinearColor& Col, float Thick);
 	void WorldArrow(const FVector& From, const FVector& To, const FLinearColor& Col, float Thick);
+	/** Oct 14 drag aim: golden kit arrow growing with the pull + power ring and % / force tier at the Zoogi. */
+	void DrawDragPower(class AZoogiGameMode* G);
 	/** Solid glowing trajectory polyline (world points): soft halo, dark outline, fill, bright core, optional static
 	 *  arrowhead. Off (per point after the first) paints off-court stretches red. Nothing animates along the line. */
 	void TrajectoryLine(const FVector* Pts, int32 Num, const FLinearColor& Fill, const FLinearColor& Glow, float Scale, float Alpha, bool bHead, const TArray<bool>* Off = nullptr);

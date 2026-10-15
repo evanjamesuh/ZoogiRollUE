@@ -117,15 +117,19 @@ TSharedRef<SWidget> UZoogiCardHandWidget::RebuildWidget()
 		UTextBlock* Dummy = nullptr; UTextBlock* CText = nullptr;
 		ConfirmBtn = MakeBtn(TEXT("CONFIRM"), FLinearColor(0.35f, 1.f, 0.45f), CText); ConfirmText = CText;
 		ClearBtn = MakeBtn(TEXT("CLEAR"), FLinearColor(1.f, 0.45f, 0.38f), Dummy);
+		UTextBlock* AText = nullptr;
+		AwakenBtn = MakeBtn(TEXT("AWAKEN: OFF"), FLinearColor(0.75f, 0.55f, 1.f), AText); AwakenText = AText;
+		AwakenBtn->OnClicked.AddDynamic(this, &UZoogiCardHandWidget::OnAwaken);
 		ConfirmBtn->OnClicked.AddDynamic(this, &UZoogiCardHandWidget::OnConfirm);
 		ClearBtn->OnClicked.AddDynamic(this, &UZoogiCardHandWidget::OnClear);
-		for (UButton* B : { ConfirmBtn.Get(), ClearBtn.Get() })
+		for (UButton* B : { ConfirmBtn.Get(), ClearBtn.Get(), AwakenBtn.Get() })
 		{
 			UCanvasPanelSlot* S = Root->AddChildToCanvas(B);
 			S->SetAnchors(FAnchors(1.f, 1.f)); S->SetAlignment(FVector2D(1.f, 1.f)); S->SetAutoSize(false); S->SetZOrder(1000);
 		}
 		Cast<UCanvasPanelSlot>(ConfirmBtn->Slot)->SetPosition(FVector2D(-24.f, -196.f)); Cast<UCanvasPanelSlot>(ConfirmBtn->Slot)->SetSize(FVector2D(220.f, 52.f));
 		Cast<UCanvasPanelSlot>(ClearBtn->Slot)->SetPosition(FVector2D(-24.f, -256.f)); Cast<UCanvasPanelSlot>(ClearBtn->Slot)->SetSize(FVector2D(220.f, 52.f)); // >= 48 dp tap target
+		Cast<UCanvasPanelSlot>(AwakenBtn->Slot)->SetPosition(FVector2D(-24.f, -316.f)); Cast<UCanvasPanelSlot>(AwakenBtn->Slot)->SetSize(FVector2D(220.f, 52.f));
 	}
 	SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 	return Super::RebuildWidget();
@@ -249,6 +253,8 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 		const float R = bFr ? -24.f - FL.Safe.Right * k : -24.f, Bm = bFr ? -FL.Safe.Bottom * k : 0.f;
 		if (ConfirmBtn) if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(ConfirmBtn->Slot)) S->SetPosition(FVector2D(R, bFr ? Bm - 30.f : -196.f));
 		if (ClearBtn) if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(ClearBtn->Slot)) S->SetPosition(FVector2D(R, bFr ? Bm - 92.f : -256.f));
+		// AWAKEN sits left of CONFIRM in the framed tray (CLEAR is above CONFIRM)
+		if (AwakenBtn) if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(AwakenBtn->Slot)) S->SetPosition(FVector2D(bFr ? R - 232.f : R, bFr ? Bm - 30.f : -316.f));
 	}
 	Time += Dt;
 	AZoogiGameMode* G = GetWorld() ? GetWorld()->GetAuthGameMode<AZoogiGameMode>() : nullptr;
@@ -272,13 +278,16 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 	// Oct 14 playtest fix: after a commit (CPUs commit in ~1 s) the hand is spent, so the tray went empty for the whole
 	// shot. Keep the cards played this turn in the tray (non-interactive, keys < 0) until the turn changes.
 	const FZoogiCardPlayerState* PlayedS = (!bShow && Cards && B && IsEnabled(G) && G->Phase != EZoogiPhase::Menu) ? Cards->Rules().Player(B->PlayerIndex) : nullptr;
-	const bool bShowPlayed = PlayedS && PlayedS->bCommitted && PlayedS->Committed.Num() > 0 && B->PlayerIndex == KeyPlayer && PlayedS->Turn == KeyTurn;
+	const bool bShowPlayed = PlayedS && PlayedS->bCommitted && (PlayedS->Committed.Num() > 0 || PlayedS->Hand.Num() > 0) && B->PlayerIndex == KeyPlayer && PlayedS->Turn == KeyTurn;
+	// Oct 14 urgent: the rest of the hand stays visible (dimmed, not playable this turn) next to the played cards
+	auto RestKey = [](int32 Id) { return -(Id + 1) - 100000; };
 	TArray<int32> PlayedOrder;
 	for (TPair<int32, FVis>& P : Vis)
 	{
 		if (P.Key >= 0) continue;
 		bool bKeep = false;
 		if (bShowPlayed) for (const FZoogiCardCommitted& K : PlayedS->Committed) if (-(K.Card.InstanceId + 1) == P.Key) bKeep = true;
+		if (bShowPlayed) for (const FZoogiCardInstance& I : PlayedS->Hand) if (RestKey(I.InstanceId) == P.Key) bKeep = true;
 		if (!bKeep && P.Value.State == EVis::Hand) { P.Value.State = EVis::ToDiscard; Fly(P.Value, FVector2D(ViewSize.X - 330.f, ViewSize.Y - 40.f), CHDiscardDur, 0.f, 0.45f, 25.f, 140.f, false); }
 	}
 	if (bShowPlayed)
@@ -294,6 +303,23 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 				Fly(*V, TargetPos, 0.35f, 0.15f * PlayedOrder.Num(), 1.f, 0.f, 80.f, true);
 			}
 			if (V->State == EVis::Hand) PlayedOrder.Add(Key);
+			if (UZoogiCardWidget* PW = V->W.Get()) PW->bAffordable = true;
+		}
+		for (const FZoogiCardInstance& I : PlayedS->Hand)
+		{
+			bool bPlayed = false;
+			for (const FZoogiCardCommitted& K : PlayedS->Committed) if (K.Card.InstanceId == I.InstanceId) bPlayed = true;
+			if (bPlayed) continue;
+			const int32 Key = RestKey(I.InstanceId);
+			FVis* V = Vis.Find(Key);
+			if (!V)
+			{
+				FVis NV; NV.W = MakeCard(Key, I.CardId); NV.Pos = FVector2D(ViewSize.X * 0.5f, ViewSize.Y + 200.f); NV.Scale = 0.6f; NV.Opacity = 0.f;
+				V = &Vis.Add(Key, NV);
+				Fly(*V, NV.Pos, 0.35f, 0.1f * PlayedOrder.Num(), 1.f, 0.f, 40.f, true);
+			}
+			if (V->State == EVis::Hand) PlayedOrder.Add(Key);
+			if (UZoogiCardWidget* RW = V->W.Get()) RW->bAffordable = false; // dimmed: still in hand, not played this turn
 		}
 		if (!bShownPlayedLog) { UE_LOG(LogZoogi, Log, TEXT("CARDUI played P%d turn=%d n=%d shown in tray (energy %d/%d)"), KeyPlayer + 1, KeyTurn, PlayedS->Committed.Num(), PlayedS->Energy, Cards->Rules().Tune().EnergyPerTurn); bShownPlayedLog = true; }
 	}
@@ -489,6 +515,8 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 	const bool bBtns = bInteractive;
 	ConfirmBtn->SetVisibility(bBtns ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	ClearBtn->SetVisibility(bBtns && S && S->Selected.Num() > 0 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	AwakenBtn->SetVisibility(bBtns ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
+	if (bBtns && G) AwakenText->SetText(FText::FromString(G->bStandbyAwaken ? TEXT("AWAKEN: ON") : TEXT("AWAKEN: OFF")));
 	if (bBtns) { ConfirmText->SetText(FText::FromString(SelCost ? FString::Printf(TEXT("CONFIRM  -%d"), SelCost) : FString(TEXT("CONFIRM (PASS)")))); ConfirmBtn->SetIsEnabled(EnergyShown >= 0); }
 }
 
@@ -563,6 +591,11 @@ FReply UZoogiCardHandWidget::NativeOnMouseButtonDown(const FGeometry& Geo, const
 	if (OverTarget()) AssignTo(A);
 	else { UE_LOG(LogZoogi, Log, TEXT("CARDUI tap off target -> disarmed")); Armed.Reset(); Hovered.Reset(); }
 	return FReply::Handled();
+}
+
+void UZoogiCardHandWidget::OnAwaken()
+{
+	if (AZoogiGameMode* G = GetWorld() ? GetWorld()->GetAuthGameMode<AZoogiGameMode>() : nullptr) { G->MenuAction(TEXT("CardAwaken"), 0); UE_LOG(LogZoogi, Log, TEXT("CARDUI awaken button -> request %d"), G->bStandbyAwaken ? 1 : 0); }
 }
 
 void UZoogiCardHandWidget::OnConfirm()

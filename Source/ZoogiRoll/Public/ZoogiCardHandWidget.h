@@ -78,6 +78,9 @@ private:
 	UPROPERTY() TObjectPtr<UButton> ConfirmBtn;
 	UPROPERTY() TObjectPtr<UButton> ClearBtn;
 	UPROPERTY() TObjectPtr<UTextBlock> ConfirmText;
+	UPROPERTY() TObjectPtr<UButton> AwakenBtn;   // Oct 14 urgent: cards-mode Awaken request lives in the tray (was keyboard A only)
+	UPROPERTY() TObjectPtr<UTextBlock> AwakenText;
+	UFUNCTION() void OnAwaken();
 	UPROPERTY() TArray<TObjectPtr<UZoogiCardWidget>> AllCards;
 	UPROPERTY() TMap<FName, TObjectPtr<UTexture2D>> ArtCache;
 	TSet<FName> ArtTried;
