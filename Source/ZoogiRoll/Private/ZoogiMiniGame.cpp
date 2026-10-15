@@ -275,6 +275,10 @@ EZoogiAirChoice UZoogiMiniGameAirReaction::DecideCPU(const UZoogiBattleStateMach
 	if (!B) return EZoogiAirChoice::Brace;
 	const FVector2D P(B->BallLocation()), V(B->GetBallVelocity());
 	// heading outward (away from the centre): brace; otherwise steer toward the centre
+	// Frozen Ring 2: out on the outer ring the crevasse lies inward too - brace when heading in or out, redirect only a
+	// body running along the ring (Apply then steers it along Ring 2, not toward the centre)
+	if (AZoogiArena::OuterOutR > 0.f && G->Arena && P.Size() > G->Arena->GetKnockoffRadius())
+		return FMath::Abs(FVector2D::DotProduct(P.GetSafeNormal(), V.GetSafeNormal())) > 0.3f ? EZoogiAirChoice::Brace : EZoogiAirChoice::Redirect;
 	return FVector2D::DotProduct(P.GetSafeNormal(), V.GetSafeNormal()) > 0.3f ? EZoogiAirChoice::Brace : EZoogiAirChoice::Redirect;
 }
 
@@ -290,7 +294,14 @@ FString UZoogiMiniGameAirReaction::Apply(UZoogiBattleStateMachine* SM) const
 	if (Choice == EZoogiAirChoice::Brace) H *= T.BraceDamp;
 	else if (Choice == EZoogiAirChoice::Redirect)
 	{
-		const FVector2D ToC = (-FVector2D(B->BallLocation())).GetSafeNormal();
+		FVector2D ToC = (-FVector2D(B->BallLocation())).GetSafeNormal();
+		// Oct 15 Frozen Ring 2: beyond Ring 1 "toward the centre" is into the crevasse - steer along the ring instead
+		// (the tangent on the side of the current heading), keeping the body on Ring 2 between the crevasse and the out line
+		if (AZoogiArena::OuterOutR > 0.f && G->Arena && FVector2D(B->BallLocation()).Size() > G->Arena->GetKnockoffRadius())
+		{
+			const FVector2D Tn(-ToC.Y, ToC.X);
+			ToC = FVector2D::DotProduct(Tn, H) >= 0.f ? Tn : -Tn;
+		}
 		const float Cur = FMath::Atan2(H.Y, H.X), Want = FMath::Atan2(ToC.Y, ToC.X);
 		const float Delta = FMath::Clamp(FMath::FindDeltaAngleRadians(Cur, Want), -FMath::DegreesToRadians(T.RedirectDeg), FMath::DegreesToRadians(T.RedirectDeg));
 		H = H.GetRotated(FMath::RadiansToDegrees(Delta));
