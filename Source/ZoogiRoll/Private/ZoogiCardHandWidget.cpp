@@ -219,7 +219,7 @@ void UZoogiCardHandWidget::DiscardAll(const FZoogiCardPlayerState* S)
 			// Oct 14 (Evan): the unplayed hand is kept between turns, so it stows below the tray instead of the discard pile
 			V.State = EVis::ToDiscard; Fly(V, FVector2D(V.Pos.X, ViewSize.Y + 240.f), CHDiscardDur, N * CHDiscardStagger * 0.5f, 0.8f, 0.f, 0.f, false); ++Kept;
 		}
-		else if (V.State == EVis::Hand) { V.State = EVis::ToDiscard; Fly(V, Pile, CHDiscardDur, N * CHDiscardStagger, 0.45f, 25.f, 140.f, false); ++N; }
+		else if (V.State == EVis::Hand) { V.State = EVis::ToDiscard; Fly(V, Pile, CHDiscardDur, N * CHDiscardStagger, 0.45f, ZoogiFramed::IsActive(GetWorld()) ? 0.f : 25.f, 140.f, false); ++N; }
 		else if (V.State == EVis::Assigned) { V.State = EVis::ToDiscard; V.bFly = false; V.T = 1.f; V.Opacity = 0.f; }
 	}
 	HandOrder.Reset();
@@ -297,7 +297,7 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 		{
 			P.Value.State = EVis::ToDiscard;
 			if (P.Key <= -100001) Fly(P.Value, FVector2D(P.Value.Pos.X, ViewSize.Y + 240.f), CHDiscardDur, 0.f, 0.8f, 0.f, 0.f, false); // kept hand: stow below the tray
-			else Fly(P.Value, FVector2D(ViewSize.X - 330.f, ViewSize.Y - 40.f), CHDiscardDur, 0.f, 0.45f, 25.f, 140.f, false);
+			else Fly(P.Value, FVector2D(ViewSize.X - 330.f, ViewSize.Y - 40.f), CHDiscardDur, 0.f, 0.45f, ZoogiFramed::IsActive(GetWorld()) ? 0.f : 25.f, 140.f, false);
 		}
 	}
 	if (bShowPlayed)
@@ -369,7 +369,7 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 				}
 				else
 				{
-					FVis NV; NV.W = MakeCard(I.InstanceId, I.CardId); NV.Pos = Deck; NV.Scale = 0.55f; NV.Angle = -20.f; NV.Opacity = 0.f;
+					FVis NV; NV.W = MakeCard(I.InstanceId, I.CardId); NV.Pos = Deck; NV.Scale = 0.55f; NV.Angle = ZoogiFramed::IsActive(GetWorld()) ? 0.f : -20.f; NV.Opacity = 0.f;
 					V = &Vis.Add(I.InstanceId, NV);
 					Fly(*V, Deck, CHDrawDur, (RiseN > 0 ? 0.25f : 0.f) + NewN * CHDrawStagger, 1.f, 0.f, 180.f, true);
 					++NewN; Drawn += FString::Printf(TEXT(" %s#%d"), *I.CardId.ToString(), I.InstanceId);
@@ -445,7 +445,9 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 		Sc0 = FMath::Clamp((TB - TT - 24.f * FL.T * k) / UZoogiCardWidget::CardH, 0.45f, 1.3f); // shorter: the fan sits down in the recess with less overlap
 		const float Avail = HX1 - HX0 - 20.f * FL.T * k;
 		Spacing = FMath::Min(UZoogiCardWidget::CardW * Sc0 * 1.06f, (Avail - UZoogiCardWidget::CardW * Sc0) / FMath::Max(N - 1, 1));
-		BaseY = TB - 7.f * FL.T * k; ArcK = 1.f; // card bottoms stay on screen TiltK = 2.5f; HoverSc = Sc0 * 1.1f; HoverY = TB; Spread = Sc0 * 0.5f;
+		// Evan 9:57 PM "straighten and unify cards": one straight, evenly spaced row on a single baseline, every card the
+		// same size; hover / select lifts the card straight up (no tilt, no neighbour push), card bottoms stay on screen
+		BaseY = TB - 7.f * FL.T * k; ArcK = 0.f; TiltK = 0.f; HoverSc = Sc0; HoverY = BaseY - 14.f * FL.T * k; Spread = 0.f;
 		FanCX = (HX0 + HX1) * 0.5f;
 		FramedFanL = FanCX - ((N - 1) * Spacing + UZoogiCardWidget::CardW * Sc0) * 0.5f;
 	}

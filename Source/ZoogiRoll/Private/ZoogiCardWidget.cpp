@@ -20,29 +20,50 @@ int32 UZoogiCardWidget::NativePaint(const FPaintArgs& Args, const FGeometry& Geo
 		FSlateDrawElement::MakeBox(Out, Layer, Geo.ToPaintGeometry(FVector2f(S + FVector2D(14.f, 14.f)), FSlateLayoutTransform(FVector2f(-7.f, -7.f))), &Glow);
 	}
 	++Layer;
+	// Evan 9:57 PM "unify cards": every card gets the same frame, art window, name plate, cost gem and element badge.
+	// The element shows as the tablet badge + the thin colour line round the art; the art is cropped to its illustration
+	// (inside its own printed frame / plate / cost) and fitted the same way into one fixed window.
+	const FLinearColor Gold = FLinearColor(0.86f, 0.70f, 0.36f, 1.f) * Dim;
+	ZoogiUIStyle::SBox(Out, Layer, Geo, FVector2D::ZeroVector, S, FLinearColor(0.035f, 0.07f, 0.18f, 0.98f), Gold, 10.f, 2.5f);
+	const FVector2D WP(8.f, 8.f), WS(S.X - 16.f, FMath::RoundToFloat(S.Y * 0.745f) - 10.f);
+	ZoogiUIStyle::SBox(Out, Layer + 1, Geo, WP, WS, Color * 0.3f * Dim + FLinearColor(0.02f, 0.04f, 0.12f, 1.f), FLinearColor::Transparent, 6.f, 0.f);
 	if (Art)
 	{
+		// illustration crop shared by all card art (printed frame / cost / name plate left out), then cover-fit to the window
+		float U0 = 0.07f, U1 = 0.93f, V0 = 0.045f, V1 = 0.785f;
+		const float TW = FMath::Max(1.f, (float)Art->GetSurfaceWidth()), TH = FMath::Max(1.f, (float)Art->GetSurfaceHeight());
+		const float CW = (U1 - U0) * TW, CH = (V1 - V0) * TH, A = WS.X / WS.Y;
+		if (CW / CH > A) { const float D = (CW - CH * A) / TW * 0.5f; U0 += D; U1 -= D; }
+		else { const float D = (CH - CW / A) / TH; V0 += D * 0.35f; V1 -= D * 0.65f; } // keep a little more of the top (heads / impact)
 		FSlateBrush B;
 		B.SetResourceObject(Art);
-		B.ImageSize = FVector2D(S);
+		B.ImageSize = WS;
 		B.DrawAs = ESlateBrushDrawType::Image;
-		FSlateDrawElement::MakeBox(Out, Layer, Geo.ToPaintGeometry(), &B, ESlateDrawEffect::None, Dim);
-		if (Tablet) ZoogiHudArt::Img(Out, Layer + 1, Geo, FVector2D(S.X - 30.f, S.Y - 40.f), FVector2D(24.f, 34.f), Tablet, Dim); // element badge
+		B.SetUVRegion(FBox2f(FVector2f(U0, V0), FVector2f(U1, V1)));
+		FSlateDrawElement::MakeBox(Out, Layer + 1, Geo.ToPaintGeometry(FVector2f(WS), FSlateLayoutTransform(FVector2f(WP))), &B, ESlateDrawEffect::None, Dim);
 	}
 	else if (Tablet && ZoogiHudArt::Tex(Tablet))
 	{
-		// no art file: the element tablet is the card face, name on its plate
-		ZoogiHudArt::Img(Out, Layer, Geo, FVector2D::ZeroVector, S, Tablet, Dim);
-		const FSlateFontInfo F = ZoogiUIStyle::BoldFont(12);
-		FSlateDrawElement::MakeText(Out, Layer + 1, Geo.ToPaintGeometry(FVector2f(S.X - 24.f, 30.f), FSlateLayoutTransform(FVector2f(14.f, S.Y * 0.80f))), Name.ToUpper(), F, ESlateDrawEffect::None, FLinearColor::White * Dim);
+		const float H = WS.Y * 0.86f, W = H * 360.f / 506.f;
+		ZoogiHudArt::Img(Out, Layer + 1, Geo, WP + FVector2D((WS.X - W) * 0.5f, (WS.Y - H) * 0.5f), FVector2D(W, H), Tablet, Dim);
 	}
-	else
+	ZoogiUIStyle::SBox(Out, Layer + 2, Geo, WP - FVector2D(1.f, 1.f), WS + FVector2D(2.f, 2.f), FLinearColor::Transparent, FLinearColor(Color.R, Color.G, Color.B, 0.9f) * Dim, 6.f, 2.f);
+	// name plate: same bar, same font, centred (shrinks only for long names)
+	const FVector2D NP(6.f, WP.Y + WS.Y + 4.f), NS(S.X - 12.f, 28.f);
+	ZoogiUIStyle::SBox(Out, Layer + 2, Geo, NP, NS, FLinearColor(0.06f, 0.11f, 0.26f, 1.f), Gold, 6.f, 1.5f);
 	{
-		// no art file: plain face from the card data (name + rule)
-		ZoogiUIStyle::SBox(Out, Layer, Geo, FVector2D::ZeroVector, S, Color * 0.45f * Dim + FLinearColor(0.02f, 0.06f, 0.25f, 0.9f), ZoogiUIStyle::Outline, 12.f, 3.5f);
-		const FSlateFontInfo F = ZoogiUIStyle::BoldFont(13);
-		FSlateDrawElement::MakeText(Out, Layer + 1, Geo.ToPaintGeometry(FVector2f(S.X - 16.f, 30.f), FSlateLayoutTransform(FVector2f(10.f, S.Y - 48.f))), Name, F, ESlateDrawEffect::None, FLinearColor::White * Dim);
+		const FString N = Name.ToUpper();
+		int32 Sz = 13; FSlateFontInfo F = ZoogiUIStyle::BoldFont(Sz, 1.5f);
+		while (Sz > 9 && ZoogiHudArt::Measure(N, F).X > NS.X - 12.f) F = ZoogiUIStyle::BoldFont(--Sz, 1.5f);
+		const FVector2D M = ZoogiHudArt::Measure(N, F);
+		const FVector2D TP(FMath::RoundToFloat(NP.X + (NS.X - M.X) * 0.5f), FMath::RoundToFloat(NP.Y + (NS.Y - M.Y) * 0.5f));
+		FSlateDrawElement::MakeText(Out, Layer + 3, Geo.ToPaintGeometry(FVector2f(M), FSlateLayoutTransform(FVector2f(TP))), N, F, ESlateDrawEffect::None, FLinearColor::White * Dim);
 	}
+	// element badge: the tablet, bottom centre under the plate (same spot on every card)
+	const float BY = NP.Y + NS.Y + 1.f, BH = FMath::Max(12.f, S.Y - BY - 2.f), BW = BH * 360.f / 506.f;
+	if (Tablet && ZoogiHudArt::Tex(Tablet)) ZoogiHudArt::Img(Out, Layer + 3, Geo, FVector2D(FMath::RoundToFloat((S.X - BW) * 0.5f), BY), FVector2D(BW, BH), Tablet, Dim);
+	else ZoogiUIStyle::SBox(Out, Layer + 3, Geo, FVector2D(S.X * 0.5f - 6.f, BY + BH * 0.5f - 6.f), FVector2D(12.f, 12.f), Color * Dim, Gold, 6.f, 1.5f);
+	Layer += 2;
 	++Layer;
 	// cost circle (top-left corner, live cost from the card system covers the printed one)
 	const float R = 17.f;
@@ -52,8 +73,10 @@ int32 UZoogiCardWidget::NativePaint(const FPaintArgs& Args, const FGeometry& Geo
 	ZoogiUIStyle::SBox(Out, Layer, Geo, C - FVector2D(R - 7.f, R - 7.f), FVector2D(R * 2.f - 14.f, R * 2.f - 14.f), bAffordable ? ZoogiUIStyle::CardEnergyA * FLinearColor(1.f, 1.f, 1.f, 0.6f) : FLinearColor(0.3f, 0.42f, 0.75f, 0.6f), FLinearColor::Transparent, R - 7.f, 0.f);
 	ZoogiUIStyle::SBox(Out, Layer, Geo, C - FVector2D(R * 0.55f, R - 6.f), FVector2D(R * 1.1f, 6.f), FLinearColor(1.f, 1.f, 1.f, 0.55f), FLinearColor::Transparent, 3.f, 0.f);
 	const FSlateFontInfo CF = ZoogiUIStyle::BoldFont(17);
-	FSlateDrawElement::MakeText(Out, Layer + 1, Geo.ToPaintGeometry(FVector2f(R * 2.f, R * 2.f), FSlateLayoutTransform(FVector2f(C - FVector2D(6.5f, 13.f)))),
-		FString::FromInt(Cost), CF, ESlateDrawEffect::None, bAffordable ? FLinearColor::White : FLinearColor(1.f, 0.55f, 0.5f));
+	const FString CostS = FString::FromInt(Cost);
+	const FVector2D CM = ZoogiHudArt::Measure(CostS, CF);
+	FSlateDrawElement::MakeText(Out, Layer + 1, Geo.ToPaintGeometry(FVector2f(CM), FSlateLayoutTransform(FVector2f(FMath::RoundToFloat(C.X - CM.X * 0.5f), FMath::RoundToFloat(C.Y - CM.Y * 0.5f)))),
+		CostS, CF, ESlateDrawEffect::None, bAffordable ? FLinearColor::White : FLinearColor(1.f, 0.55f, 0.5f));
 	return Super::NativePaint(Args, Geo, Cull, Out, Layer + 2, Style, bParentEnabled);
 }
 
