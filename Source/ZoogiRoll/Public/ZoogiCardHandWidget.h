@@ -39,6 +39,15 @@ public:
 	void CancelDrag(const TCHAR* Why);
 	bool IsDragging(const UZoogiCardWidget* C) const { return C && Dragging.Get() == C; }
 
+	// Oct 15 playtest test hooks (-ZoogiPlaytest1)
+	/** Instance ids of the cards shown in the tray row right now (hand state, visible), in row order. */
+	TArray<int32> TrayInstanceIds() const;
+	/** Visual rects (widget px) of the tray row cards, in row order. */
+	TArray<FBox2D> TrayCardRects() const;
+	FVector2D GetViewSize() const { return ViewSize; }
+	bool IsInteractive() const { return bInteractive; }
+	static UZoogiCardHandWidget* Find(const UWorld* World);
+
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual void NativeTick(const FGeometry& Geo, float Dt) override;
@@ -69,6 +78,13 @@ private:
 	UTexture2D* ArtFor(FName CardId);
 	void Fly(FVis& V, const FVector2D& To, float Dur, float Delay, float ToScale, float ToAngle, float Lift, bool bToLayout);
 	void DiscardAll(const FZoogiCardPlayerState* S);
+	FVector2D GravePos() const;           // the discard portal (grave light) in widget px
+	static constexpr float GraveScale = 0.22f;
+	void TickPlaytest1(AZoogiGameMode* G, float Dt);
+	int32 AwAutoKey = -1;                 // (player, turn) the Choose-your-Awaken view auto-opened for
+	float AwAutoT = 0.f;
+	bool bAwView = false;
+	int32 PtStep = 0; float PtT = 0.f; int32 PtTurns = 0; FString PtShots; TSet<int32> PtGone; int32 PtFails = 0, PtPasses = 0, PtLastTurn = -1;
 	void UpdateTarget(AZoogiGameMode* G);
 	bool OverTarget() const;
 	FVector2D Local(const FPointerEvent& Ev) const;

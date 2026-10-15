@@ -61,10 +61,11 @@ protected:
 	UFUNCTION() void OnInfuse();
 	UFUNCTION() void OnGuard();
 	UFUNCTION() void OnSave();
+	UFUNCTION() void OnOrb();
 
 private:
 	AZoogiGameMode* GM() const;
-	UButton* MakeButton(const FString& Label, const FLinearColor& Accent, bool bFilled, UTextBlock*& OutText, int32 FontSize = 16);
+	UButton* MakeButton(const FString& Label, const FLinearColor& Accent, bool bFilled, UTextBlock*& OutText, int32 FontSize = 16, bool bPressFires = false);
 	void PlaceW(UWidget* W, const FVector2D& Pos, const FVector2D& Size, bool bShow);
 	void SetPaused(bool bPause);
 	void RouteTray(AZoogiGameMode* G, float s);
@@ -78,6 +79,8 @@ private:
 		bool bHuman = false;
 		float InfoX0 = 0.f, InfoX1 = 0.f, InfoY = 0.f;
 		bool bInfo = false; // room for the picked stone's INFUSE / GUARD text
+		bool bCards = false; // cards mode: Choose-your-Awaken (3 tablets + SKIP, header CHOOSE YOUR AWAKEN)
+		FVector2D Header = FVector2D::ZeroVector;
 	};
 	bool TrayAwakenLayout(FTrayAwaken& Out) const;
 	void TickTrayAwaken();
@@ -91,6 +94,9 @@ private:
 	UPROPERTY() TArray<TObjectPtr<UButton>> ActBtns;
 	UPROPERTY() TObjectPtr<UTextBlock> MenuText;
 	TArray<int32> StoneKeys;
+	UPROPERTY() TObjectPtr<UButton> OrbBtn; // cards: the energy orb is the Awaken control (toggles cards / tablets)
+	bool bTrayCards = false;
+	bool OrbLive() const;
 	int32 TrayPick = 0;
 	float StonePop = 0.f;
 

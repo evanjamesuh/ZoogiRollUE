@@ -229,6 +229,7 @@ namespace ZoogiFramed
 	static FBox2D GZoomBtn(ForceInit); static bool bGZoomBtn = false;
 	void SetZoomButtonRect(const FBox2D& R, bool bVisible) { GZoomBtn = R; bGZoomBtn = bVisible && R.bIsValid; }
 	bool InZoomButton(const FVector2D& P) { return bGZoomBtn && GZoomBtn.ExpandBy(6.f).IsInside(P); }
+	bool ZoomButtonRect(FBox2D& Out) { Out = GZoomBtn; return bGZoomBtn; }
 
 	bool IsOutsideArena(const UWorld* World, const FVector2D& P)
 	{

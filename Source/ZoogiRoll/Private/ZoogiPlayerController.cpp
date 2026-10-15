@@ -643,10 +643,18 @@ void AZoogiPlayerController::LoadZoomTune()
 		T.PitchWide, T.PitchClose, T.PitchMin, T.EdgeMargin, T.FollowRadius, T.FollowPad, T.bAutoExitOnTap ? 1 : 0);
 }
 
+bool AZoogiPlayerController::ZoomStageLive(const AZoogiGameMode* G)
+{
+	// Oct 15 playtest ("ZOOM does nothing at game start"): the zoom is live in every human phase where aiming is possible -
+	// the Standby / Awaken step (from the very first turn) and the battle aim step - instead of only arming in the Standby.
+	// The Draw hero beat and the anime / cinematic shots are untouched (no zoom there).
+	return G && G->IsHumanAiming() && ((G->Stage == EZoogiStage::Battle && G->IsAimStep()) || (G->Stage == EZoogiStage::Awaken && !G->bAwakenDone));
+}
+
 bool AZoogiPlayerController::CanZoom() const
 {
 	const AZoogiGameMode* G = GM();
-	return ZoomTune.bEnabled && G && G->IsHumanAiming() && G->IsAimStep() && G->Stage == EZoogiStage::Battle;
+	return ZoomTune.bEnabled && ZoomStageLive(G);
 }
 
 void AZoogiPlayerController::SetZoomAnchor(const FVector2D& Screen)
@@ -788,7 +796,7 @@ bool AZoogiPlayerController::UpdateZoomInput(AZoogiGameMode* G, bool bAimStage, 
 	if (bDown && !bPanDown)
 	{
 		const bool bUI = Hud && Hud->IsOverUI(P);
-		bPanDown = true; bPanMoved = false; bPanTapOk = bL && !bUI;
+		bPanDown = true; bPanMoved = false; bPanTapOk = bL && !bUI && G->Stage == EZoogiStage::Battle; // Standby zoom: look / pan only, a tap never locks an aim
 		PanStart = PanLast = bUI ? FVector2D(-1.f, -1.f) : P; // UI presses (the ZOOM button, columns) never pan
 	}
 	else if (bDown && bPanDown)
@@ -1016,7 +1024,8 @@ void AZoogiPlayerController::HandleInput(float Dt)
 	bPtrWasDown = bPtrDown;
 	// Oct 14 aim zoom mode: while it is on (or two fingers are / were down) the pointers pan / pinch / tap-to-lock and
 	// nothing below sees them, so drag-aim is paused and a pinch never arms or releases a drag
-	if (UpdateZoomInput(G, G->IsHumanAiming() && G->IsAimStep() && G->Stage == EZoogiStage::Battle, bTouch ? FVector2D(TchX, TchY) : Mouse, Dt)) { HoverTarget.Reset(); return; }
+	// (in the Standby the zoom only looks / pans: the Standby keys - A, 1-7, Enter - and the UMG tray keep working below)
+	if (UpdateZoomInput(G, ZoomStageLive(G), bTouch ? FVector2D(TchX, TchY) : Mouse, Dt) && (G->Stage != EZoogiStage::Awaken || WasInputKeyJustPressed(EKeys::Escape))) { HoverTarget.Reset(); return; }
 	const bool bTouchPress = bTouch && bPtrPress && !bLMB && !(Hud && Hud->IsOverUI(Ptr)); // bLMB already covers the press
 
 	// Buttons (menu, results, in-match corner buttons).
@@ -1710,7 +1719,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	{
 		LoadZoomTune();
 		const FAimZoomTune& ZT = ZoomTune;
-		const bool bAimZoom = ZT.bEnabled && !bAnimeShot && G->IsHumanAiming() && G->IsAimStep() && G->Stage == EZoogiStage::Battle;
+		const bool bAimZoom = ZT.bEnabled && !bAnimeShot && ZoomStageLive(G);
 		if (!bAimZoom) { if (bZoomMode) UE_LOG(LogZoogi, Log, TEXT("AIMZOOM mode OFF (camera left the aim step)")); bZoomMode = false; ZoomWant = 1.f; ZoomOffWant = FVector::ZeroVector; }
 		if (bZoomArmed && !G->IsHumanAiming()) { bZoomArmed = false; UE_LOG(LogZoogi, Log, TEXT("AIMZOOM disarmed (turn over)")); }
 		if (bZoomArmed && bAimZoom) SetZoomMode(true, TEXT("armed in the Awaken step"));

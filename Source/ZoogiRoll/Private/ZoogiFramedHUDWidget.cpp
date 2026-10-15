@@ -65,9 +65,12 @@ int32 UZoogiFramedPainter::NativePaint(const FPaintArgs& Args, const FGeometry& 
 
 AZoogiGameMode* UZoogiFramedHUDWidget::GM() const { return GetWorld() ? GetWorld()->GetAuthGameMode<AZoogiGameMode>() : nullptr; }
 
-UButton* UZoogiFramedHUDWidget::MakeButton(const FString& Label, const FLinearColor& Accent, bool bFilled, UTextBlock*& OutText, int32 FontSize)
+UButton* UZoogiFramedHUDWidget::MakeButton(const FString& Label, const FLinearColor& Accent, bool bFilled, UTextBlock*& OutText, int32 FontSize, bool bPressFires)
 {
-	UButton* B = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass());
+	// bPressFires (Oct 15, ZOOM): non-focusable UZoogiButton that fires on the press, like the tray controls (a focusable
+	// button can lose its press to the viewport focus keeper; the press is consumed by the button, never the world)
+	UButton* B = WidgetTree->ConstructWidget<UButton>(bPressFires ? UZoogiButton::StaticClass() : UButton::StaticClass());
+	if (bPressFires) B->SetClickMethod(EButtonClickMethod::MouseDown);
 	B->SetStyle(ZoogiUIStyle::ButtonStyle(Accent, bFilled)); // hover / pressed / disabled plates
 	UTextBlock* T = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
 	T->SetText(FText::FromString(Label));
@@ -129,7 +132,7 @@ TSharedRef<SWidget> UZoogiFramedHUDWidget::RebuildWidget()
 			{ FSlateFontInfo F = CamText->GetFont(); F.Size = 16; CamText->SetFont(F); }
 		}
 		CamBtn->OnClicked.AddDynamic(this, &UZoogiFramedHUDWidget::OnCam);
-		ZoomBtn = MakeButton(TEXT("ZOOM"), ZoogiUIStyle::Violet, true, Tx, 18); ZoomText = Tx;
+		ZoomBtn = MakeButton(TEXT("ZOOM"), ZoogiUIStyle::Violet, true, Tx, 18, true); ZoomText = Tx;
 		ZoomBtn->OnClicked.AddDynamic(this, &UZoogiFramedHUDWidget::OnZoom);
 		MenuBtn->OnClicked.AddDynamic(this, &UZoogiFramedHUDWidget::OnPause);
 		// Pause / menu overlay (swallows clicks while up: Visible border).
@@ -197,6 +200,14 @@ TSharedRef<SWidget> UZoogiFramedHUDWidget::RebuildWidget()
 			ActBtns[2]->OnClicked.AddDynamic(this, &UZoogiFramedHUDWidget::OnSave);
 			for (UButton* B : StoneBtns) { B->OnPressed.AddDynamic(this, &UZoogiFramedHUDWidget::OnTrayBtnPressed); }
 			for (UButton* B : ActBtns) B->OnPressed.AddDynamic(this, &UZoogiFramedHUDWidget::OnTrayBtnPressed);
+			// Oct 15 playtest: the energy orb is the cards-mode Awaken control (same non-focusable, press-fires button)
+			OrbBtn = WidgetTree->ConstructWidget<UZoogiButton>(UZoogiButton::StaticClass());
+			OrbBtn->SetStyle(St);
+			OrbBtn->SetClickMethod(EButtonClickMethod::MouseDown);
+			OrbBtn->SetVisibility(ESlateVisibility::Collapsed);
+			if (UCanvasPanelSlot* S = Root->AddChildToCanvas(OrbBtn)) { S->SetAutoSize(false); S->SetZOrder(22); }
+			OrbBtn->OnClicked.AddDynamic(this, &UZoogiFramedHUDWidget::OnOrb);
+			OrbBtn->OnPressed.AddDynamic(this, &UZoogiFramedHUDWidget::OnTrayBtnPressed);
 		}
 		VolText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
 		VolText->SetFont(ZoogiUIStyle::BoldFont(18, 2.f));
@@ -291,6 +302,7 @@ void UZoogiFramedHUDWidget::NativeTick(const FGeometry& Geo, float Dt)
 		for (UButton* B : PauseBtns) PlaceW(B, FVector2D::ZeroVector, FVector2D::ZeroVector, false);
 		for (UButton* B : StoneBtns) PlaceW(B, FVector2D::ZeroVector, FVector2D::ZeroVector, false);
 		for (UButton* B : ActBtns) PlaceW(B, FVector2D::ZeroVector, FVector2D::ZeroVector, false);
+		PlaceW(OrbBtn, FVector2D::ZeroVector, FVector2D::ZeroVector, false);
 		ZoogiFramed::SetZoomButtonRect(FBox2D(ForceInit), false);
 		PlaceW(TrayHit, FVector2D::ZeroVector, FVector2D::ZeroVector, false);
 		if (APlayerController* PC = GetOwningPlayer()) if (AZoogiHUD* H = Cast<AZoogiHUD>(PC->GetHUD())) if (UZoogiAwakenWidget* AW = H->GetAwakenWidget()) AW->ClearTrayControls();
@@ -605,6 +617,28 @@ int32 UZoogiFramedHUDWidget::PaintBack(const FGeometry& Geo, FSlateWindowElement
 		TxtT(Ly + 8, TR + FVector2D(328.f, 108.f) * t + Sh, bCards ? FString::Printf(TEXT("%d/%d"), TI.Energy, TI.EnergyMax) : FString(TEXT("--")), 22.f, TI.Energy >= 0 ? FLinearColor::White : FLinearColor(1.f, 0.45f, 0.4f), 0.5f);
 		const float BF = bCards ? FMath::Clamp(TI.EnergyFrac, 0.f, 1.f) : 0.f;
 		if (BF > 0.f) ZoogiUIStyle::SBox(Out, Ly + 5, Geo, TR + FVector2D(277.f, 168.f) * t, FVector2D(92.f * BF, 7.f) * t, FLinearColor(0.78f, 0.45f, 1.f, 1.f), FLinearColor(0.95f, 0.8f, 1.f, 0.6f), 3.5f * t, 1.f * t);
+		// Oct 15: cards mode - the orb is the Awaken control: a pulsing crosshair reticle round it while it can be tapped,
+		// and the turn's Awaken state above it (AWAKEN: OFF / AWAKEN: <ELEMENT>)
+		if (bCards && OrbLive())
+		{
+			const FVector2D OC = TR + FVector2D(316.f, 114.f) * t;
+			const float Pz = 0.5f + 0.5f * FMath::Sin(Time * 4.2f);
+			const float Rr = (68.f + 6.f * Pz) * t;
+			const FLinearColor RC(0.85f, 0.7f, 1.f, 0.55f + 0.4f * Pz);
+			const bool bHovO = OrbBtn && OrbBtn->IsHovered();
+			ZoogiUIStyle::SBox(Out, Ly + 7, Geo, OC - FVector2D(Rr, Rr), FVector2D(Rr, Rr) * 2.f, FLinearColor::Transparent, bHovO ? FLinearColor::White : RC, Rr, (bHovO ? 3.5f : 2.5f) * t);
+			for (int32 k = 0; k < 4; ++k)
+			{
+				const FVector2D D = k == 0 ? FVector2D(1, 0) : k == 1 ? FVector2D(-1, 0) : k == 2 ? FVector2D(0, 1) : FVector2D(0, -1);
+				const FVector2D Tk = D.X != 0.f ? FVector2D(16.f, 4.f) * t : FVector2D(4.f, 16.f) * t;
+				const FVector2D Pc = OC + D * (Rr - 9.f * t); // crosshair ticks point inward (the CONFIRM plate sits left of the orb)
+				ZoogiUIStyle::SBox(Out, Ly + 7, Geo, Pc - Tk * 0.5f, Tk, RC, FLinearColor::Transparent, 2.f * t, 0.f);
+			}
+			const EZoogiArtifact Pk = G->CardAwakenPick >= 0 && G->CardAwakenPick < 3 ? (EZoogiArtifact)G->CardAwakenOffers[G->CardAwakenPick] : EZoogiArtifact::None;
+			const bool bAwOn = G->bStandbyAwaken && Pk != EZoogiArtifact::None;
+			const FString Lab = G->CardsAwakenViewOpen() ? FString(TEXT("TAP: CARDS")) : bAwOn ? FString::Printf(TEXT("AWAKEN: %s"), *ZoogiArtifacts::Name(Pk).ToUpper()) : FString(TEXT("AWAKEN: OFF"));
+			TxtT(Ly + 8, TR + FVector2D(316.f, 30.f) * t, Lab, 9.f, bAwOn ? ZoogiArtifacts::Color(Pk) : FLinearColor(0.85f, 0.8f, 0.95f), 0.5f);
+		}
 		// awaken stones (artifact mode): the old central picker lives in the tray now
 		PaintTrayAwaken(Geo, Out, bOverlay ? Ly + 7 : Ly + 4, t);
 		// system text (stage forming / match over) in the recess
@@ -634,7 +668,31 @@ bool UZoogiFramedHUDWidget::TrayAwakenLayout(FTrayAwaken& Out) const
 	const AZoogiGameMode* G = GM();
 	const ZoogiFramed::FLayout& L = ZoogiFramed::Current();
 	const AZoogiBall* B = G ? G->GetActiveBall() : nullptr;
-	if (!bActive || !B || !B->Artifact || G->CardsOn() || G->Phase != EZoogiPhase::Aiming || G->Stage != EZoogiStage::Awaken || G->bAwakenDone) return false;
+	if (!bActive || !B || !B->Artifact || G->Phase != EZoogiPhase::Aiming || G->Stage != EZoogiStage::Awaken || G->bAwakenDone) return false;
+	if (G->CardsOn())
+	{
+		// Choose-your-Awaken (Oct 15): 3 big stone tablets centred in the card recess under a CHOOSE YOUR AWAKEN header,
+		// SKIP on the right; the cards are lowered out of the recess while this shows
+		if (!G->CardsAwakenViewOpen()) return false;
+		Out.bCards = true; Out.bHuman = true;
+		for (int32 i = 0; i < 3; ++i) Out.Stones.Add({ i, G->CardAwakenOffers[i] });
+		Out.Pick = G->CardAwakenPick;
+		const float s = LocalScale, t = L.T * s;
+		const FVector2D H0 = L.Hand.Min * s, H1 = FVector2D(L.Hand.Max.X * s, (L.Viewport.Y - L.Safe.Bottom) * s);
+		const float HeadH = 30.f * t, Gap = 22.f * t;
+		const float BH = FMath::Max(ZoogiHudArt::TapPx(48.f, 48.f * L.U * s), 36.f * t), BW = FMath::Max(BH * 2.2f, 104.f * t);
+		const float BX = H1.X - BW - 12.f * t;
+		float TH = FMath::Min(H1.Y - H0.Y - HeadH - 14.f * t, 190.f * t), TW = TH * 360.f / 506.f;
+		const float RowRoom = BX - 16.f * t - (H0.X + 12.f * t);
+		if (3.f * TW + 2.f * Gap > RowRoom) { TW = (RowRoom - 2.f * Gap) / 3.f; TH = TW * 506.f / 360.f; }
+		const float RowW = 3.f * TW + 2.f * Gap, CX = (H0.X + 12.f * t + BX - 16.f * t) * 0.5f;
+		const float SY = H0.Y + HeadH + FMath::Max(0.f, (H1.Y - H0.Y - HeadH - 14.f * t - TH) * 0.5f);
+		for (int32 i = 0; i < 3; ++i) { const float X = CX - RowW * 0.5f + i * (TW + Gap); Out.StoneRects.Add(FBox2D(FVector2D(X, SY), FVector2D(X + TW, SY + TH))); }
+		const float BY = SY + TH * 0.5f - BH * 0.5f;
+		for (int32 i = 0; i < 3; ++i) Out.BtnRects.Add(FBox2D(FVector2D(BX, BY), FVector2D(BX + BW, BY + BH))); // only [2] (SKIP) is placed
+		Out.Header = FVector2D(CX, H0.Y + HeadH * 0.5f + 2.f * t);
+		return true;
+	}
 	const UZoogiArtifactComponent* AC = B->Artifact;
 	if (AC->Drawn != EZoogiArtifact::None) Out.Stones.Add({ 0, (uint8)AC->Drawn });
 	for (int32 i = 0; i < AC->Hand.Num(); ++i) Out.Stones.Add({ i + 1, (uint8)AC->Hand[i] });
@@ -673,7 +731,8 @@ void UZoogiFramedHUDWidget::TickTrayAwaken()
 	FTrayAwaken TA;
 	const bool bOn = TrayAwakenLayout(TA) && TA.bHuman && !bPaused;
 	for (int32 i = 0; i < StoneBtns.Num(); ++i) PlaceW(StoneBtns[i], bOn && TA.StoneRects.IsValidIndex(i) ? TA.StoneRects[i].Min : FVector2D::ZeroVector, bOn && TA.StoneRects.IsValidIndex(i) ? TA.StoneRects[i].GetSize() : FVector2D::ZeroVector, bOn && TA.StoneRects.IsValidIndex(i));
-	for (int32 i = 0; i < ActBtns.Num(); ++i) PlaceW(ActBtns[i], bOn ? TA.BtnRects[i].Min : FVector2D::ZeroVector, bOn ? TA.BtnRects[i].GetSize() : FVector2D::ZeroVector, bOn);
+	for (int32 i = 0; i < ActBtns.Num(); ++i) { const bool bB = bOn && (!TA.bCards || i == 2); PlaceW(ActBtns[i], bB ? TA.BtnRects[i].Min : FVector2D::ZeroVector, bB ? TA.BtnRects[i].GetSize() : FVector2D::ZeroVector, bB); }
+	bTrayCards = TA.bCards;
 	StoneKeys.Reset();
 	for (const auto& St : TA.Stones) StoneKeys.Add(St.Key);
 	TrayPick = TA.Pick;
@@ -682,12 +741,34 @@ void UZoogiFramedHUDWidget::TickTrayAwaken()
 	FBox2D Bounds(ForceInit);
 	if (bOn) { for (const FBox2D& R : TA.StoneRects) Bounds += R; for (const FBox2D& R : TA.BtnRects) Bounds += R; }
 	const float t = ZoogiFramed::Current().T * LocalScale;
+	if (bOn && TA.bCards)
+	{
+		// cards: the whole recess swallows presses while the tablets show (no press reaches the arena / the hidden cards)
+		const ZoogiFramed::FLayout& FL = ZoogiFramed::Current();
+		Bounds = FBox2D(FL.Hand.Min * LocalScale + FVector2D(14.f, 6.f) * t, FVector2D(FL.Hand.Max.X * LocalScale - 10.f * t, (FL.Viewport.Y - FL.Safe.Bottom) * LocalScale - 6.f * t));
+	}
+	// cards: energy orb = the Awaken control while the human's Standby is open
+	const bool bOrb = OrbLive();
+	{
+		const ZoogiFramed::FLayout& FL = ZoogiFramed::Current();
+		const FVector2D TR(FL.TrayRightX0 * LocalScale, FL.Tray.Min.Y * LocalScale + 12.f * t);
+		PlaceW(OrbBtn, bOrb ? TR + FVector2D(256.f, 54.f) * t : FVector2D::ZeroVector, bOrb ? FVector2D(120.f, 120.f) * t : FVector2D::ZeroVector, bOrb);
+	}
 	if (TrayHit) PlaceW(TrayHit, bOn && Bounds.bIsValid ? Bounds.Min - FVector2D(14.f, 6.f) * t : FVector2D::ZeroVector, bOn && Bounds.bIsValid ? Bounds.GetSize() + FVector2D(24.f, 12.f) * t : FVector2D::ZeroVector, bOn && Bounds.bIsValid);
 	APlayerController* PC = GetOwningPlayer();
 	AZoogiHUD* Hud = PC ? Cast<AZoogiHUD>(PC->GetHUD()) : nullptr;
 	if (UZoogiAwakenWidget* AW = Hud ? Hud->GetAwakenWidget() : nullptr)
 	{
-		if (!bOn) AW->ClearTrayControls();
+		if (!bOn && bOrb) { TArray<TPair<FName, int32>> Keys; TArray<UWidget*> Ws; Keys.Add({ TEXT("CardAwakenView"), 0 }); Ws.Add(OrbBtn); AW->SetTrayControls(Keys, Ws, OrbBtn); }
+		else if (!bOn) AW->ClearTrayControls();
+		else if (TA.bCards)
+		{
+			TArray<TPair<FName, int32>> Keys; TArray<UWidget*> Ws;
+			for (int32 i = 0; i < 3 && i < StoneBtns.Num(); ++i) { Keys.Add({ TEXT("CardAwakenPick"), i }); Ws.Add(StoneBtns[i]); }
+			Keys.Add({ TEXT("CardAwakenSkip"), 0 }); Ws.Add(ActBtns[2]);
+			Keys.Add({ TEXT("CardAwakenView"), 0 }); Ws.Add(OrbBtn);
+			AW->SetTrayControls(Keys, Ws, TrayHit);
+		}
 		else
 		{
 			TArray<TPair<FName, int32>> Keys; TArray<UWidget*> Ws;
@@ -724,13 +805,19 @@ void UZoogiFramedHUDWidget::OnTrayBtnPressed()
 	AZoogiHUD* Hud = PC ? Cast<AZoogiHUD>(PC->GetHUD()) : nullptr;
 	if (UZoogiAwakenWidget* AW = Hud ? Hud->GetAwakenWidget() : nullptr) AW->NotePress();
 }
-void UZoogiFramedHUDWidget::OnStone0() { if (StoneKeys.IsValidIndex(0)) FireAwaken(TEXT("AwakenPick"), StoneKeys[0]); }
-void UZoogiFramedHUDWidget::OnStone1() { if (StoneKeys.IsValidIndex(1)) FireAwaken(TEXT("AwakenPick"), StoneKeys[1]); }
-void UZoogiFramedHUDWidget::OnStone2() { if (StoneKeys.IsValidIndex(2)) FireAwaken(TEXT("AwakenPick"), StoneKeys[2]); }
+void UZoogiFramedHUDWidget::OnStone0() { if (StoneKeys.IsValidIndex(0)) FireAwaken(bTrayCards ? TEXT("CardAwakenPick") : TEXT("AwakenPick"), StoneKeys[0]); }
+void UZoogiFramedHUDWidget::OnStone1() { if (StoneKeys.IsValidIndex(1)) FireAwaken(bTrayCards ? TEXT("CardAwakenPick") : TEXT("AwakenPick"), StoneKeys[1]); }
+void UZoogiFramedHUDWidget::OnStone2() { if (StoneKeys.IsValidIndex(2)) FireAwaken(bTrayCards ? TEXT("CardAwakenPick") : TEXT("AwakenPick"), StoneKeys[2]); }
 void UZoogiFramedHUDWidget::OnStone3() { if (StoneKeys.IsValidIndex(3)) FireAwaken(TEXT("AwakenPick"), StoneKeys[3]); }
 void UZoogiFramedHUDWidget::OnInfuse() { FireAwaken(TEXT("Infuse"), TrayPick); }
 void UZoogiFramedHUDWidget::OnGuard() { FireAwaken(TEXT("Guard"), TrayPick); }
-void UZoogiFramedHUDWidget::OnSave() { FireAwaken(TEXT("Save"), 0); }
+void UZoogiFramedHUDWidget::OnSave() { FireAwaken(bTrayCards ? TEXT("CardAwakenSkip") : TEXT("Save"), 0); }
+void UZoogiFramedHUDWidget::OnOrb() { FireAwaken(TEXT("CardAwakenView"), 0); }
+bool UZoogiFramedHUDWidget::OrbLive() const
+{
+	const AZoogiGameMode* G = GM();
+	return bActive && !bPaused && G && G->CardsOn() && G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Awaken && !G->bAwakenDone && G->IsHumanAiming();
+}
 
 const TCHAR* UZoogiFramedHUDWidget::TabletFor(uint8 Artifact)
 {
@@ -751,6 +838,45 @@ void UZoogiFramedHUDWidget::PaintTrayAwaken(const FGeometry& Geo, FSlateWindowEl
 	if (!TrayAwakenLayout(TA)) return;
 	auto FontT = [&](float Sz) { return ZoogiUIStyle::BoldFont(FMath::Max(9, FMath::RoundToInt(Sz * t)), FMath::Max(1.f, 1.6f * t)); };
 	const float Pop = FMath::Clamp(StonePop, 0.f, 1.f);
+	if (TA.bCards)
+	{
+		// Choose-your-Awaken: header, 3 tablets (key 1-3 medallion, name, affinity tag), SKIP
+		const AZoogiGameMode* G = GM();
+		const AZoogiBall* AB = G ? G->GetActiveBall() : nullptr;
+		const EZoogiArtifact Aff = AB ? ZoogiArtifacts::Affinity(AB->Def.Id) : EZoogiArtifact::None;
+		const float Hp = 0.5f + 0.5f * FMath::Sin(Time * 3.f);
+		HA::Text(Out, Ly + 3, Geo, TA.Header, TEXT("CHOOSE YOUR AWAKEN"), FontT(15.f), FMath::Lerp(HA::GoldText, FLinearColor::White, 0.35f * Hp), 0.5f, 0.5f);
+		for (int32 i = 0; i < TA.Stones.Num() && i < TA.StoneRects.Num(); ++i)
+		{
+			const FBox2D R = TA.StoneRects[i];
+			const EZoogiArtifact A = (EZoogiArtifact)TA.Stones[i].Value;
+			const FZoogiArtifactRow& Row = ZoogiArtifacts::Get(A);
+			const bool bSel = TA.Stones[i].Key == TA.Pick;
+			const bool bHov = StoneBtns.IsValidIndex(i) && StoneBtns[i]->IsHovered();
+			const float Sc = (bHov ? 1.05f : 1.f) * (0.85f + 0.15f * ZoogiUIStyle::EaseOutBack(FMath::Min(1.f, Pop + i * 0.12f)));
+			const FVector2D Cn = R.GetCenter() - FVector2D(0.f, bHov ? 4.f * t : 0.f), Sz = R.GetSize() * Sc;
+			ZoogiUIStyle::SBox(Out, Ly, Geo, Cn - Sz * 0.5f - FVector2D(7.f, 7.f) * t, Sz + FVector2D(14.f, 14.f) * t, FLinearColor(Row.RimColor.R, Row.RimColor.G, Row.RimColor.B, (bSel ? 0.45f : 0.18f) + 0.12f * FMath::Sin(Time * 4.f + i)), FLinearColor::Transparent, 14.f * t, 0.f);
+			HA::Img(Out, Ly + 1, Geo, Cn - Sz * 0.5f, Sz, TabletFor(TA.Stones[i].Value));
+			HA::Text(Out, Ly + 3, Geo, Cn + FVector2D(0.f, Sz.Y * 0.33f), ZoogiArtifacts::Name(A).ToUpper(), FontT(10.f), FLinearColor::White, 0.5f, 0.5f);
+			if (A == Aff) HA::Text(Out, Ly + 3, Geo, Cn + FVector2D(0.f, Sz.Y * 0.43f), TEXT("AFFINITY"), FontT(7.5f), FLinearColor(1.f, 0.9f, 0.4f), 0.5f, 0.5f);
+			const FVector2D KC = Cn - Sz * 0.5f + FVector2D(Sz.X * 0.13f, Sz.Y * 0.08f);
+			const float KR = 15.f * t * Sc;
+			HA::Img(Out, Ly + 2, Geo, KC - FVector2D(KR, KR), FVector2D(KR, KR) * 2.f, TEXT("mark_cyan"), bSel || bHov ? FLinearColor::White : FLinearColor(0.7f, 0.75f, 0.85f, 0.9f));
+			HA::Text(Out, Ly + 3, Geo, KC, FString::FromInt(i + 1), FontT(10.f), FLinearColor::White, 0.5f, 0.5f);
+			if (bSel) HA::Img(Out, Ly + 4, Geo, Cn - Sz * 0.6f, Sz * 1.2f, TEXT("prompt_cyanbox"), FLinearColor(1.f, 1.f, 1.f, 0.8f));
+		}
+		if (TA.BtnRects.IsValidIndex(2))
+		{
+			const FBox2D R = TA.BtnRects[2];
+			const bool bHov = ActBtns.IsValidIndex(2) && ActBtns[2]->IsHovered(), bPr = ActBtns.IsValidIndex(2) && ActBtns[2]->IsPressed();
+			const FVector2D Sz = R.GetSize() * (bPr ? 0.94f : bHov ? 1.04f : 1.f), P = R.GetCenter() - Sz * 0.5f;
+			if (bHov && !bPr) HA::Img(Out, Ly + 1, Geo, P - Sz * FVector2D(0.3f, 0.25f), Sz * FVector2D(1.6f, 1.5f), TEXT("pill_on"), FLinearColor(1.f, 1.f, 1.f, 0.8f));
+			HA::Img(Out, Ly + 2, Geo, P, Sz, TEXT("pill_off"));
+			HA::Text(Out, Ly + 3, Geo, R.GetCenter(), TEXT("SKIP"), FontT(11.f), FLinearColor::White, 0.5f, 0.5f);
+			HA::Text(Out, Ly + 3, Geo, FVector2D(R.GetCenter().X, R.Max.Y + 12.f * t), TEXT("no Awaken"), FontT(7.5f), FLinearColor(0.75f, 0.8f, 0.9f), 0.5f, 0.5f);
+		}
+		return;
+	}
 	for (int32 i = 0; i < TA.Stones.Num(); ++i)
 	{
 		const FBox2D R = TA.StoneRects[i];

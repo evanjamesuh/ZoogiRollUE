@@ -31,6 +31,13 @@
 #include "ZoogiUIStyle.h"
 #include "ZoogiFramedLayout.h"
 #include "ZoogiHudArt.h"
+#include "ZoogiHUD.h"
+#include "ZoogiAwakenWidget.h"
+#include "ZoogiPlayerController.h"
+#include "ZoogiArtifactComponent.h"
+#include "ZoogiArtifacts.h"
+#include "Framework/Application/SlateApplication.h"
+#include "UObject/UObjectIterator.h"
 
 namespace
 {
@@ -105,7 +112,7 @@ TSharedRef<SWidget> UZoogiCardHandWidget::RebuildWidget()
 				B->SetStyle(ZoogiUIStyle::ButtonStyle(C, true)); // uistyle: chunky saturated plate + navy outline (was the default gray UButton)
 			UTextBlock* T = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass());
 			T->SetText(FText::FromString(Label));
-			T->SetFont(ZoogiUIStyle::BoldFont(17, 2.f));
+			T->SetFont(ZoogiUIStyle::BoldFont(15, 2.f)); // Oct 15: fits the slab strip between the discard portal and the orb
 			T->SetColorAndOpacity(FSlateColor(FLinearColor::White));
 			T->SetShadowOffset(FVector2D(2.f, 3.f));
 			T->SetShadowColorAndOpacity(FLinearColor(0.f, 0.f, 0.06f, 0.6f));
@@ -117,19 +124,16 @@ TSharedRef<SWidget> UZoogiCardHandWidget::RebuildWidget()
 		UTextBlock* Dummy = nullptr; UTextBlock* CText = nullptr;
 		ConfirmBtn = MakeBtn(TEXT("CONFIRM"), FLinearColor(0.35f, 1.f, 0.45f), CText); ConfirmText = CText;
 		ClearBtn = MakeBtn(TEXT("CLEAR"), FLinearColor(1.f, 0.45f, 0.38f), Dummy);
-		UTextBlock* AText = nullptr;
-		AwakenBtn = MakeBtn(TEXT("AWAKEN: OFF"), FLinearColor(0.75f, 0.55f, 1.f), AText); AwakenText = AText;
-		AwakenBtn->OnClicked.AddDynamic(this, &UZoogiCardHandWidget::OnAwaken);
+		// Oct 15 playtest: no AWAKEN: OFF plate any more - the energy orb (framed tray) / keyboard A is the Awaken control
 		ConfirmBtn->OnClicked.AddDynamic(this, &UZoogiCardHandWidget::OnConfirm);
 		ClearBtn->OnClicked.AddDynamic(this, &UZoogiCardHandWidget::OnClear);
-		for (UButton* B : { ConfirmBtn.Get(), ClearBtn.Get(), AwakenBtn.Get() })
+		for (UButton* B : { ConfirmBtn.Get(), ClearBtn.Get() })
 		{
 			UCanvasPanelSlot* S = Root->AddChildToCanvas(B);
 			S->SetAnchors(FAnchors(1.f, 1.f)); S->SetAlignment(FVector2D(1.f, 1.f)); S->SetAutoSize(false); S->SetZOrder(1000);
 		}
 		Cast<UCanvasPanelSlot>(ConfirmBtn->Slot)->SetPosition(FVector2D(-24.f, -196.f)); Cast<UCanvasPanelSlot>(ConfirmBtn->Slot)->SetSize(FVector2D(220.f, 52.f));
 		Cast<UCanvasPanelSlot>(ClearBtn->Slot)->SetPosition(FVector2D(-24.f, -256.f)); Cast<UCanvasPanelSlot>(ClearBtn->Slot)->SetSize(FVector2D(220.f, 52.f)); // >= 48 dp tap target
-		Cast<UCanvasPanelSlot>(AwakenBtn->Slot)->SetPosition(FVector2D(-24.f, -316.f)); Cast<UCanvasPanelSlot>(AwakenBtn->Slot)->SetSize(FVector2D(220.f, 52.f));
 	}
 	SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 	return Super::RebuildWidget();
@@ -202,25 +206,39 @@ void UZoogiCardHandWidget::Fly(FVis& V, const FVector2D& To, float Dur, float De
 
 FVector2D UZoogiCardHandWidget::Local(const FPointerEvent& Ev) const { return CachedGeo.AbsoluteToLocal(Ev.GetScreenSpacePosition()); }
 
-void UZoogiCardHandWidget::DiscardAll(const FZoogiCardPlayerState* S)
+FVector2D UZoogiCardHandWidget::GravePos() const
 {
+	// Oct 15 playtest: played / discarded cards sink into the grave-like discard portal (the rising blue light on the
+	// tray's right slab) and vanish there; card positions are bottom-centre, so aim the card's middle at the light
 	const ZoogiFramed::FLayout& SFL = ZoogiFramed::Current();
 	const float Sk = SFL.bValid && SFL.Viewport.X > 0.f ? ViewSize.X / SFL.Viewport.X : 1.f;
-	const FVector2D Pile(ViewSize.X - 330.f - (SFL.bValid ? SFL.Safe.Right * Sk : 0.f), ViewSize.Y - 40.f - (SFL.bValid ? SFL.Safe.Bottom * Sk : 0.f)); // altar, inside the safe area
+	if (SFL.bValid && ZoogiFramed::IsActive(GetWorld())) return SFL.Discard * Sk + FVector2D(0.f, UZoogiCardWidget::CardH * GraveScale * 0.5f);
+	return FVector2D(ViewSize.X - 330.f, ViewSize.Y - 40.f);
+}
+
+void UZoogiCardHandWidget::DiscardAll(const FZoogiCardPlayerState* S)
+{
+	const FVector2D Pile = GravePos();
 	int32 N = 0, Gone = 0, Kept = 0;
 	for (TPair<int32, FVis>& P : Vis)
 	{
 		FVis& V = P.Value;
 		bool bCommitted = false;
 		if (S) for (const FZoogiCardCommitted& K : S->Committed) if (K.Card.InstanceId == P.Key) bCommitted = true;
-		if (V.State == EVis::Hand && bCommitted) { V.State = EVis::ToTarget; Fly(V, TargetPos, CHAssignDur, 0.f, 0.3f, 0.f, 60.f, false); ++Gone; }
+		if (V.State == EVis::Hand && bCommitted) { V.State = EVis::ToDiscard; Fly(V, Pile, CHDiscardDur, Gone * CHDiscardStagger, GraveScale, 0.f, 140.f, false); ++Gone; }
 		else if (V.State == EVis::Hand && P.Key >= 0 && S && S->Hand.ContainsByPredicate([&](const FZoogiCardInstance& I) { return I.InstanceId == P.Key; }))
 		{
 			// Oct 14 (Evan): the unplayed hand is kept between turns, so it stows below the tray instead of the discard pile
 			V.State = EVis::ToDiscard; Fly(V, FVector2D(V.Pos.X, ViewSize.Y + 240.f), CHDiscardDur, N * CHDiscardStagger * 0.5f, 0.8f, 0.f, 0.f, false); ++Kept;
 		}
-		else if (V.State == EVis::Hand) { V.State = EVis::ToDiscard; Fly(V, Pile, CHDiscardDur, N * CHDiscardStagger, 0.45f, ZoogiFramed::IsActive(GetWorld()) ? 0.f : 25.f, 140.f, false); ++N; }
-		else if (V.State == EVis::Assigned) { V.State = EVis::ToDiscard; V.bFly = false; V.T = 1.f; V.Opacity = 0.f; }
+		else if (V.State == EVis::Hand) { V.State = EVis::ToDiscard; Fly(V, Pile, CHDiscardDur, N * CHDiscardStagger, GraveScale, ZoogiFramed::IsActive(GetWorld()) ? 0.f : 25.f, 140.f, false); ++N; }
+		else if ((V.State == EVis::Assigned || V.State == EVis::ToTarget) && bCommitted)
+		{
+			// played on the Zoogi: after CONFIRM it leaves the Zoogi for the grave (visible flight), then is gone for good
+			V.State = EVis::ToDiscard; V.Pos = TargetPos; V.Scale = 0.3f; V.Opacity = 1.f; V.Angle = 0.f;
+			Fly(V, Pile, CHDiscardDur * 1.2f, 0.12f + Gone * CHDiscardStagger, GraveScale, 0.f, 120.f, false); ++Gone;
+		}
+		else if (V.State == EVis::Assigned || V.State == EVis::ToTarget) { V.State = EVis::ToDiscard; V.bFly = false; V.T = 1.f; V.Opacity = 0.f; }
 	}
 	HandOrder.Reset();
 	if (N || Gone || Kept) UE_LOG(LogZoogi, Log, TEXT("CARDUI discard P%d turn=%d leftover=%d -> discard pile, committed=%d, kept in hand=%d (stowed)"), KeyPlayer + 1, KeyTurn, N, Gone, Kept);
@@ -256,18 +274,48 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 		const ZoogiFramed::FLayout& FL = ZoogiFramed::Current();
 		const float k = bFr && FL.Viewport.X > 0.f ? ViewSize.X / FL.Viewport.X : 1.f;
 		const float R = bFr ? -24.f - FL.Safe.Right * k : -24.f, Bm = bFr ? -FL.Safe.Bottom * k : 0.f;
-		if (ConfirmBtn) if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(ConfirmBtn->Slot)) S->SetPosition(FVector2D(R, bFr ? Bm - 30.f : -196.f));
-		if (ClearBtn) if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(ClearBtn->Slot)) S->SetPosition(FVector2D(R, bFr ? Bm - 92.f : -256.f));
-		// AWAKEN sits left of CONFIRM in the framed tray (CLEAR is above CONFIRM)
-		if (AwakenBtn) if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(AwakenBtn->Slot)) S->SetPosition(FVector2D(bFr ? R - 232.f : R, bFr ? Bm - 30.f : -316.f));
+		(void)Bm;
+		if (bFr)
+		{
+			// Oct 15 playtest: the energy orb is the Awaken control, so CONFIRM / CLEAR move to the slab strip between the
+			// discard portal and the orb (never over the orb, the portal or the DISCARD count)
+			const float t = FL.T * k;
+			const FVector2D TR(FL.TrayRightX0 * k, (FL.Tray.Min.Y + 12.f * FL.T) * k);
+			const float X0 = TR.X + 126.f * t, X1 = TR.X + 248.f * t, BH = FMath::Max(36.f * t, 48.f * FL.U * k);
+			auto Put = [&](UButton* Bt, float Y1) { if (UCanvasPanelSlot* S = Bt ? Cast<UCanvasPanelSlot>(Bt->Slot) : nullptr) { S->SetPosition(FVector2D(X1 - ViewSize.X, Y1 - ViewSize.Y)); S->SetSize(FVector2D(X1 - X0, BH)); } };
+			Put(ConfirmBtn, TR.Y + 172.f * t);
+			Put(ClearBtn, TR.Y + 172.f * t - BH - 10.f * t);
+		}
+		else
+		{
+			if (ConfirmBtn) if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(ConfirmBtn->Slot)) { S->SetPosition(FVector2D(R, -196.f)); S->SetSize(FVector2D(220.f, 52.f)); }
+			if (ClearBtn) if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(ClearBtn->Slot)) { S->SetPosition(FVector2D(R, -256.f)); S->SetSize(FVector2D(220.f, 52.f)); }
+		}
 	}
 	Time += Dt;
 	AZoogiGameMode* G = GetWorld() ? GetWorld()->GetAuthGameMode<AZoogiGameMode>() : nullptr;
+	{ static const bool bPt = FParse::Param(FCommandLine::Get(), TEXT("ZoogiPlaytest1")); if (bPt && G) TickPlaytest1(G, Dt); }
 	UZoogiCardSubsystem* Cards = UZoogiCardSubsystem::Get(this);
 	AZoogiBall* B = G ? G->GetActiveBall() : nullptr;
 	const FZoogiCardPlayerState* S = (Cards && B && IsEnabled(G)) ? Cards->Rules().Player(B->PlayerIndex) : nullptr;
 	const bool bShow = S && G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Awaken && !G->bAwakenDone && S->bStandbyOpen;
 	bInteractive = bShow && G->IsHumanAiming() && !S->bCommitted;
+	// Oct 15 Choose-your-Awaken: while the 3 tablets show, the cards are lowered out of the recess (not playable)
+	bAwView = bShow && G->CardsAwakenViewOpen();
+	if (bAwView) { bInteractive = false; if (Dragging.IsValid()) CancelDrag(TEXT("awaken_view")); Armed.Reset(); }
+	if (bShow && G->IsHumanAiming() && !S->bCommitted)
+	{
+		// after the draw lands: CHOOSE YOUR AWAKEN opens once per turn (unless the player already opened / picked)
+		const int32 AK = B->PlayerIndex * 100000 + S->Turn;
+		if (AwAutoKey != AK)
+		{
+			static const bool bNoAuto = FParse::Param(FCommandLine::Get(), TEXT("ZoogiNoAwakenAuto")) || FString(FCommandLine::Get()).Contains(TEXT("ZoogiCardTest="));
+			AwAutoT += Dt;
+			if (bNoAuto || G->bCardAwakenView || G->CardAwakenPick >= 0) { AwAutoKey = AK; AwAutoT = 0.f; }
+			else if (AwAutoT > 1.1f) { AwAutoKey = AK; AwAutoT = 0.f; G->MenuAction(TEXT("CardAwakenView"), 1); }
+		}
+	}
+	else AwAutoT = 0.f;
 	UpdateTarget(G);
 
 	// standby closed / another player's or turn's standby: leftovers fly to the discard pile
@@ -291,30 +339,19 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 	{
 		if (P.Key >= 0) continue;
 		bool bKeep = false;
-		if (bShowPlayed) for (const FZoogiCardCommitted& K : PlayedS->Committed) if (-(K.Card.InstanceId + 1) == P.Key) bKeep = true;
 		if (bShowPlayed) for (const FZoogiCardInstance& I : PlayedS->Hand) if (RestKey(I.InstanceId) == P.Key) bKeep = true;
 		if (!bKeep && P.Value.State == EVis::Hand)
 		{
 			P.Value.State = EVis::ToDiscard;
 			if (P.Key <= -100001) Fly(P.Value, FVector2D(P.Value.Pos.X, ViewSize.Y + 240.f), CHDiscardDur, 0.f, 0.8f, 0.f, 0.f, false); // kept hand: stow below the tray
-			else Fly(P.Value, FVector2D(ViewSize.X - 330.f, ViewSize.Y - 40.f), CHDiscardDur, 0.f, 0.45f, ZoogiFramed::IsActive(GetWorld()) ? 0.f : 25.f, 140.f, false);
+			else Fly(P.Value, GravePos(), CHDiscardDur, 0.f, GraveScale, 0.f, 140.f, false);
 		}
 	}
 	if (bShowPlayed)
 	{
-		for (const FZoogiCardCommitted& K : PlayedS->Committed)
-		{
-			const int32 Key = -(K.Card.InstanceId + 1);
-			FVis* V = Vis.Find(Key);
-			if (!V)
-			{
-				FVis NV; NV.W = MakeCard(Key, K.Card.CardId); NV.Pos = TargetPos; NV.Scale = 0.3f; NV.Opacity = 0.f;
-				V = &Vis.Add(Key, NV);
-				Fly(*V, TargetPos, 0.35f, 0.15f * PlayedOrder.Num(), 1.f, 0.f, 80.f, true);
-			}
-			if (V->State == EVis::Hand) PlayedOrder.Add(Key);
-			if (UZoogiCardWidget* PW = V->W.Get()) PW->bAffordable = true;
-		}
+		// Oct 15 playtest fix ("discarded cards come back after CONFIRM"): the played cards are NOT re-created in the tray
+		// any more (that copy looked like the discards resetting into the hand). They went into the grave at CONFIRM and stay
+		// gone until a reshuffle; only the unplayed rest of the hand stays on show, dimmed.
 		for (const FZoogiCardInstance& I : PlayedS->Hand)
 		{
 			bool bPlayed = false;
@@ -324,9 +361,11 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 			FVis* V = Vis.Find(Key);
 			if (!V)
 			{
+				// hand-off from the live card (stowing after CONFIRM): the dimmed copy starts where it is, no drop-and-rise
 				FVis NV; NV.W = MakeCard(Key, I.CardId); NV.Pos = FVector2D(ViewSize.X * 0.5f, ViewSize.Y + 200.f); NV.Scale = 0.6f; NV.Opacity = 0.f;
+				if (FVis* Old = Vis.Find(I.InstanceId)) { NV.Pos = Old->Pos; NV.Scale = Old->Scale; NV.Opacity = Old->Opacity; Old->State = EVis::ToDiscard; Old->bFly = false; Old->Opacity = 0.f; }
 				V = &Vis.Add(Key, NV);
-				Fly(*V, NV.Pos, 0.35f, 0.1f * PlayedOrder.Num(), 1.f, 0.f, 40.f, true);
+				Fly(*V, NV.Pos, 0.3f, 0.f, 1.f, 0.f, 0.f, true);
 			}
 			if (V->State == EVis::Hand) PlayedOrder.Add(Key);
 			if (UZoogiCardWidget* RW = V->W.Get()) RW->bAffordable = false; // dimmed: still in hand, not played this turn
@@ -402,7 +441,7 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 		{
 			EnergyShown = KS->Energy - (KS->bCommitted ? 0 : SelCost);
 			EnergyMax = Cards->Rules().Tune().EnergyPerTurn;
-			DrawCount = KS->DrawPile.Num(); DiscardCount = KS->Discard.Num();
+			DrawCount = KS->DrawPile.Num(); DiscardCount = KS->Discard.Num() + KS->Committed.Num(); // played cards are in the grave from CONFIRM (rules move them at end of turn)
 			EnergyJuice.Update(EnergyMax > 0 ? FMath::Clamp((float)EnergyShown / EnergyMax, 0.f, 1.f) : 0.f, Dt);
 			if (EnergyShown != LastLoggedEnergy) { UE_LOG(LogZoogi, Log, TEXT("CARDUI energy P%d %d/%d"), (bShow ? B->PlayerIndex : KeyPlayer) + 1, EnergyShown, EnergyMax); LastLoggedEnergy = EnergyShown; }
 		}
@@ -442,13 +481,20 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 		// hud-v3: the fan sits in the dark card tray recess between the deck slab and the discard / energy slab
 		const float TT = FL.Hand.Min.Y * k, TB = FL.Hand.Max.Y * k, HX0 = FL.Hand.Min.X * k, HX1 = FL.Hand.Max.X * k;
 		FramedTrayTop = TT;
-		Sc0 = FMath::Clamp((TB - TT - 24.f * FL.T * k) / UZoogiCardWidget::CardH, 0.45f, 1.3f); // shorter: the fan sits down in the recess with less overlap
-		const float Avail = HX1 - HX0 - 20.f * FL.T * k;
-		Spacing = FMath::Min(UZoogiCardWidget::CardW * Sc0 * 1.06f, (Avail - UZoogiCardWidget::CardW * Sc0) / FMath::Max(N - 1, 1));
-		// Evan 9:57 PM "straighten and unify cards": one straight, evenly spaced row on a single baseline, every card the
-		// same size; hover / select lifts the card straight up (no tilt, no neighbour push), card bottoms stay on screen
-		BaseY = TB - 7.f * FL.T * k; ArcK = 0.f; TiltK = 0.f; HoverSc = Sc0; HoverY = BaseY - 14.f * FL.T * k; Spread = 0.f;
+		// Oct 15 playtest (Evan): a straight, evenly spaced row of identical cards at every hand size. The card size is fixed
+		// by the hand cap (7 fit side by side with one gap, never overlapping) and the recess height, so 1..7 cards all have
+		// the same size and spacing on every aspect (16:9, 20:9 phones, 4:3); hover / select lifts straight up inside the tray.
+		const int32 Cap = FMath::Max3(Cards ? Cards->Rules().Tune().HandCap : 7, N, 1);
+		const float TU = FL.T * k, Gap = 10.f * TU, Pad = 10.f * TU, LiftRoom = 12.f * TU;
+		const float Avail = HX1 - HX0 - 2.f * Pad;
+		const float ScH = (TB - TT - 10.f * TU - LiftRoom) / UZoogiCardWidget::CardH;
+		const float ScW = (Avail - (Cap - 1) * Gap) / (Cap * UZoogiCardWidget::CardW);
+		Sc0 = FMath::Clamp(FMath::Min(ScH, ScW), 0.2f, 1.3f);
+		Spacing = UZoogiCardWidget::CardW * Sc0 + Gap;
+		BaseY = FMath::Min(TB - 8.f * TU, (TT + LiftRoom + TB) * 0.5f + UZoogiCardWidget::CardH * Sc0 * 0.5f); // centred in the recess
+		ArcK = 0.f; TiltK = 0.f; HoverSc = Sc0; HoverY = BaseY - LiftRoom; Spread = 0.f;
 		FanCX = (HX0 + HX1) * 0.5f;
+		if (bAwView) BaseY = HoverY = TB + UZoogiCardWidget::CardH * Sc0 + 40.f; // Choose-your-Awaken: cards lowered out of the recess
 		FramedFanL = FanCX - ((N - 1) * Spacing + UZoogiCardWidget::CardW * Sc0) * 0.5f;
 	}
 	TMap<int32, FVector4> Layout; // x, y, angle, scale
@@ -543,8 +589,6 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 	const bool bBtns = bInteractive;
 	ConfirmBtn->SetVisibility(bBtns ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
 	ClearBtn->SetVisibility(bBtns && S && S->Selected.Num() > 0 ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-	AwakenBtn->SetVisibility(bBtns ? ESlateVisibility::Visible : ESlateVisibility::Collapsed);
-	if (bBtns && G) AwakenText->SetText(FText::FromString(G->bStandbyAwaken ? TEXT("AWAKEN: ON") : TEXT("AWAKEN: OFF")));
 	if (bBtns) { ConfirmText->SetText(FText::FromString(SelCost ? FString::Printf(TEXT("CONFIRM  -%d"), SelCost) : FString(TEXT("CONFIRM (PASS)")))); ConfirmBtn->SetIsEnabled(EnergyShown >= 0); }
 }
 
@@ -728,4 +772,249 @@ int32 UZoogiCardHandWidget::NativePaint(const FPaintArgs& Args, const FGeometry&
 		CHText(Out, L + 7, Geo, R.Pos + FVector2D(-50.f, -TargetR - 40.f - 40.f * A), R.Label, 20, C, true);
 	}
 	return L + 8;
+}
+
+// ------------------------------------------------------------------ Oct 15 playtest test hooks
+UZoogiCardHandWidget* UZoogiCardHandWidget::Find(const UWorld* World)
+{
+	for (TObjectIterator<UZoogiCardHandWidget> It; It; ++It) if (It->GetWorld() == World && It->IsInViewport()) return *It;
+	return nullptr;
+}
+
+TArray<int32> UZoogiCardHandWidget::TrayInstanceIds() const
+{
+	TArray<int32> Ids;
+	for (int32 Key : HandOrder)
+	{
+		const FVis* V = Vis.Find(Key);
+		if (!V || V->State != EVis::Hand || V->Opacity <= 0.01f) continue;
+		Ids.Add(Key >= 0 ? Key : Key <= -100001 ? -(Key + 100000) - 1 : -Key - 1);
+	}
+	return Ids;
+}
+
+TArray<FBox2D> UZoogiCardHandWidget::TrayCardRects() const
+{
+	TArray<FBox2D> R;
+	for (int32 Key : HandOrder)
+	{
+		const FVis* V = Vis.Find(Key);
+		if (!V || V->State != EVis::Hand) continue;
+		const float W = UZoogiCardWidget::CardW * V->Scale, H = UZoogiCardWidget::CardH * V->Scale;
+		R.Add(FBox2D(FVector2D(V->Pos.X - W * 0.5f, V->Pos.Y - H), FVector2D(V->Pos.X + W * 0.5f, V->Pos.Y)));
+	}
+	return R;
+}
+
+// -ZoogiPlaytest1 (with -ZoogiHumanTest -ZoogiCards -ZoogiShots=...): Evan's Oct 15 playtest items driven through real
+// Slate input (synthetic mouse clicks / touch taps / key presses routed by Slate hit-testing) on P1's turns:
+// auto CHOOSE YOUR AWAKEN after the draw, orb click / A key toggle, tablet pick (touch), SKIP (mouse), keys 1-3, ZOOM at
+// the first Standby and at the aim step (no fall-through), the straight hand row, and hand / draw / discard before and
+// after CONFIRM over several turns (played cards never come back until a reshuffle). Logs "PT1 PASS/FAIL".
+void UZoogiCardHandWidget::TickPlaytest1(AZoogiGameMode* G, float Dt)
+{
+	UZoogiCardSubsystem* Cards = UZoogiCardSubsystem::Get(this);
+	AZoogiBall* B = G->GetActiveBall();
+	APlayerController* PCb = GetOwningPlayer();
+	AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(PCb);
+	AZoogiHUD* Hud = PCb ? Cast<AZoogiHUD>(PCb->GetHUD()) : nullptr;
+	UZoogiAwakenWidget* AW = Hud ? Hud->GetAwakenWidget() : nullptr;
+	if (!Cards || !B || !PC || !AW || !G->CardsOn()) return;
+	auto Check = [&](bool bOk, const FString& What) { (bOk ? PtPasses : PtFails)++; UE_LOG(LogZoogi, Log, TEXT("PT1 %s: %s"), bOk ? TEXT("PASS") : TEXT("FAIL"), *What); };
+	auto Ids = [](const TArray<int32>& A) { FString S; for (int32 i : A) S += FString::Printf(TEXT(" %d"), i); return S; };
+	auto HandIds = [&](const FZoogiCardPlayerState* S) { TArray<int32> A; for (const FZoogiCardInstance& I : S->Hand) A.Add(I.InstanceId); return A; };
+	auto Click = [&](const FVector2D& Abs, bool bTouch) { return bTouch ? AW->SynthTouch(Abs) : AW->SynthClick(Abs); };
+	auto Ctl = [&](FName A, int32 I, bool bTouch) -> bool { FVector2D Abs; if (!AW->FindControl(A, I, Abs)) { Check(false, FString::Printf(TEXT("control %s %d on screen"), *A.ToString(), I)); return false; } UE_LOG(LogZoogi, Log, TEXT("PT1 %s on %s %d -> Slate finds [%s]"), bTouch ? TEXT("touch tap") : TEXT("mouse click"), *A.ToString(), I, *AW->ControlUnder(Abs)); return Click(Abs, bTouch); };
+	auto Key = [&](FKey K) { FSlateApplication& Sa = FSlateApplication::Get(); Sa.ProcessKeyDownEvent(FKeyEvent(K, FModifierKeysState(), 0, false, 0, 0)); Sa.ProcessKeyUpEvent(FKeyEvent(K, FModifierKeysState(), 0, false, 0, 0)); };
+	auto ZoomAbs = [&](FVector2D& Abs) -> bool
+	{
+		FBox2D R; if (!ZoogiFramed::ZoomButtonRect(R)) return false;
+		const ZoogiFramed::FLayout& FL = ZoogiFramed::Current();
+		const float k = FL.Viewport.X > 0.f ? ViewSize.X / FL.Viewport.X : 1.f;
+		Abs = CachedGeo.LocalToAbsolute(R.GetCenter() * k); return true;
+	};
+	auto Summary = [&]() { UE_LOG(LogZoogi, Log, TEXT("PT1 SUMMARY: %d passed, %d failed (P1 turns %d, view %.0fx%.0f)"), PtPasses, PtFails, PtTurns, ViewSize.X, ViewSize.Y); };
+	if (G->Phase == EZoogiPhase::GameOver) { if (PtStep != 999) { Summary(); PtStep = 999; } return; }
+	const FZoogiCardPlayerState* S = Cards->Rules().Player(B->PlayerIndex);
+	if (!S) return;
+	const FString Tag = FString::Printf(TEXT("t%d"), PtTurns);
+	// played-card watch: every frame of every turn, a card played earlier never shows in the tray until a reshuffle
+	if (B->PlayerIndex == 0)
+		for (int32 Id : TrayInstanceIds()) if (PtGone.Contains(Id)) { Check(false, FString::Printf(TEXT("played card #%d came back into the tray (turn %d, no reshuffle)"), Id, S->Turn)); PtGone.Remove(Id); }
+	if (B->bCPU) { if (G->Stage == EZoogiStage::Awaken && PtStep > 0 && PtStep < 100) PtStep = 100; return; }
+	// ---- human (P1) turn
+	if (G->Stage == EZoogiStage::Awaken && !G->bAwakenDone && S->bStandbyOpen && S->Turn != PtLastTurn)
+	{
+		PtLastTurn = S->Turn; ++PtTurns; PtStep = 1; PtT = 0.f;
+		UE_LOG(LogZoogi, Log, TEXT("PT1 turn %d (rules turn %d) standby: hand=[%s ] draw=%d discard=%d energy=%d"), PtTurns, S->Turn, *Ids(HandIds(S)), S->DrawPile.Num(), S->Discard.Num(), S->Energy);
+		for (int32 Id : HandIds(S)) if (PtGone.Contains(Id)) Check(false, FString::Printf(TEXT("played card #%d back in the hand without a reshuffle"), Id));
+		Summary();
+	}
+	PtT += Dt;
+	const bool bView = G->CardsAwakenViewOpen();
+	if (G->Stage == EZoogiStage::Awaken && !G->bAwakenDone)
+	{
+		switch (PtStep)
+		{
+		case 1: if (PtT > 0.45f) { G->TakeShot(Tag + TEXT("_1_draw")); PtStep = 2; } break;
+		case 2:
+			if (bView || PtT > 4.f)
+			{
+				Check(bView, FString::Printf(TEXT("%s: CHOOSE YOUR AWAKEN opened by itself after the draw (%.1f s)"), *Tag, PtT));
+				Check(G->BigText == TEXT("CHOOSE YOUR AWAKEN"), TEXT("announcement text CHOOSE YOUR AWAKEN"));
+				PtStep = 3; PtT = 0.f;
+			}
+			break;
+		case 3:
+			if (PtT > 0.35f)
+			{
+				G->TakeShot(Tag + TEXT("_2_choose_awaken"));
+				FVector2D A0, A1, A2; const bool b3 = AW->FindControl(TEXT("CardAwakenPick"), 0, A0) && AW->FindControl(TEXT("CardAwakenPick"), 1, A1) && AW->FindControl(TEXT("CardAwakenPick"), 2, A2);
+				Check(b3, TEXT("3 Awaken tablets on screen as tap targets"));
+				Check(TrayInstanceIds().Num() == 0 || !bInteractive, TEXT("cards lowered / not playable while the tablets show"));
+				FVector2D Sk; Check(AW->FindControl(TEXT("CardAwakenSkip"), 0, Sk), TEXT("SKIP on screen"));
+				UE_LOG(LogZoogi, Log, TEXT("PT1 offers: %s / %s / %s"), *ZoogiArtifacts::Name((EZoogiArtifact)G->CardAwakenOffers[0]), *ZoogiArtifacts::Name((EZoogiArtifact)G->CardAwakenOffers[1]), *ZoogiArtifacts::Name((EZoogiArtifact)G->CardAwakenOffers[2]));
+				PtStep = 4; PtT = 0.f;
+			}
+			break;
+		case 4: // orb (mouse) -> back to the cards
+			if (PtT > 1.8f) { Ctl(TEXT("CardAwakenView"), 0, false); PtStep = 5; PtT = 0.f; }
+			break;
+		case 5:
+			if (PtT > 0.5f)
+			{
+				Check(!bView && bInteractive, FString::Printf(TEXT("%s: orb click (mouse) -> tray shows the cards again"), *Tag));
+				G->TakeShot(Tag + TEXT("_3_orb_cards"));
+				Check(TrayInstanceIds().Num() == S->Hand.Num(), FString::Printf(TEXT("tray row shows the whole hand (%d == %d)"), TrayInstanceIds().Num(), S->Hand.Num()));
+				Key(EKeys::A); PtStep = 6; PtT = 0.f;
+			}
+			break;
+		case 6:
+			if (PtT > 0.4f)
+			{
+				Check(bView, TEXT("keyboard A -> tablets again"));
+				const int32 Mode = (PtTurns - 1) % 3; // 0: tablet 2 by touch, 1: SKIP by mouse, 2: key 3
+				if (Mode == 0) Ctl(TEXT("CardAwakenPick"), 1, true);
+				else if (Mode == 1) Ctl(TEXT("CardAwakenSkip"), 0, false);
+				else Key(EKeys::Three);
+				PtStep = 7; PtT = 0.f;
+			}
+			break;
+		case 7:
+			if (PtT > 0.45f)
+			{
+				const int32 Mode = (PtTurns - 1) % 3;
+				const EZoogiArtifact Inf = B->Artifact ? B->Artifact->Infused : EZoogiArtifact::None;
+				if (Mode == 1) Check(!G->bStandbyAwaken && G->CardAwakenPick < 0 && Inf == EZoogiArtifact::None && !bView, FString::Printf(TEXT("%s: SKIP (mouse) -> no Awaken, back to the cards"), *Tag));
+				else
+				{
+					const int32 Want = Mode == 0 ? 1 : 2;
+					Check(G->bStandbyAwaken && G->CardAwakenPick == Want && Inf == (EZoogiArtifact)G->CardAwakenOffers[Want] && !bView,
+						FString::Printf(TEXT("%s: %s picked tablet %d (%s) -> infused %s, Awakening ON, back to the cards"), *Tag, Mode == 0 ? TEXT("touch tap") : TEXT("key 3"), Want + 1,
+							*ZoogiArtifacts::Name((EZoogiArtifact)G->CardAwakenOffers[Want]), *ZoogiArtifacts::Name(Inf)));
+				}
+				G->TakeShot(Tag + (Mode == 1 ? TEXT("_4_skipped") : TEXT("_4_picked")));
+				PtStep = 8; PtT = 0.f;
+			}
+			break;
+		case 8: // ZOOM in the Standby (first turn: right at match start)
+			if (PtT > 0.3f)
+			{
+				FVector2D Z;
+				const bool bLock0 = G->TargetLock.IsValid(); const bool bAim0 = G->HasAim();
+				if (!ZoomAbs(Z)) { Check(false, TEXT("ZOOM button on screen in the Standby")); PtStep = 10; break; }
+				Click(Z, PtTurns % 2 == 0);
+				Check(PC->IsZoomMode(), FString::Printf(TEXT("%s: ZOOM %s in the Standby -> zoom mode ON at once"), *Tag, PtTurns % 2 == 0 ? TEXT("touch") : TEXT("mouse click")));
+				Check(G->TargetLock.IsValid() == bLock0 && G->HasAim() == bAim0, TEXT("ZOOM press did not fall through (aim / lock unchanged)"));
+				PtStep = 9; PtT = 0.f;
+			}
+			break;
+		case 9:
+			if (PtT > 0.9f)
+			{
+				Check(PC->GetAimZoom() > 1.2f, FString::Printf(TEXT("camera zoomed in (%.2fx)"), PC->GetAimZoom()));
+				G->TakeShot(Tag + TEXT("_5_zoom_standby"));
+				FVector2D Z; if (ZoomAbs(Z)) Click(Z, false);
+				PtStep = 10; PtT = 0.f;
+			}
+			break;
+		case 10: // hand row geometry
+			if (PtT > 0.6f)
+			{
+				Check(!PC->IsZoomMode(), TEXT("ZOOM again -> off"));
+				const TArray<FBox2D> R = TrayCardRects();
+				const ZoogiFramed::FLayout& FL = ZoogiFramed::Current();
+				const float k = FL.Viewport.X > 0.f ? ViewSize.X / FL.Viewport.X : 1.f;
+				const FBox2D Rec(FL.Hand.Min * k, FVector2D(FL.Hand.Max.X * k, ViewSize.Y));
+				bool bOk = R.Num() == S->Hand.Num() && R.Num() > 0; FString Why;
+				for (int32 i = 0; i < R.Num(); ++i)
+				{
+					const FVector2D Sz = R[i].GetSize();
+					if (FMath::Abs(Sz.X - R[0].GetSize().X) > 1.f || FMath::Abs(Sz.Y - R[0].GetSize().Y) > 1.f) { bOk = false; Why += TEXT(" size"); }
+					if (FMath::Abs(R[i].Max.Y - R[0].Max.Y) > 1.f) { bOk = false; Why += TEXT(" baseline"); }
+					if (i > 0 && R[i].Min.X < R[i - 1].Max.X - 0.5f) { bOk = false; Why += TEXT(" overlap"); }
+					if (i > 1 && FMath::Abs((R[i].Min.X - R[i - 1].Min.X) - (R[1].Min.X - R[0].Min.X)) > 1.f) { bOk = false; Why += TEXT(" spacing"); }
+					if (R[i].Min.X < Rec.Min.X - 1.f || R[i].Max.X > Rec.Max.X + 1.f || R[i].Min.Y < Rec.Min.Y - 1.f || R[i].Max.Y > Rec.Max.Y + 1.f) { bOk = false; Why += TEXT(" outside_recess"); }
+				}
+				Check(bOk, FString::Printf(TEXT("%s: hand row of %d is straight, same size %.0fx%.0f, gap %.0f, no overlap, inside the tray recess%s"), *Tag, R.Num(),
+					R.Num() ? R[0].GetSize().X : 0.f, R.Num() ? R[0].GetSize().Y : 0.f, R.Num() > 1 ? R[1].Min.X - R[0].Max.X : 0.f, *Why));
+				PtStep = 11; PtT = 0.f;
+			}
+			break;
+		case 11: // play every affordable card from the left with keys 1..7 (real key presses)
+			if (PtT > 0.25f)
+			{
+				const FZoogiCardContext Ctx = Cards->BuildContext(G);
+				int32 Slot = INDEX_NONE;
+				for (int32 i = 0; i < S->Hand.Num() && i < 7; ++i) if (!S->Selected.Contains(S->Hand[i].InstanceId) && Cards->Rules().CanSelect(B->PlayerIndex, S->Hand[i].InstanceId, Ctx) == EZoogiCardResult::Ok) { Slot = i; break; }
+				if (Slot == INDEX_NONE || S->Selected.Num() >= 3) { PtStep = 12; PtT = 0.f; break; }
+				static const FKey Ks[7] = { EKeys::One, EKeys::Two, EKeys::Three, EKeys::Four, EKeys::Five, EKeys::Six, EKeys::Seven };
+				Key(Ks[Slot]); PtT = 0.f;
+			}
+			break;
+		case 12:
+			if (PtT > 0.6f)
+			{
+				G->TakeShot(Tag + TEXT("_6_selected"));
+				UE_LOG(LogZoogi, Log, TEXT("PT1 %s BEFORE CONFIRM: hand=[%s ] selected=[%s ] draw=%d discard=%d shown discard=%d"), *Tag, *Ids(HandIds(S)), *Ids(S->Selected), S->DrawPile.Num(), S->Discard.Num(), DiscardCount);
+				PtShots = Ids(S->Selected);
+				for (int32 Id : S->Selected) PtGone.Add(Id);
+				if (UButton* Cb = ConfirmBtn.Get()) { const FVector2D A = Cb->GetCachedGeometry().GetAbsolutePositionAtCoordinates(FVector2D(0.5f, 0.5f)); UE_LOG(LogZoogi, Log, TEXT("PT1 CONFIRM %s"), PtTurns % 2 ? TEXT("mouse click") : TEXT("touch tap")); Click(A, PtTurns % 2 == 0); }
+				PtStep = 13; PtT = 0.f;
+			}
+			break;
+		}
+	}
+	if (PtStep == 13 && PtT > 0.9f)
+	{
+		Check(S->bCommitted || G->bAwakenDone, FString::Printf(TEXT("%s: CONFIRM committed"), *Tag));
+		int32 Back = 0; for (int32 Id : TrayInstanceIds()) if (PtGone.Contains(Id)) ++Back;
+		UE_LOG(LogZoogi, Log, TEXT("PT1 %s AFTER CONFIRM: hand=[%s ] committed=%d draw=%d discard=%d shown discard=%d tray=[%s ]"), *Tag, *Ids(HandIds(S)), S->Committed.Num(), S->DrawPile.Num(), S->Discard.Num(), DiscardCount, *Ids(TrayInstanceIds()));
+		Check(Back == 0, FString::Printf(TEXT("%s: played cards [%s ] stay gone after CONFIRM (tray has none of them)"), *Tag, *PtShots));
+		Check(DiscardCount == S->Discard.Num() + S->Committed.Num() && DrawCount == S->DrawPile.Num(), FString::Printf(TEXT("%s: tray DISCARD %d / deck %d match the piles"), *Tag, DiscardCount, DrawCount));
+		G->TakeShot(Tag + TEXT("_7_after_confirm"));
+		PtStep = 14; PtT = 0.f;
+	}
+	// aim step: ZOOM must work there too (between the HumanTest aim click at 0.5 s and its Space at 2.0 s)
+	if (G->Stage == EZoogiStage::Battle && G->IsAimStep() && PtStep >= 13 && PtStep < 20)
+	{
+		if (PtStep < 15) { PtStep = 15; PtT = 0.f; }
+		if (PtStep == 15 && PtT > 0.62f)
+		{
+			FVector2D Z; const bool bAim0 = G->HasAim();
+			if (ZoomAbs(Z)) { Click(Z, PtTurns % 2 == 1); Check(PC->IsZoomMode(), FString::Printf(TEXT("%s: ZOOM at the aim step -> zoom mode ON"), *Tag)); Check(G->HasAim() == bAim0, TEXT("aim-step ZOOM press did not fall through")); }
+			else Check(false, TEXT("ZOOM button on screen at the aim step"));
+			PtStep = 16; PtT = 0.f;
+		}
+		else if (PtStep == 16 && PtT > 0.55f) { G->TakeShot(Tag + TEXT("_8_zoom_aim")); FVector2D Z; if (ZoomAbs(Z)) Click(Z, false); PtStep = 20; }
+	}
+	// reshuffle watch: the draw pile refilled from the discard -> played cards may come back from now on
+	static int32 LastDraw = -1, LastDisc = -1;
+	if (LastDraw >= 0 && S->DrawPile.Num() > LastDraw && LastDisc > 0 && S->Discard.Num() < LastDisc)
+	{
+		Check(true, FString::Printf(TEXT("reshuffle: discard %d -> draw pile (draw %d -> %d, discard %d -> %d)"), LastDisc, LastDraw, S->DrawPile.Num(), LastDisc, S->Discard.Num()));
+		PtGone.Reset();
+		G->TakeShot(FString::Printf(TEXT("t%d_9_reshuffle"), PtTurns));
+	}
+	LastDraw = S->DrawPile.Num(); LastDisc = S->Discard.Num();
 }

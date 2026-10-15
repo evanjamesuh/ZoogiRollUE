@@ -187,6 +187,7 @@ public:
 	 *  armed from the Awaken / standby step (turns on when the aim step starts). */
 	bool IsZoomShownOn() const { return bZoomMode || bZoomArmed; }
 	bool CanZoom() const;
+	static bool ZoomStageLive(const class AZoogiGameMode* G);
 	/** The ZOOM button is usable (shown): the human's Awaken / standby step (arms the mode) or the aim step (toggles it). */
 	bool CanShowZoom() const;
 	/** HUD ZOOM button / Z key: flips what the button shows. */
