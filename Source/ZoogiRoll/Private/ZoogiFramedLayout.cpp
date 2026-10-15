@@ -226,10 +226,14 @@ namespace ZoogiFramed
 		return VY > 0 ? (float)VX / (float)VY : 16.f / 9.f;
 	}
 
+	static FBox2D GZoomBtn(ForceInit); static bool bGZoomBtn = false;
+	void SetZoomButtonRect(const FBox2D& R, bool bVisible) { GZoomBtn = R; bGZoomBtn = bVisible && R.bIsValid; }
+	bool InZoomButton(const FVector2D& P) { return bGZoomBtn && GZoomBtn.ExpandBy(6.f).IsInside(P); }
+
 	bool IsOutsideArena(const UWorld* World, const FVector2D& P)
 	{
 		if (!GCur.bValid || !IsActive(World)) return false;
-		return !GCur.Arena.IsInside(P);
+		return !GCur.Arena.IsInside(P) || InZoomButton(P);
 	}
 
 	void Pulse(const FLinearColor& C) { GPulse = 1.f; GPulseColor = C; }

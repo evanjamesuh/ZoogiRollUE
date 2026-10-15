@@ -141,6 +141,44 @@ protected:
 	bool bDragCfgLoaded = false;
 	// scripted drag
 	bool bSimDragOn = false; FVector2D SimDragFrom = FVector2D::ZeroVector, SimDragTo = FVector2D::ZeroVector; float SimDragT = 0.f, SimDragDur = 0.f; int32 SimDragPhase = 0;
+	// Oct 14 (Evan 10:28 / 10:30 PM) aim ZOOM mode: a toggle (HUD ZOOM button / Z key, or wheel / two fingers enter it)
+	// while the human aims. In the mode one finger / LMB / RMB / MMB slides pan, pinch / wheel zoom toward the fingers
+	// / cursor, a tap locks the aim on the tapped orb / Zoogi / floor point and leaves the mode; drag-aim is paused.
+	// The camera tilts lower as it zooms in, stays inside the knockout ring and softly keeps the shooter in frame.
+	// [ZoogiRoll.AimZoom] holds every limit and angle.
+	struct FAimZoomTune
+	{
+		bool bEnabled = true, bAutoExitOnTap = true;
+		float MaxZoom = 2.6f, EnterZoom = 1.6f, WheelStep = 0.18f, KeyStep = 0.25f, PinchPower = 1.f, MinPinchPx = 30.f;
+		float EaseIn = 7.f, EaseOut = 4.f, PanEase = 18.f;
+		float PitchWide = 55.f, PitchClose = 38.f, PitchMin = 30.f;   // camera pitch (deg down) at 1x / MaxZoom; never below PitchMin
+		float EdgeMargin = 120.f;                                      // pan stays this far inside the knockout radius (cm)
+		float FollowRadius = 1500.f, FollowPad = 250.f, FollowLag = 2.5f; // shooter kept within FollowRadius / zoom + pad of the view centre
+	};
+	FAimZoomTune ZoomTune; bool bZoomCfg = false;
+	bool bZoomMode = false;
+	float ZoomWant = 1.f, ZoomCur = 1.f;         // boom distance divisor (1 = normal view)
+	FVector ZoomAnchor = FVector::ZeroVector;    // world floor point kept under the fingers / cursor while zooming
+	FVector ZoomOff = FVector::ZeroVector, ZoomOffWant = FVector::ZeroVector; // view-centre shift from zoom + pan
+	float ZoomTilt = 0.f;                        // eased pitch blend (0 = normal, 1 = close angle)
+	bool bPinch = false, bPinchHold = false, bPanDown = false, bPanMoved = false, bPanTapOk = false;
+	FVector2D PanStart = FVector2D::ZeroVector, PanLast = FVector2D::ZeroVector;
+	float PinchD0 = 1.f, PinchZ0 = 1.f;
+	int32 ZoomLogN = 0, PanLogN = 0;
+	bool bPinchTest = false; float PinchTestT = -1.f; int32 PinchTestPhase = 0; int32 PinchTestRuns = 0; FVector PinchTestOff0 = FVector::ZeroVector;
+	void LoadZoomTune();
+	bool UpdateZoomInput(class AZoogiGameMode* G, bool bAimStage, const FVector2D& Mouse, float Dt); // true = zoom mode owns the pointers
+	void UpdatePinchTest(class AZoogiGameMode* G, float Dt);
+	void SetZoomAnchor(const FVector2D& Screen);
+	void ZoomAbout(float NewWant);
+	void PanBy(const FVector2D& From, const FVector2D& To);
+public:
+	float GetAimZoom() const { return ZoomCur; }
+	bool IsZoomMode() const { return bZoomMode; }
+	bool CanZoom() const;
+	/** HUD ZOOM button / Z key. */
+	void ToggleZoomMode(const TCHAR* Why);
+protected:
 	uint64 UiSnapFrame = 0;
 	int32 UiPass = 0, UiFail = 0;
 	int32 ShotsSeen = 0, UiShotSnap = -1;

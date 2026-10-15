@@ -29,6 +29,7 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "ZoogiHudArt.h"
+#include "ZoogiPlayerController.h"
 #include "ZoogiArtifacts.h"
 #include "ZoogiArtifactComponent.h"
 
@@ -127,6 +128,8 @@ TSharedRef<SWidget> UZoogiFramedHUDWidget::RebuildWidget()
 			{ FSlateFontInfo F = CamText->GetFont(); F.Size = 16; CamText->SetFont(F); }
 		}
 		CamBtn->OnClicked.AddDynamic(this, &UZoogiFramedHUDWidget::OnCam);
+		ZoomBtn = MakeButton(TEXT("ZOOM"), ZoogiUIStyle::Violet, true, Tx, 18); ZoomText = Tx;
+		ZoomBtn->OnClicked.AddDynamic(this, &UZoogiFramedHUDWidget::OnZoom);
 		MenuBtn->OnClicked.AddDynamic(this, &UZoogiFramedHUDWidget::OnPause);
 		// Pause / menu overlay (swallows clicks while up: Visible border).
 		PauseShade = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
@@ -210,6 +213,7 @@ void UZoogiFramedHUDWidget::SetPaused(bool bPause)
 	UE_LOG(LogZoogi, Log, TEXT("FRAMED %s"), bPause ? TEXT("paused (menu open)") : TEXT("resumed"));
 }
 
+void UZoogiFramedHUDWidget::OnZoom() { if (AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetOwningPlayer())) PC->ToggleZoomMode(TEXT("HUD ZOOM button")); }
 void UZoogiFramedHUDWidget::OnCam() { if (AZoogiGameMode* G = GM()) G->MenuAction(TEXT("CamStyle"), 0); }
 void UZoogiFramedHUDWidget::OnPause() { SetPaused(!bPaused); }
 void UZoogiFramedHUDWidget::OnResume() { SetPaused(false); }
@@ -261,11 +265,12 @@ void UZoogiFramedHUDWidget::NativeTick(const FGeometry& Geo, float Dt)
 	if (!bActive)
 	{
 		if (bPaused) SetPaused(false);
-		for (UWidget* W : { (UWidget*)ColL.Get(), (UWidget*)ColR.Get(), (UWidget*)CamBtn.Get(), (UWidget*)MenuBtn.Get(), (UWidget*)PauseShade.Get(), (UWidget*)PausePanel.Get(), (UWidget*)PauseTitle.Get(),
+		for (UWidget* W : { (UWidget*)ColL.Get(), (UWidget*)ColR.Get(), (UWidget*)CamBtn.Get(), (UWidget*)ZoomBtn.Get(), (UWidget*)MenuBtn.Get(), (UWidget*)PauseShade.Get(), (UWidget*)PausePanel.Get(), (UWidget*)PauseTitle.Get(),
 			(UWidget*)VolDown.Get(), (UWidget*)VolUp.Get(), (UWidget*)VolText.Get(), (UWidget*)SetCamBtn.Get() }) PlaceW(W, FVector2D::ZeroVector, FVector2D::ZeroVector, false);
 		for (UButton* B : PauseBtns) PlaceW(B, FVector2D::ZeroVector, FVector2D::ZeroVector, false);
 		for (UButton* B : StoneBtns) PlaceW(B, FVector2D::ZeroVector, FVector2D::ZeroVector, false);
 		for (UButton* B : ActBtns) PlaceW(B, FVector2D::ZeroVector, FVector2D::ZeroVector, false);
+		ZoogiFramed::SetZoomButtonRect(FBox2D(ForceInit), false);
 		LastStage = LastActive = LastPhase = -1;
 		return;
 	}
@@ -288,6 +293,18 @@ void UZoogiFramedHUDWidget::NativeTick(const FGeometry& Geo, float Dt)
 		const float BH = FMath::Max(34.f * t, ZoogiHudArt::TapPx(48.f, 48.f * u)), BY = Y0 + 26.f * t - BH * 0.5f;
 		PlaceW(MenuBtn, FVector2D(X1 - 126.f * t, BY), FVector2D(FMath::Max(104.f * t, BH), BH), true);
 		PlaceW(CamBtn, FVector2D(X1 - 255.f * t, BY), FVector2D(FMath::Max(117.f * t, BH), BH), true);
+	}
+	// Oct 14 aim ZOOM toggle: bottom-left of the arena window while the human aims (>= 48 dp, also clickable)
+	{
+		AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetOwningPlayer());
+		const bool bShowZ = PC && !bPaused && (PC->CanZoom() || PC->IsZoomMode());
+		const float t = L.T * s;
+		const float ZH = FMath::Max(40.f * t, ZoogiHudArt::TapPx(48.f, 48.f * u)), ZW = FMath::Max(132.f * t, ZH * 2.4f);
+		const FVector2D ZP(L.Arena.Min.X * s + 14.f * t, L.Arena.Max.Y * s - ZH - 14.f * t);
+		PlaceW(ZoomBtn, ZP, FVector2D(ZW, ZH), bShowZ);
+		if (bShowZ && ZoomText) ZoomText->SetText(FText::FromString(PC->IsZoomMode() ? TEXT("ZOOM: ON") : TEXT("ZOOM")));
+		if (ZoomBtn && bShowZ) ZoomBtn->SetRenderOpacity(PC->IsZoomMode() ? 1.f : 0.85f);
+		ZoogiFramed::SetZoomButtonRect(s > 0.f ? FBox2D(ZP / s, (ZP + FVector2D(ZW, ZH)) / s) : FBox2D(ForceInit), bShowZ);
 	}
 	CamText->SetText(FText::FromString(G->bCinematicCam ? TEXT("      CAM: CINE") : TEXT("      CAM: TACT"))); // leading space = room for the camera icon
 	CamBtn->SetIsEnabled(G->Phase != EZoogiPhase::GameOver && G->Phase != EZoogiPhase::Forming); // disabled state when the camera style can't matter

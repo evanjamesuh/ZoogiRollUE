@@ -42,6 +42,7 @@ protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual void NativeTick(const FGeometry& Geo, float Dt) override;
 	UFUNCTION() void OnCam();
+	UFUNCTION() void OnZoom();
 	UFUNCTION() void OnPause();
 	UFUNCTION() void OnResume();
 	UFUNCTION() void OnRestart();
@@ -95,6 +96,8 @@ private:
 	UPROPERTY() TObjectPtr<UZoogiTeamColumnWidget> ColL;
 	UPROPERTY() TObjectPtr<UZoogiTeamColumnWidget> ColR;
 	UPROPERTY() TObjectPtr<UButton> CamBtn;
+	UPROPERTY() TObjectPtr<UButton> ZoomBtn;      // Oct 14 aim ZOOM mode toggle (arena window, bottom-left; touch-sized)
+	UPROPERTY() TObjectPtr<UTextBlock> ZoomText;
 	UPROPERTY() TObjectPtr<UTextBlock> CamText;
 	UPROPERTY() TObjectPtr<UButton> MenuBtn;
 	UPROPERTY() TObjectPtr<UBorder> PauseShade;

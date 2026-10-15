@@ -74,6 +74,9 @@ namespace ZoogiFramed
 	ZOOGIROLL_API float ViewAspect(const APlayerController* PC);
 	/** Viewport pixel position is in the UI margins (outside the arena rect) while the frame is active. */
 	ZOOGIROLL_API bool IsOutsideArena(const UWorld* World, const FVector2D& ViewportPos);
+	/** Oct 14 aim zoom: the ZOOM toggle sits inside the arena window; its rect (viewport px) counts as UI, never a world pick. */
+	ZOOGIROLL_API void SetZoomButtonRect(const FBox2D& ViewportRect, bool bVisible);
+	ZOOGIROLL_API bool InZoomButton(const FVector2D& ViewportPos);
 	/** Major-event light pulse on the arena frame (0..1, decays). */
 	ZOOGIROLL_API void Pulse(const FLinearColor& Color);
 	ZOOGIROLL_API float PulseAmount(FLinearColor& OutColor);
