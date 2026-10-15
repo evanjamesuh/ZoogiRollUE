@@ -270,6 +270,11 @@ void UZoogiFramedHUDWidget::NativeTick(const FGeometry& Geo, float Dt)
 		return;
 	}
 	const float u = L.U * s;
+	// Oct 14: HUD frame shake on hard impacts (frame art + team columns; buttons stay put so taps never miss)
+	{
+		const FVector2D ShakeOff = ZoogiFramed::FrameShakeOffset(Dt) * u;
+		for (UWidget* W : { (UWidget*)Painter.Get(), (UWidget*)ColL.Get(), (UWidget*)ColR.Get() }) if (W) W->SetRenderTranslation(ShakeOff);
+	}
 	auto Box = [&](const FBox2D& B) { return TPair<FVector2D, FVector2D>(B.Min * s, (B.Max - B.Min) * s); };
 	const auto LB = Box(L.Left), RB = Box(L.Right);
 	ColL->UScale = ColR->UScale = u * (L.bCompact ? 0.86f : 1.f);
@@ -545,9 +550,14 @@ int32 UZoogiFramedHUDWidget::PaintBack(const FGeometry& Geo, FSlateWindowElement
 		const float Br = 0.5f + 0.5f * FMath::Sin(Time * 2.f);
 		ZoogiUIStyle::SBox(Out, bOverlay ? Ly + 6 : Ly + 4, Geo, TR + FVector2D(28.f, 20.f) * t, FVector2D(90.f, 110.f) * t, FLinearColor(0.4f, 0.95f, 1.f, 0.06f + 0.08f * Br), FLinearColor::Transparent, 30.f * t, 0.f);
 		TxtT(Ly + 6, TR + FVector2D(155.f, 184.f) * t, bCards ? FString::Printf(TEXT("DISCARD %d"), TI.Discard) : FString(TEXT("DISCARD")), 8.f, FLinearColor::White, 0.5f);
-		// energy orb: the swirl turns, number + bar live
+		// energy orb (Oct 14, Evan: no spin): static swirl art; a subtle glow breathes behind it only while energy is ready
 		const FVector2D Sh = bCards ? FVector2D(FMath::Sin(Time * 60.f), FMath::Cos(Time * 47.f)) * 4.f * t * TI.Shake : FVector2D::ZeroVector;
-		HA::ImgRot(Out, bOverlay ? Ly + 6 : Ly + 4, Geo, TR + FVector2D(252.f, 50.f) * t, FVector2D(128.f, 128.f) * t, TEXT("orb_swirl"), Time * 0.7f, FLinearColor(1.f, 1.f, 1.f, bOverlay ? 0.75f : 1.f)); // above the overlay so it turns
+		if (bCards && TI.Energy > 0)
+		{
+			const float Gl = 0.5f + 0.5f * FMath::Sin(Time * 2.4f);
+			ZoogiUIStyle::SBox(Out, bOverlay ? Ly + 5 : Ly + 3, Geo, TR + FVector2D(262.f, 60.f) * t, FVector2D(108.f, 108.f) * t, FLinearColor(0.75f, 0.45f, 1.f, 0.10f + 0.12f * Gl), FLinearColor::Transparent, 54.f * t, 0.f);
+		}
+		HA::ImgRot(Out, bOverlay ? Ly + 6 : Ly + 4, Geo, TR + FVector2D(252.f, 50.f) * t, FVector2D(128.f, 128.f) * t, TEXT("orb_swirl"), 0.f, FLinearColor(1.f, 1.f, 1.f, bOverlay ? 0.75f : 1.f));
 		if (bCards && TI.Flash > 0.f) ZoogiUIStyle::SBox(Out, Ly + 5, Geo, TR + FVector2D(292.f, 78.f) * t, FVector2D(72.f, 72.f) * t, FLinearColor(1.f, 1.f, 1.f, 0.5f * TI.Flash), FLinearColor::Transparent, 36.f * t, 0.f);
 		TxtT(Ly + 8, TR + FVector2D(328.f, 108.f) * t + Sh, bCards ? FString::Printf(TEXT("%d/%d"), TI.Energy, TI.EnergyMax) : FString(TEXT("--")), 22.f, TI.Energy >= 0 ? FLinearColor::White : FLinearColor(1.f, 0.45f, 0.4f), 0.5f);
 		const float BF = bCards ? FMath::Clamp(TI.EnergyFrac, 0.f, 1.f) : 0.f;

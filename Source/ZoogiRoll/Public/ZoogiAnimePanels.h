@@ -14,7 +14,9 @@ class ZOOGIROLL_API FZoogiAnimePanels
 {
 public:
 	~FZoogiAnimePanels() { Hide(); }
-	void Show(UGameViewportClient* Viewport, UTexture* Movie, const FLinearColor& Accent, float Length);
+	/** Player >= 0 with a published profile card rect (ZoogiFramed::ProfileRect): the four panels shrink into a 2x2 grid over
+	 *  that player's profile card in the team column (Oct 14, Evan) instead of the screen edges over the arena. */
+	void Show(UGameViewportClient* Viewport, UTexture* Movie, const FLinearColor& Accent, float Length, int32 Player = -1);
 	void Hide();
 	void SetAge(float Age);
 	bool IsShown() const { return Root.IsValid(); }

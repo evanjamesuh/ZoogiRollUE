@@ -11,6 +11,8 @@
 #include "ZoogiBattleStateMachine.h"
 #include "ZoogiFramedHUDWidget.h"
 #include "ZoogiHudArt.h"
+#include "ZoogiComicSliceOverlay.h"
+#include "ZoogiFramedLayout.h"
 #include "Engine/Texture2D.h"
 #include "Engine/World.h"
 #include "Rendering/DrawElements.h"
@@ -113,6 +115,25 @@ int32 UZoogiTeamColumnWidget::NativePaint(const FPaintArgs& Args, const FGeometr
 		if (GemN && !bOv) HA::Img(Out, L + 3, Geo, FVector2D(X + W - 44.f * t, Y + 3.f * t), FVector2D(34.f, 31.f) * t, GemN);
 		// card panel
 		const FVector2D CP(X + 10.f * t, Y + 38.f * t), CS(W - 20.f * t, 133.f * t);
+		// Oct 14: publish the profile card rect (comic strip / Awaken panels sit over it) and paint the turn-start eye strip there
+		{
+			const FVector2D A0 = FVector2D(Geo.LocalToAbsolute(CP)), A1 = FVector2D(Geo.LocalToAbsolute(CP + CS));
+			ZoogiFramed::SetProfileRect(B->PlayerIndex, A0, A1 - A0);
+			UTexture2D* CT = nullptr; float CA = 0.f, CSc = 1.f;
+			if (const UZoogiComicSliceOverlay* CO = GetWorld()->GetSubsystem<UZoogiComicSliceOverlay>())
+				if (CO->ProfileSlice(B->PlayerIndex, CT, CA, CSc) && CT && CA > 0.f)
+				{
+					const float TW = FMath::Max(1.f, (float)CT->GetSurfaceWidth()), TH = FMath::Max(1.f, (float)CT->GetSurfaceHeight());
+					const FVector2D Inner = CS - FVector2D(10.f, 10.f) * t;
+					const float Fit = FMath::Min(Inner.X / TW, Inner.Y / TH) * CSc;
+					const FVector2D Sz(TW * Fit, TH * Fit), Pos = CP + (CS - Sz) * 0.5f;
+					ZoogiUIStyle::SBox(Out, L + 40, Geo, CP, CS, FLinearColor(0.01f, 0.01f, 0.015f, 0.82f * CA), FLinearColor(1.f, 1.f, 1.f, 0.9f * CA), 8.f * t, 2.f * t);
+					ComicBrush.SetResourceObject(CT);
+					ComicBrush.ImageSize = FVector2D(TW, TH);
+					ComicBrush.DrawAs = ESlateBrushDrawType::Image;
+					FSlateDrawElement::MakeBox(Out, L + 41, Geo.ToPaintGeometry(FVector2f(Sz), FSlateLayoutTransform(FVector2f(Pos))), &ComicBrush, ESlateDrawEffect::None, FLinearColor(1.f, 1.f, 1.f, CA));
+				}
+		}
 		if (!bOv) HA::Nine(Out, L + 2, Geo, CP, CS, TEXT("card_panel"), FMargin(10.f), t);
 		// portrait in a status ring: cyan friendly, red rival, bronze when out / knocked out
 		const FVector2D PC = CP + FVector2D(36.f, 35.f) * t;
@@ -278,5 +299,5 @@ int32 UZoogiTeamColumnWidget::NativePaint(const FPaintArgs& Args, const FGeometr
 		const FVector2D FS = HA::SizeT(TEXT("rbar_full"));
 		if (F > 0.f) HA::Part(Out, L + 6, Geo, RBp, FVector2D(RBs.X * F, RBs.Y), TEXT("rbar_full"), FBox2D(FVector2D::ZeroVector, FVector2D(FS.X * F, FS.Y)));
 	}
-	return L + 10;
+	return L + 42;
 }

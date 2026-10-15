@@ -42,6 +42,22 @@ namespace ZoogiFramed
 	ZOOGIROLL_API void SetTrayInfo(const FTrayInfo& I);
 	ZOOGIROLL_API const FTrayInfo& TrayInfo();
 
+	/** Oct 14 (Evan): HUD frame shake + controller / phone rumble on hard impacts. [ZoogiRoll.FrameShake] bEnabled, ImpulseThreshold,
+	 *  ImpulseFull, MaxOffset (1080p px), Duration, bRumble, RumbleScale; Settings > GRAPHICS > FRAME SHAKE (menu key FrameShake)
+	 *  switches the shake, Settings > AUDIO > HAPTICS the rumble. Visual / haptic only: never touches physics or RNG. */
+	ZOOGIROLL_API void ImpactShake(float Impulse, UWorld* World);
+	/** Direct kick, Strength 0..1 (scaled like an impact at that fraction of the threshold..full range). */
+	ZOOGIROLL_API void FrameShake(float Strength, UWorld* World);
+	/** Advances the shake by Dt and returns the frame offset in 1080p units (zero when idle or switched off). */
+	ZOOGIROLL_API FVector2D FrameShakeOffset(float Dt);
+	ZOOGIROLL_API bool FrameShakeEnabled();
+	ZOOGIROLL_API int32 FrameShakeKicks();
+
+	/** Oct 14: the team column publishes each player's profile card (portrait box) rect in absolute desktop px each paint;
+	 *  the anime comic strip lays its panels over the acting player's box. False if not painted in the last second. */
+	ZOOGIROLL_API void SetProfileRect(int32 Player, const FVector2D& AbsMin, const FVector2D& AbsSize);
+	ZOOGIROLL_API bool ProfileRect(int32 Player, FVector2D& OutAbsMin, FVector2D& OutAbsSize);
+
 	ZOOGIROLL_API bool IsEnabled();
 	/** Enabled and a match screen is up (not the main menu, not -ZoogiNoHUD). */
 	ZOOGIROLL_API bool IsActive(const UWorld* World);

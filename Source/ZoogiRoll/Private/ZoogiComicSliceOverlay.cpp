@@ -8,6 +8,7 @@
 #include "ZoogiGameMode.h"
 #include "ZoogiBall.h"
 #include "ZoogiRoll.h"
+#include "ZoogiFramedLayout.h"
 #include "GameFramework/HUD.h"
 #include "Engine/Canvas.h"
 #include "Engine/Texture2D.h"
@@ -116,11 +117,12 @@ FName UZoogiComicSliceOverlay::EyesFor(const AZoogiGameMode* G, int32 Player) co
 	return Blue; // cyan / blue, and purple falls back to cyan
 }
 
-void UZoogiComicSliceOverlay::Trigger(FName Slice, int32 Priority, const TCHAR* Why)
+void UZoogiComicSliceOverlay::Trigger(FName Slice, int32 Priority, const TCHAR* Why, int32 Player)
 {
 	if (!bOn || Slice.IsNone()) return;
 	if (!PendSlice.IsNone() && Priority < PendPri) return;
 	PendSlice = Slice;
+	PendPlayer = Player;
 	PendPri = Priority;
 	PendAt = FPlatformTime::Seconds();
 	UE_LOG(LogZoogi, Verbose, TEXT("COMIC queued %s (%s)"), *Slice.ToString(), Why);
@@ -191,7 +193,7 @@ void UZoogiComicSliceOverlay::Observe(AZoogiGameMode* G, double Now)
 		if (const UZoogiEpisodeSubsystem* Ep = SM->GetEpisode())
 		{
 			const FZoogiCinematicPlan& P = Ep->GetPlan();
-			if (P.Tier >= 4 && P.ActionId != LastBigAction) { LastBigAction = P.ActionId; Trigger(EyesFor(G, G->ActivePlayer), 2, TEXT("big_moment")); }
+			if (P.Tier >= 4 && P.ActionId != LastBigAction) { LastBigAction = P.ActionId; Trigger(EyesFor(G, G->ActivePlayer), 2, TEXT("big_moment"), G->ActivePlayer); }
 		}
 	}
 	// the shooter's turn start: each player's first turn, and every Awakened turn
@@ -203,13 +205,29 @@ void UZoogiComicSliceOverlay::Observe(AZoogiGameMode* G, double Now)
 		bool bFirst = false;
 		FirstTurnSeen.Add(P, &bFirst);
 		bFirst = !bFirst;
-		if (bFirst || (SM && SM->IsAwakened(P))) Trigger(EyesFor(G, P), 1, TEXT("turn_start"));
+		if (bFirst || (SM && SM->IsAwakened(P))) Trigger(EyesFor(G, P), 1, TEXT("turn_start"), P);
 	}
+}
+
+bool UZoogiComicSliceOverlay::ProfileSlice(int32 Player, UTexture2D*& OutTex, float& OutAlpha, float& OutScale) const
+{
+	using namespace ZoogiComic;
+	if (!bOn || Cur.IsNone() || !bEyes || CurPlayer != Player || Player < 0) return false;
+	const TObjectPtr<UTexture2D>* T = Textures.Find(Cur);
+	if (!T || !*T || !(*T)->GetResource()) return false;
+	const float t = float(FPlatformTime::Seconds() - CurStart);
+	if (t < 0.f || t >= Total) return false;
+	OutTex = *T;
+	OutAlpha = t < InT ? t / InT : (t > HoldEnd ? 1.f - (t - HoldEnd) / OutT : 1.f);
+	OutScale = t < InT ? FMath::Lerp(1.25f, 1.f, EaseOutBack(t / InT)) : 1.f;
+	return true;
 }
 
 void UZoogiComicSliceOverlay::Start(double Now)
 {
 	Cur = PendSlice;
+	CurPlayer = PendPlayer;
+	PendPlayer = -1;
 	PendSlice = NAME_None;
 	PendPri = -1;
 	CurStart = Now;
@@ -217,7 +235,10 @@ void UZoogiComicSliceOverlay::Start(double Now)
 	bEyes = Cur.ToString().StartsWith(TEXT("slice_eyes"));
 	++SideFlip;
 	++Shown;
-	UE_LOG(LogZoogi, Log, TEXT("COMIC slice %s (#%d)"), *Cur.ToString(), Shown);
+	FVector2D PMin = FVector2D::ZeroVector, PSize = FVector2D::ZeroVector;
+	const bool bProf = bEyes && CurPlayer >= 0 && ZoogiFramed::ProfileRect(CurPlayer, PMin, PSize);
+	UE_LOG(LogZoogi, Log, TEXT("COMIC slice %s (#%d)%s"), *Cur.ToString(), Shown,
+		bProf ? *FString::Printf(TEXT(" over P%d profile card (%.0f,%.0f %.0fx%.0f)"), CurPlayer + 1, PMin.X, PMin.Y, PSize.X, PSize.Y) : TEXT(""));
 }
 
 void UZoogiComicSliceOverlay::Tick(float DeltaTime)
@@ -268,6 +289,10 @@ void UZoogiComicSliceOverlay::OnHUDPostRender(AHUD* HUD, UCanvas* Canvas)
 #endif
 	const float t = float(FPlatformTime::Seconds() - CurStart);
 	if (t < 0.f || t >= Total) return;
+	{
+		FVector2D PMin, PSize; // the eye strip lives on the player's profile card (team column paints it)
+		if (bEyes && CurPlayer >= 0 && ZoogiFramed::ProfileRect(CurPlayer, PMin, PSize)) return;
+	}
 
 	const float Wd = Canvas->ClipX, Ht = Canvas->ClipY, U = Ht / 1080.f;
 	const float TW = FMath::Max(1.f, T->GetSurfaceWidth()), TH = FMath::Max(1.f, T->GetSurfaceHeight());

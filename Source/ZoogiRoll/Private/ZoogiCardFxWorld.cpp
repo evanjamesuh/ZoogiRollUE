@@ -8,6 +8,7 @@
 // (Prev + (Post - Prev) * K), never invent a direction. HP / damage numbers (Guard 12, Anchor 12, Momentum Steal x0.6)
 // are display / log only (no HP system in Phase 3; PROPOSED).
 #include "ZoogiCardSubsystem.h"
+#include "ZoogiIceWall.h"
 #include "ZoogiProgression.h"
 #include "ZoogiRoll.h"
 #include "ZoogiGameMode.h"
@@ -200,6 +201,17 @@ void UZoogiCardSubsystem::FxContact(AZoogiBall* Self, AActor* Other, const FVect
 	if (!Tune.bCards || !G || !Self || G->Stage != EZoogiStage::Battle) return;
 	const int32 Shooter = G->ActivePlayer;
 	const float Now = GetWorld()->GetTimeSeconds();
+	// Oct 14 ice wall: remember the acting Zoogi's first real (non-floor) contact for a committed Crystal Collapse
+	if (CollapseEffectId != 0 && !bCollapseHit && !CollapsePiece.IsValid() && Self->PlayerIndex == CollapseOwner && Shooter == CollapseOwner && Other
+		&& !Other->IsA<AZoogiIceWall>() && (Other->IsA<AZoogiBall>() || Other->IsA<AZoogiOrb>() || FMath::Abs(Hit.ImpactNormal.Z) < 0.5f))
+	{
+		bCollapseHit = true;
+		CollapseHitAt = Hit.ImpactPoint;
+		const FVector Pv = Prev(Self);
+		CollapseHitDir = FVector(Pv.X, Pv.Y, 0.f).GetSafeNormal(UE_SMALL_NUMBER, FVector(Hit.ImpactPoint - Self->BallLocation()).GetSafeNormal2D());
+		CollapseFloorZ = Self->BallLocation().Z - ZoogiConst::ZoogiRadius;
+		UE_LOG(LogZoogi, Log, TEXT("CARDS crystal_collapse effect=%lld first contact P%d with %s at (%.0f, %.0f)"), CollapseEffectId, Self->PlayerIndex + 1, *Other->GetName(), CollapseHitAt.X, CollapseHitAt.Y);
+	}
 	if (AZoogiBall* OB = Cast<AZoogiBall>(Other))
 	{
 		const int32 Ep = Fx.ContactEpisode(Self->PlayerIndex, OB->PlayerIndex, Now);

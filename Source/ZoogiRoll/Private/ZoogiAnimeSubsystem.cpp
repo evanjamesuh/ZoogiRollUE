@@ -322,7 +322,7 @@ void UZoogiAnimeSubsystem::Start(const FZoogiCombatEvent& E)
 	}
 	UE_LOG(LogZoogi, Log, TEXT("Anime START %s (%s, %s %.2fs%s%s)"), *CurrentId, *Row.Tier, bShort ? TEXT("Short") : TEXT("Full"), Length,
 		bFrozen ? TEXT(", world frozen") : TEXT(""), bMovie ? *FString::Printf(TEXT(", cut-in %s.mp4"), *CurrentMovie) : TEXT(""));
-	if (bPanelMode) Panels.Show(GetWorld()->GetGameViewport(), MovieTexture, Color, Length); else Panels.Hide();
+	if (bPanelMode) Panels.Show(GetWorld()->GetGameViewport(), MovieTexture, Color, Length, E.Player); else Panels.Hide();
 	SyncPlaying();
 	if (AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetWorld()->GetFirstPlayerController())) PC->OnAnimeStarted(Current);
 }

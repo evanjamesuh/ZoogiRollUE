@@ -1,4 +1,6 @@
 #include "ZoogiBall.h"
+#include "ZoogiIceWall.h"
+#include "ZoogiFramedLayout.h"
 #include "ZoogiRoll.h"
 #include "ZoogiPhysics.h"
 #include "ZoogiOrb.h"
@@ -577,6 +579,11 @@ void AZoogiBall::OnSphereHit(UPrimitiveComponent* HitComp, AActor* OtherActor, U
 	if (AZoogiRock* Rock = Cast<AZoogiRock>(OtherActor)) Rock->OnBallHit(this, NormalImpulse, Hit.ImpactPoint);
 	// Frozen Ring stage pieces (walls, arches, stands, ramp, platform, obelisks, crystal bumpers ...) take the hit too.
 	if (AZoogiArenaPiece* Piece = Cast<AZoogiArenaPiece>(OtherActor)) Piece->OnBallHit(this, NormalImpulse, Hit.ImpactPoint);
+	// Oct 14: Crystal Collapse ice walls (cards on only; a hard enough hit shatters the segment)
+	if (AZoogiIceWall* IceWall = Cast<AZoogiIceWall>(OtherActor)) IceWall->OnBallHit(this, OtherComp, NormalImpulse, Hit);
+	// Oct 14: HUD frame shake + rumble on hard impacts (a Zoogi pair once, from the lower index). Visual / haptic only.
+	if (G && (!Cast<AZoogiBall>(OtherActor) || PlayerIndex < Cast<AZoogiBall>(OtherActor)->PlayerIndex) && FMath::Abs(Hit.ImpactNormal.Z) < 0.6f)
+		ZoogiFramed::ImpactShake(NormalImpulse.Size(), GetWorld());
 	// Reactive floor: hard Zoogi-vs-Zoogi impacts scar the ice (visual only: cracks -> glowing cracks -> cyan crater),
 	// an Ember / Titan infused clash also hits the stage pieces around it (power-reactive hook).
 	if (AZoogiBall* OB = Cast<AZoogiBall>(OtherActor))

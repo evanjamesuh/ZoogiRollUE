@@ -207,18 +207,23 @@ void UZoogiCardHandWidget::DiscardAll(const FZoogiCardPlayerState* S)
 	const ZoogiFramed::FLayout& SFL = ZoogiFramed::Current();
 	const float Sk = SFL.bValid && SFL.Viewport.X > 0.f ? ViewSize.X / SFL.Viewport.X : 1.f;
 	const FVector2D Pile(ViewSize.X - 330.f - (SFL.bValid ? SFL.Safe.Right * Sk : 0.f), ViewSize.Y - 40.f - (SFL.bValid ? SFL.Safe.Bottom * Sk : 0.f)); // altar, inside the safe area
-	int32 N = 0, Gone = 0;
+	int32 N = 0, Gone = 0, Kept = 0;
 	for (TPair<int32, FVis>& P : Vis)
 	{
 		FVis& V = P.Value;
 		bool bCommitted = false;
 		if (S) for (const FZoogiCardCommitted& K : S->Committed) if (K.Card.InstanceId == P.Key) bCommitted = true;
 		if (V.State == EVis::Hand && bCommitted) { V.State = EVis::ToTarget; Fly(V, TargetPos, CHAssignDur, 0.f, 0.3f, 0.f, 60.f, false); ++Gone; }
+		else if (V.State == EVis::Hand && P.Key >= 0 && S && S->Hand.ContainsByPredicate([&](const FZoogiCardInstance& I) { return I.InstanceId == P.Key; }))
+		{
+			// Oct 14 (Evan): the unplayed hand is kept between turns, so it stows below the tray instead of the discard pile
+			V.State = EVis::ToDiscard; Fly(V, FVector2D(V.Pos.X, ViewSize.Y + 240.f), CHDiscardDur, N * CHDiscardStagger * 0.5f, 0.8f, 0.f, 0.f, false); ++Kept;
+		}
 		else if (V.State == EVis::Hand) { V.State = EVis::ToDiscard; Fly(V, Pile, CHDiscardDur, N * CHDiscardStagger, 0.45f, 25.f, 140.f, false); ++N; }
 		else if (V.State == EVis::Assigned) { V.State = EVis::ToDiscard; V.bFly = false; V.T = 1.f; V.Opacity = 0.f; }
 	}
 	HandOrder.Reset();
-	if (N || Gone) UE_LOG(LogZoogi, Log, TEXT("CARDUI discard P%d turn=%d leftover=%d -> discard pile, committed=%d"), KeyPlayer + 1, KeyTurn, N, Gone);
+	if (N || Gone || Kept) UE_LOG(LogZoogi, Log, TEXT("CARDUI discard P%d turn=%d leftover=%d -> discard pile, committed=%d, kept in hand=%d (stowed)"), KeyPlayer + 1, KeyTurn, N, Gone, Kept);
 }
 
 void UZoogiCardHandWidget::UpdateTarget(AZoogiGameMode* G)
@@ -288,7 +293,12 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 		bool bKeep = false;
 		if (bShowPlayed) for (const FZoogiCardCommitted& K : PlayedS->Committed) if (-(K.Card.InstanceId + 1) == P.Key) bKeep = true;
 		if (bShowPlayed) for (const FZoogiCardInstance& I : PlayedS->Hand) if (RestKey(I.InstanceId) == P.Key) bKeep = true;
-		if (!bKeep && P.Value.State == EVis::Hand) { P.Value.State = EVis::ToDiscard; Fly(P.Value, FVector2D(ViewSize.X - 330.f, ViewSize.Y - 40.f), CHDiscardDur, 0.f, 0.45f, 25.f, 140.f, false); }
+		if (!bKeep && P.Value.State == EVis::Hand)
+		{
+			P.Value.State = EVis::ToDiscard;
+			if (P.Key <= -100001) Fly(P.Value, FVector2D(P.Value.Pos.X, ViewSize.Y + 240.f), CHDiscardDur, 0.f, 0.8f, 0.f, 0.f, false); // kept hand: stow below the tray
+			else Fly(P.Value, FVector2D(ViewSize.X - 330.f, ViewSize.Y - 40.f), CHDiscardDur, 0.f, 0.45f, 25.f, 140.f, false);
+		}
 	}
 	if (bShowPlayed)
 	{
@@ -335,9 +345,14 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 			const ZoogiFramed::FLayout& DFL = ZoogiFramed::Current();
 			if (DFL.bValid && ZoogiFramed::IsActive(GetWorld()) && DFL.Viewport.X > 0.f) Deck = DFL.Deck * (ViewSize.X / DFL.Viewport.X) + FVector2D(0.f, 60.f * DFL.T * ViewSize.X / DFL.Viewport.X); // hud-v3: out of the rune deck
 		}
-		int32 NewN = 0;
+		int32 NewN = 0, RiseN = 0;
 		FString Drawn;
 		HandOrder.Reset();
+		// Oct 14: cards kept from an earlier turn rise back from below the tray; only fresh draws come out of the deck
+		TSet<int32>& Known = KnownHand.FindOrAdd(B->PlayerIndex);
+		int32& KnownTurn = KnownTurnFor.FindOrAdd(B->PlayerIndex);
+		if (S->Turn < KnownTurn) Known.Reset(); // new match
+		KnownTurn = S->Turn;
 		for (const FZoogiCardInstance& I : S->Hand)
 		{
 			const bool bSel = S->Selected.Contains(I.InstanceId);
@@ -345,10 +360,21 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 			FVis* V = Vis.Find(I.InstanceId);
 			if (!V)
 			{
-				FVis NV; NV.W = MakeCard(I.InstanceId, I.CardId); NV.Pos = Deck; NV.Scale = 0.55f; NV.Angle = -20.f; NV.Opacity = 0.f;
-				V = &Vis.Add(I.InstanceId, NV);
-				Fly(*V, Deck, CHDrawDur, NewN * CHDrawStagger, 1.f, 0.f, 180.f, true);
-				++NewN; Drawn += FString::Printf(TEXT(" %s#%d"), *I.CardId.ToString(), I.InstanceId);
+				if (Known.Contains(I.InstanceId))
+				{
+					FVis NV; NV.W = MakeCard(I.InstanceId, I.CardId); NV.Pos = FVector2D(ViewSize.X * 0.5f, ViewSize.Y + 240.f); NV.Scale = 0.8f; NV.Opacity = 1.f;
+					V = &Vis.Add(I.InstanceId, NV);
+					Fly(*V, NV.Pos, CHDrawDur * 0.8f, RiseN * 0.04f, 1.f, 0.f, 0.f, true);
+					++RiseN;
+				}
+				else
+				{
+					FVis NV; NV.W = MakeCard(I.InstanceId, I.CardId); NV.Pos = Deck; NV.Scale = 0.55f; NV.Angle = -20.f; NV.Opacity = 0.f;
+					V = &Vis.Add(I.InstanceId, NV);
+					Fly(*V, Deck, CHDrawDur, (RiseN > 0 ? 0.25f : 0.f) + NewN * CHDrawStagger, 1.f, 0.f, 180.f, true);
+					++NewN; Drawn += FString::Printf(TEXT(" %s#%d"), *I.CardId.ToString(), I.InstanceId);
+				}
+				Known.Add(I.InstanceId);
 			}
 			if (bSel && V->State == EVis::Hand)
 			{
@@ -364,7 +390,7 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 			if (V->State == EVis::Hand) HandOrder.Add(I.InstanceId);
 			if (UZoogiCardWidget* W = V->W.Get()) W->bAffordable = bSel || Cards->Rules().CanSelect(B->PlayerIndex, I.InstanceId, Ctx) == EZoogiCardResult::Ok;
 		}
-		if (NewN) UE_LOG(LogZoogi, Log, TEXT("CARDUI draw P%d turn=%d n=%d [%s ] energy=%d deck=%d discard=%d"), B->PlayerIndex + 1, S->Turn, NewN, *Drawn, S->Energy, S->DrawPile.Num(), S->Discard.Num());
+		if (NewN || RiseN) UE_LOG(LogZoogi, Log, TEXT("CARDUI draw P%d turn=%d n=%d [%s ] kept=%d hand=%d energy=%d deck=%d discard=%d"), B->PlayerIndex + 1, S->Turn, NewN, *Drawn, RiseN, S->Hand.Num(), S->Energy, S->DrawPile.Num(), S->Discard.Num());
 	}
 
 	// energy counter + piles

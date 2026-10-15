@@ -37,7 +37,10 @@ public:
 	/** Config + command-line toggle. */
 	static bool Enabled();
 	/** Queues a slice (name without the T_ prefix, e.g. panel_halo_bank). Higher priority replaces a lower pending one. */
-	void Trigger(FName Slice, int32 Priority, const TCHAR* Why);
+	void Trigger(FName Slice, int32 Priority, const TCHAR* Why, int32 Player = -1);
+	/** Oct 14 (Evan): a player's turn-start eye strip is drawn small over that player's profile card in the team column
+	 *  (UZoogiTeamColumnWidget paints it) instead of across the arena. True while that strip is up for Player. */
+	bool ProfileSlice(int32 Player, UTexture2D*& OutTex, float& OutAlpha, float& OutScale) const;
 
 	int32 Shown = 0;
 
@@ -61,6 +64,7 @@ private:
 
 	// active slice (real time)
 	FName Cur;
+	int32 CurPlayer = -1, PendPlayer = -1;
 	double CurStart = -100.0;
 	double NextAllowed = 0.0;
 	bool bCurShot = false;

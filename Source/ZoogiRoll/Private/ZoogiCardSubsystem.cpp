@@ -1,4 +1,5 @@
 #include "ZoogiCardSubsystem.h"
+#include "ZoogiIceWall.h"
 #include "ZoogiCPUBrain.h"
 #include "ZoogiRoll.h"
 #include "ZoogiGameMode.h"
@@ -6,6 +7,8 @@
 #include "ZoogiOrb.h"
 #include "ZoogiArenaPiece.h"
 #include "ZoogiTypes.h"
+#include "ZoogiFX.h"
+#include "Engine/StaticMesh.h"
 #include "EngineUtils.h"
 #include "Components/SphereComponent.h"
 #include "Engine/World.h"
@@ -23,7 +26,7 @@ void UZoogiCardSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	Tune.Load();
 	FParse::Value(FCommandLine::Get(), TEXT("ZoogiCardTest="), TestCase);
 	if (Tune.bCards)
-		UE_LOG(LogZoogi, Log, TEXT("CARDS on: hand=%d energy=%d deck=%d maxcopies=%d test=%s"), Tune.HandSize, Tune.EnergyPerTurn, Tune.DeckSize, Tune.MaxCopies, TestCase.IsEmpty() ? TEXT("-") : *TestCase);
+		UE_LOG(LogZoogi, Log, TEXT("CARDS on: hand=%d drawperturn=%d handcap=%d energy=%d deck=%d maxcopies=%d test=%s"), Tune.HandSize, Tune.DrawPerTurn, Tune.HandCap, Tune.EnergyPerTurn, Tune.DeckSize, Tune.MaxCopies, TestCase.IsEmpty() ? TEXT("-") : *TestCase);
 }
 
 UZoogiCardSubsystem* UZoogiCardSubsystem::Get(const UObject* WorldContext)
@@ -117,7 +120,12 @@ void UZoogiCardSubsystem::EnsureMatch(AZoogiGameMode* G)
 	FanTune.Load();
 	FxReset();
 	if (!DeckNotice.IsEmpty()) UE_LOG(LogZoogi, Log, TEXT("CARDS deck notice: %s"), *DeckNotice);
-	CollapseEffectId = 0; CollapseOwner = -1; CollapsePiece.Reset();
+	CollapseEffectId = 0; CollapseOwner = -1; CollapsePiece.Reset(); bCollapseHit = false;
+	AZoogiIceWall::DestroyAll(GetWorld(), TEXT("new match"));
+	// Oct 14 polish: load every card VFX system + the ice wall mesh now and fill the glow-actor pool (no mid-shot hitches)
+	AZoogiFX::Prewarm(GetWorld(), { TEXT("NS_Burst_Purple"), TEXT("NS_Burst_White"), TEXT("NS_Burst_Blue"), TEXT("NS_Burst_Red"), TEXT("NS_Burst_Gold"),
+		TEXT("NS_Burst_Green"), TEXT("NS_Burst_Yellow"), TEXT("NS_Explosion"), TEXT("NS_Sparks"), TEXT("NS_Dust") }, WarmAssets, 20);
+	if (UObject* IceMesh = AZoogiIceWall::Tune().Mesh.IsEmpty() ? nullptr : LoadObject<UStaticMesh>(nullptr, *AZoogiIceWall::Tune().Mesh, nullptr, LOAD_NoWarn | LOAD_Quiet)) WarmAssets.AddUnique(IceMesh);
 	UE_LOG(LogZoogi, Log, TEXT("CARDS match: backend=%s data=%s defs=%d players=%d seed=%d ok=%d%s"), *Backend->BackendName().ToString(), *DataSource, Defs.Num(), G->Balls.Num(), Seed, bOk ? 1 : 0, *LogS);
 }
 
@@ -215,7 +223,7 @@ EZoogiCardResult UZoogiCardSubsystem::Commit(AZoogiGameMode* G, FString& OutChoi
 		const FZoogiCardDef* D = Def(K.Card.CardId);
 		Cost += D ? D->Cost : 0;
 		OutChoice += FString::Printf(TEXT("%s%s"), k == 0 ? TEXT(" ") : TEXT(" + "), D ? *D->Name : *K.Card.CardId.ToString());
-		if (K.Card.CardId == FName(TEXT("crystal_collapse"))) { CollapseEffectId = K.EffectId; CollapseOwner = P; CollapsePiece.Reset(); }
+		if (K.Card.CardId == FName(TEXT("crystal_collapse"))) { CollapseEffectId = K.EffectId; CollapseOwner = P; CollapsePiece.Reset(); bCollapseHit = false; }
 		FxArm(G, P, K.Card.CardId, K.EffectId);
 	}
 	if (TestCase == TEXT("followup") && !bTestDone)
@@ -307,15 +315,34 @@ void UZoogiCardSubsystem::OnPieceContact(AZoogiArenaPiece* Piece, AZoogiBall* Ba
 	AZoogiGameMode* G = GetWorld() ? GetWorld()->GetAuthGameMode<AZoogiGameMode>() : nullptr;
 	if (!G || G->Stage != EZoogiStage::Battle || ActivePlayer(G) != CollapseOwner) return; // only the committed lead action
 	if (!IsCollapseEligible(Piece)) { UE_LOG(LogZoogi, Log, TEXT("CARDS crystal_collapse effect=%lld contact with %s ignored (not eligible: indestructible/broken)"), CollapseEffectId, *GetNameSafe(Piece)); return; }
-	CollapsePiece = Piece; CollapseAt = At; CollapseDir = Dir;
+	CollapsePiece = Piece; CollapseAt = At; CollapseDir = Dir; CollapseFloorZ = Ball->BallLocation().Z - ZoogiConst::ZoogiRadius;
 	FanSpikes(G, Ball, At); // fantasy: crystal spikes burst at the contact (pushes Zoogis only)
 	CovCond.FindOrAdd(FName(TEXT("crystal_collapse"))).Add(CollapseEffectId);
 	UE_LOG(LogZoogi, Log, TEXT("CARDS crystal_collapse effect=%lld qualified contact P%d -> %s (applies at the Resolve boundary)"), CollapseEffectId, CollapseOwner + 1, *Piece->GetName());
 }
 
+void UZoogiCardSubsystem::RaiseIceWall(AZoogiGameMode* G, const FVector& At, const FVector& Dir, const TCHAR* Why)
+{
+	// Oct 14 (Evan 9:33 PM): the collapse raises a permanent wall of ice shards across the hit, perpendicular to the shot line
+	const FVector Floor(At.X, At.Y, CollapseFloorZ);
+	AZoogiIceWall* W = AZoogiIceWall::SpawnWall(GetWorld(), Floor, Dir, CollapseOwner, CollapseEffectId);
+	UE_LOG(LogZoogi, Log, TEXT("CARDS crystal_collapse effect=%lld P%d ice wall %s at (%.0f, %.0f) (%s)"), CollapseEffectId, CollapseOwner + 1, W ? TEXT("raised") : TEXT("blocked"), At.X, At.Y, Why);
+	if (W) { FxUses.FindOrAdd(FName(TEXT("crystal_collapse")))++; if (G) G->TakeShot(TEXT("icewall_raised")); }
+}
+
 void UZoogiCardSubsystem::ApplyPendingCollapses(AZoogiGameMode* G)
 {
-	if (CollapseEffectId == 0 || !CollapsePiece.IsValid()) return;
+	if (CollapseEffectId == 0) return;
+	if (!CollapsePiece.IsValid())
+	{
+		if (bCollapseHit)
+		{
+			RaiseIceWall(G, CollapseHitAt, CollapseHitDir, TEXT("first contact"));
+			CollapseEffectId = 0; CollapseOwner = -1; bCollapseHit = false;
+		}
+		return;
+	}
+	RaiseIceWall(G, CollapseAt, CollapseDir, TEXT("breakable piece contact"));
 	AZoogiArenaPiece* Piece = CollapsePiece.Get();
 	const FString Before = AZoogiArenaPiece::StateName(Piece->GetPieceState());
 	const bool bChanged = Piece->ApplyCardCollapse(CollapseEffectId, CollapseAt, CollapseDir);
@@ -342,7 +369,7 @@ void UZoogiCardSubsystem::ApplyPendingCollapses(AZoogiGameMode* G)
 	}
 	UE_LOG(LogZoogi, Log, TEXT("CARDS crystal_collapse effect=%lld %s: %s -> %s changed=%d (global bDestruction=%d)"), CollapseEffectId, *Piece->GetName(), *Before,
 		*AZoogiArenaPiece::StateName(Piece->GetPieceState()), bChanged ? 1 : 0, ZoogiUtil::DestructionEnabled() ? 1 : 0);
-	CollapseEffectId = 0; CollapseOwner = -1; CollapsePiece.Reset();
+	CollapseEffectId = 0; CollapseOwner = -1; CollapsePiece.Reset(); bCollapseHit = false;
 }
 
 void UZoogiCardSubsystem::ExpireCollapse(const TCHAR* Why)
@@ -438,7 +465,8 @@ void UZoogiCardSubsystem::TestOnStandby(AZoogiGameMode* G, int32 P)
 	const int32 E0 = S->Energy, Sp0 = RulesV.TotalSpent(P), H0 = S->Hand.Num();
 	const int32 Avail = S->Hand.Num() + S->DrawPile.Num() + S->Discard.Num();
 	TestCheck(E0 == Tune.EnergyPerTurn, FString::Printf(TEXT("P%d energy refresh %d == %d"), P + 1, E0, Tune.EnergyPerTurn));
-	TestCheck(H0 == FMath::Min(Tune.HandSize, Avail), FString::Printf(TEXT("P%d hand %d == min(%d,%d)"), P + 1, H0, Tune.HandSize, Avail));
+	TestCheck(H0 == S->HandBeforeDraw + FMath::Min(S->LastDrawWant, Avail - S->HandBeforeDraw), FString::Printf(TEXT("P%d hand %d == %d + min(%d,%d)"), P + 1, H0, S->HandBeforeDraw, S->LastDrawWant, Avail - S->HandBeforeDraw));
+	TestCheck(S->Turn != G->TurnCounter || S->LastDrawWant <= FMath::Max(Tune.HandSize, Tune.DrawPerTurn), FString::Printf(TEXT("P%d per-turn draw %d"), P + 1, S->LastDrawWant));
 	RulesV.BeginStandby(P, G->TurnCounter); // second call for the same turn: no extra draw / refresh
 	TestCheck(S->Hand.Num() == H0 && S->Energy == E0, TEXT("BeginStandby twice draws/refreshes once"));
 	// invalid / unaffordable actions spend nothing

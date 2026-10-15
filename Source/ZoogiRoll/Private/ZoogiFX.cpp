@@ -12,21 +12,55 @@
 #include "TimerManager.h"
 #include "ZoogiKFXExtras.h"
 
+namespace
+{
+	TMap<FName, TWeakObjectPtr<UNiagaraSystem>>& NSCache() { static TMap<FName, TWeakObjectPtr<UNiagaraSystem>> C; return C; }
+	UNiagaraSystem* FindNS(const TCHAR* SystemName)
+	{
+		const FName Key(SystemName);
+		if (UNiagaraSystem* Hit = NSCache().FindRef(Key).Get()) return Hit;
+		const FString Path = FString::Printf(TEXT("/Game/FX/%s.%s"), SystemName, SystemName);
+		UNiagaraSystem* Sys = LoadObject<UNiagaraSystem>(nullptr, *Path, nullptr, LOAD_NoWarn);
+		if (Sys) NSCache().Add(Key, Sys);
+		return Sys;
+	}
+	TArray<TWeakObjectPtr<AZoogiFX>>& FXPool() { static TArray<TWeakObjectPtr<AZoogiFX>> P; return P; }
+	constexpr int32 MaxFXPool = 48;
+}
+
+int32 AZoogiFX::Reused = 0;
+
 void AZoogiFX::Niagara(UWorld* World, const TCHAR* SystemName, const FVector& Location, const FRotator& Rotation, float Scale)
 {
 	static const bool bDisabled = FParse::Param(FCommandLine::Get(), TEXT("ZoogiNoNiagara"));
 	if (!World || bDisabled || World->GetNetMode() == NM_DedicatedServer) return;
-	static TMap<FName, TWeakObjectPtr<UNiagaraSystem>> Cache;
-	const FName Key(SystemName);
-	UNiagaraSystem* Sys = Cache.FindRef(Key).Get();
-	if (!Sys)
-	{
-		const FString Path = FString::Printf(TEXT("/Game/FX/%s.%s"), SystemName, SystemName);
-		Sys = LoadObject<UNiagaraSystem>(nullptr, *Path, nullptr, LOAD_NoWarn);
-		if (!Sys) return;
-		Cache.Add(Key, Sys);
-	}
+	UNiagaraSystem* Sys = FindNS(SystemName);
+	if (!Sys) return;
 	UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, Sys, Location, Rotation, FVector(Scale), true, true, ENCPoolMethod::AutoRelease);
+}
+
+void AZoogiFX::Prewarm(UWorld* World, const TArray<const TCHAR*>& Systems, TArray<TObjectPtr<UObject>>& Keep, int32 PoolActors)
+{
+	if (!World || World->GetNetMode() == NM_DedicatedServer) return;
+	int32 NS = 0;
+	for (const TCHAR* S : Systems) if (UNiagaraSystem* Sys = FindNS(S)) { ++NS; Keep.AddUnique(Sys); } // the caller's UPROPERTY keeps them loaded
+	int32 Made = 0;
+	for (int32 i = FXPool().Num(); i < PoolActors; ++i)
+	{
+		if (AZoogiFX* FX = Spawn(World, FVector(0.f, 0.f, -10000.f), FLinearColor::Black, 1.f, 0.05f, false, 0.f)) { FX->Release(); ++Made; }
+	}
+	UE_LOG(LogTemp, Log, TEXT("ZOOGI fx prewarm: %d/%d Niagara systems loaded, %d pooled glow actors (pool %d)"), NS, Systems.Num(), Made, FXPool().Num());
+}
+
+void AZoogiFX::Release()
+{
+	Follow.Reset();
+	if (Flash) Flash->SetIntensity(0.f);
+	SetActorHiddenInGame(true);
+	SetActorTickEnabled(false);
+	FXPool().RemoveAll([](const TWeakObjectPtr<AZoogiFX>& X) { return !X.IsValid(); });
+	if (FXPool().Num() < MaxFXPool) FXPool().Add(this);
+	else Destroy();
 }
 
 UNiagaraComponent* AZoogiFX::KFX(UWorld* World, const TCHAR* Prefab, const FVector& Location, float Scale, float MaxLife, AActor* Attach)
@@ -113,17 +147,37 @@ AZoogiFX::AZoogiFX()
 AZoogiFX* AZoogiFX::Spawn(UWorld* World, const FVector& Location, const FLinearColor& Color, float Radius, float Duration, bool bRing, float Strength, AActor* FollowActor)
 {
 	if (!World) return nullptr;
-	FActorSpawnParameters P;
-	P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
-	AZoogiFX* FX = World->SpawnActor<AZoogiFX>(AZoogiFX::StaticClass(), FTransform(Location), P);
+	// Oct 14 polish: reuse a pooled effect actor (no spawn / MID allocation per hit)
+	AZoogiFX* FX = nullptr;
+	while (FXPool().Num() && !FX)
+	{
+		AZoogiFX* C = FXPool().Pop(EAllowShrinking::No).Get();
+		if (C && C->GetWorld() == World && !C->IsActorBeingDestroyed()) FX = C;
+	}
+	if (FX)
+	{
+		++Reused;
+		FX->SetActorLocation(Location);
+		FX->SetActorHiddenInGame(false);
+		FX->SetActorTickEnabled(true);
+	}
+	else
+	{
+		FActorSpawnParameters P;
+		P.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		FX = World->SpawnActor<AZoogiFX>(AZoogiFX::StaticClass(), FTransform(Location), P);
+	}
 	if (!FX) return nullptr;
+	FX->Age = 0.f;
+	FX->Flash->SetVisibility(true);
 	FX->Life = FMath::Max(Duration, 0.05f);
 	FX->EndRadius = Radius;
 	FX->BaseStrength = Strength;
 	FX->bIsRing = bRing;
 	FX->Follow = FollowActor;
 	FX->Mesh->SetStaticMesh(ZoogiUtil::BasicShape(bRing ? TEXT("Cylinder") : TEXT("Sphere")));
-	FX->MID = ZoogiUtil::FxMID(FX, Color, Strength);
+	if (!FX->MID) FX->MID = ZoogiUtil::FxMID(FX, Color, Strength);
+	else { FX->MID->SetVectorParameterValue(TEXT("Color"), Color); FX->MID->SetScalarParameterValue(TEXT("Strength"), Strength); }
 	FX->MID->SetScalarParameterValue(TEXT("Ring"), bRing ? 1.f : 0.f);
 	FX->Mesh->SetMaterial(0, FX->MID);
 	FX->BaseLight = FMath::Clamp(Radius * 0.25f, 20.f, 200.f);
@@ -159,5 +213,5 @@ void AZoogiFX::Tick(float DeltaSeconds)
 	const float Fade = 1.f - T * T;
 	if (MID) MID->SetScalarParameterValue(TEXT("Strength"), BaseStrength * Fade);
 	Flash->SetIntensity(BaseLight * (1.f - T));
-	if (Age >= Life) Destroy();
+	if (Age >= Life) Release();
 }

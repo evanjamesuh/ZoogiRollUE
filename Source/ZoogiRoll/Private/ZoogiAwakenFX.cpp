@@ -70,6 +70,7 @@ FZoogiVoidTune AZoogiAwakenFX::GetVoidTune()
 		GConfig->GetFloat(TEXT("ZoogiRoll.Void"), TEXT("PullSeconds"), T.PullSeconds, GGameIni);
 		GConfig->GetFloat(TEXT("ZoogiRoll.Void"), TEXT("MeteorSeconds"), T.MeteorSeconds, GGameIni);
 		GConfig->GetFloat(TEXT("ZoogiRoll.Void"), TEXT("FadeSeconds"), T.FadeSeconds, GGameIni);
+		GConfig->GetBool(TEXT("ZoogiRoll.Void"), TEXT("bPortalAfterHit"), T.bPortalAfterHit, GGameIni);
 	}
 	T.PullRadius = FMath::Max(50.f, T.PullRadius); T.PullSeconds = FMath::Max(0.1f, T.PullSeconds); T.FadeSeconds = FMath::Clamp(T.FadeSeconds, 0.1f, T.PullSeconds); T.MeteorSeconds = FMath::Max(1.f, T.MeteorSeconds);
 	return T;
@@ -136,7 +137,14 @@ void AZoogiAwakenFX::OnInfuse(UWorld* World, AZoogiBall* InBall, EZoogiArtifact 
 			SpawnFX(World, EZoogiAwakenFX::MeteorArm, G, ZoogiScale, InBall, FVector::ZeroVector, Tgt);
 			UE_LOG(LogZoogi, Log, TEXT("AwakenFX: Void 2 Titan Meteor ARMED for %s (fires on the first orb/player collision)"), *InBall->Def.Name);
 		}
-		else SpawnFX(World, EZoogiAwakenFX::VoidPortal, G, ZoogiScale, InBall, Off, Tgt); // Void 1: portal + gravity pull
+		else if (GetVoidTune().bPortalAfterHit)
+		{
+			// Oct 14 (Evan): Void 1 is ARMED here; the black hole opens at the first orb / player collision, after the hit lands
+			for (TActorIterator<AZoogiAwakenFX> It(World); It; ++It) if (It->Kind == EZoogiAwakenFX::VoidArm && It->Ball == InBall) It->Finish(0.05f);
+			SpawnFX(World, EZoogiAwakenFX::VoidArm, G, ZoogiScale, InBall, Off, Tgt);
+			UE_LOG(LogZoogi, Log, TEXT("AwakenFX: Void 1 portal ARMED for %s (opens at the first orb/player collision)"), *InBall->Def.Name);
+		}
+		else SpawnFX(World, EZoogiAwakenFX::VoidPortal, G, ZoogiScale, InBall, Off, Tgt); // Void 1 (legacy timing): portal + gravity pull at infuse
 	}
 }
 
@@ -251,6 +259,7 @@ void AZoogiAwakenFX::Init()
 		if (AZoogiBall* B = Ball.Get()) B->Sphere->OnComponentHit.AddDynamic(this, &AZoogiAwakenFX::OnBallHit);
 		break;
 	case EZoogiAwakenFX::MeteorArm:
+	case EZoogiAwakenFX::VoidArm:
 		if (AZoogiBall* B = Ball.Get()) B->Sphere->OnComponentHit.AddDynamic(this, &AZoogiAwakenFX::OnBallHit);
 		break;
 	case EZoogiAwakenFX::ShockHit:
@@ -365,12 +374,23 @@ void AZoogiAwakenFX::Finish(float FadeTime)
 	EndAt = Age;
 	Param.Z = FadeTime; // reuse: fade length once finished
 	if (Niagara) Niagara->Deactivate();
-	if (Ball.IsValid() && (Kind == EZoogiAwakenFX::ShockChain || Kind == EZoogiAwakenFX::MeteorArm)) Ball->Sphere->OnComponentHit.RemoveDynamic(this, &AZoogiAwakenFX::OnBallHit);
+	if (Ball.IsValid() && (Kind == EZoogiAwakenFX::ShockChain || Kind == EZoogiAwakenFX::MeteorArm || Kind == EZoogiAwakenFX::VoidArm)) Ball->Sphere->OnComponentHit.RemoveDynamic(this, &AZoogiAwakenFX::OnBallHit);
 }
 
 void AZoogiAwakenFX::OnBallHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit)
 {
 	if (EndAt >= 0.f) return;
+	if (Kind == EZoogiAwakenFX::VoidArm)
+	{
+		AZoogiBall* B = Ball.Get();
+		if (!B || !OtherActor || OtherActor == B || !(OtherActor->IsA<AZoogiOrb>() || OtherActor->IsA<AZoogiBall>())) return;
+		const FVector BL = B->BallLocation();
+		FVector Dir = B->GetBallVelocity(); Dir.Z = 0.f;
+		if (!Dir.Normalize()) Dir = FVector(OtherActor->GetActorLocation() - BL).GetSafeNormal2D(UE_SMALL_NUMBER, FVector::ForwardVector);
+		OpenVoidAt(FVector(Hit.ImpactPoint.X, Hit.ImpactPoint.Y, BL.Z - ZoogiConst::ZoogiRadius + 2.f), Dir, OtherActor);
+		Finish(0.05f);
+		return;
+	}
 	if (Kind == EZoogiAwakenFX::MeteorArm)
 	{
 		// real collision event: only an orb or another Zoogi counts (floor / walls / pillars don't); presentation only
@@ -417,6 +437,7 @@ void AZoogiAwakenFX::Tick(float Dt)
 	case EZoogiAwakenFX::ShockHit: TickShockHit(Dt); break;
 	case EZoogiAwakenFX::VoidPortal: TickVoid(Dt); break;
 	case EZoogiAwakenFX::MeteorArm: TickMeteorArm(); break;
+	case EZoogiAwakenFX::VoidArm: TickMeteorArm(); break;
 	}
 }
 
@@ -647,9 +668,17 @@ void AZoogiAwakenFX::TickMeteorArm()
 	const AZoogiBall* B = Ball.Get();
 	if (!B || B->bOut || !B->Artifact || B->Artifact->Infused != EZoogiArtifact::Void || Age > 120.f)
 	{
-		UE_LOG(LogZoogi, Log, TEXT("AwakenFX: Void 2 Titan Meteor disarmed without a collision (no meteor)"));
+		UE_LOG(LogZoogi, Log, TEXT("AwakenFX: %s disarmed without a collision"), Kind == EZoogiAwakenFX::VoidArm ? TEXT("Void 1 portal") : TEXT("Void 2 Titan Meteor"));
 		Finish(0.05f);
 	}
+}
+
+void AZoogiAwakenFX::OpenVoidAt(const FVector& Floor, const FVector& Dir, AActor* Other)
+{
+	// the black hole opens where the hit landed, facing along the shot (Param = target offset for the portal's orientation)
+	SpawnFX(GetWorld(), EZoogiAwakenFX::VoidPortal, Floor, S, Ball.Get(), Dir * 500.f, nullptr);
+	UE_LOG(LogZoogi, Log, TEXT("AwakenFX: Void 1 portal OPENED at collision (%.0f, %.0f) with %s (after the hit)"), Floor.X, Floor.Y, Other ? *Other->GetName() : TEXT("-"));
+	if (AZoogiGameMode* GM = GetWorld()->GetAuthGameMode<AZoogiGameMode>()) GM->TakeShot(TEXT("void1_portal_collision"));
 }
 
 void AZoogiAwakenFX::TickVoid(float Dt)

@@ -1,5 +1,6 @@
 #include "ZoogiGameMode.h"
 #include "ZoogiSpawnElevator.h"
+#include "ZoogiIceWall.h"
 #include "ZoogiEpisodeDirector.h"
 #include "ZoogiBattleStateMachine.h"
 #include "ZoogiEpisodeSubsystem.h"
@@ -245,6 +246,7 @@ void AZoogiGameMode::ClearMatch()
 	PendingKicks.Reset();
 	bFollowUpOffered = false;
 	if (UZoogiAnimeSubsystem* Anime = GetWorld()->GetSubsystem<UZoogiAnimeSubsystem>()) Anime->ResetMatch();
+	AZoogiIceWall::DestroyAll(GetWorld(), TEXT("match reset")); // Oct 14: Crystal Collapse walls last the match only
 }
 
 bool AZoogiGameMode::OrbSpot(FVector& L) const
@@ -917,7 +919,7 @@ void AZoogiGameMode::PlanCPUShot()
 
 	CPUPlannedCut = 0.f;
 	const EZoogiCPUTier CPUTier = ZoogiCPU::ActiveTier();
-	struct FPlan { float Cost; FVector2D Dir; float Frac; AActor* Actor; bool bStraight; float Dist; float Radius; float Risk = 0.f; float Exposure = 0.f; }; // Risk/Exposure: tier lookahead inputs only (Oct 14)
+	struct FPlan { float Cost; FVector2D Dir; float Frac; AActor* Actor; bool bStraight; float Dist; float Radius; float Risk = 0.f; float Exposure = 0.f; bool bBank = false; }; // Risk/Exposure: tier lookahead inputs only (Oct 14)
 	TArray<FPlan> Plans;
 	FVector2D BestDir(-B.GetSafeNormal());
 	float BestFrac = 0.45f;
@@ -997,6 +999,58 @@ void AZoogiGameMode::PlanCPUShot()
 			Plans.Add({ Cost, Dir, Frac, C.Actor, false, GDist, C.Radius, Tang.IsNearlyZero() ? 0.f : FMath::Clamp((VAfter * VAfter / (2.f * Decel)) / FMath::Max(Arena->DistanceToEdge(Ghost, Tang), 1.f), 0.f, 1.f), 1.f - FMath::Clamp(Arena->DistanceToEdge(Ghost, Dir) / 1500.f, 0.f, 1.f) });
 		}
 	}
+	// Oct 14: Crystal Collapse ice walls are bank surfaces too (cards on only: no walls = no extra plans, no RNG draws).
+	// Mirror the target across the wall's bounce line (wall face + Zoogi radius), aim at the mirror; the bounce point must
+	// land on a live segment, both legs clear, and the hit soft enough not to shatter the segment instead of banking.
+	{
+		TArray<AZoogiIceWall::FSeg2D> Ice;
+		AZoogiIceWall::LiveSegments(GetWorld(), Ice);
+		int32 NBank = 0;
+		const float Shatter = AZoogiIceWall::Tune().ShatterSpeed;
+		for (const AZoogiIceWall::FSeg2D& W : Ice)
+		{
+			const FVector2D Nw = W.N;
+			const FVector2D Ax = W.B - W.A;
+			const float SegL = Ax.Size();
+			if (SegL < 1.f) continue;
+			const FVector2D AxN = Ax / SegL;
+			for (const FCand& C : Cands)
+			{
+				const float SB = FVector2D::DotProduct(B - W.A, Nw), SC = FVector2D::DotProduct(C.P - W.A, Nw);
+				if (SB * SC <= 0.f || FMath::Abs(SB) < W.Half + ZoogiConst::ZoogiRadius + 20.f) continue; // same side, room to roll
+				const FVector2D Pl = W.A + Nw * (SB > 0.f ? 1.f : -1.f) * (W.Half + ZoogiConst::ZoogiRadius);
+				const FVector2D Mir = C.P - Nw * 2.f * FVector2D::DotProduct(C.P - Pl, Nw);
+				const FVector2D L = Mir - B;
+				const float Den = FVector2D::DotProduct(L, Nw);
+				if (FMath::Abs(Den) < 1.f) continue;
+				const float T = -FVector2D::DotProduct(B - Pl, Nw) / Den;
+				if (T <= 0.f || T >= 1.f) continue;
+				const FVector2D X = B + L * T; // ball centre at the bounce
+				const float U = FVector2D::DotProduct(X - W.A, AxN);
+				if (U < 12.f || U > SegL - 12.f) continue;
+				const float Leg1 = FVector2D::Distance(B, X), Leg2 = FVector2D::Distance(X, C.P);
+				if (Leg1 < 60.f || Leg2 < 120.f) continue;
+				const FVector2D Dir = (X - B) / Leg1, Dir2 = (C.P - X) / Leg2;
+				const float Edge = Arena->DistanceToEdge(C.P, Dir2);
+				float Cost = (Leg1 + Leg2) * 0.5f + Edge - C.Value * 6.f + 250.f; // banks are harder than a straight line
+				if (Blocked(B, X, C.P) || Arena->IsPathBlocked(B, X, ZoogiConst::ZoogiRadius - 5.f)) Cost += 1500.f;
+				if (Blocked(X, C.P, C.P) || Arena->IsPathBlocked(X + Dir2 * 5.f, C.P - Dir2 * (ZoogiConst::ZoogiRadius + C.Radius), ZoogiConst::ZoogiRadius - 5.f)) Cost += 1500.f;
+				const float Need = FMath::Sqrt(2.f * Decel * (Edge + 250.f));
+				const float VIn = Need / FMath::Max((1.f + 0.7f) * M1 / (M1 + C.TargetMass), 0.3f);
+				const float VOut = FMath::Sqrt(VIn * VIn + 2.f * Decel * FMath::Max(0.f, Leg2 - ZoogiConst::ZoogiRadius - C.Radius));
+				const float V0 = FMath::Sqrt(FMath::Square(VOut / 0.75f) + 2.f * Decel * Leg1); // ~75% kept off the ice
+				if (V0 > VMax) Cost += 300.f + (V0 - VMax) * 0.5f;
+				const float Frac = FMath::Clamp(InvertLaunch(FMath::Min(V0, VMax)), 0.3f, 0.97f);
+				const float VWall = FMath::Sqrt(FMath::Max(0.f, FMath::Square(ZoogiConst::LaunchSpeedForPull(Frac)) - 2.f * Decel * Leg1)) * FMath::Abs(FVector2D::DotProduct(Dir, Nw));
+				if (VWall > Shatter * 0.9f) Cost += 800.f; // it would smash through, not bank
+				FPlan Bp{ Cost, Dir, Frac, C.Actor, false, Leg1 + Leg2, C.Radius, 0.25f, 1.f - FMath::Clamp(Arena->DistanceToEdge(X, Dir2) / 1500.f, 0.f, 1.f) };
+				Bp.bBank = true;
+				Plans.Add(Bp);
+				++NBank;
+			}
+		}
+		if (Ice.Num()) UE_LOG(LogZoogi, Log, TEXT("CPU icewall: %d live segment(s) as obstacles, %d bank plan(s) for P%d"), Ice.Num(), NBank, ActivePlayer + 1);
+	}
 	// Pick one of the three cheapest shots so CPU players vary their targets.
 	Plans.Sort([](const FPlan& A, const FPlan& Bp) { return A.Cost < Bp.Cost; });
 	if (Plans.Num() > 0)
@@ -1018,6 +1072,7 @@ void AZoogiGameMode::PlanCPUShot()
 			UE_LOG(LogZoogi, Log, TEXT("CPU tier=%s P%d picked plan %d/%d cost=%.0f risk=%.2f"), ZoogiProgress::TierName(CPUTier), ActivePlayer + 1, PickIdx, Plans.Num(), Plans[PickIdx].Cost, Plans[PickIdx].Risk);
 		}
 		const FPlan& Pick = Plans[PickIdx];
+		if (Pick.bBank) UE_LOG(LogZoogi, Log, TEXT("CPU icewall: P%d plays a BANK off the ice wall at %s (cost %.0f)"), ActivePlayer + 1, *GetNameSafe(Pick.Actor), Pick.Cost);
 		BestDir = Pick.Dir;
 		BestFrac = Pick.Frac;
 		CPULock = Pick.Actor;

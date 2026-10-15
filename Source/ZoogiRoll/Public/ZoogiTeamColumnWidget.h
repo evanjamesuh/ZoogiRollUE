@@ -37,6 +37,7 @@ private:
 	const FSlateBrush* Portrait(FName Id) const;
 	UPROPERTY() mutable TMap<FName, TObjectPtr<UTexture2D>> PortraitTex;
 	mutable TMap<FName, FSlateBrush> PortraitBrush;
+	mutable FSlateBrush ComicBrush; // Oct 14: turn-start eye strip over the profile card
 	TMap<int32, ZoogiUIStyle::FBarJuice> EnergyJuice;
 	ZoogiUIStyle::FBarJuice ComboJuice;
 	TMap<int32, int32> LastScore;

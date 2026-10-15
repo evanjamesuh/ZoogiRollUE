@@ -84,6 +84,102 @@ namespace ZoogiFramed
 	void SetTrayInfo(const FTrayInfo& I) { GTray = I; }
 	const FTrayInfo& TrayInfo() { return GTray; }
 
+	// ---- Oct 14: HUD frame shake + rumble
+	struct FShakeTune
+	{
+		bool bEnabled = true, bRumble = true;
+		float ImpulseThreshold = 9000.f, ImpulseFull = 32000.f, MaxOffset = 9.f, Duration = 0.28f, RumbleScale = 0.8f;
+		FShakeTune()
+		{
+			const TCHAR* S = TEXT("ZoogiRoll.FrameShake");
+			if (GConfig)
+			{
+				GConfig->GetBool(S, TEXT("bEnabled"), bEnabled, GGameIni);
+				GConfig->GetBool(S, TEXT("bRumble"), bRumble, GGameIni);
+				GConfig->GetFloat(S, TEXT("ImpulseThreshold"), ImpulseThreshold, GGameIni);
+				GConfig->GetFloat(S, TEXT("ImpulseFull"), ImpulseFull, GGameIni);
+				GConfig->GetFloat(S, TEXT("MaxOffset"), MaxOffset, GGameIni);
+				GConfig->GetFloat(S, TEXT("Duration"), Duration, GGameIni);
+				GConfig->GetFloat(S, TEXT("RumbleScale"), RumbleScale, GGameIni);
+			}
+			if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiNoFrameShake"))) bEnabled = false;
+			ImpulseFull = FMath::Max(ImpulseFull, ImpulseThreshold + 1.f);
+			Duration = FMath::Max(Duration, 0.05f);
+		}
+	};
+	static const FShakeTune& ShakeTune() { static FShakeTune T; return T; }
+	static float GShakeAmp = 0.f, GShakeT = 0.f, GShakeLastLog = -10.f;
+	static int32 GShakeKicks = 0;
+
+	static bool MenuSetting(const TCHAR* Key, int32 Def)
+	{
+		int32 V = Def;
+		if (GConfig) GConfig->GetInt(TEXT("ZoogiRoll.MenuSettings"), Key, V, GGameUserSettingsIni);
+		return V != 0;
+	}
+
+	bool FrameShakeEnabled() { return ShakeTune().bEnabled && MenuSetting(TEXT("FrameShake"), 1); }
+	int32 FrameShakeKicks() { return GShakeKicks; }
+
+	void FrameShake(float Strength, UWorld* World)
+	{
+		const FShakeTune& T = ShakeTune();
+		const float K = FMath::Clamp(Strength, 0.f, 1.f);
+		if (K <= 0.f) return;
+		const bool bShake = FrameShakeEnabled();
+		if (bShake) { GShakeAmp = FMath::Max(GShakeAmp, 0.35f + 0.65f * K); ++GShakeKicks; }
+		bool bRumbled = false;
+		if (T.bRumble && MenuSetting(TEXT("Haptics"), 1) && World)
+		{
+			if (APlayerController* PC = World->GetFirstPlayerController())
+			{
+				// gamepad motors / phone vibrator (Android + iOS map force feedback to the device haptics)
+				PC->PlayDynamicForceFeedback(FMath::Clamp((0.3f + 0.7f * K) * T.RumbleScale, 0.f, 1.f), 0.12f + 0.16f * K, true, true, true, true);
+				bRumbled = true;
+			}
+		}
+		const float Now = World ? World->GetRealTimeSeconds() : 0.f;
+		if (Now - GShakeLastLog > 0.25f)
+		{
+			GShakeLastLog = Now;
+			UE_LOG(LogZoogi, Log, TEXT("FRAMESHAKE kick %.2f shake=%d rumble=%d (kicks %d)"), K, bShake ? 1 : 0, bRumbled ? 1 : 0, GShakeKicks);
+		}
+	}
+
+	void ImpactShake(float Impulse, UWorld* World)
+	{
+		const FShakeTune& T = ShakeTune();
+		if (Impulse < T.ImpulseThreshold) return;
+		FrameShake((Impulse - T.ImpulseThreshold) / (T.ImpulseFull - T.ImpulseThreshold), World);
+	}
+
+	FVector2D FrameShakeOffset(float Dt)
+	{
+		if (GShakeAmp <= 0.f) return FVector2D::ZeroVector;
+		const FShakeTune& T = ShakeTune();
+		GShakeT += Dt;
+		GShakeAmp = FMath::Max(0.f, GShakeAmp - Dt / T.Duration);
+		if (!FrameShakeEnabled()) { GShakeAmp = 0.f; return FVector2D::ZeroVector; }
+		const float A = T.MaxOffset * GShakeAmp * GShakeAmp;
+		return FVector2D(FMath::Sin(GShakeT * 71.f), FMath::Cos(GShakeT * 57.f) * 0.7f) * A;
+	}
+
+	// ---- Oct 14: profile card rects for the comic strip
+	struct FProfRect { FVector2D Min = FVector2D::ZeroVector, Size = FVector2D::ZeroVector; double At = -100.0; };
+	static TArray<FProfRect> GProf;
+	void SetProfileRect(int32 Player, const FVector2D& AbsMin, const FVector2D& AbsSize)
+	{
+		if (Player < 0 || Player > 15) return;
+		if (GProf.Num() <= Player) GProf.SetNum(Player + 1);
+		GProf[Player].Min = AbsMin; GProf[Player].Size = AbsSize; GProf[Player].At = FPlatformTime::Seconds();
+	}
+	bool ProfileRect(int32 Player, FVector2D& OutAbsMin, FVector2D& OutAbsSize)
+	{
+		if (!GProf.IsValidIndex(Player) || FPlatformTime::Seconds() - GProf[Player].At > 1.0 || GProf[Player].Size.X < 4.f) return false;
+		OutAbsMin = GProf[Player].Min; OutAbsSize = GProf[Player].Size;
+		return true;
+	}
+
 	const FLayout& Current() { return GCur; }
 	void SetCurrent(const FLayout& L) { GCur = L; }
 	void Clear() { GCur.bValid = false; }

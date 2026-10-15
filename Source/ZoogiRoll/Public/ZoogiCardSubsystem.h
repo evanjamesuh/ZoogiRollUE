@@ -164,6 +164,7 @@ private:
 
 	FZoogiCardTune Tune;
 	FZoogiCardRules RulesV;
+	UPROPERTY() TArray<TObjectPtr<UObject>> WarmAssets; // Oct 14: card VFX loaded at match start (no first-use hitch)
 	TArray<TWeakObjectPtr<AZoogiBall>> MatchBalls;
 	int32 LastStandbyTurn = -1;
 
@@ -172,6 +173,11 @@ private:
 	int32 CollapseOwner = -1;
 	TWeakObjectPtr<AZoogiArenaPiece> CollapsePiece;
 	FVector CollapseAt = FVector::ZeroVector, CollapseDir = FVector::ZeroVector;
+	// Oct 14 ice wall: the acting Zoogi's first real contact (orb / Zoogi / stage) when no breakable piece qualified
+	bool bCollapseHit = false;
+	FVector CollapseHitAt = FVector::ZeroVector, CollapseHitDir = FVector::ZeroVector;
+	float CollapseFloorZ = 0.f;
+	void RaiseIceWall(AZoogiGameMode* G, const FVector& At, const FVector& Dir, const TCHAR* Why);
 
 	// phase observation (CARDS phase lines) + runtime tests (-ZoogiCardTest=standby_flow|crystal_collapse)
 	FString LastPhase;

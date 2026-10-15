@@ -39,17 +39,30 @@ float ZoogiUtil::BreakToughness()
 bool ZoogiUtil::DestructionEnabled()
 {
 	static int32 Cached = -1;
+	static bool bFixed = false; // command line override or a test / auto run: the ini / command-line value only (parity)
 	if (Cached < 0)
 	{
 		bool bOn = true;
 		if (GConfig) GConfig->GetBool(TEXT("ZoogiRoll.Arena"), TEXT("bDestruction"), bOn, GGameIni);
 		FString V;
-		if (FParse::Value(FCommandLine::Get(), TEXT("ZoogiDestruction="), V))
+		const TCHAR* C = FCommandLine::Get();
+		if (FParse::Value(C, TEXT("ZoogiDestruction="), V))
+		{
 			bOn = V.Equals(TEXT("On"), ESearchCase::IgnoreCase) || V.Equals(TEXT("1")) || V.Equals(TEXT("True"), ESearchCase::IgnoreCase);
+			bFixed = true;
+		}
+		bFixed |= FParse::Param(C, TEXT("ZoogiAuto")) || FParse::Value(C, TEXT("ZoogiCardTest="), V) || FParse::Value(C, TEXT("ZoogiBattleTest="), V) || GIsAutomationTesting;
 		Cached = bOn ? 1 : 0;
-		UE_LOG(LogTemp, Log, TEXT("ZOOGI destruction=%s"), bOn ? TEXT("on") : TEXT("off"));
+		UE_LOG(LogTemp, Log, TEXT("ZOOGI destruction=%s%s"), bOn ? TEXT("on") : TEXT("off"), bFixed ? TEXT(" (fixed: command line / test run)") : TEXT(" (default; Settings > GRAPHICS > DESTRUCTION overrides)"));
 	}
-	return Cached == 1;
+	if (bFixed) return Cached == 1;
+	// Oct 14 (Evan): Settings > GRAPHICS > DESTRUCTION, saved with the player's settings ([ZoogiRoll.MenuSettings] Destruction in
+	// GameUserSettings.ini). Default = the ini value (OFF). Pillars stay indestructible; Crystal Collapse keeps its card exemption.
+	int32 S = Cached;
+	if (GConfig) GConfig->GetInt(TEXT("ZoogiRoll.MenuSettings"), TEXT("Destruction"), S, GGameUserSettingsIni);
+	static int32 Logged = -1;
+	if (S != Logged) { Logged = S; UE_LOG(LogTemp, Log, TEXT("ZOOGI destruction=%s (Settings)"), S != 0 ? TEXT("on") : TEXT("off")); }
+	return S != 0;
 }
 
 void ZoogiUtil::ApplyOrbStyle(AZoogiOrb* O)

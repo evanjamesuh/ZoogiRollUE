@@ -999,6 +999,9 @@ void UZoogiMenuRoot::BuildSettings()
 				440.f + f * 160.f, 162.f, 150.f, 52.f, 28);
 		}
 		Toggle(310.f, 230.f, TEXT("CAMERA SHAKE"), TEXT("CameraShake"), 1);
+		// Oct 14 (Evan): breakable arena pieces (pillars never break; Crystal Collapse always may) + HUD frame shake / rumble
+		Toggle(620.f, 230.f, TEXT("DESTRUCTION"), TEXT("Destruction"), 0);
+		Toggle(310.f, 290.f, TEXT("FRAME SHAKE"), TEXT("FrameShake"), 1);
 	}
 	else if (SettingsTab == 2)
 	{

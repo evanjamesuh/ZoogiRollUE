@@ -1,4 +1,5 @@
 #include "ZoogiArena.h"
+#include "ZoogiIceWall.h"
 #include "ZoogiObstacle.h"
 #include "ZoogiRock.h"
 #include "ZoogiTopping.h"
@@ -113,6 +114,17 @@ bool AZoogiArena::IsSpotClear(const FVector2D& P, float Radius) const
 		if (FVector2D::Distance(C, P) < Radius + 15.f) return false;
 	}
 	for (const FVector2D& Q : SolidPosts) if (FVector2D::Distance(Q, P) < Radius + 95.5f + 15.f) return false;
+	// Oct 14: Crystal Collapse ice walls (cards on only; none exist otherwise)
+	{
+		TArray<AZoogiIceWall::FSeg2D> Ice;
+		AZoogiIceWall::LiveSegments(GetWorld(), Ice);
+		for (const AZoogiIceWall::FSeg2D& S : Ice)
+		{
+			const FVector2D AB = S.B - S.A;
+			const float K = FMath::Clamp(FVector2D::DotProduct(P - S.A, AB) / FMath::Max(AB.SizeSquared(), 1.f), 0.f, 1.f);
+			if (FVector2D::Distance(S.A + AB * K, P) < Radius + S.Half + 15.f) return false;
+		}
+	}
 	// r22: live breakable pieces with a path block (Meadow court crates, Frozen obelisks ...) are solid too.
 	for (const AZoogiArenaPiece* Pc : Pieces)
 	{
@@ -122,11 +134,37 @@ bool AZoogiArena::IsSpotClear(const FVector2D& P, float Radius) const
 	return true;
 }
 
+/** Closest distance between segments P0-P1 and Q0-Q1 (2D). */
+static float ZoogiIceSegDist(const FVector2D& P0, const FVector2D& P1, const FVector2D& Q0, const FVector2D& Q1)
+{
+	auto Cross = [](const FVector2D& A, const FVector2D& B) { return A.X * B.Y - A.Y * B.X; };
+	const FVector2D R = P1 - P0, S = Q1 - Q0;
+	const float Den = Cross(R, S);
+	if (FMath::Abs(Den) > 1e-4f)
+	{
+		const float T = Cross(Q0 - P0, S) / Den, U = Cross(Q0 - P0, R) / Den;
+		if (T >= 0.f && T <= 1.f && U >= 0.f && U <= 1.f) return 0.f; // crossing
+	}
+	auto PtSeg = [](const FVector2D& X, const FVector2D& A, const FVector2D& B)
+	{
+		const FVector2D AB = B - A;
+		const float K = FMath::Clamp(FVector2D::DotProduct(X - A, AB) / FMath::Max(AB.SizeSquared(), 1e-4f), 0.f, 1.f);
+		return FVector2D::Distance(A + AB * K, X);
+	};
+	return FMath::Min(FMath::Min(PtSeg(P0, Q0, Q1), PtSeg(P1, Q0, Q1)), FMath::Min(PtSeg(Q0, P0, P1), PtSeg(Q1, P0, P1)));
+}
+
 bool AZoogiArena::IsPathBlocked(const FVector2D& From, const FVector2D& To, float Radius) const
 {
 	const FVector2D D = To - From;
 	const float Len = D.Size();
 	if (Len < 1.f) return false;
+	// Oct 14: Crystal Collapse ice walls (cards on only): a swept circle against each live segment (capsule)
+	{
+		TArray<AZoogiIceWall::FSeg2D> Ice;
+		AZoogiIceWall::LiveSegments(GetWorld(), Ice);
+		for (const AZoogiIceWall::FSeg2D& S : Ice) if (ZoogiIceSegDist(From, To, S.A, S.B) < Radius + S.Half) return true;
+	}
 	// Frozen Ring stage pieces with a live collider (pillars, obelisks, walls, bumpers ...).
 	for (const AZoogiArenaPiece* Pc : Pieces)
 	{

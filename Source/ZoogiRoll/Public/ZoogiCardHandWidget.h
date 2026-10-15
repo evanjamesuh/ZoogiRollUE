@@ -86,6 +86,8 @@ private:
 	TSet<FName> ArtTried;
 
 	TMap<int32, FVis> Vis;        // by card instance id
+	TMap<int32, TSet<int32>> KnownHand; // Oct 14: per player, instance ids already shown (kept cards rise back instead of a draw)
+	TMap<int32, int32> KnownTurnFor;
 	TArray<int32> HandOrder;      // instance ids in hand-slot order (Hand state only)
 	int32 KeyPlayer = -1, KeyTurn = -1;
 	bool bShown = false, bInteractive = false, bShownPlayedLog = false;

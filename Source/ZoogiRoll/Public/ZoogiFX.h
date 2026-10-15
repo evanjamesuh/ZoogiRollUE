@@ -34,7 +34,14 @@ public:
 
 	virtual void Tick(float DeltaSeconds) override;
 
+	/** Oct 14 polish: loads these /Game/FX Niagara systems now (no first-use hitch) and fills the glow / ring actor pool. */
+	static void Prewarm(UWorld* World, const TArray<const TCHAR*>& Systems, TArray<TObjectPtr<UObject>>& Keep, int32 PoolActors = 16);
+	static int32 PoolReused() { return Reused; }
+
 protected:
+	/** Finished effects go back to a small pool (hidden, not ticking) instead of being destroyed; Spawn reuses them. */
+	void Release();
+	static int32 Reused;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UStaticMeshComponent> Mesh;
 	UPROPERTY(VisibleAnywhere) TObjectPtr<UPointLightComponent> Flash;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> MID;

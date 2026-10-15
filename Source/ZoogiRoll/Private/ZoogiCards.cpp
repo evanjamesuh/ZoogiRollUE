@@ -117,6 +117,8 @@ void FZoogiCardTune::Load()
 	{
 		GConfig->GetBool(S, TEXT("bCards"), bCards, GGameIni);
 		GConfig->GetInt(S, TEXT("HandSize"), HandSize, GGameIni);
+		GConfig->GetInt(S, TEXT("DrawPerTurn"), DrawPerTurn, GGameIni);
+		GConfig->GetInt(S, TEXT("HandCap"), HandCap, GGameIni);
 		GConfig->GetInt(S, TEXT("EnergyPerTurn"), EnergyPerTurn, GGameIni);
 		GConfig->GetInt(S, TEXT("DeckSize"), DeckSize, GGameIni);
 		GConfig->GetInt(S, TEXT("MaxCopies"), MaxCopies, GGameIni);
@@ -130,7 +132,11 @@ void FZoogiCardTune::Load()
 	else if (FParse::Param(Cmd, TEXT("ZoogiCards"))) bCards = true;
 	FParse::Value(Cmd, TEXT("ZoogiCardDeck="), DefaultDeck);
 	FParse::Value(Cmd, TEXT("ZoogiCardBackend="), Backend);
+	FParse::Value(Cmd, TEXT("ZoogiDrawPerTurn="), DrawPerTurn);
+	FParse::Value(Cmd, TEXT("ZoogiHandCap="), HandCap);
 	HandSize = FMath::Clamp(HandSize, 1, 10);
+	DrawPerTurn = FMath::Clamp(DrawPerTurn, 0, 10);
+	HandCap = FMath::Clamp(HandCap, HandSize, 12);
 	EnergyPerTurn = FMath::Clamp(EnergyPerTurn, 0, 20);
 	DeckSize = FMath::Clamp(DeckSize, 1, 60);
 	MaxCopies = FMath::Clamp(MaxCopies, 1, 10);
@@ -399,15 +405,21 @@ void FZoogiCardRules::BeginStandby(int32 P, int32 Turn)
 {
 	if (!Players.IsValidIndex(P)) return;
 	if (Players[P].bStandbyOpen && Players[P].Turn == Turn) return; // apply once
-	for (int32 Q = 0; Q < Players.Num(); ++Q) if (Players[Q].bStandbyOpen || Players[Q].Committed.Num() > 0 || Players[Q].Hand.Num() > 0) EndTurn(Q);
+	for (int32 Q = 0; Q < Players.Num(); ++Q) if (Players[Q].bStandbyOpen || Players[Q].Committed.Num() > 0) EndTurn(Q);
 	FZoogiCardPlayerState& S = Players[P];
+	const bool bOpening = S.Turn < 0; // first Standby of the match: the opening hand
 	S.Turn = Turn;
 	S.bStandbyOpen = true;
 	S.bCommitted = false;
 	S.Selected.Reset();
 	S.Energy = TuneV.EnergyPerTurn; // refresh, not accumulate
 	Log(P, TEXT("standby"), nullptr, 0, 0, FString::Printf(TEXT("energy=%d"), S.Energy));
-	Draw(P, FMath::Max(0, TuneV.HandSize - S.Hand.Num()));
+	// Evan, Oct 14: the opening hand is HandSize; every later turn draws DrawPerTurn (the hand persists), up to HandCap.
+	S.HandBeforeDraw = S.Hand.Num();
+	S.LastDrawWant = bOpening ? FMath::Max(0, TuneV.HandSize - S.Hand.Num()) : FMath::Clamp(TuneV.HandCap - S.Hand.Num(), 0, TuneV.DrawPerTurn);
+	Draw(P, S.LastDrawWant);
+	S.LastDrawn = S.Hand.Num() - S.HandBeforeDraw;
+	Log(P, TEXT("turn_draw"), nullptr, 0, 0, FString::Printf(TEXT("%s want=%d drew=%d hand=%d"), bOpening ? TEXT("opening") : TEXT("turn"), S.LastDrawWant, S.LastDrawn, S.Hand.Num()));
 }
 
 const FZoogiCardInstance* FZoogiCardRules::FindInHand(int32 P, int32 InstanceId) const
@@ -521,11 +533,10 @@ void FZoogiCardRules::EndTurn(int32 P)
 {
 	if (!Players.IsValidIndex(P)) return;
 	FZoogiCardPlayerState& S = Players[P];
-	if (!S.bStandbyOpen && S.Hand.Num() == 0 && S.Committed.Num() == 0) return;
-	const int32 N = S.Hand.Num() + S.Committed.Num();
+	if (!S.bStandbyOpen && S.Committed.Num() == 0) return;
+	const int32 N = S.Committed.Num();
 	for (const FZoogiCardCommitted& K : S.Committed) S.Discard.Add(K.Card);
-	S.Discard.Append(S.Hand);
-	S.Hand.Reset(); S.Committed.Reset(); S.Selected.Reset();
+	S.Committed.Reset(); S.Selected.Reset(); // Evan, Oct 14: the unplayed hand is kept (draw 1 per turn, no refill)
 	S.bStandbyOpen = false;
 	S.bCommitted = false;
 	S.Energy = 0; // unspent Card Energy does not carry over (refresh, not bank)

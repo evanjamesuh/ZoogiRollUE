@@ -116,6 +116,9 @@ struct FZoogiCardPlayerState
 	int32 Turn = -1;                         // turn of the open / last Standby
 	bool bStandbyOpen = false;
 	bool bCommitted = false;
+	int32 HandBeforeDraw = 0;                // diagnostics for the per-turn draw (not serialized)
+	int32 LastDrawWant = 0;
+	int32 LastDrawn = 0;
 };
 
 /** Toolkit seam: card definitions + shuffling. Swap in a plugin-backed implementation later; rules stay the same. */
@@ -166,7 +169,9 @@ private:
 struct FZoogiCardTune
 {
 	bool bCards = false;        // [ZoogiRoll.Cards] bCards (default False) / -ZoogiCards / -ZoogiCards=Off
-	int32 HandSize = 5;         // card book: "Draw five"
+	int32 HandSize = 5;         // card book: "Draw five" (opening hand only; Evan Oct 14: no refill to full each turn)
+	int32 DrawPerTurn = 1;      // [ZoogiRoll.Cards] DrawPerTurn: cards drawn at every later Standby
+	int32 HandCap = 7;          // [ZoogiRoll.Cards] HandCap: per-turn draws stop at this many cards in hand
 	int32 EnergyPerTurn = 5;    // card book: "refresh five Energy"
 	int32 DeckSize = 15;        // Evan, Oct 14: at least 15 cards
 	int32 MaxCopies = 2;        // PROPOSED (Evan, Oct 13)

@@ -8,6 +8,10 @@
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SConstraintCanvas.h"
 #include "Widgets/Images/SImage.h"
+#include "Widgets/SViewport.h"
+#include "ZoogiFramedLayout.h"
+#include "ZoogiRoll.h"
+
 
 namespace
 {
@@ -30,10 +34,29 @@ FBox2f FZoogiAnimePanels::PanelRect(int32 Index)
 	return FBox2f(FVector2f(X0, Y0), FVector2f(X1, Y1));
 }
 
-void FZoogiAnimePanels::Show(UGameViewportClient* Viewport, UTexture* Movie, const FLinearColor& Accent, float Length)
+void FZoogiAnimePanels::Show(UGameViewportClient* Viewport, UTexture* Movie, const FLinearColor& Accent, float Length, int32 Player)
 {
 	Hide();
 	if (!Viewport || !Movie) return;
+	// Oct 14: over the acting player's profile card (normalized viewport coords of the card rect), else the edge layout
+	bool bProf = false;
+	FBox2f Prof(FVector2f(0.f), FVector2f(1.f));
+	{
+		FVector2D AMin, ASize;
+		TSharedPtr<SViewport> VW = Viewport->GetGameViewportWidget();
+		if (Player >= 0 && VW.IsValid() && ZoogiFramed::ProfileRect(Player, AMin, ASize))
+		{
+			const FGeometry& VG = VW->GetTickSpaceGeometry();
+			const FVector2D VS = VG.GetLocalSize();
+			if (VS.X > 10.f && VS.Y > 10.f)
+			{
+				const FVector2D L0 = FVector2D(VG.AbsoluteToLocal(AMin)) / VS, L1 = FVector2D(VG.AbsoluteToLocal(AMin + ASize)) / VS;
+				Prof = FBox2f(FVector2f(L0), FVector2f(L1));
+				bProf = Prof.GetSize().X > 0.02f && Prof.GetSize().Y > 0.02f;
+			}
+		}
+		UE_LOG(LogZoogi, Log, TEXT("Anime panels: %s"), bProf ? *FString::Printf(TEXT("2x2 over P%d profile card (%.3f,%.3f)-(%.3f,%.3f)"), Player + 1, Prof.Min.X, Prof.Min.Y, Prof.Max.X, Prof.Max.Y) : TEXT("screen-edge layout"));
+	}
 	VC = Viewport;
 	State = MakeShared<FState>();
 	State->Length = FMath::Max(0.4f, Length);
@@ -47,16 +70,22 @@ void FZoogiAnimePanels::Show(UGameViewportClient* Viewport, UTexture* Movie, con
 		B->ImageSize = FVector2D(1280.f, 720.f);
 		B->SetUVRegion(GCrop[i]);
 		State->Brushes.Add(B);
-		const FBox2f R = PanelRect(i);
+		FBox2f R = PanelRect(i);
+		if (bProf)
+		{
+			const FVector2f Cell = Prof.GetSize() * 0.5f, Pad = Cell * 0.03f;
+			const FVector2f M = Prof.Min + FVector2f((i & 1) * Cell.X, (i >> 1) * Cell.Y);
+			R = FBox2f(M + Pad, M + Cell - Pad);
+		}
 		TSharedPtr<FState> St = State;
 		const float Start = i * 0.25f;
 		auto Reveal = [St, Start]() { return FMath::Clamp((St->Age / St->Length - Start) / 0.06f, 0.f, 1.f); };
 		TSharedRef<SWidget> Panel =
 			SNew(SBorder) // black comic outline
-			.BorderImage(White).BorderBackgroundColor(FLinearColor(0.01f, 0.01f, 0.012f, 1.f)).Padding(5.f)
+			.BorderImage(White).BorderBackgroundColor(FLinearColor(0.01f, 0.01f, 0.012f, 1.f)).Padding(bProf ? 2.f : 5.f)
 			[
 				SNew(SBorder) // white inner frame
-				.BorderImage(White).BorderBackgroundColor(FLinearColor(0.97f, 0.97f, 0.95f, 1.f)).Padding(3.f)
+				.BorderImage(White).BorderBackgroundColor(FLinearColor(0.97f, 0.97f, 0.95f, 1.f)).Padding(bProf ? 1.5f : 3.f)
 				[
 					SNew(SBorder) // thin accent keyline (artifact colour)
 					.BorderImage(White).BorderBackgroundColor_Lambda([St]() { return St->Accent; }).Padding(2.f)
@@ -74,7 +103,7 @@ void FZoogiAnimePanels::Show(UGameViewportClient* Viewport, UTexture* Movie, con
 				]
 			];
 		Panel->SetRenderTransformPivot(FVector2D(0.5f, 0.5f));
-		const float Tilt = GTilt[i];
+		const float Tilt = bProf ? GTilt[i] * 0.5f : GTilt[i];
 		Panel->SetRenderTransform(TAttribute<TOptional<FSlateRenderTransform>>::CreateLambda([Reveal, Tilt]()
 		{
 			const float K = Reveal();

@@ -24,7 +24,7 @@ class UPrimitiveComponent;
  *    stays open briefly and pulls nearby orbs toward it before closing.
  *  Assets (materials, textures, Niagara) come from Scripts/kfx/finale/kfx_finale.py under /Game/VFX/AwakenFX. */
 UENUM()
-enum class EZoogiAwakenFX : uint8 { LaunchRing, ShockChain, ShockHit, VoidPortal, MeteorArm }; // MeteorArm: invisible Void 2 watcher (fires the Titan Meteor on the first orb / player collision)
+enum class EZoogiAwakenFX : uint8 { LaunchRing, ShockChain, ShockHit, VoidPortal, MeteorArm, VoidArm }; // VoidArm (Oct 14): invisible Void 1 watcher, opens the portal at the first orb / player collision // MeteorArm: invisible Void 2 watcher (fires the Titan Meteor on the first orb / player collision)
 
 /** Void tuning, [ZoogiRoll.Void] in DefaultGame.ini (Evan, Oct 14). Void 1 = portal gravity pull only; Void 2 = Titan Meteor. */
 struct FZoogiVoidTune
@@ -34,6 +34,7 @@ struct FZoogiVoidTune
 	float PullSeconds = 5.0f;    // s: portal stays open and pulls this long (Evan 12:58 PM; was 2.0, originally 1.4)
 	float FadeSeconds = 1.2f;    // s: smooth close at the end of the pull (pull strength fades with it)
 	float MeteorSeconds = 2.4f;  // Void 2 presentation length (real s)
+	bool bPortalAfterHit = true; // Oct 14 (Evan): the Void 1 black hole opens at the collision point after the hit lands (False = old: at infuse)
 };
 
 UCLASS()
@@ -108,6 +109,7 @@ protected:
 	void TickShockHit(float Dt);
 	void TickVoid(float Dt);
 	void TickMeteorArm();
+	void OpenVoidAt(const FVector& Floor, const FVector& Dir, AActor* Other);
 	void Finish(float FadeTime);
 
 	FVector ViewPos() const;
