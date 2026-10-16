@@ -8,13 +8,14 @@
 // over-cranked take that plays back slow when encoded at 60 fps. Presentation only: global time dilation is never
 // touched, physics runs its normal rules at the fixed step.
 //
-//   -ZoogiCineCapture=track|pushin|orbit|crane|whip|ringout   shot path (see ZoogiCineCapture.cpp)
+//   -ZoogiCineCapture=track|pushin|orbit|crane|whip|ringout   shot path (see ZoogiCineCapture.cpp); a comma list cycles
+//                           over the filmed launches (launch 1 = first shot, ...)
 //   -ZoogiCineTake=N        variation (side / angle / speed), default 1
 //   -ZoogiCineTurns=1,2|all which launches to film (1-based), default 1; with "all" up to -ZoogiCineMaxTurns (4)
 //   -ZoogiCineSlow=K        over-crank (fixed step 1/(60K)), default 1
 //   -ZoogiCineOut=<dir>     frame folder root (default Saved/CineCapture/<shot>_take<N>)
 //   -ZoogiCineFocus=launch|power  (whose launch: any launch, or only launches with an infused artifact / armed card)
-// Writes <out>/launchNN/f_00000.png ... plus events.txt (frame numbers of power-up, launch, first impact, ring-out,
+// Writes <out>/launchNN_<shot>/f_00000.png ... plus events.txt (frame numbers of power-up, launch, first impact, ring-out,
 // resolve) and quits when the last filmed launch has been recorded (or after -ZoogiCineMaxSeconds, default 420 real s).
 #pragma once
 
@@ -42,7 +43,11 @@ public:
 private:
 	enum class EShot : uint8 { Track, PushIn, Orbit, Crane, Whip, RingOut };
 	EShot Shot = EShot::Track;
-	FString ShotName, OutRoot;
+	FString ShotName, OutRoot, CurShot;
+	TArray<FString> ShotList;
+	bool bDumping = false;
+	int32 RigN = 0;
+	void SetShot(const FString& N);
 	int32 Take = 1, Slow = 1, MaxTurns = 4;
 	TArray<int32> Turns;
 	bool bAllTurns = false, bPowerOnly = false;

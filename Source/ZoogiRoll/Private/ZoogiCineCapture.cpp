@@ -45,10 +45,11 @@ void UZoogiCineCapture::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
 	const TCHAR* Cmd = FCommandLine::Get();
-	FParse::Value(Cmd, TEXT("ZoogiCineCapture="), ShotName);
+	FParse::Value(Cmd, TEXT("ZoogiCineCapture="), ShotName, false);
 	ShotName = ShotName.ToLower();
-	Shot = ShotName == TEXT("pushin") ? EShot::PushIn : ShotName == TEXT("orbit") ? EShot::Orbit : ShotName == TEXT("crane") ? EShot::Crane
-		: ShotName == TEXT("whip") ? EShot::Whip : ShotName == TEXT("ringout") ? EShot::RingOut : EShot::Track;
+	ShotName.ParseIntoArray(ShotList, TEXT(","));
+	if (ShotList.Num() == 0) ShotList.Add(TEXT("track"));
+	SetShot(ShotList[0]);
 	FParse::Value(Cmd, TEXT("ZoogiCineTake="), Take);
 	FParse::Value(Cmd, TEXT("ZoogiCineSlow="), Slow);
 	Slow = FMath::Clamp(Slow, 1, 8);
@@ -59,10 +60,17 @@ void UZoogiCineCapture::Initialize(FSubsystemCollectionBase& Collection)
 	bAllTurns = TurnsArg.Equals(TEXT("all"), ESearchCase::IgnoreCase);
 	if (!bAllTurns) { TArray<FString> Parts; TurnsArg.ParseIntoArray(Parts, TEXT(",")); for (const FString& P : Parts) Turns.Add(FCString::Atoi(*P)); }
 	if (FParse::Value(Cmd, TEXT("ZoogiCineFocus="), Focus)) bPowerOnly = Focus.Equals(TEXT("power"), ESearchCase::IgnoreCase);
-	if (!FParse::Value(Cmd, TEXT("ZoogiCineOut="), OutRoot)) OutRoot = FPaths::ProjectSavedDir() / TEXT("CineCapture") / FString::Printf(TEXT("%s_take%d"), *ShotName, Take);
+	if (!FParse::Value(Cmd, TEXT("ZoogiCineOut="), OutRoot)) OutRoot = FPaths::ProjectSavedDir() / TEXT("CineCapture") / FString::Printf(TEXT("take%d"), Take);
 	Side = (Take % 2 == 1) ? 1.f : -1.f;
 	StartReal = FPlatformTime::Seconds();
 	UE_LOG(LogZoogi, Log, TEXT("CINECAP on: shot %s take %d slow x%d launches %s%s -> %s"), *ShotName, Take, Slow, *TurnsArg, bPowerOnly ? TEXT(" (power launches only)") : TEXT(""), *OutRoot);
+}
+
+void UZoogiCineCapture::SetShot(const FString& N)
+{
+	CurShot = N;
+	Shot = N == TEXT("pushin") ? EShot::PushIn : N == TEXT("orbit") ? EShot::Orbit : N == TEXT("crane") ? EShot::Crane
+		: N == TEXT("whip") ? EShot::Whip : N == TEXT("ringout") ? EShot::RingOut : EShot::Track;
 }
 
 void UZoogiCineCapture::Deinitialize()
@@ -113,9 +121,11 @@ void UZoogiCineCapture::Begin(AZoogiGameMode* G)
 	StartPos.Reset();
 	for (AZoogiBall* B : G->Balls) if (B) StartPos.Add(B, B->BallLocation());
 	Struck = nullptr; Faller = nullptr;
-	T = 0.f; LaunchT = ImpactT = OutT = ResolveT = -1.f; Frame = 0; Events.Reset();
+	T = 0.f; LaunchT = ImpactT = OutT = ResolveT = -1.f; Frame = 0; RigN = 0; Events.Reset(); bDumping = false;
 	ImpactPos = TL; OutDir = AimDir;
-	Dir = OutRoot / FString::Printf(TEXT("launch%02d"), LaunchNo);
+	SetShot(ShotList[Filmed % ShotList.Num()]); // shots cycle over the filmed launches
+	Side = ((Take + Filmed / ShotList.Num()) % 2 == 1) ? 1.f : -1.f;
+	Dir = OutRoot / FString::Printf(TEXT("launch%02d_%s"), LaunchNo, *CurShot);
 	IFileManager::Get().MakeDirectory(*Dir, true);
 	if (!Cam)
 	{
@@ -129,7 +139,7 @@ void UZoogiCineCapture::Begin(AZoogiGameMode* G)
 	FApp::SetUseFixedTimeStep(true);
 	FApp::SetFixedDeltaTime(1.0 / (60.0 * Slow));
 	GEngine->Exec(GetWorld(), TEXT("DisableAllScreenMessages"));
-	Event(FString::Printf(TEXT("powerup shooter %s target %s artifact %d fps_game %d"), *GetNameSafe(S), *GetNameSafe(Target.Get()),
+	Event(FString::Printf(TEXT("powerup shot %s shooter %s target %s artifact %d fps_game %d"), *CurShot, *GetNameSafe(S), *GetNameSafe(Target.Get()),
 		(S && S->Artifact) ? (int32)S->Artifact->Infused : -1, 60 * Slow));
 }
 
@@ -180,9 +190,9 @@ void UZoogiCineCapture::Rig(AZoogiGameMode* G, float Dt)
 		const float H = 28.f + 6.f * (Take - 1);
 		FVector Want = SL + Right * (Side * 360.f) - VelDir * (LaunchT < 0.f ? 260.f : 140.f) + FVector(0, 0, H - ZoogiConst::ZoogiRadius);
 		if (LaunchT >= 0.f && Speed < 40.f && T - LaunchT > 1.f) Want.Z += 120.f; // settled: lift off the floor
-		CamLoc = (Frame == 0) ? Want : Damp(CamLoc, Want, 7.f, Dt);
+		CamLoc = (RigN == 0) ? Want : Damp(CamLoc, Want, 7.f, Dt);
 		CamLoc.Z = FMath::Max(CamLoc.Z, 22.f);
-		LookAt = (Frame == 0) ? SL : Damp(LookAt, SL + VelDir * 120.f, 10.f, Dt);
+		LookAt = (RigN == 0) ? SL : Damp(LookAt, SL + VelDir * 120.f, 10.f, Dt);
 		Apply(CamLoc, LookAt, 42.f, 2.8f, 0.6f);
 		break;
 	}
@@ -206,11 +216,11 @@ void UZoogiCineCapture::Rig(AZoogiGameMode* G, float Dt)
 		const float Rad = 640.f - 40.f * (Take - 1), Hgt = 170.f + 30.f * (Take - 1);
 		const float Spin = Side * (ImpactT >= 0.f ? 72.f : 30.f);
 		float& Ang = OrbitAng;
-		if (Frame == 0) Ang = FMath::RadiansToDegrees(FMath::Atan2(-AimDir.Y, -AimDir.X)) + Side * 70.f;
+		if (RigN == 0) Ang = FMath::RadiansToDegrees(FMath::Atan2(-AimDir.Y, -AimDir.X)) + Side * 70.f;
 		Ang += Spin * Dt;
 		const FVector Want = C + FVector(FMath::Cos(FMath::DegreesToRadians(Ang)), FMath::Sin(FMath::DegreesToRadians(Ang)), 0.f) * Rad + FVector(0, 0, Hgt);
-		CamLoc = (Frame == 0) ? Want : Damp(CamLoc, Want, 5.f, Dt);
-		LookAt = (Frame == 0) ? C : Damp(LookAt, C, 6.f, Dt);
+		CamLoc = (RigN == 0) ? Want : Damp(CamLoc, Want, 5.f, Dt);
+		LookAt = (RigN == 0) ? C : Damp(LookAt, C, 6.f, Dt);
 		Apply(CamLoc, LookAt, 50.f, 3.2f, 0.5f);
 		break;
 	}
@@ -251,8 +261,8 @@ void UZoogiCineCapture::Rig(AZoogiGameMode* G, float Dt)
 		if (!F)
 		{
 			const FVector Want = SL - VelDir * 420.f + Right * (Side * 260.f) + FVector(0, 0, 230.f);
-			CamLoc = (Frame == 0) ? Want : Damp(CamLoc, Want, 4.f, Dt);
-			LookAt = (Frame == 0) ? SL : Damp(LookAt, SL + VelDir * 200.f, 6.f, Dt);
+			CamLoc = (RigN == 0) ? Want : Damp(CamLoc, Want, 4.f, Dt);
+			LookAt = (RigN == 0) ? SL : Damp(LookAt, SL + VelDir * 200.f, 6.f, Dt);
 			Apply(CamLoc, LookAt, 52.f, 4.f, 0.5f);
 		}
 		else
@@ -331,15 +341,25 @@ void UZoogiCineCapture::Tick(float DeltaTime)
 	if (ResolveT < 0.f && (G->Stage == EZoogiStage::Resolve || G->Stage == EZoogiStage::End || G->Phase == EZoogiPhase::Resolving)) { ResolveT = T; Event(TEXT("resolve")); }
 
 	Rig(G, Dt);
-	// one HUD-free frame per tick (viewport only)
-	FScreenshotRequest::RequestScreenshot(Dir / FString::Printf(TEXT("f_%05d.png"), Frame), false, false);
-	++Frame;
+	++RigN;
+	// one HUD-free frame per tick (viewport only). Over-cranked takes skip the power-up (PNG dumps are the slow part):
+	// they start 0.5 s (game) before the launch, recognised by the CPU's power-up length (~1.2 s) or the launch itself.
+	const bool bDump = Slow == 1 || LaunchT >= 0.f || T >= 0.7f;
+	if (bDump)
+	{
+		if (!bDumping) { bDumping = true; Event(TEXT("dump start")); }
+		FScreenshotRequest::RequestScreenshot(Dir / FString::Printf(TEXT("f_%05d.png"), Frame), false, false);
+		++Frame;
+	}
 	T += Dt;
 
 	const float Cap = (Shot == EShot::Crane) ? 7.5f : (Shot == EShot::RingOut ? 9.5f : 8.f);
 	const bool bAfterResolve = ResolveT >= 0.f && T - ResolveT > 1.0f && (Shot != EShot::RingOut || OutT < 0.f || T - OutT > 3.f) && (Shot != EShot::Crane || T > 6.8f);
 	const bool bOutDone = Shot == EShot::RingOut && OutT >= 0.f && T - OutT > 3.2f;
-	if (T >= Cap) End(TEXT("cap"));
+	const float Hit = OutT >= 0.f ? OutT : ImpactT;
+	if (Slow > 1 && Hit >= 0.f && T - Hit > 1.8f && Shot != EShot::Crane) End(TEXT("slow: hit + 1.8 s"));
+	else if (Slow > 1 && LaunchT >= 0.f && Hit < 0.f && T - LaunchT > 3.5f) End(TEXT("slow: no hit"));
+	else if (T >= Cap) End(TEXT("cap"));
 	else if (bOutDone) End(TEXT("faller followed"));
 	else if (bAfterResolve && T > 3.f) End(TEXT("resolved"));
 	else if (G->Phase == EZoogiPhase::GameOver && T > 2.f) End(TEXT("game over"));
