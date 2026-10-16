@@ -10,6 +10,8 @@ class UPointLightComponent;
 class UMaterialInstanceDynamic;
 class USceneCaptureComponent2D;
 class UTextureRenderTarget2D;
+class UPrimitiveComponent;
+class UMaterialInterface;
 
 /** Titan Awaken look (Titan card art): a shell of chunky grey stone slabs that slam onto the Zoogi's sphere, glowing
  *  orange-hot seams between them, embers / pebbles / dust while it rolls, a stone-crack burst on hits and a shatter when
@@ -25,6 +27,7 @@ class ZOOGIROLL_API AZoogiTitanShell : public AActor
 public:
 	AZoogiTitanShell();
 	virtual void Tick(float DeltaSeconds) override;
+	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 
 	static bool Enabled();
 	static AZoogiTitanShell* Activate(AZoogiBall* Ball);
@@ -87,4 +90,15 @@ protected:
 	static int32 CapSerial;
 	void Capture(const FString& Name, float Delay);
 	void TickCaptures();
+	void CaptureView(const FVector& Eye, const FVector& Look, float Fov, const FString& Name);
+	int32 FrontCaps = 0, FacingCaps = 0;
+
+	// While the shell is on, the Zoogi's own extras (artifact glow shell / guard bubble / orbiters / plates, nubs, auras, visor
+	// glass and other translucent model slots) are hidden so every Zoogi reads like the card; restored on shatter.
+	TArray<TWeakObjectPtr<UPrimitiveComponent>> Suppressed;
+	TArray<TPair<int32, TWeakObjectPtr<UMaterialInterface>>> HiddenSlots;
+	UPROPERTY() TObjectPtr<UMaterialInterface> HiddenMat;
+	FLinearColor TurnColor = FLinearColor::White;
+	bool bSuppressed = false;
+	void Suppress(bool bOn);
 };

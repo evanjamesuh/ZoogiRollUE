@@ -21,6 +21,11 @@
 #include "Engine/TextureRenderTarget2D.h"
 #include "Kismet/KismetRenderingLibrary.h"
 #include "Camera/PlayerCameraManager.h"
+#include "Components/PrimitiveComponent.h"
+#include "Engine/StaticMesh.h"
+#include "Materials/Material.h"
+#include "NiagaraComponent.h"
+#include "EngineUtils.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 
@@ -75,8 +80,9 @@ AZoogiTitanShell* AZoogiTitanShell::Activate(AZoogiBall* InBall)
 	if (!S) return nullptr;
 	S->Ball = InBall;
 	S->Rng.Initialize(FMath::Rand());
-	S->bTest = FParse::Param(FCommandLine::Get(), TEXT("ZoogiTitanTest"));
+	S->bTest = FParse::Param(FCommandLine::Get(), TEXT("ZoogiTitanTest")) || FParse::Param(FCommandLine::Get(), TEXT("ZoogiTitanShots"));
 	S->Build();
+	S->Suppress(true);
 	UE_LOG(LogZoogi, Log, TEXT("TitanShell: P%d %s awakens (%d slabs)"), InBall->PlayerIndex + 1, *InBall->Def.Name, S->Slabs.Num());
 	return S;
 }
@@ -138,6 +144,62 @@ void AZoogiTitanShell::TickCaptures()
 	}
 }
 
+void AZoogiTitanShell::Suppress(bool bOn)
+{
+	AZoogiBall* B = Ball.Get();
+	if (!B || bOn == bSuppressed) return;
+	bSuppressed = bOn;
+	if (bOn)
+	{
+		TArray<UPrimitiveComponent*> Prims;
+		B->GetComponents<UPrimitiveComponent>(Prims);
+		for (UPrimitiveComponent* P : Prims)
+		{
+			if (!P || P == B->Sphere || P == B->Visual || P == B->Ring || !P->IsVisible()) continue;
+			P->SetVisibility(false);
+			Suppressed.Add(P);
+		}
+		// translucent / glass / visor slots of the model (the Eyes and Core slots drive the face and stay)
+		HiddenMat = LoadTitan<UMaterialInterface>(TEXT("/Game/VFX/TitanFX/M_TitanHidden.M_TitanHidden"));
+		const TArray<FName> Slots = B->Visual->GetMaterialSlotNames();
+		for (int32 i = 0; i < B->Visual->GetNumMaterials(); ++i)
+		{
+			UMaterialInterface* M = B->Visual->GetMaterial(i);
+			const FString Sn = Slots.IsValidIndex(i) ? Slots[i].ToString() : FString();
+			const bool bFace = Sn == TEXT("Eyes") || Sn.EndsWith(TEXT("_Eyes")) || Sn == TEXT("Core") || Sn.EndsWith(TEXT("_Core"));
+			const EBlendMode Bm = M ? M->GetBlendMode() : BLEND_Opaque;
+			const bool bGlass = Bm == BLEND_Translucent || Bm == BLEND_Additive || Sn.Contains(TEXT("Visor")) || Sn.Contains(TEXT("Glass")) || Sn.Contains(TEXT("Dome")) || Sn.Contains(TEXT("Goggle")) || Sn.Contains(TEXT("Glow")) || Sn.EndsWith(TEXT("_Shell")); // the model's own outer shell / dome: the stone is the shell now
+			UE_LOG(LogZoogi, Log, TEXT("TitanShell: P%d slot %d '%s' %s blend=%d%s"), B->PlayerIndex + 1, i, *Sn, M ? *M->GetName() : TEXT("-"), (int32)Bm, bGlass && !bFace && HiddenMat ? TEXT(" -> hidden") : TEXT(""));
+			if (bGlass && !bFace && HiddenMat) { HiddenSlots.Add(TPair<int32, TWeakObjectPtr<UMaterialInterface>>(i, M)); B->Visual->SetMaterial(i, HiddenMat); }
+		}
+		if (B->TurnLight) TurnColor = B->TurnLight->GetLightColor();
+	}
+	else
+	{
+		for (const TWeakObjectPtr<UPrimitiveComponent>& P : Suppressed) if (P.IsValid()) P->SetVisibility(true);
+		Suppressed.Reset();
+		for (const auto& H : HiddenSlots) if (B->Visual && H.Value.IsValid()) B->Visual->SetMaterial(H.Key, H.Value.Get());
+		HiddenSlots.Reset();
+		if (B->TurnLight) B->TurnLight->SetLightColor(TurnColor);
+	}
+}
+
+void AZoogiTitanShell::CaptureView(const FVector& Eye, const FVector& Look, float Fov, const FString& Name)
+{
+	const AZoogiGameMode* GM = GetWorld()->GetAuthGameMode<AZoogiGameMode>();
+	if (!bTest || !GM || GM->ShotDir.IsEmpty()) return;
+	Capture(TEXT("_warm"), 1e6f); // makes sure the capture component exists
+	CapQueue.RemoveAll([](const TPair<float, FString>& Q) { return Q.Value == TEXT("_warm"); });
+	const float OldFov = Cap->FOVAngle;
+	Cap->FOVAngle = Fov;
+	Cap->SetWorldLocationAndRotation(Eye, (Look - Eye).Rotation());
+	Cap->CaptureScene(); Cap->CaptureScene();
+	const FString File = FString::Printf(TEXT("titancap_%03d_%s.png"), CapSerial++, *Name);
+	UKismetRenderingLibrary::ExportRenderTarget(this, CapRT, GM->ShotDir, File);
+	UE_LOG(LogZoogi, Log, TEXT("TitanShell: captured %s"), *File);
+	Cap->FOVAngle = OldFov;
+}
+
 void AZoogiTitanShell::Shot(const TCHAR* Name, float Delay)
 {
 	if (!bTest) return;
@@ -158,7 +220,7 @@ void AZoogiTitanShell::Build()
 
 	// Fibonacci spread with jitter; the face window (model +X) stays open like the card (angry face peeking out).
 	const float R = ZoogiConst::ZoogiRadius;
-	constexpr int32 N = 26;
+	constexpr int32 N = 30;
 	for (int32 i = 0; i < N; ++i)
 	{
 		const float Y = 1.f - 2.f * (i + 0.5f) / N;
@@ -169,7 +231,7 @@ void AZoogiTitanShell::Build()
 		if (D.X > 0.78f && FMath::Abs(D.Z) < 0.45f) continue;                   // eyes / mouth window
 		FSlab S;
 		S.Dir = D;
-		S.Size = Rng.FRandRange(0.88f, 1.1f);
+		S.Size = Rng.FRandRange(0.72f, 1.22f);
 		S.Home = D * R * 1.05f;
 		const FVector Out = (D + FVector(0, 0, 0.6f)).GetSafeNormal();
 		S.From = S.Home + Out * Rng.FRandRange(170.f, 260.f) + Rng.VRand() * 40.f;
@@ -178,8 +240,8 @@ void AZoogiTitanShell::Build()
 		UProceduralMeshComponent* PM = NewObject<UProceduralMeshComponent>(this);
 		PM->SetupAttachment(Pivot);
 		PM->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-		PM->SetCastShadow(true);
-		BuildSlabMesh(PM, D, 0.34f * S.Size, Rng.FRandRange(0.75f, 1.3f), Rng.FRandRange(0.f, 90.f), R, false);
+		PM->SetCastShadow(false); // no slab-on-slab self shadow: the card reads evenly lit
+		BuildSlabMesh(PM, D, 0.31f * S.Size, Rng.FRandRange(0.7f, 1.45f), Rng.FRandRange(0.f, 90.f), R, false);
 		PM->SetRelativeLocation(S.From);
 		PM->SetRelativeRotation(S.Spin);
 		PM->RegisterComponent();
@@ -199,79 +261,76 @@ void AZoogiTitanShell::Build()
 
 void AZoogiTitanShell::BuildSlabMesh(UProceduralMeshComponent* M, const FVector& Dir, float Half, float Aspect, float Twist, float Radius, bool bChip)
 {
-	// Chunky stone brick: a 3x3 patch on the sphere (corners chamfered), outer face pushed out with bumps, flat-shaded.
-	// Vertex colour R = seam heat (sides / under / rim), G = outer face (crack overlay). Geometry is local to the slab centre.
+	// Card-style stone brick: chamfered-rectangle footprint on the sphere, FLAT (slightly tilted) top, bevelled top edge,
+	// straight side walls down to the ball. Flat-shaded. Vertex colour R = seam heat (side walls / underside),
+	// G = top face (crack overlay + ambient). Geometry is local to the slab centre C.
 	FVector T1, T2;
 	Dir.FindBestAxisVectors(T1, T2);
 	const FQuat Tw(Dir, FMath::DegreesToRadians(Twist));
 	T1 = Tw.RotateVector(T1); T2 = Tw.RotateVector(T2);
-	const float Ro = Radius * (bChip ? 1.f : 1.22f), Ri = Radius * (bChip ? 0.7f : 0.98f);
+	const float Ro = Radius * (bChip ? 1.f : Rng.FRandRange(1.17f, 1.30f));
+	const float Ri = Radius * (bChip ? 0.55f : 0.97f);
 	const FVector C = bChip ? FVector::ZeroVector : Dir * Radius * 1.05f;
 	const float Ta = FMath::Tan(Half);
-	constexpr int32 G = 4; // verts per side
-	FVector Outer[G][G], Inner[G][G];
-	float Rim[G][G];
-	for (int32 y = 0; y < G; ++y)
-		for (int32 x = 0; x < G; ++x)
-		{
-			float u = -1.f + 2.f * x / (G - 1), v = -1.f + 2.f * y / (G - 1);
-			const bool bCorner = (x == 0 || x == G - 1) && (y == 0 || y == G - 1);
-			const bool bEdge = x == 0 || x == G - 1 || y == 0 || y == G - 1;
-			if (bCorner) { u *= 0.68f; v *= 0.68f; }
-			if (bEdge) { u += Rng.FRandRange(-0.09f, 0.09f); v += Rng.FRandRange(-0.09f, 0.09f); }
-			const FVector D = (Dir + Ta * (u * Aspect * T1 + v / Aspect * T2)).GetSafeNormal();
-			// flatter top than the sphere (stone slab), slight bevel at the rim
-			const float Bump = Rng.FRandRange(-0.025f, 0.03f) * Radius;
-			const float Top = bEdge ? Ro * 0.965f : Ro + Bump;
-			const FVector Flat = D * (Top / FMath::Max(FVector::DotProduct(D, Dir), 0.6f));
-			Outer[y][x] = FMath::Lerp(D * Top, Flat, bChip ? 0.8f : 0.45f) - C;
-			Inner[y][x] = D * Ri - C;
-			Rim[y][x] = 0.f; // top face stays stone; heat lives on the sides / underside
-		}
+	const FVector Nt = (Dir + Rng.VRand() * (bChip ? 0.35f : 0.13f)).GetSafeNormal(); // tilted top plane
+	const float Bev = Radius * (bChip ? 0.12f : 0.045f);                                   // bevel height
+	// chamfered rectangle footprint (8 corners), half extents in tangent units
+	const float Ha = Ta * Aspect, Hb = Ta / Aspect;
+	const float Ch = 0.22f + Rng.FRandRange(0.f, 0.15f);
+	TArray<FVector2D> Foot;
+	const FVector2D Corners[4] = { { Ha, Hb }, { -Ha, Hb }, { -Ha, -Hb }, { Ha, -Hb } };
+	for (int32 k = 0; k < 4; ++k)
+	{
+		const FVector2D P = Corners[k], Prev = Corners[(k + 3) % 4], Next = Corners[(k + 1) % 4];
+		const float Ck = Ch * Rng.FRandRange(0.6f, 1.3f);
+		Foot.Add(P + (Prev - P) * Ck * 0.5f + FVector2D(Rng.FRandRange(-0.02f, 0.02f), Rng.FRandRange(-0.02f, 0.02f)));
+		Foot.Add(P + (Next - P) * Ck * 0.5f + FVector2D(Rng.FRandRange(-0.02f, 0.02f), Rng.FRandRange(-0.02f, 0.02f)));
+	}
+	const int32 K = Foot.Num();
+	const FVector TopC = Dir * (Ro / FMath::Max(FVector::DotProduct(Dir, Nt), 0.5f));
+	TArray<FVector> Top, Edge, Bot;
+	for (const FVector2D& F : Foot)
+	{
+		const FVector D = (Dir + F.X * T1 + F.Y * T2).GetSafeNormal();
+		const float Dn = FMath::Max(FVector::DotProduct(D, Nt), 0.45f);
+		const FVector OnTop = D * (Ro / Dn);
+		Edge.Add(D * ((Ro - Bev) / Dn) - C);
+		Top.Add(TopC + (OnTop - TopC) * 0.86f - C);   // bevel: top face inset
+		Bot.Add(D * Ri - C);
+	}
 	TArray<FVector> V; TArray<int32> Tri; TArray<FVector> N; TArray<FVector2D> UV; TArray<FLinearColor> Col; TArray<FProcMeshTangent> Tan;
-	auto Face = [&](const FVector& A, const FVector& B, const FVector& Cc, const FVector2D& Ua, const FVector2D& Ub, const FVector2D& Uc, float Ra, float Rb, float Rc, float Gf)
+	auto Face = [&](const FVector& A, const FVector& B, const FVector& Cc, float Ra, float Rb, float Rc, float Gf)
 	{
 		const FVector Nn = FVector::CrossProduct(Cc - A, B - A).GetSafeNormal();
 		const int32 I = V.Num();
 		V.Add(A); V.Add(B); V.Add(Cc);
 		N.Add(Nn); N.Add(Nn); N.Add(Nn);
-		UV.Add(Ua); UV.Add(Ub); UV.Add(Uc);
+		// planar UV from the slab tangent frame (stone texture keeps a consistent scale)
+		auto U = [&](const FVector& P) { return FVector2D(FVector::DotProduct(P, T1), FVector::DotProduct(P, T2)) / (Radius * 0.9f) + FVector2D(0.5f, 0.5f); };
+		UV.Add(U(A)); UV.Add(U(B)); UV.Add(U(Cc));
 		Col.Add(FLinearColor(Ra, Gf, 0, 1)); Col.Add(FLinearColor(Rb, Gf, 0, 1)); Col.Add(FLinearColor(Rc, Gf, 0, 1));
 		Tri.Add(I); Tri.Add(I + 1); Tri.Add(I + 2);
 	};
-	auto Uv = [](int32 x, int32 y) { return FVector2D(float(x) / (G - 1), float(y) / (G - 1)); };
-	// winding: outward normals (Unreal front face is clockwise seen from the front)
-	for (int32 y = 0; y < G - 1; ++y)
-		for (int32 x = 0; x < G - 1; ++x)
-		{
-			Face(Outer[y][x], Outer[y + 1][x], Outer[y][x + 1], Uv(x, y), Uv(x, y + 1), Uv(x + 1, y), Rim[y][x], Rim[y + 1][x], Rim[y][x + 1], 1.f);
-			Face(Outer[y + 1][x], Outer[y + 1][x + 1], Outer[y][x + 1], Uv(x, y + 1), Uv(x + 1, y + 1), Uv(x + 1, y), Rim[y + 1][x], Rim[y + 1][x + 1], Rim[y][x + 1], 1.f);
-			Face(Inner[y][x], Inner[y][x + 1], Inner[y + 1][x], Uv(x, y), Uv(x + 1, y), Uv(x, y + 1), 1, 1, 1, 0.f);
-			Face(Inner[y + 1][x], Inner[y][x + 1], Inner[y + 1][x + 1], Uv(x, y + 1), Uv(x + 1, y), Uv(x + 1, y + 1), 1, 1, 1, 0.f);
-		}
-	// side walls around the border
-	TArray<FIntPoint> Ring;
-	for (int32 x = 0; x < G - 1; ++x) Ring.Add({ x, 0 });
-	for (int32 y = 0; y < G - 1; ++y) Ring.Add({ G - 1, y });
-	for (int32 x = G - 1; x > 0; --x) Ring.Add({ x, G - 1 });
-	for (int32 y = G - 1; y > 0; --y) Ring.Add({ 0, y });
-	for (int32 k = 0; k < Ring.Num(); ++k)
+	const FVector TopMid = TopC - C, BotMid = Dir * Ri - C;
+	for (int32 k = 0; k < K; ++k)
 	{
-		const FIntPoint a = Ring[k], b = Ring[(k + 1) % Ring.Num()];
-		const FVector Oa = Outer[a.Y][a.X], Ob = Outer[b.Y][b.X], Ia = Inner[a.Y][a.X], Ib = Inner[b.Y][b.X];
-		const FVector2D U0(0, 0), U1(1, 0), U2(0, 1), U3(1, 1);
-		Face(Oa, Ob, Ia, U0, U1, U2, 0.7f, 0.7f, 1.f, 0.f);
-		Face(Ob, Ib, Ia, U1, U3, U2, 0.7f, 1.f, 1.f, 0.f);
+		const int32 j = (k + 1) % K;
+		Face(TopMid, Top[k], Top[j], 0, 0, 0, 1.f);                       // flat top
+		Face(Top[k], Edge[k], Edge[j], 0, 0, 0, 0.6f);                     // bevel
+		Face(Top[k], Edge[j], Top[j], 0, 0, 0, 0.6f);
+		Face(Edge[k], Bot[k], Bot[j], 0.65f, 1.f, 1.f, 0.f);              // side wall (hot toward the ball)
+		Face(Edge[k], Bot[j], Edge[j], 0.65f, 1.f, 0.65f, 0.f);
+		Face(BotMid, Bot[j], Bot[k], 1, 1, 1, 0.f);                         // underside
 	}
-	// make sure the winding is outward: flip any face whose normal points toward the slab centre
-	const FVector Mid = (Dir * (Ro + Ri) * 0.5f) - C;
+	// outward winding: flip any face whose normal points toward the slab's interior
+	const FVector Mid = Dir * (Ro + Ri) * 0.5f - C;
 	for (int32 t = 0; t < Tri.Num(); t += 3)
 	{
 		const FVector Cen = (V[Tri[t]] + V[Tri[t + 1]] + V[Tri[t + 2]]) / 3.f;
 		if (FVector::DotProduct(N[Tri[t]], Cen - Mid) < 0.f)
 		{
 			Swap(Tri[t + 1], Tri[t + 2]);
-			for (int32 j = 0; j < 3; ++j) N[Tri[t] + j] = -N[Tri[t] + j];
+			for (int32 jj = 0; jj < 3; ++jj) N[Tri[t] + jj] = -N[Tri[t] + jj];
 		}
 	}
 	M->CreateMeshSection_LinearColor(0, V, Tri, N, UV, Col, Tan, false);
@@ -351,6 +410,7 @@ void AZoogiTitanShell::Shatter()
 	if (State == EState::Shattering) return;
 	State = EState::Shattering;
 	StateAge = 0.f;
+	Suppress(false);
 	Crack = 4.f;
 	Impulse = 3.f;
 	const FVector C = Center();
@@ -377,6 +437,12 @@ void AZoogiTitanShell::Shatter()
 	Shot(TEXT("titan_3_shatter"), 0.3f);
 	CapFrom = C;
 	Capture(TEXT("end_a_crack"), 0.08f); Capture(TEXT("end_b_fall"), 0.45f); Capture(TEXT("end_c_fade"), 1.2f);
+}
+
+void AZoogiTitanShell::EndPlay(const EEndPlayReason::Type Reason)
+{
+	Suppress(false);
+	Super::EndPlay(Reason);
 }
 
 void AZoogiTitanShell::Tick(float Dt)
@@ -429,17 +495,46 @@ void AZoogiTitanShell::Tick(float Dt)
 	{
 		const float Spd = B->PlanarSpeed();
 		NextEmber -= Dt; NextPebble -= Dt * (Spd > 150.f ? 2.5f : 1.f); NextDust -= Dt;
-		if (NextEmber <= 0.f) { NextEmber = Rng.FRandRange(0.25f, 0.6f); Embers(C + Rng.VRand() * ZoogiConst::ZoogiRadius, 0.25f); }
+		if (NextEmber <= 0.f) { NextEmber = Spd > 120.f ? Rng.FRandRange(0.06f, 0.12f) : Rng.FRandRange(0.15f, 0.32f); Embers(C + Rng.VRand() * ZoogiConst::ZoogiRadius * 1.1f, 0.55f); }
 		if (NextPebble <= 0.f)
 		{
 			NextPebble = Rng.FRandRange(0.8f, 1.6f);
 			SpawnChip(C + Rng.VRand() * ZoogiConst::ZoogiRadius * 1.05f, Rng.VRand() * 60.f + FVector(0, 0, 40.f), Rng.FRandRange(0.5f, 0.9f));
 		}
-		if (Spd > 120.f && NextDust <= 0.f) { NextDust = 0.12f; Dust(FVector(C.X, C.Y, Ground()), 0.35f); }
+		if (Spd > 90.f && NextDust <= 0.f)
+		{
+			NextDust = 0.06f;
+			const FVector Back = -FVector(B->GetBallVelocity().X, B->GetBallVelocity().Y, 0.f).GetSafeNormal() * ZoogiConst::ZoogiRadius * 0.6f;
+			Dust(FVector(C.X, C.Y, Ground()) + Back, 0.55f);
+		}
 		if (!bShotRolling && Spd > 250.f) { bShotRolling = true; Shot(TEXT("titan_2_rolling"), 0.25f); }
 		if (Spd > 200.f && RollCaps < 3 && CapQueue.Num() == 0) { ++RollCaps; Capture(FString::Printf(TEXT("roll_%d"), RollCaps), 0.12f * RollCaps); }
 		if (const AZoogiGameMode* GM = GetWorld()->GetAuthGameMode<AZoogiGameMode>())
+		{
 			if (GM->Phase == EZoogiPhase::Aiming && Spd < 20.f && AimCaps < 4 && CapQueue.Num() == 0 && StateAge > 0.6f * (AimCaps + 1)) { ++AimCaps; Capture(FString::Printf(TEXT("aimface_%d"), AimCaps), 0.f); }
+			// front shot: camera straight in front of the face (model +X), face visible through the open window
+			if (GM->Phase == EZoogiPhase::Aiming && Spd < 20.f && FrontCaps < 2 && StateAge > 0.9f + 0.9f * FrontCaps && B->Visual)
+			{
+				++FrontCaps;
+				FVector F = B->Visual->GetForwardVector(); F.Z = 0.f; F = F.GetSafeNormal();
+				CaptureView(C + F * 260.f + FVector(0, 0, 45.f), C + FVector(0, 0, 8.f), 40.f, FString::Printf(TEXT("front_P%d_%d"), B->PlayerIndex + 1, FrontCaps));
+			}
+			// facing check from the gameplay camera: every other Zoogi, close crop (only the local one should look at the camera)
+			if (GM->Phase == EZoogiPhase::Aiming && FacingCaps < 1 && StateAge > 1.5f)
+				if (APlayerCameraManager* PCM = UGameplayStatics::GetPlayerCameraManager(GetWorld(), 0))
+				{
+					++FacingCaps;
+					for (AZoogiBall* O : GM->Balls)
+					{
+						if (!O || O == B || O->bOut) continue;
+						// along the gameplay camera's line of sight to that Zoogi, but close (no props in between)
+						const FVector Oc = O->BallLocation();
+						const FVector Eye = Oc + (PCM->GetCameraLocation() - Oc).GetSafeNormal() * 280.f;
+						CaptureView(Eye, Oc, 40.f,
+							FString::Printf(TEXT("facing_P%d_%s_seenby_cam"), O->PlayerIndex + 1, O->PlayerIndex == 0 ? TEXT("local") : TEXT("nonlocal")));
+					}
+				}
+		}
 	}
 	else if (State == EState::Shattering)
 	{
@@ -460,6 +555,15 @@ void AZoogiTitanShell::Tick(float Dt)
 		if (StateAge > 3.f) { Destroy(); return; }
 	}
 
+	if (bSuppressed && State != EState::Shattering && B)
+	{
+		for (const TWeakObjectPtr<UPrimitiveComponent>& P : Suppressed) if (P.IsValid() && P->IsVisible()) P->SetVisibility(false);
+		TArray<UPrimitiveComponent*> Prims;
+		B->GetComponents<UPrimitiveComponent>(Prims);
+		for (UPrimitiveComponent* P : Prims)
+			if (P && P != B->Sphere && P != B->Visual && P != B->Ring && P->IsVisible()) { P->SetVisibility(false); Suppressed.AddUnique(P); }
+		if (B->TurnLight) { B->TurnLight->SetLightColor(HotSeam); B->TurnLight->SetIntensity(FMath::Min(B->TurnLight->Intensity, 25.f)); }
+	}
 	TickChips(Dt);
 	TickCaptures();
 	if (Stone)

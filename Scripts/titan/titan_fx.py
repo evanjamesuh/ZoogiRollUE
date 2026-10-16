@@ -61,11 +61,11 @@ def build_stone(crack):
     tc = E(m, unreal.MaterialExpressionTextureCoordinate)
     t = TX(m, 'StoneTex', rock, O(m, MUL, tc, S(m, 'StoneTile', 0.8)))
     vc = E(m, unreal.MaterialExpressionVertexColor)
-    tint = V(m, 'Tint', LC(0.80, 0.80, 0.80, 1))
+    tint = V(m, 'Tint', LC(0.52, 0.52, 0.53, 1))  # mid grey like the card
     # grey stone like the card: desaturated KriptoFX golem rock, lifted
     lum = E(m, unreal.MaterialExpressionDotProduct); C(t, 'RGB', lum, 'A')
     w = E(m, unreal.MaterialExpressionConstant3Vector); w.set_editor_property('constant', LC(0.33, 0.33, 0.33, 1)); C(w, '', lum, 'B')
-    stone = O(m, ADD, O(m, MUL, O(m, MUL, lum, K(m, 0.9)), tint), S(m, 'Lift', 0.10))
+    stone = O(m, ADD, O(m, MUL, O(m, MUL, lum, K(m, 0.9)), tint), S(m, 'Lift', 0.05))
     # hot faces (slab sides / underside, vertex R > 0.5) read orange even under daylight
     hotbase = V(m, 'HotBase', LC(0.55, 0.12, 0.02, 1))
     ha = E(m, unreal.MaterialExpressionSaturate); C(O(m, MUL, O(m, unreal.MaterialExpressionSubtract, vc, K(m, 0.5), 'R', ''), K(m, 2.5)), '', ha, '')
@@ -78,7 +78,7 @@ def build_stone(crack):
     ck = TX(m, 'CrackTex', crack, O(m, MUL, tc, K(m, 1.0)))
     e2 = O(m, MUL, O(m, MUL, O(m, MUL, seamc, S(m, 'CrackGlow', 0.0)), ck, '', 'R'), vc, '', 'G')
     # card-like even lighting: a little self-lit stone so slabs in the ball's own shadow stay readable grey
-    amb = O(m, MUL, O(m, MUL, stone, S(m, 'Ambient', 0.75)), vc, '', 'G')
+    amb = O(m, MUL, O(m, MUL, stone, S(m, 'Ambient', 0.6)), vc, '', 'G')
     MEL.connect_material_property(O(m, ADD, O(m, ADD, e1, e2), amb), '', unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     finish(m)
     mi = fresh('MI_TitanStone', unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
@@ -109,7 +109,7 @@ def build_sprite():
         for k, v in params.items(): MEL.set_material_instance_scalar_parameter_value(x, k, v)
         EAL.save_loaded_asset(x)
         return x
-    return mi('MI_TitanDust', {'Glow': 0.55, 'Opacity': 0.55, 'Softness': 1.4}), mi('MI_TitanEmber', {'Glow': 7.0, 'Opacity': 1.0, 'Softness': 2.5})
+    return mi('MI_TitanDust', {'Glow': 0.8, 'Opacity': 0.85, 'Softness': 1.4}), mi('MI_TitanEmber', {'Glow': 16.0, 'Opacity': 1.0, 'Softness': 2.5})
 
 def system(name, tpl, mat, cfg):
     p = ROOT + '/' + name
@@ -129,17 +129,25 @@ def system(name, tpl, mat, cfg):
     log('%s compile: %s' % (name, L.compile_report(s)))
     EAL.save_loaded_asset(s)
 
+def build_hidden():
+    # invisible masked material: hides the model's glass / visor slots while the stone shell is on
+    m = fresh('M_TitanHidden')
+    m.set_editor_property('blend_mode', unreal.BlendMode.BLEND_MASKED)
+    MEL.connect_material_property(K(m, 0.0), '', unreal.MaterialProperty.MP_OPACITY_MASK)
+    MEL.connect_material_property(K(m, 0.0), '', unreal.MaterialProperty.MP_BASE_COLOR)
+    finish(m)
+
 def build_niagara(dust, ember):
     # dust ring: flat burst along the floor (component scale 1 = Zoogi-sized thump)
     system('NS_TitanDust', 'OmnidirectionalBurst', dust, {
-        'SpawnBurst_Instantaneous.Spawn Count': 26, 'InitializeParticle.Lifetime Min': 0.6, 'InitializeParticle.Lifetime Max': 1.3,
-        'Uniform Sprite Size Min': 30.0, 'Uniform Sprite Size Max': 70.0, 'InitializeParticle.Color': LC(0.62, 0.55, 0.47, 0.55),
+        'SpawnBurst_Instantaneous.Spawn Count': 30, 'InitializeParticle.Lifetime Min': 0.8, 'InitializeParticle.Lifetime Max': 1.6,
+        'Uniform Sprite Size Min': 40.0, 'Uniform Sprite Size Max': 90.0, 'InitializeParticle.Color': LC(0.78, 0.70, 0.60, 0.8),
         'RandomRangeFloat.Minimum': 120.0, 'RandomRangeFloat.Maximum': 340.0, 'GravityForce.Gravity': unreal.Vector(0, 0, 40), 'Drag.Drag': 3.5,
         'ShapeLocation.Sphere Radius': 45.0, 'ShapeLocation.Non Uniform Scale': unreal.Vector(1, 1, 0.08)})
     # embers: small orange sparks drifting off the seams
     system('NS_TitanEmbers', 'OmnidirectionalBurst', ember, {
-        'SpawnBurst_Instantaneous.Spawn Count': 10, 'InitializeParticle.Lifetime Min': 0.5, 'InitializeParticle.Lifetime Max': 1.2,
-        'Uniform Sprite Size Min': 2.0, 'Uniform Sprite Size Max': 5.0, 'InitializeParticle.Color': LC(1.0, 0.45, 0.1, 1),
+        'SpawnBurst_Instantaneous.Spawn Count': 22, 'InitializeParticle.Lifetime Min': 0.7, 'InitializeParticle.Lifetime Max': 1.5,
+        'Uniform Sprite Size Min': 4.0, 'Uniform Sprite Size Max': 9.0, 'InitializeParticle.Color': LC(1.0, 0.42, 0.08, 1),
         'RandomRangeFloat.Minimum': 40.0, 'RandomRangeFloat.Maximum': 160.0, 'GravityForce.Gravity': unreal.Vector(0, 0, 60), 'Drag.Drag': 1.5,
         'ShapeLocation.Sphere Radius': 12.0})
 
@@ -147,4 +155,5 @@ crack = import_tex()
 build_stone(crack)
 d, e = build_sprite()
 build_niagara(d, e)
+build_hidden()
 log('done')
