@@ -1294,24 +1294,35 @@ void AZoogiPlayerController::ApplyPostProcess(float Dt, int32 Profile, float Foc
 	S.DepthOfFieldFstop = FMath::Lerp(32.f, 2.2f, FMath::Clamp(PPDof, 0.f, 1.f)); // f/32 = effectively sharp
 }
 
-bool AZoogiPlayerController::IsLeavingPlay(const FVector& L, bool bOut, float CourtZ, bool bRadialArena)
+bool AZoogiPlayerController::IsOffPlayArea(const AZoogiArena* Arena, const FVector2D& P)
 {
-	if (bOut) return true;
-	if (L.Z < CourtZ - 1.5f * ZoogiConst::ZoogiRadius) return true;                 // dropped below the floor it was rolling on
-	return bRadialArena && FVector2D(L.X, L.Y).Size() > AZoogiArena::ActiveKnockoffR; // past the knockoff ring
+	if (Arena) return Arena->IsOffCourt(P);
+	return AZoogiArena::ActiveKnockoffR > 0.f && P.Size() > AZoogiArena::ActiveKnockoffR;
 }
 
-FVector AZoogiPlayerController::TacticalRollPivot(const FVector& SL, bool bOut, float CourtZ, bool bRadialArena)
+float AZoogiPlayerController::PlayRadius(const AZoogiArena* Arena)
+{
+	return Arena ? Arena->GetKnockoffRadius() : AZoogiArena::ActiveKnockoffR;
+}
+
+bool AZoogiPlayerController::IsLeavingPlay(const FVector& L, bool bOut, float CourtZ, const AZoogiArena* Arena)
+{
+	if (bOut) return true;
+	if (L.Z < CourtZ - 1.5f * ZoogiConst::ZoogiRadius) return true; // dropped below the floor it was rolling on
+	return IsOffPlayArea(Arena, FVector2D(L.X, L.Y));               // off this arena's court
+}
+
+FVector AZoogiPlayerController::TacticalRollPivot(const FVector& SL, bool bOut, float CourtZ, const AZoogiArena* Arena)
 {
 	using namespace ZoogiCamTune;
 	const FVector C0(0.f, 0.f, CourtZ);
-	if (IsLeavingPlay(SL, bOut, CourtZ, bRadialArena)) return C0;
+	if (IsLeavingPlay(SL, bOut, CourtZ, Arena)) return C0;
 	FVector P = FMath::Lerp(C0, SL, TacRollTrack);
-	if (bRadialArena)
+	if (!(Arena && Arena->IsNeonRect())) // a rect court's pivot is already inside its rails
 	{
-		const float MaxR = AZoogiArena::ActiveKnockoffR * 0.8f;
+		const float MaxR = PlayRadius(Arena) * 0.8f;
 		FVector2D P2(P.X, P.Y);
-		if (P2.Size() > MaxR) { P2 = P2.GetSafeNormal() * MaxR; P.X = P2.X; P.Y = P2.Y; }
+		if (MaxR > 0.f && P2.Size() > MaxR) { P2 = P2.GetSafeNormal() * MaxR; P.X = P2.X; P.Y = P2.Y; }
 	}
 	P.Z = FMath::Max(P.Z, CourtZ);
 	return P;
@@ -1413,10 +1424,10 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	UZoogiAnimeSubsystem* Anime = GetWorld()->GetSubsystem<UZoogiAnimeSubsystem>();
 	const AZoogiBall* FocusBall = Cast<AZoogiBall>(AnimeFocus.Get());
 	const bool bRadial = !(G->Arena && G->Arena->IsNeonRect());
-	const bool bFocusGone = FocusBall && IsLeavingPlay(FocusBall->BallLocation(), FocusBall->bOut, CourtZ, bRadial);
+	const bool bFocusGone = FocusBall && IsLeavingPlay(FocusBall->BallLocation(), FocusBall->bOut, CourtZ, G->Arena);
 	const bool bAnimeShot = bAnimeCam && Anime && Anime->IsBusy() && AnimeFocus.IsValid() && !bFocusGone;
 	// Court height only from a shooter still in play (a falling Zoogi must not drag the camera pivots down with it).
-	const bool bShooterLeaving = !Shooter || IsLeavingPlay(SL, Shooter->bOut, CourtZ, bRadial);
+	const bool bShooterLeaving = !Shooter || IsLeavingPlay(SL, Shooter->bOut, CourtZ, G->Arena);
 	if (!bShooterLeaving && SL.Z > -200.f) CourtZ = SL.Z;
 	const bool bTac = !G->bCinematicCam;
 
@@ -1486,7 +1497,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		else if (G->Phase == EZoogiPhase::Rolling)
 		{
 			// Ring-out safe: clamped to the court, the arena centre once the shooter leaves play (was: followed it down to -600).
-			WantPivot = TacticalRollPivot(SL, !Shooter || Shooter->bOut, CourtZ, bRadial);
+			WantPivot = TacticalRollPivot(SL, !Shooter || Shooter->bOut, CourtZ, G->Arena);
 			DistMul = 1.05f * Scale;
 		}
 		else

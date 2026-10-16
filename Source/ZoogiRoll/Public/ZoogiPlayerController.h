@@ -8,6 +8,7 @@
 class ACameraActor;
 class AZoogiBall;
 class AZoogiTargetMarker;
+class AZoogiArena;
 struct FZoogiCombatEvent;
 
 /**
@@ -42,11 +43,16 @@ public:
 	AActor* GetHoverTarget() const { return HoverTarget.Get(); }
 
 	// ---- ring-out camera safety (Oct 14 playtest: the follow camera chased a falling Zoogi into the cliffs).
-	/** True once a Zoogi has left play: marked out, past the knockoff ring (radial arenas) or below the floor it was on. */
-	static bool IsLeavingPlay(const FVector& BallLoc, bool bOut, float CourtZ, bool bRadialArena = true);
+	/** Oct 16: the arena's own play area (Arena->IsOffCourt: its knock-off radius, e.g. r2015 on Volcanic/Cosmic/Arabian/Tomb,
+	 *  Frozen Ring 2's bridges / outer ring, the Neon rect court when that is on); no arena = r > AZoogiArena::ActiveKnockoffR. */
+	static bool IsOffPlayArea(const AZoogiArena* Arena, const FVector2D& P);
+	/** Radius the ring-out camera clamps follow pivots inside: the arena's knock-off radius (ActiveKnockoffR without an arena). */
+	static float PlayRadius(const AZoogiArena* Arena);
+	/** True once a Zoogi has left play: marked out, off the arena's play area (IsOffPlayArea) or below the floor it was on. */
+	static bool IsLeavingPlay(const FVector& BallLoc, bool bOut, float CourtZ, const AZoogiArena* Arena = nullptr);
 	/** Tactical Rolling follow pivot: partway toward the shooter but never off the court (inside the ring, at court
 	 *  height); the arena centre once the shooter is leaving play, so the falling Zoogi leaves the shot instead. */
-	static FVector TacticalRollPivot(const FVector& ShooterLoc, bool bOut, float CourtZ, bool bRadialArena = true);
+	static FVector TacticalRollPivot(const FVector& ShooterLoc, bool bOut, float CourtZ, const AZoogiArena* Arena = nullptr);
 	/** Tactical boom (pitch, distance incl. the arena's camera scale, FOV, pivot lag) for G's arena; for the shot test. */
 	static void TacticalBoom(const AZoogiGameMode* G, float& OutPitch, float& OutDist, float& OutFov, float& OutPosLag);
 	FVector2D GetCursor() const;

@@ -639,7 +639,7 @@ void AZoogiShotTestDriver::StartRingOut(EZoogiShotType Type, bool bSim)
 	const FVector FL = F ? F->GetActorLocation() : FVector(-1000.f, 0.f, 50.f);
 	// Toward the rim in front of the gameplay camera (so the fall happens where the Tactical view looks).
 	const FVector2D U = RimDir(FL).GetRotated(20.f);
-	const float R = AZoogiArena::ActiveKnockoffR;
+	const float R = AZoogiPlayerController::PlayRadius(GM() ? GM()->Arena : nullptr);
 	FallDir = FVector(U.X, U.Y, 0.f);
 	FallStart = FallDir * (R * 0.6f) + FVector(0.f, 0.f, ZoogiConst::ZoogiRadius);
 	FallEdgeT = (R * 0.95f - R * 0.6f) / 650.f;
@@ -709,8 +709,8 @@ void AZoogiShotTestDriver::TickRingOut(float Dt)
 		}
 		else
 		{
-			if (!AZoogiPlayerController::IsLeavingPlay(Pos, bSimOut, SimCourtZ) && Pos.Z > -200.f) SimCourtZ = Pos.Z;
-			Want = AZoogiPlayerController::TacticalRollPivot(Pos, bSimOut, SimCourtZ);
+			if (!AZoogiPlayerController::IsLeavingPlay(Pos, bSimOut, SimCourtZ, G ? G->Arena : nullptr) && Pos.Z > -200.f) SimCourtZ = Pos.Z;
+			Want = AZoogiPlayerController::TacticalRollPivot(Pos, bSimOut, SimCourtZ, G ? G->Arena : nullptr);
 		}
 		SimPivot = SimPivot + (Want - SimPivot) * (1.f - FMath::Exp(-Lag * Dt));
 		if (!bRingOutLegacy) SimPivot.Z = FMath::Max(SimPivot.Z, SimCourtZ - 100.f);
@@ -1107,6 +1107,24 @@ void AZoogiShotTestDriver::Verify()
 		{
 			bPass &= bFrame && bHeight && bFell;
 			Extra.Add(Line);
+			if (C.Kind == ZoogiShotTest::ECaseKind::RingOutSimFixed)
+			{
+				// Oct 16: the out-of-play test uses this arena's own court (knock-off radius / Frozen Ring 2 outer ring), not a fixed 1550.
+				const AZoogiGameMode* G = GM();
+				const AZoogiArena* A = G ? G->Arena : nullptr;
+				const float PR = AZoogiPlayerController::PlayRadius(A);
+				const float OutR = FMath::Max(PR, AZoogiArena::OuterOutR);
+				bool bIn = true, bOff = true;
+				for (int32 k = 0; k < 8; ++k)
+				{
+					const FVector2D U = FVector2D(1.f, 0.f).GetRotated(45.f * k + 10.f);
+					bIn &= !AZoogiPlayerController::IsOffPlayArea(A, U * (PR - 20.f));
+					bOff &= AZoogiPlayerController::IsOffPlayArea(A, U * (OutR + 20.f));
+				}
+				const bool bRadOK = A && FMath::IsNearlyEqual(PR, A->GetKnockoffRadius()) && bIn && bOff;
+				bPass &= bRadOK;
+				Extra.Add(FString::Printf(TEXT("play radius %.0f (arena knock-off %.0f, outer %.0f): in at r-20 %d, off past the outer edge %d"), PR, A ? A->GetKnockoffRadius() : -1.f, AZoogiArena::OuterOutR, bIn, bOff));
+			}
 		}
 	}
 	if (FinishLog.Num()) Extra.Add(TEXT("ends ") + FString::Join(FinishLog, TEXT(",")));
