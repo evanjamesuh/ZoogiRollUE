@@ -63,6 +63,12 @@ void UZoogiCineCapture::Initialize(FSubsystemCollectionBase& Collection)
 	if (!FParse::Value(Cmd, TEXT("ZoogiCineOut="), OutRoot)) OutRoot = FPaths::ProjectSavedDir() / TEXT("CineCapture") / FString::Printf(TEXT("take%d"), Take);
 	Side = (Take % 2 == 1) ? 1.f : -1.f;
 	StartReal = FPlatformTime::Seconds();
+	// Launched with -UseFixedTimeStep -FPS=N (ZOOGI's capture settings): keep that exact step so the same seed replays the
+	// same moment; one PNG per sim step, any 60 fps / slow-mo conversion happens in the encoder. Otherwise switch to a
+	// fixed 1/(60*Slow) s step only while recording.
+	bKeepStep = FApp::UseFixedTimeStep();
+	CapFps = bKeepStep ? FMath::Max(1, FMath::RoundToInt(1.0 / FApp::GetFixedDeltaTime())) : 60 * Slow;
+	UE_LOG(LogZoogi, Log, TEXT("CINECAP step: %s, %d frames per game second"), bKeepStep ? TEXT("game's own fixed step kept") : TEXT("fixed while recording"), CapFps);
 	UE_LOG(LogZoogi, Log, TEXT("CINECAP on: shot %s take %d slow x%d launches %s%s -> %s"), *ShotName, Take, Slow, *TurnsArg, bPowerOnly ? TEXT(" (power launches only)") : TEXT(""), *OutRoot);
 }
 
@@ -75,7 +81,7 @@ void UZoogiCineCapture::SetShot(const FString& N)
 
 void UZoogiCineCapture::Deinitialize()
 {
-	if (bRec) { FApp::SetUseFixedTimeStep(false); bRec = false; }
+	if (bRec) { if (!bKeepStep) FApp::SetUseFixedTimeStep(false); bRec = false; }
 	Super::Deinitialize();
 }
 
@@ -121,7 +127,7 @@ void UZoogiCineCapture::Begin(AZoogiGameMode* G)
 	StartPos.Reset();
 	for (AZoogiBall* B : G->Balls) if (B) StartPos.Add(B, B->BallLocation());
 	Struck = nullptr; Faller = nullptr;
-	T = 0.f; LaunchT = ImpactT = OutT = ResolveT = -1.f; Frame = 0; RigN = 0; Events.Reset(); bDumping = false;
+	T = 0.f; LaunchT = ImpactT = OutT = ResolveT = -1.f; Frame = 0; RigN = 0; Events.Reset(); bDumping = false; PrevShooterV = FVector::ZeroVector; ClearFrac = 1.f;
 	ImpactPos = TL; OutDir = AimDir;
 	SetShot(ShotList[Filmed % ShotList.Num()]); // shots cycle over the filmed launches
 	Side = ((Take + Filmed / ShotList.Num()) % 2 == 1) ? 1.f : -1.f;
@@ -136,11 +142,10 @@ void UZoogiCineCapture::Begin(AZoogiGameMode* G)
 	CamLoc = SL + FVector(0, 0, 300); LookAt = SL;
 	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0)) PrevVT = PC->GetViewTarget();
 	bRec = true;
-	FApp::SetUseFixedTimeStep(true);
-	FApp::SetFixedDeltaTime(1.0 / (60.0 * Slow));
+	if (!bKeepStep) { FApp::SetUseFixedTimeStep(true); FApp::SetFixedDeltaTime(1.0 / (60.0 * Slow)); }
 	GEngine->Exec(GetWorld(), TEXT("DisableAllScreenMessages"));
 	Event(FString::Printf(TEXT("powerup shot %s shooter %s target %s artifact %d fps_game %d"), *CurShot, *GetNameSafe(S), *GetNameSafe(Target.Get()),
-		(S && S->Artifact) ? (int32)S->Artifact->Infused : -1, 60 * Slow));
+		(S && S->Artifact) ? (int32)S->Artifact->Infused : -1, CapFps));
 }
 
 void UZoogiCineCapture::End(const TCHAR* Why)
@@ -148,7 +153,7 @@ void UZoogiCineCapture::End(const TCHAR* Why)
 	Event(FString::Printf(TEXT("end (%s) frames %d"), Why, Frame));
 	FFileHelper::SaveStringArrayToFile(Events, *(Dir / TEXT("events.txt")));
 	bRec = false;
-	FApp::SetUseFixedTimeStep(false);
+	if (!bKeepStep) FApp::SetUseFixedTimeStep(false);
 	++Filmed;
 	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0); PC && Cam && PC->GetViewTarget() == Cam)
 		if (PrevVT.IsValid()) PC->SetViewTarget(PrevVT.Get());
@@ -156,9 +161,25 @@ void UZoogiCineCapture::End(const TCHAR* Why)
 	if (!bMore && !bQuitting) { bQuitting = true; QuitAt = FPlatformTime::Seconds() + 1.0; UE_LOG(LogZoogi, Log, TEXT("CINECAP done: %d launches filmed"), Filmed); }
 }
 
-void UZoogiCineCapture::Apply(const FVector& Loc, const FVector& Look, float Fov, float Fstop, float Blur)
+void UZoogiCineCapture::Apply(const FVector& InLoc, const FVector& Look, float Fov, float Fstop, float Blur)
 {
 	if (!Cam) return;
+	// Keep the subject clear: sweep from the subject to the camera (orbs, pillars, props block; Zoogis do not) and pull the
+	// camera in front of the first blocker, snapping in fast and easing back out slowly.
+	FVector Loc = InLoc;
+	{
+		FCollisionQueryParams Q(TEXT("CineClear"), false);
+		if (AZoogiGameMode* G = GM()) for (AZoogiBall* B : G->Balls) if (B) Q.AddIgnoredActor(B);
+		Q.AddIgnoredActor(Cam);
+		FHitResult Hit;
+		float Want = 1.f;
+		const FVector From = Look + (InLoc - Look).GetSafeNormal() * 60.f;
+		if (GetWorld()->SweepSingleByChannel(Hit, From, InLoc, FQuat::Identity, ECC_Visibility, FCollisionShape::MakeSphere(28.f), Q) && !Hit.bStartPenetrating)
+			Want = FMath::Clamp(Hit.Time - 0.03f, 0.f, 1.f);
+		const float K = Want < ClearFrac ? 25.f : 2.5f;
+		ClearFrac = (RigN == 0) ? Want : ClearFrac + (Want - ClearFrac) * (1.f - FMath::Exp(-K * LastDt));
+		Loc = From + (InLoc - From) * ClearFrac;
+	}
 	Cam->SetActorLocation(Loc);
 	Cam->SetActorRotation((Look - Loc).Rotation());
 	UCameraComponent* C = Cam->GetCameraComponent();
@@ -204,7 +225,8 @@ void UZoogiCineCapture::Rig(AZoogiGameMode* G, float Dt)
 		const float D = FMath::Lerp(820.f, 330.f, A);
 		const FVector Base = (StartPos.Contains(Shooter) ? StartPos[Shooter] : SL);
 		const FVector Want = Base + Front * D + FVector(0, 0, FMath::Lerp(120.f, 40.f, A));
-		if (LaunchT < 0.f) CamLoc = Want; // after launch the camera stays put and pans with the Zoogi
+		if (LaunchT < 0.f) { CamLoc = Want; PushOff = CamLoc - SL; }
+		else CamLoc = Damp(CamLoc, SL + PushOff.GetClampedToMaxSize(520.f) + FVector(0, 0, 30.f), 2.5f, Dt); // then trails the Zoogi
 		LookAt = (LaunchT < 0.f) ? SL + FVector(0, 0, 10.f) : Damp(LookAt, SL, 5.f, Dt);
 		Apply(CamLoc, LookAt, FMath::Lerp(48.f, 36.f, A), 2.0f, 0.5f);
 		break;
@@ -212,8 +234,10 @@ void UZoogiCineCapture::Rig(AZoogiGameMode* G, float Dt)
 	case EShot::Orbit:
 	{
 		// Orbit / 360 around the impact: centred on the predicted contact until the first impact, then on the impact point.
-		const FVector C = (ImpactT >= 0.f ? ImpactPos : (LaunchT < 0.f ? (SL + TL) * 0.5f : TL)) + FVector(0, 0, 30.f);
-		const float Rad = 640.f - 40.f * (Take - 1), Hgt = 170.f + 30.f * (Take - 1);
+		const FVector Want0 = (ImpactT >= 0.f ? ImpactPos : (LaunchT < 0.f ? SL : SL + VelDir * 150.f)) + FVector(0, 0, 30.f);
+		OrbitC = (RigN == 0) ? Want0 : Damp(OrbitC, Want0, ImpactT >= 0.f ? 3.f : 5.f, Dt);
+		const FVector C = OrbitC;
+		const float Rad = 520.f - 30.f * (Take - 1), Hgt = 210.f + 30.f * (Take - 1);
 		const float Spin = Side * (ImpactT >= 0.f ? 72.f : 30.f);
 		float& Ang = OrbitAng;
 		if (RigN == 0) Ang = FMath::RadiansToDegrees(FMath::Atan2(-AimDir.Y, -AimDir.X)) + Side * 70.f;
@@ -305,8 +329,20 @@ void UZoogiCineCapture::Tick(float DeltaTime)
 	if (!bRec) return;
 
 	const float Dt = DeltaTime;
+	LastDt = Dt;
 	// beats
 	if (LaunchT < 0.f && G->Stage == EZoogiStage::Battle && G->BattleStep == EZoogiBattleStep::Rolling) { LaunchT = T; Event(TEXT("launch")); }
+	if (LaunchT >= 0.f && ImpactT < 0.f && Shooter.IsValid())
+	{
+		// the shooter's own contact (wall / piece / power landing): a sharp turn or a big speed drop
+		const FVector V = Flat(Shooter->GetBallVelocity());
+		if (T - LaunchT > 0.12f && PrevShooterV.Size() > 250.f && (V.Size() < PrevShooterV.Size() * 0.6f || FVector::DotProduct(V.GetSafeNormal(), PrevShooterV.GetSafeNormal()) < 0.8f))
+		{
+			ImpactT = T; ImpactPos = Shooter->BallLocation();
+			Event(FString::Printf(TEXT("impact shooter contact at %s"), *ImpactPos.ToString()));
+		}
+		PrevShooterV = V;
+	}
 	if (LaunchT >= 0.f && ImpactT < 0.f)
 	{
 		for (auto& KV : StartPos)

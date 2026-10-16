@@ -12,7 +12,8 @@
 //                           over the filmed launches (launch 1 = first shot, ...)
 //   -ZoogiCineTake=N        variation (side / angle / speed), default 1
 //   -ZoogiCineTurns=1,2|all which launches to film (1-based), default 1; with "all" up to -ZoogiCineMaxTurns (4)
-//   -ZoogiCineSlow=K        over-crank (fixed step 1/(60K)), default 1
+//   -ZoogiCineSlow=K        over-crank (fixed step 1/(60K)), default 1; with -UseFixedTimeStep -FPS=N the game's step
+//                           is kept (deterministic replay of a seed) and slow-mo / 60 fps are made in the encoder
 //   -ZoogiCineOut=<dir>     frame folder root (default Saved/CineCapture/<shot>_take<N>)
 //   -ZoogiCineFocus=launch|power  (whose launch: any launch, or only launches with an infused artifact / armed card)
 // Writes <out>/launchNN_<shot>/f_00000.png ... plus events.txt (frame numbers of power-up, launch, first impact, ring-out,
@@ -47,8 +48,11 @@ private:
 	TArray<FString> ShotList;
 	bool bDumping = false;
 	int32 RigN = 0;
+	float ClearFrac = 1.f, LastDt = 1.f / 60.f;
+	FVector PrevShooterV = FVector::ZeroVector, OrbitC = FVector::ZeroVector, PushOff = FVector::ZeroVector;
 	void SetShot(const FString& N);
-	int32 Take = 1, Slow = 1, MaxTurns = 4;
+	int32 Take = 1, Slow = 1, MaxTurns = 4, CapFps = 60;
+	bool bKeepStep = false;
 	TArray<int32> Turns;
 	bool bAllTurns = false, bPowerOnly = false;
 	double StartReal = 0.0, MaxReal = 420.0;
