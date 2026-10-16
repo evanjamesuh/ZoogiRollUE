@@ -519,6 +519,20 @@ void AZoogiTitanShell::Tick(float Dt)
 				FVector F = B->Visual->GetForwardVector(); F.Z = 0.f; F = F.GetSafeNormal();
 				CaptureView(C + F * 260.f + FVector(0, 0, 45.f), C + FVector(0, 0, 8.f), 40.f, FString::Printf(TEXT("front_P%d_%d"), B->PlayerIndex + 1, FrontCaps));
 			}
+			// facing trace (test runs): how each other Zoogi's face lines up with the gameplay camera over the turn
+			FacingLogClock -= Dt;
+			if (bTest && FacingLogClock <= 0.f)
+				if (APlayerCameraManager* PCM = UGameplayStatics::GetPlayerCameraManager(GetWorld(), 0))
+				{
+					FacingLogClock = 0.5f;
+					for (AZoogiBall* O : GM->Balls)
+					{
+						if (!O || O == B || O->bOut || !O->Visual) continue;
+						UE_LOG(LogTemp, Log, TEXT("TitanFacingT: P%d %s cpu=%d phase=%d speed=%.0f camDot=%.2f"), O->PlayerIndex + 1,
+							O->PlayerIndex == 0 ? TEXT("local") : TEXT("nonlocal"), O->bCPU ? 1 : 0, (int32)GM->Phase, O->PlanarSpeed(),
+							FVector::DotProduct(O->Visual->GetForwardVector().GetSafeNormal2D(), (PCM->GetCameraLocation() - O->BallLocation()).GetSafeNormal2D()));
+					}
+				}
 			// facing check from the gameplay camera: every other Zoogi, close crop (only the local one should look at the camera)
 			if (GM->Phase == EZoogiPhase::Aiming && FacingCaps < 1 && StateAge > 1.5f)
 				if (APlayerCameraManager* PCM = UGameplayStatics::GetPlayerCameraManager(GetWorld(), 0))
@@ -530,6 +544,9 @@ void AZoogiTitanShell::Tick(float Dt)
 						// along the gameplay camera's line of sight to that Zoogi, but close (no props in between)
 						const FVector Oc = O->BallLocation();
 						const FVector Eye = Oc + (PCM->GetCameraLocation() - Oc).GetSafeNormal() * 280.f;
+						if (O->Visual)
+							UE_LOG(LogTemp, Log, TEXT("TitanFacing: P%d %s camDot=%.2f"), O->PlayerIndex + 1, O->PlayerIndex == 0 ? TEXT("local") : TEXT("nonlocal"),
+								FVector::DotProduct(O->Visual->GetForwardVector().GetSafeNormal2D(), (PCM->GetCameraLocation() - Oc).GetSafeNormal2D()));
 						CaptureView(Eye, Oc, 40.f,
 							FString::Printf(TEXT("facing_P%d_%s_seenby_cam"), O->PlayerIndex + 1, O->PlayerIndex == 0 ? TEXT("local") : TEXT("nonlocal")));
 					}

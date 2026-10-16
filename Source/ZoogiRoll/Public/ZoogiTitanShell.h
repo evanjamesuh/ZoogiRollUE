@@ -92,6 +92,7 @@ protected:
 	void TickCaptures();
 	void CaptureView(const FVector& Eye, const FVector& Look, float Fov, const FString& Name);
 	int32 FrontCaps = 0, FacingCaps = 0;
+	float FacingLogClock = 0.f;
 
 	// While the shell is on, the Zoogi's own extras (artifact glow shell / guard bubble / orbiters / plates, nubs, auras, visor
 	// glass and other translucent model slots) are hidden so every Zoogi reads like the card; restored on shatter.
