@@ -179,6 +179,10 @@ void UZoogiCineCapture::Apply(const FVector& InLoc, const FVector& Look, float F
 		const float K = Want < ClearFrac ? 25.f : 2.5f;
 		ClearFrac = (RigN == 0) ? Want : ClearFrac + (Want - ClearFrac) * (1.f - FMath::Exp(-K * LastDt));
 		Loc = From + (InLoc - From) * ClearFrac;
+		// never closer than 230 cm to the subject (or the rig's own distance if that is shorter): a blocker that close is
+		// better left in the shot than filling it with the Zoogi
+		const float MinD = FMath::Min(230.f, FVector::Dist(Look, InLoc));
+		if (FVector::Dist(Look, Loc) < MinD) Loc = Look + (InLoc - Look).GetSafeNormal() * MinD;
 	}
 	Cam->SetActorLocation(Loc);
 	Cam->SetActorRotation((Look - Loc).Rotation());
