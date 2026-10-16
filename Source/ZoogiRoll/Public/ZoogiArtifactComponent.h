@@ -9,6 +9,7 @@
 #include "ZoogiArtifactComponent.generated.h"
 
 class AZoogiBall;
+class AZoogiTitanShell;
 class UStaticMeshComponent;
 class UMaterialInstanceDynamic;
 
@@ -58,6 +59,8 @@ public:
 
 protected:
 	virtual void BeginPlay() override;
+	TWeakObjectPtr<AZoogiTitanShell> TitanShell;
+	void TickTitanShell(AZoogiBall* B);
 	void BuildVisuals();
 	void ApplyLook();
 	void TickVisuals(float Dt);

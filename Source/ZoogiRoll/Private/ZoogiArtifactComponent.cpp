@@ -4,6 +4,10 @@
 #include "ZoogiFX.h"
 #include "ZoogiTypes.h"
 #include "ZoogiGameMode.h"
+#include "ZoogiTitanShell.h"
+#include "ZoogiCardSubsystem.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/PointLightComponent.h"
@@ -185,7 +189,11 @@ void UZoogiArtifactComponent::Pulse(float Strength)
 	// Item 4 hook: the character shell breathes out with the core pulse (draw 0.35, infuse / power-up 1.0 -> 1.06x).
 	if (AZoogiBall* B = Cast<AZoogiBall>(GetOwner())) B->ShellExpand(PulseStrength);
 }
-void UZoogiArtifactComponent::ImpactPulse(float Strength) { ImpactAge = 0.f; ImpactStrength = FMath::Clamp(Strength, 0.f, 1.5f); }
+void UZoogiArtifactComponent::ImpactPulse(float Strength)
+{
+	ImpactAge = 0.f; ImpactStrength = FMath::Clamp(Strength, 0.f, 1.5f);
+	if (AZoogiTitanShell* T = TitanShell.Get()) T->Impact(Strength); // Titan: stone-crack burst with chips
+}
 void UZoogiArtifactComponent::GuardFlash() { GuardFlashAge = 0.f; }
 
 FString UZoogiArtifactComponent::StatusLabel() const
@@ -204,7 +212,8 @@ void UZoogiArtifactComponent::ApplyLook()
 	const FLinearColor C = ZoogiArtifacts::Color(A);
 
 	// Shell change: translucent glowing shell + overlay rim on the character model (GLB materials untouched).
-	Shell->SetVisibility(bOn);
+	const bool bStoneShell = A == EZoogiArtifact::Titan && AZoogiTitanShell::Enabled(); // the stone shell replaces glow shell + rim
+	Shell->SetVisibility(bOn && !bStoneShell);
 	if (bOn)
 	{
 		// Item 2: per-artifact instances (MI_Artifact_<Key>) when they exist; one MID per artifact, reused.
@@ -222,7 +231,7 @@ void UZoogiArtifactComponent::ApplyLook()
 		if (!OverlayMID) OverlayMID = MakeOverlayMID(this, C, 2.f);
 		OverlayMID->SetVectorParameterValue(TEXT("Color"), A == EZoogiArtifact::Void ? R.RimColor : C);
 		OverlayMID->SetScalarParameterValue(TEXT("Pattern"), (float)(int32)A);
-		if (B->Visual) B->Visual->SetOverlayMaterial(OverlayMID);
+		if (B->Visual) B->Visual->SetOverlayMaterial(bStoneShell ? nullptr : OverlayMID);
 	}
 	else
 	{
@@ -253,7 +262,7 @@ void UZoogiArtifactComponent::ApplyLook()
 	}
 
 	// Plates on the shell: Ember cracks (thin glowing slivers), Storm veins, Frost shards (cones), Titan stone plates.
-	const int32 NPl = A == EZoogiArtifact::Void ? 0 : (A == EZoogiArtifact::Titan ? 8 : NumPlates);
+	const int32 NPl = A == EZoogiArtifact::Void ? 0 : (A == EZoogiArtifact::Titan ? (AZoogiTitanShell::Enabled() ? 0 : 8) : NumPlates);
 	for (int32 i = 0; i < Plates.Num(); ++i)
 	{
 		UStaticMeshComponent* P = Plates[i];
@@ -320,6 +329,7 @@ void UZoogiArtifactComponent::TickVisuals(float Dt)
 	PulseAge += Dt;
 	ImpactAge += Dt;
 	GuardFlashAge += Dt;
+	TickTitanShell(B);
 	if (B->bOut)
 	{
 		if (Shell->IsVisible()) Shell->SetVisibility(false);
@@ -484,4 +494,26 @@ void UZoogiArtifactComponent::TickVisuals(float Dt)
 		GuardShell->SetWorldLocation(L);
 		GuardShell->SetWorldScale3D(FVector(S));
 	}
+}
+
+void UZoogiArtifactComponent::TickTitanShell(AZoogiBall* B)
+{
+	// Titan Awaken look (card art stone shell): on while Titan Core is infused (Awaken Infuse) or the "titan" card is armed
+	// for this player (v3 cards; expires at turn end), shatters when either ends. Visual only.
+	if (!AZoogiTitanShell::Enabled()) return;
+	AZoogiGameMode* GM = GetWorld() ? GetWorld()->GetAuthGameMode<AZoogiGameMode>() : nullptr;
+	static const bool bTest = FParse::Param(FCommandLine::Get(), TEXT("ZoogiTitanTest"));
+	// -ZoogiTitanTest: every shooter infuses Titan Core once it is aiming (review captures with -ZoogiAuto -ZoogiShots=<dir>).
+	if (bTest && GM && GM->Phase == EZoogiPhase::Aiming && GM->GetActiveBall() == B && Infused != EZoogiArtifact::Titan)
+	{
+		UE_LOG(LogZoogi, Log, TEXT("TitanTest: P%d infuses Titan Core"), B->PlayerIndex + 1);
+		SetInfused(EZoogiArtifact::Titan);
+	}
+	bool bTitan = Infused == EZoogiArtifact::Titan;
+	if (!bTitan)
+		if (const UZoogiCardSubsystem* C = UZoogiCardSubsystem::Get(this))
+			bTitan = C->IsOn() && C->FxCore().Find(FName(TEXT("titan")), B->PlayerIndex) != nullptr;
+	if (B->bOut) bTitan = false;
+	if (bTitan && !TitanShell.IsValid()) TitanShell = AZoogiTitanShell::Activate(B);
+	else if (!bTitan && TitanShell.IsValid()) { TitanShell->Shatter(); TitanShell.Reset(); }
 }

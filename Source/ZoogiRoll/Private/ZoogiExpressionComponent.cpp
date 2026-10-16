@@ -379,11 +379,40 @@ void UZoogiExpressionComponent::Apply(EZoogiExpr Shown, float Dt)
 
 void UZoogiExpressionComponent::TickFace(AZoogiGameMode* GM, float Dt)
 {
+	// Facing rules (Evan, Oct 14):
+	//  - the shooter, while aiming / charging, eases its face toward the chosen target (~0.3 s at rate 10/s) before launch;
+	//  - otherwise only the local player's own Zoogi (lowest-index human) faces the camera;
+	//  - every other Zoogi keeps its natural roll orientation (face turn off).
 	AZoogiBall* B = Ball();
 	if (!FaceCamera()) { B->SetFaceTarget(false, FQuat::Identity); return; }
 	const bool bSettled = !IsFalling() && B->PlanarSpeed() < 70.f && FMath::Abs(B->GetBallVelocity().Z) < 60.f;
+	if (!bSettled) { B->SetFaceTarget(false, FQuat::Identity); return; }
+
+	if (GM && GM->Phase == EZoogiPhase::Aiming && GM->GetActiveBall() == B)
+	{
+		FVector D = FVector::ZeroVector;
+		if (GM->Preview.bValid && GM->Preview.ContactActor.IsValid() && GM->Preview.ContactActor.Get() != B)
+			D = GM->Preview.ContactActor->GetActorLocation() - B->GetActorLocation();
+		else if (GM->Preview.bValid) D = GM->Preview.Dir;
+		else if (GM->bFreeAim) D = GM->FreeAimPoint - B->GetActorLocation();
+		if (D.Size2D() > 1.f)
+		{
+			const float Yaw = FMath::RadiansToDegrees(FMath::Atan2(D.Y, D.X));
+			B->SetFaceTarget(true, FRotator(0.f, Yaw, 0.f).Quaternion(), 10.f);
+			return;
+		}
+	}
+
+	bool bLocalOwn = false;
+	if (GM)
+	{
+		const AZoogiBall* Own = nullptr;
+		for (const AZoogiBall* O : GM->Balls) if (O && !O->bCPU && (!Own || O->PlayerIndex < Own->PlayerIndex)) Own = O;
+		if (!Own) for (const AZoogiBall* O : GM->Balls) if (O && O->PlayerIndex == 0) Own = O; // CPU-only (auto / attract): P1's seat
+		bLocalOwn = Own == B;
+	}
 	APlayerController* PC = GetWorld()->GetFirstPlayerController();
-	if (!bSettled || !PC || !PC->PlayerCameraManager) { B->SetFaceTarget(false, FQuat::Identity); return; }
+	if (!bLocalOwn || !PC || !PC->PlayerCameraManager) { B->SetFaceTarget(false, FQuat::Identity); return; }
 	const FVector Cam = PC->PlayerCameraManager->GetCameraLocation();
 	const FVector D = Cam - B->GetActorLocation();
 	if (D.Size2D() < 1.f) { B->SetFaceTarget(false, FQuat::Identity); return; }
