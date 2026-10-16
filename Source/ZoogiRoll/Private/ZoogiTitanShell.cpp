@@ -318,8 +318,8 @@ void AZoogiTitanShell::BuildSlabMesh(UProceduralMeshComponent* M, const FVector&
 		Face(TopMid, Top[k], Top[j], 0, 0, 0, 1.f);                       // flat top
 		Face(Top[k], Edge[k], Edge[j], 0, 0, 0, 0.6f);                     // bevel
 		Face(Top[k], Edge[j], Top[j], 0, 0, 0, 0.6f);
-		Face(Edge[k], Bot[k], Bot[j], 0.65f, 1.f, 1.f, 0.f);              // side wall (hot toward the ball)
-		Face(Edge[k], Bot[j], Edge[j], 0.65f, 1.f, 0.65f, 0.f);
+		Face(Edge[k], Bot[k], Bot[j], 0.f, 1.f, 1.f, 0.f);                // side wall: stone outside, seam glow only at the inner rim
+		Face(Edge[k], Bot[j], Edge[j], 0.f, 1.f, 0.f, 0.f);
 		Face(BotMid, Bot[j], Bot[k], 1, 1, 1, 0.f);                         // underside
 	}
 	// outward winding: flip any face whose normal points toward the slab's interior

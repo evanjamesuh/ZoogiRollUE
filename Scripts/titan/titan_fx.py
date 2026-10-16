@@ -68,17 +68,18 @@ def build_stone(crack):
     stone = O(m, ADD, O(m, MUL, O(m, MUL, lum, K(m, 0.9)), tint), S(m, 'Lift', 0.05))
     # hot faces (slab sides / underside, vertex R > 0.5) read orange even under daylight
     hotbase = V(m, 'HotBase', LC(0.55, 0.12, 0.02, 1))
-    ha = E(m, unreal.MaterialExpressionSaturate); C(O(m, MUL, O(m, unreal.MaterialExpressionSubtract, vc, K(m, 0.5), 'R', ''), K(m, 2.5)), '', ha, '')
+    ha = E(m, unreal.MaterialExpressionSaturate); C(O(m, MUL, O(m, unreal.MaterialExpressionSubtract, vc, K(m, 0.72), 'R', ''), K(m, 3.6)), '', ha, '')  # glow only in the inner seam band
     lerp = E(m, unreal.MaterialExpressionLinearInterpolate); C(stone, '', lerp, 'A'); C(hotbase, '', lerp, 'B'); C(ha, '', lerp, 'Alpha')
     MEL.connect_material_property(lerp, '', unreal.MaterialProperty.MP_BASE_COLOR)
     MEL.connect_material_property(S(m, 'Roughness', 0.88), '', unreal.MaterialProperty.MP_ROUGHNESS)
     seamc = V(m, 'SeamColor', LC(1.0, 0.30, 0.04, 1))
-    heat = O(m, MUL, vc, vc, 'R', 'R')
+    heat = O(m, MUL, ha, ha)
     e1 = O(m, MUL, O(m, MUL, seamc, S(m, 'SeamGlow', 1.6)), heat)
     ck = TX(m, 'CrackTex', crack, O(m, MUL, tc, K(m, 1.0)))
     e2 = O(m, MUL, O(m, MUL, O(m, MUL, seamc, S(m, 'CrackGlow', 0.0)), ck, '', 'R'), vc, '', 'G')
     # card-like even lighting: a little self-lit stone so slabs in the ball's own shadow stay readable grey
-    amb = O(m, MUL, O(m, MUL, stone, S(m, 'Ambient', 0.6)), vc, '', 'G')
+    om = E(m, unreal.MaterialExpressionOneMinus); C(ha, '', om, '')
+    amb = O(m, MUL, O(m, MUL, stone, S(m, 'Ambient', 0.8)), om)  # every non-hot face is self-lit grey
     MEL.connect_material_property(O(m, ADD, O(m, ADD, e1, e2), amb), '', unreal.MaterialProperty.MP_EMISSIVE_COLOR)
     finish(m)
     mi = fresh('MI_TitanStone', unreal.MaterialInstanceConstant, unreal.MaterialInstanceConstantFactoryNew())
