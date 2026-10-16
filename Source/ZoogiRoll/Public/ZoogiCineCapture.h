@@ -52,7 +52,7 @@ private:
 	FVector PrevShooterV = FVector::ZeroVector, OrbitC = FVector::ZeroVector, PushOff = FVector::ZeroVector;
 	void SetShot(const FString& N);
 	int32 Take = 1, Slow = 1, MaxTurns = 4, CapFps = 60;
-	bool bKeepStep = false;
+	bool bKeepStep = false, bSkipClear = false;
 	TArray<int32> Turns;
 	bool bAllTurns = false, bPowerOnly = false;
 	double StartReal = 0.0, MaxReal = 420.0;

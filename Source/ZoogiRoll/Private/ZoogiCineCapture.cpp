@@ -127,7 +127,7 @@ void UZoogiCineCapture::Begin(AZoogiGameMode* G)
 	StartPos.Reset();
 	for (AZoogiBall* B : G->Balls) if (B) StartPos.Add(B, B->BallLocation());
 	Struck = nullptr; Faller = nullptr;
-	T = 0.f; LaunchT = ImpactT = OutT = ResolveT = -1.f; Frame = 0; RigN = 0; Events.Reset(); bDumping = false; PrevShooterV = FVector::ZeroVector; ClearFrac = 1.f;
+	T = 0.f; LaunchT = ImpactT = OutT = ResolveT = -1.f; Frame = 0; RigN = 0; Events.Reset(); bDumping = false; PrevShooterV = FVector::ZeroVector; ClearFrac = 1.f; bSkipClear = false;
 	ImpactPos = TL; OutDir = AimDir;
 	SetShot(ShotList[Filmed % ShotList.Num()]); // shots cycle over the filmed launches
 	Side = ((Take + Filmed / ShotList.Num()) % 2 == 1) ? 1.f : -1.f;
@@ -167,6 +167,7 @@ void UZoogiCineCapture::Apply(const FVector& InLoc, const FVector& Look, float F
 	// Keep the subject clear: sweep from the subject to the camera (orbs, pillars, props block; Zoogis do not) and pull the
 	// camera in front of the first blocker, snapping in fast and easing back out slowly.
 	FVector Loc = InLoc;
+	if (!bSkipClear)
 	{
 		FCollisionQueryParams Q(TEXT("CineClear"), false);
 		if (AZoogiGameMode* G = GM()) for (AZoogiBall* B : G->Balls) if (B) Q.AddIgnoredActor(B);
@@ -296,6 +297,7 @@ void UZoogiCineCapture::Rig(AZoogiGameMode* G, float Dt)
 		else
 		{
 			const FVector FL = F->BallLocation();
+			bSkipClear = true; // the sweep from a falling Zoogi up to the rim camera hits the arena's underside
 			const FVector Rim = OutDir * (R * 0.98f);
 			const FVector Want = Rim - OutDir * 120.f + OutDir.RotateAngleAxis(90.f, FVector::UpVector) * (Side * 260.f) + FVector(0, 0, FMath::Max(160.f, FL.Z + 520.f));
 			CamLoc = Damp(CamLoc, Want, 3.f, Dt);
