@@ -24,6 +24,7 @@
 #include "Engine/GameViewportClient.h"
 #include "ZoogiFramedLayout.h"
 #include "ZoogiCardSubsystem.h"
+#include "ZoogiSpawnElevator.h"
 
 // ============================================================================
 // Camera director tuning: every number for the per-stage cameras lives here.
@@ -1338,6 +1339,80 @@ void AZoogiPlayerController::TacticalBoom(const AZoogiGameMode* G, float& OutPit
 	OutPosLag = Profiles[PTactical].PosLag;
 }
 
+void AZoogiPlayerController::FormingSweepPose(float Pg, float Scale, float& OutYaw, float& OutPitch, float& OutDist, float& OutFov, FVector& OutPivot)
+{
+	const float E = Pg * Pg * (3.f - 2.f * Pg);
+	OutYaw = FMath::Lerp(215.f, 270.f, E);
+	OutPitch = FMath::Lerp(30.f, 52.f, E);
+	OutDist = FMath::Lerp(4300.f, 3300.f, E) * Scale;
+	OutFov = 70.f;
+	OutPivot = FVector(0.f, 0.f, -60.f);
+}
+
+float AZoogiPlayerController::ArenaCamScale(const AZoogiGameMode* G)
+{
+	return (G && G->Arena && G->Arena->IsNeon()) ? ZoogiCamTune::NeonScale : (G && G->Arena ? G->Arena->CamScale : 1.f);
+}
+
+float AZoogiPlayerController::ElevatorPushWeight(float WinT)
+{
+	auto Smooth = [](float X) { X = FMath::Clamp(X, 0.f, 1.f); return X * X * (3.f - 2.f * X); };
+	if (WinT <= 0.f || WinT >= ElevPushOutEnd) return 0.f;
+	return FMath::Min(Smooth(WinT / ElevPushIn), Smooth((ElevPushOutEnd - WinT) / ElevPushOut));
+}
+
+FVector AZoogiPlayerController::BoomLocation(const FVector& P, float InYaw, float InPitch, float InDist)
+{
+	const float Pr = FMath::DegreesToRadians(InPitch);
+	return P - FRotator(0.f, InYaw, 0.f).Vector() * InDist * FMath::Cos(Pr) + FVector(0.f, 0.f, InDist * FMath::Sin(Pr));
+}
+
+void AZoogiPlayerController::ElevatorPushFit(const TArray<FVector>& PadFloors, float InYaw, float InFov, float BaseDist, FVector& OutPivot, float& OutPitch, float& OutDist)
+{
+	FVector C = FVector::ZeroVector;
+	for (const FVector& P : PadFloors) C += P;
+	C /= FMath::Max(1, PadFloors.Num());
+	OutPivot = FVector(C.X, C.Y, C.Z + 40.f); // pad centroid at lift-top height
+	OutPitch = 38.f;                           // a little lower than the sweep's 52: the lifts read as rising
+	const float TanH = FMath::Tan(FMath::DegreesToRadians(InFov * 0.5f)) * 0.82f; // keep a margin inside the frame
+	const float TanV = TanH / (16.f / 9.f);
+	auto Fits = [&](float D)
+	{
+		const FVector Loc = BoomLocation(OutPivot, InYaw, OutPitch, D);
+		const FRotator Rot = (OutPivot - Loc).Rotation();
+		for (const FVector& P : PadFloors)
+			for (int32 k = 0; k < 10; ++k)
+			{
+				// pad rim (r ~150) at the floor and the Zoogi on top of the lift (~z +130)
+				const float A = k * 72.f;
+				const FVector Off = k < 5 ? FVector(FMath::Cos(FMath::DegreesToRadians(A)) * 150.f, FMath::Sin(FMath::DegreesToRadians(A)) * 150.f, 0.f) : FVector(0.f, 0.f, 130.f);
+				const FVector L = Rot.UnrotateVector(P + Off - Loc);
+				if (L.X < 50.f || FMath::Abs(L.Y) / L.X > TanH || FMath::Abs(L.Z) / L.X > TanV) return false;
+			}
+		return true;
+	};
+	float Lo = FMath::Min(900.f, BaseDist), Hi = BaseDist;
+	if (!Fits(Hi)) { OutDist = BaseDist; return; }
+	for (int32 i = 0; i < 18; ++i) { const float M = 0.5f * (Lo + Hi); if (Fits(M)) Hi = M; else Lo = M; }
+	OutDist = Hi;
+}
+
+bool AZoogiPlayerController::ElevatorPushAllowed(const AZoogiGameMode* G)
+{
+	const TCHAR* Cmd = FCommandLine::Get();
+	if (FParse::Param(Cmd, TEXT("ZoogiNoElevatorPush"))) return false;
+	if (!G || G->bFormShots || G->FormPass != 0) return false;
+	if (FParse::Param(Cmd, TEXT("ZoogiElevatorPush"))) return true;
+	if (!AZoogiSpawnElevator::IsEnabled()) return false; // also covers -ZoogiAuto / battle tests / -ZoogiNoForm / automation
+	FString V;
+	static const TCHAR* Params[] = { TEXT("ZoogiShotTest"), TEXT("ZoogiPowerTest"), TEXT("ZoogiTitanTest"), TEXT("ZoogiCamStuckTest"), TEXT("ZoogiUiTest"),
+		TEXT("ZoogiHumanTest"), TEXT("ZoogiPlaytest"), TEXT("ZoogiFrozenPlayTest"), TEXT("ZoogiArenaPlayTest"), TEXT("ZoogiClimaxTest"), TEXT("ZoogiPinchTest"), TEXT("ZoogiRockTest") };
+	for (const TCHAR* P : Params) if (FParse::Param(Cmd, P)) return false;
+	static const TCHAR* Values[] = { TEXT("ZoogiMatchTest="), TEXT("ZoogiCardTest="), TEXT("ZoogiEpisodeTest="), TEXT("ZoogiSaveTest=") };
+	for (const TCHAR* P : Values) if (FParse::Value(Cmd, P, V)) return false;
+	return true;
+}
+
 void AZoogiPlayerController::UpdateCamera(float Dt)
 {
 	using namespace ZoogiCamTune;
@@ -1349,13 +1424,31 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	{
 		// Stage forming: a slow sweep in to the art orientation (screen up = -Y) while the stage assembles.
 		const float Pg = (G->Arena && G->Arena->Forming) ? G->Arena->Forming->GetProgress() : 1.f;
-		const float E = Pg * Pg * (3.f - 2.f * Pg);
-		Yaw = FMath::Lerp(215.f, 270.f, E);
-		Pitch = FMath::Lerp(30.f, 52.f, E);
-		Dist = FMath::Lerp(4300.f, 3300.f, E) * Scale;
-		Fov = 70.f;
+		FormingSweepPose(Pg, Scale, Yaw, Pitch, Dist, Fov, Pivot);
 		Dutch = 0.f;
-		Pivot = FVector(0.f, 0.f, -60.f);
+		// Spawn-elevator push-in over the intro's last 1.25 s (same window the GameMode starts the elevators in), timed off the
+		// forming progress so the weight is exactly 0 for the intro's final frames.
+		const float FormLen = (G->Arena && G->Arena->Forming) ? G->Arena->Forming->GetLength() * G->FormTimeScale : 0.f;
+		const float WinT = ElevPushWindow - (1.f - Pg) * FormLen;
+		if (G->FormCamMode == 0 && FormLen > 0.f && WinT > 0.f && ElevatorPushAllowed(G))
+		{
+			if (!bElevPushFit)
+			{
+				TArray<FVector> Pads;
+				for (const AZoogiBall* B : G->Balls) if (B && !B->bOut) Pads.Add(B->BallLocation() - FVector(0.f, 0.f, ZoogiConst::ZoogiRadius));
+				float FYaw, FPitch, FDist, FFov; FVector FPivot;
+				FormingSweepPose(1.f, Scale, FYaw, FPitch, FDist, FFov, FPivot);
+				ElevPushPivot = FPivot; ElevPushPitch = FPitch; ElevPushDist = FDist;
+				if (Pads.Num()) ElevatorPushFit(Pads, FYaw, FFov, FDist, ElevPushPivot, ElevPushPitch, ElevPushDist);
+				bElevPushFit = true;
+				UE_LOG(LogZoogi, Log, TEXT("CAM elevator push-in: %d pads, pivot %s pitch %.1f dist %.0f (sweep end %.0f)"), Pads.Num(), *ElevPushPivot.ToString(), ElevPushPitch, ElevPushDist, FDist);
+			}
+			const float W = ElevatorPushWeight(WinT);
+			Pivot = FMath::Lerp(Pivot, ElevPushPivot, W);
+			Pitch = FMath::Lerp(Pitch, ElevPushPitch, W);
+			Dist = FMath::Lerp(Dist, ElevPushDist, W);
+		}
+		else if (WinT <= 0.f) bElevPushFit = false;
 		if (G->FormCamMode == 1)
 		{
 			// Pillar close-up (forming shots): low view across the floor at the 22.5 deg Resonance pillar and its neighbour.

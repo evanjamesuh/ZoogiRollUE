@@ -6,6 +6,8 @@
 #include "ZoogiOrb.h"
 #include "ZoogiArena.h"
 #include "ZoogiPlayerController.h"
+#include "ZoogiSpawnElevator.h"
+#include "ZoogiStageForming.h"
 #include "Camera/CameraComponent.h"
 #include "ZoogiFX.h"
 #include "NiagaraFunctionLibrary.h"
@@ -206,6 +208,7 @@ void AZoogiShotTestDriver::BuildCases()
 	Add(ZoogiShotTest::ECaseKind::RingOutDirector, TEXT("RingOutFall_TrickRingOutLine_MainView"), EZoogiShotType::TrickRingOutLine, EZoogiShotOutput::MainView);
 	Add(ZoogiShotTest::ECaseKind::RingOutDirector, TEXT("RingOutFall_Tracking_MainView"), EZoogiShotType::Tracking, EZoogiShotOutput::MainView);
 	Add(ZoogiShotTest::ECaseKind::RingOutDirector, TEXT("RingOutFall_Airborne_MainView"), EZoogiShotType::Airborne, EZoogiShotOutput::MainView);
+	Add(ZoogiShotTest::ECaseKind::ElevatorPush, TEXT("ElevatorPushIn_StageIntro_SpawnPads"), EZoogiShotType::Custom, EZoogiShotOutput::MainView);
 	Add(ZoogiShotTest::ECaseKind::LevelEnd, TEXT("LevelEnd"), EZoogiShotType::TopDownImpact, EZoogiShotOutput::MainView);
 }
 
@@ -749,6 +752,97 @@ void AZoogiShotTestDriver::TickRingOut(float Dt)
 	}
 }
 
+// ------------------------------------------------------------------ spawn-elevator push-in
+
+void AZoogiShotTestDriver::StartElevPush()
+{
+	AZoogiGameMode* G = GM();
+	bElevPush = true; bElevDone = false; bElevShot = false; ElevPass = 0; ElevT = -0.3f;
+	ElevPeakW = 0.f; ElevEndDev = 0.f; ElevMinZ = 1e9f; ElevSpreadBase = ElevSpreadPush = 0.f; ElevPadsOut = ElevPads = 0; bElevSpawned = false;
+	ElevFormLen = (G && G->Arena && G->Arena->Forming && G->Arena->Forming->GetLength() > 1.f) ? G->Arena->Forming->GetLength() : 6.f;
+	bElevGateLive = AZoogiPlayerController::ElevatorPushAllowed(G);
+	ElevPadFloors.Reset();
+	if (G) for (const AZoogiBall* B : G->Balls) if (B && !B->bOut) ElevPadFloors.Add(B->BallLocation() - FVector(0.f, 0.f, ZoogiConst::ZoogiRadius));
+	const float Scale = AZoogiPlayerController::ArenaCamScale(G);
+	float Yaw, Pitch, Fov; FVector Pv;
+	AZoogiPlayerController::FormingSweepPose(1.f, Scale, Yaw, Pitch, ElevBaseDist, Fov, Pv);
+	ElevFitPivot = Pv; ElevFitPitch = Pitch; ElevFitDist = ElevBaseDist;
+	AZoogiPlayerController::ElevatorPushFit(ElevPadFloors, Yaw, Fov, ElevBaseDist, ElevFitPivot, ElevFitPitch, ElevFitDist);
+	CaseMid = 1e6f; // explicit _before / _after frames instead of the generic mid frame
+	FActorSpawnParameters SP; SP.ObjectFlags |= RF_Transient;
+	SimCam = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), Snap0.POV.Location, Snap0.POV.Rotation, SP);
+	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0); PC && SimCam) PC->SetViewTarget(SimCam);
+	UE_LOG(LogZoogi, Log, TEXT("ZOOGI SHOTTEST   elevator push-in: %d pads, forming %.2f s, fit pivot %s pitch %.1f dist %.0f (sweep end %.0f), live gate %d"),
+		ElevPadFloors.Num(), ElevFormLen, *ElevFitPivot.ToString(), ElevFitPitch, ElevFitDist, ElevBaseDist, bElevGateLive);
+}
+
+void AZoogiShotTestDriver::TickElevPush(float Dt)
+{
+	if (bElevDone) return;
+	APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
+	AZoogiGameMode* G = GM();
+	if (!SimCam || !PC) { bElevDone = true; return; }
+	const float PrevT = ElevT;
+	ElevT += Dt;
+	if (PrevT < 0.f && ElevT >= 0.f && G && AZoogiSpawnElevator::IsEnabled()) { AZoogiSpawnElevator::PlayAll(G); bElevSpawned = true; } // the real elevators, as the GameMode starts them
+	const float W = AZoogiPlayerController::ElevPushWindow;
+	const float Pg = FMath::Clamp(1.f - (W - FMath::Min(ElevT, W)) / ElevFormLen, 0.f, 1.f);
+	const float Scale = AZoogiPlayerController::ArenaCamScale(G);
+	float Yaw, Pitch, Dist, Fov; FVector Pv;
+	AZoogiPlayerController::FormingSweepPose(Pg, Scale, Yaw, Pitch, Dist, Fov, Pv);
+	const FVector BaseLoc = AZoogiPlayerController::BoomLocation(Pv, Yaw, Pitch, Dist);
+	const FRotator BaseRot = (Pv - BaseLoc).Rotation();
+	FVector Loc = BaseLoc; FRotator Rot = BaseRot;
+	if (ElevPass == 1 && ElevT > 0.f && ElevT < W)
+	{
+		// exactly the controller's blend (UpdateCamera, Forming branch)
+		const float Wt = AZoogiPlayerController::ElevatorPushWeight(ElevT);
+		const FVector P2 = FMath::Lerp(Pv, ElevFitPivot, Wt);
+		const float Pi2 = FMath::Lerp(Pitch, ElevFitPitch, Wt);
+		const float D2 = FMath::Lerp(Dist, ElevFitDist, Wt);
+		Loc = AZoogiPlayerController::BoomLocation(P2, Yaw, Pi2, D2);
+		Rot = (P2 - Loc).Rotation();
+		ElevPeakW = FMath::Max(ElevPeakW, Wt);
+		if (ElevT >= AZoogiPlayerController::ElevPushOutEnd) ElevEndDev = FMath::Max(ElevEndDev, FMath::Max(FVector::Dist(Loc, BaseLoc), (Rot - BaseRot).GetNormalized().Euler().GetAbsMax()));
+		ElevMinZ = FMath::Min(ElevMinZ, Loc.Z);
+		if (Wt >= 0.999f)
+		{
+			const float TanH = FMath::Tan(FMath::DegreesToRadians(Fov * 0.5f)), TanV = TanH / (16.f / 9.f);
+			for (const FVector& P : ElevPadFloors)
+				for (const FVector& O : { FVector(0.f, 0.f, 0.f), FVector(0.f, 0.f, 130.f) })
+				{
+					const FVector L = Rot.UnrotateVector(P + O - Loc);
+					ElevPads++;
+					if (L.X < 1.f || FMath::Abs(L.Y) / L.X > TanH || FMath::Abs(L.Z) / L.X > TanV) ElevPadsOut++;
+				}
+		}
+	}
+	// pad spread on screen (max angle between two pads), sweep vs push-in, at the same moment
+	if (ElevT >= 0.6f && ElevT < 0.6f + Dt && ElevPadFloors.Num() >= 2)
+	{
+		float Spread = 0.f;
+		for (int32 i = 0; i < ElevPadFloors.Num(); ++i) for (int32 j = i + 1; j < ElevPadFloors.Num(); ++j)
+		{
+			const FVector A = (ElevPadFloors[i] - Loc).GetSafeNormal(), B = (ElevPadFloors[j] - Loc).GetSafeNormal();
+			Spread = FMath::Max(Spread, FMath::Acos(FMath::Clamp(FVector::DotProduct(A, B), -1.f, 1.f)));
+		}
+		(ElevPass == 0 ? ElevSpreadBase : ElevSpreadPush) = Spread;
+	}
+	SimCam->SetActorLocation(Loc);
+	SimCam->SetActorRotation(Rot);
+	SimCam->GetCameraComponent()->SetFieldOfView(Fov);
+	if (!bElevShot && ElevT >= 0.7f) { bElevShot = true; Shot(Cases[CaseIdx].Name + (ElevPass == 0 ? TEXT("_before") : TEXT("_after"))); }
+	if (ElevPass == 1 && ElevT >= 1.20f && ElevT < 1.20f + Dt) Shot(Cases[CaseIdx].Name + TEXT("_after_end"));
+	// each pass lasts until the elevators have finished (sink + destroy ~2.2 s after their stagger)
+	bool bAny = false;
+	for (TActorIterator<AZoogiSpawnElevator> It(GetWorld()); It; ++It) { bAny = true; break; }
+	if (ElevT >= 1.6f && (!bAny || ElevT > 4.f))
+	{
+		if (ElevPass == 0) { ElevPass = 1; ElevT = -0.3f; bElevShot = false; }
+		else { PC->SetViewTarget(Snap0.ViewTarget.Get()); bElevDone = true; }
+	}
+}
+
 // ------------------------------------------------------------------ cases
 
 void AZoogiShotTestDriver::StartCase()
@@ -860,6 +954,9 @@ void AZoogiShotTestDriver::StartCase()
 	case ZoogiShotTest::ECaseKind::RingOutDirector:
 		StartRingOut(C.Type, false);
 		break;
+	case ZoogiShotTest::ECaseKind::ElevatorPush:
+		StartElevPush();
+		break;
 	case ZoogiShotTest::ECaseKind::AvoidParticles:
 	{
 		// A white glow burst (+ a Niagara white burst) right where the tracking camera would sit; the camera must stay out of it.
@@ -934,6 +1031,7 @@ void AZoogiShotTestDriver::RunCase(float RealDt)
 		ArcProp->SetActorLocation(Pos);
 	}
 	if (bRingOut) TickRingOut(GetWorld()->GetDeltaSeconds());
+	if (bElevPush) TickElevPush(GetWorld()->GetDeltaSeconds());
 	// RenderTarget output must leave the main view completely alone, every frame.
 	if ((C.Kind == ZoogiShotTest::ECaseKind::Shot || C.Kind == ZoogiShotTest::ECaseKind::AirborneSlowMoRefused || C.Kind == ZoogiShotTest::ECaseKind::AvoidOcclusion) && C.Output == EZoogiShotOutput::RenderTarget)
 	{
@@ -1019,7 +1117,7 @@ void AZoogiShotTestDriver::RunCase(float RealDt)
 		if (C.Kind == ZoogiShotTest::ECaseKind::Overlap && Handles.Num() >= 3) ExportRT(D->GetShotRenderTarget(Handles[2]), C.Name + TEXT("_rendertarget"));
 	}
 	const bool bIdle = D->NumActiveShots() == 0 && !D->IsTimeScaleActive();
-	const bool bRingWait = bRingOut && !bRingOutDone;
+	const bool bRingWait = (bRingOut && !bRingOutDone) || (bElevPush && !bElevDone);
 	if (bIdle && !bRingWait && StepTime > 0.2f && (C.Kind != ZoogiShotTest::ECaseKind::LevelEnd))
 	{
 		Step = ZoogiShotTest::EStep::WaitEnd;
@@ -1127,6 +1225,22 @@ void AZoogiShotTestDriver::Verify()
 			}
 		}
 	}
+	if (C.Kind == ZoogiShotTest::ECaseKind::ElevatorPush)
+	{
+		// The push-in reaches full weight, keeps every pad (and its rising Zoogi) in frame, makes the pads read bigger, never dips
+		// below the court, and is back at the exact sweep pose for the intro's last frames; the live game skips it in test runs.
+		const bool bPeak = ElevPeakW >= 0.999f;
+		const bool bPadsIn = ElevPads > 0 && ElevPadsOut == 0;
+		const float Gain = ElevSpreadBase > 1e-3f ? ElevSpreadPush / ElevSpreadBase : 0.f;
+		const bool bBigger = Gain >= 1.3f;
+		const bool bExact = ElevEndDev == 0.f;
+		const bool bHigh = ElevMinZ >= ZoogiConst::ZoogiRadius;
+		const bool bGate = !bElevGateLive;
+		bPass &= bElevDone && bPeak && bPadsIn && bBigger && bExact && bHigh && bGate;
+		Extra.Add(FString::Printf(TEXT("elevator push-in: fit pivot %s pitch %.1f dist %.0f (sweep end %.0f) | peak weight %.3f | pads out of frame %d/%d samples | pad spread x%.2f (need 1.30) | sweep-pose deviation over the last %.2f s: %.4f (need 0) | lowest camera z=%.0f | live gate in this test run: %s | elevators spawned %d"),
+			*ElevFitPivot.ToString(), ElevFitPitch, ElevFitDist, ElevBaseDist, ElevPeakW, ElevPadsOut, ElevPads, Gain, AZoogiPlayerController::ElevPushWindow - AZoogiPlayerController::ElevPushOutEnd, ElevEndDev, ElevMinZ,
+			bElevGateLive ? TEXT("ON (should be skipped)") : TEXT("skipped"), bElevSpawned));
+	}
 	if (FinishLog.Num()) Extra.Add(TEXT("ends ") + FString::Join(FinishLog, TEXT(",")));
 	if (AZoogiGameMode* G = GM()) Extra.Add(FString::Printf(TEXT("stage %d phase %d"), (int32)G->Stage, (int32)G->Phase));
 	Result(bPass, FString::Printf(TEXT("[%s] camera restore"), *C.Name), Report + TEXT(" | ") + FString::Join(Extra, TEXT(" | ")));
@@ -1212,8 +1326,9 @@ void AZoogiShotTestDriver::Tick(float DeltaSeconds)
 			HidePanel();
 			if (TrackProp) TrackProp->SetActorHiddenInGame(true);
 			if (ArcProp) ArcProp->SetActorHiddenInGame(true);
-			bBankMove = false; bBankHitLogged = false; bRingOut = false;
+			bBankMove = false; bBankHitLogged = false; bRingOut = false; bElevPush = false;
 			if (SimCam) { SimCam->Destroy(); SimCam = nullptr; }
+			bElevPush = false;
 			if (TempProp) { TempProp->Destroy(); TempProp = nullptr; }
 			if (TempFX) { TempFX->Destroy(); TempFX = nullptr; }
 			WaitFrames = 1;

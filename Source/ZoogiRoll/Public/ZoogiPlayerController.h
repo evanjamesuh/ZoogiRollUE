@@ -55,6 +55,25 @@ public:
 	static FVector TacticalRollPivot(const FVector& ShooterLoc, bool bOut, float CourtZ, const AZoogiArena* Arena = nullptr);
 	/** Tactical boom (pitch, distance incl. the arena's camera scale, FOV, pivot lag) for G's arena; for the shot test. */
 	static void TacticalBoom(const AZoogiGameMode* G, float& OutPitch, float& OutDist, float& OutFov, float& OutPosLag);
+
+	// ---- spawn-elevator push-in (Oct 16, ZOOGI): the elevators rise over the last ~1.25 s of the stage intro and read too small
+	// at the wide forming camera, so the camera pushes in on the pads during that window and eases back to the exact sweep pose
+	// before the intro ends (gameplay starts from the unchanged view). Off in auto / test runs; -ZoogiNoElevatorPush disables it.
+	static constexpr float ElevPushWindow = 1.25f;   // the GameMode starts the elevators when 1.25 s of the intro remain
+	static constexpr float ElevPushIn = 0.40f;     // ease in
+	static constexpr float ElevPushOutEnd = 1.17f; // back at the exact sweep pose from here (the intro's last ~5 frames)
+	static constexpr float ElevPushOut = 0.40f;    // ease back
+	/** The stage-forming sweep pose at progress Pg (0..1), as the controller has always drawn it. */
+	static void FormingSweepPose(float Pg, float Scale, float& OutYaw, float& OutPitch, float& OutDist, float& OutFov, FVector& OutPivot);
+	/** Push-in weight at WinT seconds into the elevator window: 0 at 0, 1 while the lifts rise, exactly 0 from ElevPushOutEnd. */
+	static float ElevatorPushWeight(float WinT);
+	/** Closest boom (pivot, pitch, distance <= BaseDist) at this yaw / FOV that keeps every spawn pad (with its lift) in frame. */
+	static void ElevatorPushFit(const TArray<FVector>& PadFloors, float Yaw, float Fov, float BaseDist, FVector& OutPivot, float& OutPitch, float& OutDist);
+	static FVector BoomLocation(const FVector& Pivot, float Yaw, float Pitch, float Dist);
+	/** The arena's camera boom scale (Neon / CamScale), as UpdateCamera uses it. */
+	static float ArenaCamScale(const AZoogiGameMode* G);
+	/** Whether the live game uses the push-in: spawn elevators on and not an auto / test / forming-shots run (-ZoogiElevatorPush forces it). */
+	static bool ElevatorPushAllowed(const AZoogiGameMode* G);
 	FVector2D GetCursor() const;
 
 protected:
@@ -84,6 +103,7 @@ protected:
 	FVector Look = FVector::ZeroVector;
 	float ArmScale = 1.f;          // collision probe (1 = full boom)
 	float MenuOrbit = 0.f;
+	bool bElevPushFit = false; FVector ElevPushPivot = FVector::ZeroVector; float ElevPushPitch = 0.f, ElevPushDist = 0.f; // spawn-elevator push-in (fit once per intro)
 	float DrawBaseYaw = 0.f;
 	float StandbyYaw = 0.f;
 	float CourtZ = ZoogiConst::ZoogiRadius; // last on-court shooter height (camera pivots stay on the floor after a fall)
