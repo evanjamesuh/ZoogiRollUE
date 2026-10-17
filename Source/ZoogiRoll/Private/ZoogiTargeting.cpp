@@ -165,6 +165,7 @@ void AZoogiGameMode::LockOn(AActor* Target, bool bSoft)
 {
 	if (!IsValidTarget(Target)) return;
 	if (TargetLock.Get() == Target && bSoftLock == bSoft && !bFreeAim) return;
+	bArrowAim = false;
 	TargetLock = Target;
 	bSoftLock = bSoft;
 	bFreeAim = false;
@@ -177,6 +178,7 @@ void AZoogiGameMode::LockOn(AActor* Target, bool bSoft)
 
 void AZoogiGameMode::ClearLock()
 {
+	bArrowAim = false;
 	if (!TargetLock.IsValid() && !bSoftLock && !bFreeAim) return;
 	TargetLock.Reset();
 	bSoftLock = false;
@@ -216,6 +218,7 @@ void AZoogiGameMode::SetFreeAim(const FVector& InP)
 		}
 	}
 	P = Pc;
+	bArrowAim = false;
 	TargetLock.Reset();
 	bSoftLock = false;
 	bFreeAim = true;
@@ -232,6 +235,32 @@ void AZoogiGameMode::NudgeAim(int32 Steps)
 	if (!HasAim() || !IsAimStep()) return;
 	AimCutDeg = FMath::Clamp(AimCutDeg + Steps * ZoogiStageTune::CutStepDeg, -ZoogiStageTune::MaxCutDeg, ZoogiStageTune::MaxCutDeg);
 	ZoogiUtil::PlaySfx(this, TEXT("HitClick"), 0.4f, 1.6f + 0.02f * AimCutDeg);
+}
+
+void AZoogiGameMode::SetArrowAim(float YawDeg, float Dist)
+{
+	// aim-arrow: the arrow sets a free aim along its direction (the launch then follows it exactly like a floor tap would).
+	// Distance kept from the aim it replaced so Space / auto power is unchanged; a drag sets the power as always.
+	const AZoogiBall* Me = GetActiveBall();
+	if (!Me || Me->bCPU || !IsAimStep()) return;
+	const FVector2D S2(Me->BallLocation().X, Me->BallLocation().Y);
+	const float Rad = FMath::DegreesToRadians(YawDeg);
+	const FVector2D Dir(FMath::Cos(Rad), FMath::Sin(Rad));
+	FVector2D P2 = S2 + Dir * FMath::Max(Dist, ZoogiConst::ZoogiRadius * 1.5f + 20.f);
+	auto Off = [this](const FVector2D& Q) { return Arena ? Arena->IsOffCourt(Q) : Q.Size() > ZoogiConst::KnockoffRadius; };
+	if (Off(P2) && !Off(S2))
+	{
+		float Lo = 0.f, Hi = 1.f; // same on-court clamp along the line as a far floor tap (SetFreeAim)
+		for (int32 i = 0; i < 22; ++i) { const float Mid = 0.5f * (Lo + Hi); if (Off(FMath::Lerp(S2, P2, Mid))) Hi = Mid; else Lo = Mid; }
+		P2 = FMath::Lerp(S2, P2, Lo);
+		if (FVector2D::Distance(P2, S2) < ZoogiConst::ZoogiRadius * 1.5f + 1.f) P2 = S2 + Dir * (ZoogiConst::ZoogiRadius * 1.5f + 1.f); // direction must survive
+	}
+	TargetLock.Reset();
+	bSoftLock = false;
+	bFreeAim = true;
+	FreeAimPoint = FVector(P2.X, P2.Y, Me->BallLocation().Z - ZoogiConst::ZoogiRadius);
+	AimCutDeg = 0.f; // the arrow's yaw is the final direction
+	bArrowAim = true;
 }
 
 bool AZoogiGameMode::HasAim() const
