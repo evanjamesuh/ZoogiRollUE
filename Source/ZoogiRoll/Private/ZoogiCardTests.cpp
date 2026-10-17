@@ -114,10 +114,22 @@ bool FZoogiCardDeckTest::RunTest(const FString&)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiCardDrawTest, "ZoogiRoll.Cards.DrawAndEnergyRefresh", ZoogiCardFlags)
 bool FZoogiCardDrawTest::RunTest(const FString&)
 {
+	// Draw rule (Evan, Oct 14, commit 3e2214c): the opening Standby draws HandSize (5); every later Standby draws DrawPerTurn (1)
+	// and never above HandCap (7); the unplayed hand is KEPT at turn end, only committed cards go to the discard. Energy refreshes to 5.
 	FZoogiCardRules R; TestTrue(TEXT("init"), Make(R));
+	const FZoogiCardTune T = Tune();
+	TestEqual(TEXT("tune: opening hand 5"), T.HandSize, 5);
+	TestEqual(TEXT("tune: draw 1 per turn"), T.DrawPerTurn, 1);
+	TestEqual(TEXT("tune: hand cap 7"), T.HandCap, 7);
 	const FZoogiCardContext Ctx;
+	auto PlayOne = [&](int32 P) -> bool // commit the first selectable card in hand (moves it to Committed -> discard at turn end)
+	{
+		for (const FZoogiCardInstance& C : R.Player(P)->Hand)
+			if (R.Select(P, C.InstanceId, Ctx) == EZoogiCardResult::Ok) return R.Commit(P, Ctx) == EZoogiCardResult::Ok;
+		return false;
+	};
 	R.BeginStandby(0, 1);
-	TestEqual(TEXT("draw 5"), R.Player(0)->Hand.Num(), 5);
+	TestEqual(TEXT("opening draw 5"), R.Player(0)->Hand.Num(), 5);
 	TestEqual(TEXT("energy 5"), R.Player(0)->Energy, 5);
 	TestEqual(TEXT("pile 10"), R.Player(0)->DrawPile.Num(), 10);
 	R.BeginStandby(0, 1); // same turn again: apply once
@@ -125,24 +137,42 @@ bool FZoogiCardDrawTest::RunTest(const FString&)
 	TestEqual(TEXT("P2 untouched"), R.Player(1)->Hand.Num(), 0);
 	// spend 1, end turn: energy does not carry over, next standby refreshes to exactly 5
 	const int32 One = FindByCost(R, 0, 1);
-	if (One >= 0)
+	int32 Played = 0;
+	if (TestTrue(TEXT("opening hand has a 1-cost card"), One >= 0))
 	{
 		TestTrue(TEXT("select"), R.Select(0, One, Ctx) == EZoogiCardResult::Ok);
 		TestTrue(TEXT("commit"), R.Commit(0, Ctx) == EZoogiCardResult::Ok);
 		TestEqual(TEXT("energy 4"), R.Player(0)->Energy, 4);
+		Played = 1;
 	}
 	R.BeginStandby(1, 2); // opening P2's turn ends P1's
-	TestEqual(TEXT("P1 hand discarded"), R.Player(0)->Hand.Num(), 0);
-	TestEqual(TEXT("P1 discard 5"), R.Player(0)->Discard.Num(), 5);
+	TestEqual(TEXT("P1 unplayed hand kept"), R.Player(0)->Hand.Num(), 5 - Played);
+	TestEqual(TEXT("P1 discard = committed cards only"), R.Player(0)->Discard.Num(), Played);
 	TestEqual(TEXT("P1 energy cleared"), R.Player(0)->Energy, 0);
+	TestEqual(TEXT("P2 opening draw 5"), R.Player(1)->Hand.Num(), 5);
 	R.BeginStandby(0, 3);
 	TestEqual(TEXT("refresh to 5 (not 4+5)"), R.Player(0)->Energy, 5);
-	TestEqual(TEXT("draw 5 again"), R.Player(0)->Hand.Num(), 5);
-	// 15-card deck: third standby empties the pile, fourth reshuffles the discard
-	R.BeginStandby(1, 4); R.BeginStandby(0, 5); TestEqual(TEXT("pile empty after third draw"), R.Player(0)->DrawPile.Num(), 0); R.BeginStandby(1, 6); R.BeginStandby(0, 7);
-	TestEqual(TEXT("hand 5 after reshuffle"), R.Player(0)->Hand.Num(), 5);
-	bool bReshuffled = false; for (const FZoogiCardEvent& E : R.Events()) bReshuffled |= E.Kind == FName(TEXT("reshuffle")) && E.Player == 0;
+	TestEqual(TEXT("later turn draws 1"), R.Player(0)->LastDrawn, 1);
+	TestEqual(TEXT("hand = kept + 1"), R.Player(0)->Hand.Num(), 5 - Played + 1);
+	TestEqual(TEXT("pile 9"), R.Player(0)->DrawPile.Num(), 9);
+	// no plays: +1 per turn up to the cap of 7, then no more draws
+	int32 Turn = 4;
+	for (int32 k = 0; k < 4; ++k) { R.BeginStandby(1, Turn++); R.BeginStandby(0, Turn++); }
+	TestEqual(TEXT("hand capped at 7"), R.Player(0)->Hand.Num(), 7);
+	TestEqual(TEXT("no draw at the cap"), R.Player(0)->LastDrawn, 0);
+	// playing one card per turn keeps drawing 1; the 15-card pile runs dry and the discard reshuffles in
+	bool bReshuffled = false, bCapOk = true, bOnePerTurn = true;
+	for (int32 k = 0; k < 30 && !bReshuffled; ++k)
+	{
+		PlayOne(0);
+		R.BeginStandby(1, Turn++); R.BeginStandby(0, Turn++);
+		bCapOk &= R.Player(0)->Hand.Num() <= T.HandCap;
+		bOnePerTurn &= R.Player(0)->LastDrawn <= T.DrawPerTurn;
+		for (const FZoogiCardEvent& E : R.Events()) bReshuffled |= E.Kind == FName(TEXT("reshuffle")) && E.Player == 0;
+	}
 	TestTrue(TEXT("reshuffle logged"), bReshuffled);
+	TestTrue(TEXT("hand never above HandCap"), bCapOk);
+	TestTrue(TEXT("never more than DrawPerTurn after the opening hand"), bOnePerTurn);
 	const FZoogiCardPlayerState* S = R.Player(0);
 	TestEqual(TEXT("15 cards conserved"), S->Hand.Num() + S->DrawPile.Num() + S->Discard.Num() + S->Committed.Num(), 15);
 	return true;
