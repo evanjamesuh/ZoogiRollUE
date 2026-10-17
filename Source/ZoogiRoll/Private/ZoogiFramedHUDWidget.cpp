@@ -34,6 +34,10 @@
 #include "ZoogiArtifacts.h"
 #include "ZoogiCardHandWidget.h"
 #include "ZoogiArtifactComponent.h"
+#include "UnrealEngine.h"
+#include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
+#include "HAL/PlatformMisc.h"
 
 namespace
 {
@@ -61,7 +65,7 @@ namespace
 
 int32 UZoogiFramedPainter::NativePaint(const FPaintArgs& Args, const FGeometry& Geo, const FSlateRect& Cull, FSlateWindowElementList& Out, int32 Layer, const FWidgetStyle& Style, bool bParentEnabled) const
 {
-	return Owner.IsValid() ? Owner->PaintBack(Geo, Out, Layer) : Layer;
+	return Owner.IsValid() ? (bRotateLayer ? Owner->PaintRotate(Geo, Out, Layer) : Owner->PaintBack(Geo, Out, Layer)) : Layer;
 }
 
 AZoogiGameMode* UZoogiFramedHUDWidget::GM() const { return GetWorld() ? GetWorld()->GetAuthGameMode<AZoogiGameMode>() : nullptr; }
@@ -136,6 +140,14 @@ TSharedRef<SWidget> UZoogiFramedHUDWidget::RebuildWidget()
 		ZoomBtn = MakeButton(TEXT("ZOOM"), ZoogiUIStyle::Violet, true, Tx, 18, true); ZoomText = Tx;
 		ZoomBtn->OnClicked.AddDynamic(this, &UZoogiFramedHUDWidget::OnZoom);
 		MenuBtn->OnClicked.AddDynamic(this, &UZoogiFramedHUDWidget::OnPause);
+		// Oct 17 (Evan): styled HUD toggle - HIDE HUD (landscape, framed) <-> SHOW HUD (portrait play, arena full screen)
+		HudBtn = MakeButton(TEXT("HIDE HUD"), ZoogiUIStyle::Gold, false, Tx, 15, true); HudText = Tx;
+		HudBtn->OnClicked.AddDynamic(this, &UZoogiFramedHUDWidget::OnHudToggle);
+		RotPainter = CreateWidget<UZoogiFramedPainter>(GetOwningPlayer(), UZoogiFramedPainter::StaticClass());
+		RotPainter->Owner = this;
+		RotPainter->bRotateLayer = true;
+		RotPainter->SetVisibility(ESlateVisibility::HitTestInvisible);
+		if (UCanvasPanelSlot* S = Root->AddChildToCanvas(RotPainter)) { S->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f)); S->SetOffsets(FMargin(0.f)); S->SetZOrder(40); }
 		// Pause / menu overlay (swallows clicks while up: Visible border).
 		PauseShade = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
 		PauseShade->SetBrushColor(FLinearColor(0.f, 0.02f, 0.10f, 0.62f));
@@ -315,7 +327,9 @@ void UZoogiFramedHUDWidget::NativeTick(const FGeometry& Geo, float Dt)
 	if (!bActive)
 	{
 		if (bPaused) SetPaused(false);
-		for (UWidget* W : { (UWidget*)ColL.Get(), (UWidget*)ColR.Get(), (UWidget*)CamBtn.Get(), (UWidget*)ZoomBtn.Get(), (UWidget*)MenuBtn.Get(), (UWidget*)PauseShade.Get(), (UWidget*)PausePanel.Get(), (UWidget*)PauseTitle.Get(),
+		RotateT = -1.f;
+		ZoogiFramed::SetUiRects(TArray<FBox2D>());
+		for (UWidget* W : { (UWidget*)HudBtn.Get(), (UWidget*)ColL.Get(), (UWidget*)ColR.Get(), (UWidget*)CamBtn.Get(), (UWidget*)ZoomBtn.Get(), (UWidget*)MenuBtn.Get(), (UWidget*)PauseShade.Get(), (UWidget*)PausePanel.Get(), (UWidget*)PauseTitle.Get(),
 			(UWidget*)VolDown.Get(), (UWidget*)VolUp.Get(), (UWidget*)VolText.Get(), (UWidget*)SetCamBtn.Get() }) PlaceW(W, FVector2D::ZeroVector, FVector2D::ZeroVector, false);
 		for (UButton* B : PauseBtns) PlaceW(B, FVector2D::ZeroVector, FVector2D::ZeroVector, false);
 		for (UButton* B : StoneBtns) PlaceW(B, FVector2D::ZeroVector, FVector2D::ZeroVector, false);
@@ -340,22 +354,37 @@ void UZoogiFramedHUDWidget::NativeTick(const FGeometry& Geo, float Dt)
 	ColL->UScale = ColR->UScale = u * (L.bCompact ? 0.86f : 1.f);
 	ColL->bCompact = ColR->bCompact = L.bCompact;
 	ColL->TScale = ColR->TScale = L.T * s;
-	PlaceW(ColL, LB.Key, LB.Value, true);
-	PlaceW(ColR, RB.Key, RB.Value, true);
+	PlaceW(ColL, LB.Key, LB.Value, !L.bPortrait); // portrait play: no team columns (the top indicator carries turn / score)
+	PlaceW(ColR, RB.Key, RB.Value, !L.bPortrait);
 	// header buttons: on the CAM / MENU plates of the top_right art (>= 48 dp tap targets)
+	TArray<FBox2D> UiRects; // portrait: edge controls + tray overlay count as UI (viewport px)
+	if (!L.bPortrait)
 	{
 		const float t = L.T * s, X1 = (L.Viewport.X - L.Safe.Right) * s, Y0 = L.Safe.Top * s;
 		const float BH = FMath::Max(34.f * t, ZoogiHudArt::TapPx(48.f, 48.f * u)), BY = Y0 + 26.f * t - BH * 0.5f;
 		PlaceW(MenuBtn, FVector2D(X1 - 126.f * t, BY), FVector2D(FMath::Max(104.f * t, BH), BH), true);
 		PlaceW(CamBtn, FVector2D(X1 - 255.f * t, BY), FVector2D(FMath::Max(117.f * t, BH), BH), true);
+		// Oct 17: HIDE HUD toggle just left of the CAM / MENU plate
+		const float HW = FMath::Max(112.f * t, BH * 2.2f);
+		PlaceW(HudBtn, FVector2D(X1 - 282.f * t - 10.f * t - HW, BY), FVector2D(HW, BH), RotateT < 0.f);
 	}
+	else
+	{
+		PlaceW(MenuBtn, FVector2D::ZeroVector, FVector2D::ZeroVector, false);
+		PlaceW(CamBtn, FVector2D::ZeroVector, FVector2D::ZeroVector, false);
+		PlaceW(HudBtn, L.HudBtn.Min * s, L.HudBtn.GetSize() * s, RotateT < 0.f);
+		UiRects.Add(L.HudBtn); UiRects.Add(L.Indicator);
+		if (PortraitTrayShown()) UiRects.Add(L.Tray);
+	}
+	if (HudText) HudText->SetText(FText::FromString(L.bPortrait ? TEXT("SHOW HUD") : TEXT("HIDE HUD")));
 	// Oct 14 aim ZOOM toggle: bottom-left of the arena window while the human aims (>= 48 dp, also clickable)
 	{
 		AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(GetOwningPlayer());
 		const bool bShowZ = PC && !bPaused && (PC->CanShowZoom() || PC->IsZoomShownOn());
 		const float t = L.T * s;
-		const float ZH = FMath::Max(40.f * t, ZoogiHudArt::TapPx(48.f, 48.f * u)), ZW = FMath::Max(132.f * t, ZH * 2.4f);
-		const FVector2D ZP(L.Arena.Min.X * s + 14.f * t, L.Arena.Max.Y * s - ZH - 14.f * t);
+		float ZH = FMath::Max(40.f * t, ZoogiHudArt::TapPx(48.f, 48.f * u)), ZW = FMath::Max(132.f * t, ZH * 2.4f);
+		FVector2D ZP(L.Arena.Min.X * s + 14.f * t, L.Arena.Max.Y * s - ZH - 14.f * t);
+		if (L.bPortrait) { ZP = L.ZoomBtn.Min * s; ZW = L.ZoomBtn.GetSize().X * s; ZH = L.ZoomBtn.GetSize().Y * s; } // portrait: top-right edge
 		PlaceW(ZoomBtn, ZP, FVector2D(ZW, ZH), bShowZ);
 		// single source: the controller's mode (button, wheel, = -, Z, pinch all land there); reset when the mode ends
 		const bool bOnNow = PC && PC->IsZoomShownOn();
@@ -364,6 +393,15 @@ void UZoogiFramedHUDWidget::NativeTick(const FGeometry& Geo, float Dt)
 		if (ZoomBtn && bShowZ) ZoomBtn->SetRenderOpacity(bOnNow ? 1.f : 0.85f);
 		ZoogiFramed::SetZoomButtonRect(s > 0.f ? FBox2D(ZP / s, (ZP + FVector2D(ZW, ZH)) / s) : FBox2D(ForceInit), bShowZ);
 	}
+	ZoogiFramed::SetUiRects(UiRects);
+	// Oct 17: HUD toggle -> rotate prompt; the layout + platform orientation switch at mid-prompt
+	if (RotateT >= 0.f)
+	{
+		RotateT += FMath::Min(Dt, 0.1f);
+		if (!bRotateApplied && RotateT >= 0.95f) { bRotateApplied = true; ApplyOrientation(bRotateTo); }
+		if (RotateT >= 2.0f) RotateT = -1.f;
+	}
+	TickHudToggleTest(G, Dt);
 	CamText->SetText(FText::FromString(G->bCinematicCam ? TEXT("      CAM: CINE") : TEXT("      CAM: TACT"))); // leading space = room for the camera icon
 	CamBtn->SetIsEnabled(G->Phase != EZoogiPhase::GameOver && G->Phase != EZoogiPhase::Forming); // disabled state when the camera style can't matter
 	// pause / menu overlay
@@ -489,14 +527,16 @@ int32 UZoogiFramedHUDWidget::PaintBack(const FGeometry& Geo, FSlateWindowElement
 	auto FontT = [&](float Sz) { return BoldFont(FMath::Max(9, FMath::RoundToInt(Sz * t)), FMath::Max(1.f, 1.6f * t)); };
 	auto TxtT = [&](int32 Lay, const FVector2D& P, const FString& Tx, float Sz, const FLinearColor& C, float Ax = 0.f, float Ay = 0.5f) { HA::Text(Out, Lay, Geo, P, Tx, FontT(Sz), C, Ax, Ay); };
 
-	// 1) dark stone in the four margins only (never over the arena rect)
+	// 1) dark stone in the four margins only (never over the arena rect); portrait play: the arena is the whole screen
+	FLinearColor PulseC; const float Pulse = ZoogiFramed::PulseAmount(PulseC);
+	if (!L.bPortrait)
+	{
 	const FLinearColor Bg(0.035f, 0.035f, 0.04f, 1.f), StoneTint(0.42f, 0.42f, 0.44f, 1.f);
 	const FVector2D Bands[4][2] = { { FVector2D(0.f, 0.f), FVector2D(V.X, A0.Y) }, { FVector2D(0.f, A1.Y), FVector2D(V.X, V.Y - A1.Y) },
 		{ FVector2D(0.f, A0.Y), FVector2D(A0.X, AS.Y) }, { FVector2D(A1.X, A0.Y), FVector2D(V.X - A1.X, AS.Y) } };
 	for (const auto& Bd : Bands) { FillRect(Out, Ly, Geo, Bd[0], Bd[1], Bg); HA::Tiled(Out, Ly + 1, Geo, Bd[0], Bd[1], TEXT("stone_tile"), 340.f, t, StoneTint); }
 
 	// 2) arena frame: steel bands + gold / crystal corner brackets with a cyan glow (light pulse on major events)
-	FLinearColor PulseC; const float Pulse = ZoogiFramed::PulseAmount(PulseC);
 	HA::Img(Out, Ly + 3, Geo, FVector2D(A0.X - 16.f * t, A0.Y), FVector2D(16.f * t, AS.Y), TEXT("edge_l"));
 	HA::Img(Out, Ly + 3, Geo, FVector2D(A1.X, A0.Y), FVector2D(16.f * t, AS.Y), TEXT("edge_r"));
 	HA::Img(Out, Ly + 3, Geo, FVector2D(A0.X - 16.f * t, A0.Y - 16.f * t), FVector2D(AS.X + 32.f * t, 16.f * t), TEXT("edge_t"));
@@ -514,10 +554,11 @@ int32 UZoogiFramedHUDWidget::PaintBack(const FGeometry& Geo, FSlateWindowElement
 			HA::Img(Out, Ly + 4, Geo, CP[i], CS, CN[i]);
 		}
 	}
+	}
 
 	// hud-v3 overlay (Evan 4:25 PM): his target image as ONE full-frame overlay; arena / pills / plate are holes,
 	// live values are drawn on top (layer 6+), the sliced pieces underneath only show through the holes.
-	const bool bOverlay = HA::Tex(TEXT("overlay")) != nullptr;
+	const bool bOverlay = !L.bPortrait && HA::Tex(TEXT("overlay")) != nullptr;
 	if (bOverlay)
 	{
 		// split at the arena edges: the left (0..380) and right (966..1376) target strips keep their shape, the middle
@@ -559,6 +600,8 @@ int32 UZoogiFramedHUDWidget::PaintBack(const FGeometry& Geo, FSlateWindowElement
 
 	// 3) top bar: title plate (round / orbs), phase pills + active player / map plate, CAM / MENU plate
 	const AZoogiBall* AB = G->GetActiveBall();
+	if (L.bPortrait) PaintPortraitStrip(Geo, Out, Ly + 6);
+	else
 	{
 		HA::ImgT(Out, Ly + 2, Geo, FVector2D(X0, Y0), t, TEXT("top_title"));
 		TxtT(Ly + 6, FVector2D(X0 + 182.5f * t, Y0 + 34.5f * t), FString::Printf(TEXT("%d / %d"), FMath::Clamp(G->RoundNumber, 1, FMath::Max(1, G->MenuRounds)), G->MenuRounds), 11.f, FLinearColor::White, 0.5f);
@@ -610,16 +653,33 @@ int32 UZoogiFramedHUDWidget::PaintBack(const FGeometry& Geo, FSlateWindowElement
 		TxtT(Ly + 6, NP + FVector2D(94.f, 32.f) * t, Map, 13.5f, FMath::Lerp(HA::GoldText, FLinearColor::White, Pulse * 0.5f), 0.5f);
 	}
 
-	// 4) bottom tray: deck slab, card tray recess, discard portal + energy orb
+	// 4) bottom tray: deck slab, card tray recess, discard portal + energy orb (portrait play: overlaid at the bottom of the
+	//    arena only while the human's Awaken / Standby is open)
+	if (!L.bPortrait || PortraitTrayShown())
 	{
 		const float TT = L.Tray.Min.Y * s, HL = L.Hand.Min.X * s;
 		const ZoogiFramed::FTrayInfo& TI = ZoogiFramed::TrayInfo();
 		const bool bCards = TI.bCards && G->CardsOn();
 		const float LX1 = L.TrayLeftX1 * s, RX0 = L.TrayRightX0 * s;
-		HA::Nine(Out, Ly + 2, Geo, FVector2D(LX1 - 2.f * t, TT), FVector2D(RX0 - LX1 + 6.f * t, V.Y - TT + 24.f * t), TEXT("tray_mid"), FMargin(22.f, 22.f, 32.f, 22.f), t);
-		HA::ImgT(Out, Ly + 3, Geo, FVector2D(X0, TT + 12.f * t), t, TEXT("tray_left"));
-		HA::ImgT(Out, Ly + 3, Geo, FVector2D(RX0, TT + 12.f * t), t, TEXT("tray_right"));
-		const FVector2D TL(X0, TT + 12.f * t), TR(RX0, TT + 12.f * t);
+		const FVector2D TL = L.TrayL * s, TR = L.TrayR * s; // tray art anchors (landscape: (X0 | RX0, TT + 12 t) as before)
+		if (!L.bPortrait)
+		{
+			HA::Nine(Out, Ly + 2, Geo, FVector2D(LX1 - 2.f * t, TT), FVector2D(RX0 - LX1 + 6.f * t, V.Y - TT + 24.f * t), TEXT("tray_mid"), FMargin(22.f, 22.f, 32.f, 22.f), t);
+			HA::ImgT(Out, Ly + 3, Geo, TL, t, TEXT("tray_left"));
+			HA::ImgT(Out, Ly + 3, Geo, TR, t, TEXT("tray_right"));
+		}
+		else
+		{
+			// portrait: stone row behind the deck / discard + orb slabs, the recess across the full width above it, the deck
+			// slab cropped out of tray_left (its right part is the landscape recess edge)
+			const FVector2D R0 = L.BottomRow.Min * s, RS = FVector2D(V.X, V.Y - R0.Y);
+			FillRect(Out, Ly + 1, Geo, FVector2D(0.f, TT), FVector2D(V.X, V.Y - TT), FLinearColor(0.035f, 0.035f, 0.04f, 0.96f));
+			HA::Tiled(Out, Ly + 1, Geo, R0, RS, TEXT("stone_tile"), 340.f, t, FLinearColor(0.42f, 0.42f, 0.44f, 1.f));
+			HA::Nine(Out, Ly + 2, Geo, FVector2D(0.f, TT), FVector2D(V.X, R0.Y - TT + 8.f * t), TEXT("tray_mid"), FMargin(22.f, 22.f, 32.f, 22.f), t);
+			const FVector2D LS = HA::SizeT(TEXT("tray_left"));
+			HA::Part(Out, Ly + 3, Geo, TL, FVector2D(200.f, LS.Y) * t, TEXT("tray_left"), FBox2D(FVector2D::ZeroVector, FVector2D(200.f, LS.Y)));
+			HA::ImgT(Out, Ly + 3, Geo, TR, t, TEXT("tray_right"));
+		}
 		TxtT(Ly + 8, TL + FVector2D(71.5f, 139.f) * t, bCards ? FString::FromInt(TI.Draw) : FString(TEXT("-")), 19.f, FLinearColor::White, 0.5f);
 		// discard portal: breathing cyan light + count
 		const float Br = 0.5f + 0.5f * FMath::Sin(Time * 2.f);
@@ -703,6 +763,7 @@ bool UZoogiFramedHUDWidget::TrayAwakenLayout(FTrayAwaken& Out) const
 	const ZoogiFramed::FLayout& L = ZoogiFramed::Current();
 	const AZoogiBall* B = G ? G->GetActiveBall() : nullptr;
 	if (!bActive || !B || !B->Artifact || G->Phase != EZoogiPhase::Aiming || G->Stage != EZoogiStage::Awaken || G->bAwakenDone) return false;
+	if (L.bPortrait && !PortraitTrayShown()) return false; // portrait play: the tray overlay is the human's only
 	if (G->CardsOn())
 	{
 		// Choose-your-Awaken (Oct 15): 3 big stone tablets centred in the card recess under a CHOOSE YOUR AWAKEN header,
@@ -712,7 +773,7 @@ bool UZoogiFramedHUDWidget::TrayAwakenLayout(FTrayAwaken& Out) const
 		for (int32 i = 0; i < 3; ++i) Out.Stones.Add({ i, G->CardAwakenOffers[i] });
 		Out.Pick = G->CardAwakenPick;
 		const float s = LocalScale, t = L.T * s;
-		const FVector2D H0 = L.Hand.Min * s, H1 = FVector2D(L.Hand.Max.X * s, (L.Viewport.Y - L.Safe.Bottom) * s);
+		const FVector2D H0 = L.Hand.Min * s, H1 = L.Hand.Max * s; // recess bottom (landscape: Viewport.Y - Safe.Bottom)
 		const float HeadH = 30.f * t, Gap = 22.f * t;
 		const float BH = FMath::Max(ZoogiHudArt::TapPx(48.f, 48.f * L.U * s), 36.f * t), BW = FMath::Max(BH * 2.2f, 104.f * t);
 		const float BX = H1.X - BW - 12.f * t;
@@ -734,7 +795,7 @@ bool UZoogiFramedHUDWidget::TrayAwakenLayout(FTrayAwaken& Out) const
 	if (!Out.Stones.ContainsByPredicate([&](const TPair<int32, uint8>& C) { return C.Key == Out.Pick; }) && Out.Stones.Num()) Out.Pick = Out.Stones[0].Key;
 	Out.bHuman = !B->bCPU;
 	const float s = LocalScale, t = L.T * s;
-	const FVector2D H0 = L.Hand.Min * s, H1 = FVector2D(L.Hand.Max.X * s, (L.Viewport.Y - L.Safe.Bottom) * s);
+	const FVector2D H0 = L.Hand.Min * s, H1 = L.Hand.Max * s; // recess bottom (landscape: Viewport.Y - Safe.Bottom)
 	// one gap everywhere (stone to stone, stones to text, text to buttons, buttons to the recess edge); the button stack
 	// is centred on the stone row. When the recess is tight (1920) the stones shrink a little so the INFUSE / GUARD text fits.
 	const float Gap = 10.f * t, BG = 8.f * t;
@@ -779,13 +840,13 @@ void UZoogiFramedHUDWidget::TickTrayAwaken()
 	{
 		// cards: the whole recess swallows presses while the tablets show (no press reaches the arena / the hidden cards)
 		const ZoogiFramed::FLayout& FL = ZoogiFramed::Current();
-		Bounds = FBox2D(FL.Hand.Min * LocalScale + FVector2D(14.f, 6.f) * t, FVector2D(FL.Hand.Max.X * LocalScale - 10.f * t, (FL.Viewport.Y - FL.Safe.Bottom) * LocalScale - 6.f * t));
+		Bounds = FBox2D(FL.Hand.Min * LocalScale + FVector2D(14.f, 6.f) * t, FVector2D(FL.Hand.Max.X * LocalScale - 10.f * t, FL.Hand.Max.Y * LocalScale - 6.f * t));
 	}
 	// cards: energy orb = the Awaken control while the human's Standby is open
 	const bool bOrb = OrbLive();
 	{
 		const ZoogiFramed::FLayout& FL = ZoogiFramed::Current();
-		const FVector2D TR(FL.TrayRightX0 * LocalScale, FL.Tray.Min.Y * LocalScale + 12.f * t);
+		const FVector2D TR = FL.TrayR * LocalScale; // tray_right art origin (landscape: (TrayRightX0, TrayTop + 12 T))
 		// the swirl orb (centre TR+(252,50)) and the top of the energy bubble; stops above CLEAR (x < 248, y > 88)
 		PlaceW(OrbBtn, bOrb ? TR + FVector2D(192.f, -12.f) * t : FVector2D::ZeroVector, bOrb ? FVector2D(188.f, 100.f) * t : FVector2D::ZeroVector, bOrb);
 	}
@@ -983,5 +1044,163 @@ void UZoogiFramedHUDWidget::PaintTrayAwaken(const FGeometry& Geo, FSlateWindowEl
 		const bool bOn = !ActBtns.IsValidIndex(i) || ActBtns[i]->GetIsEnabled();
 		HA::Img(Out, Ly + 2, Geo, P, S, i == 0 ? TEXT("pill_done") : TEXT("pill_off"), bOn ? FLinearColor::White : FLinearColor(0.55f, 0.6f, 0.7f, 0.7f));
 		HA::Text(Out, Ly + 3, Geo, R.GetCenter(), Lbl[i], FontT(10.f), bOn ? FLinearColor::White : FLinearColor(0.7f, 0.74f, 0.82f, 0.8f), 0.5f, 0.5f);
+	}
+}
+
+// ------------------------------------------------------------------ Oct 17 (Evan 12:10 PM): HUD toggle = orientation switch
+// HUD shown = landscape framed hud-v3; HUD hidden = portrait play: the arena fills the tall screen, the camera frames it
+// vertically (aspect-aware battle FOV, ZoogiFramed::PortraitFov) and only the HUD toggle, the turn / score indicator and ZOOM
+// stay on the top edge (+ the tray overlay during the human's Awaken / Standby). Each toggle shows the rotate-phone prompt.
+void UZoogiFramedHUDWidget::OnHudToggle()
+{
+	if (RotateT >= 0.f || !bActive) return;
+	bRotateTo = !ZoogiFramed::IsHudHidden();
+	RotateT = 0.f;
+	bRotateApplied = false;
+	UE_LOG(LogZoogi, Log, TEXT("FRAMED HUD toggle pressed -> rotate prompt (to %s)"), bRotateTo ? TEXT("PORTRAIT, HUD hidden") : TEXT("LANDSCAPE, HUD shown"));
+}
+
+void UZoogiFramedHUDWidget::ApplyOrientation(bool bHidden)
+{
+	ZoogiFramed::SetHudHidden(bHidden);
+#if PLATFORM_IOS || PLATFORM_ANDROID
+	// Config allows both orientations (DefaultEngine.ini); the battle picks one at runtime
+	FPlatformMisc::SetAllowedDeviceOrientation(bHidden ? EDeviceScreenOrientation::Portrait : EDeviceScreenOrientation::LandscapeSensor);
+	UE_LOG(LogZoogi, Log, TEXT("FRAMED orientation -> %s"), bHidden ? TEXT("Portrait") : TEXT("LandscapeSensor"));
+#else
+	// PC: a windowed game turns its window (width <-> height), clamped to the desktop work area; fullscreen / -ZoogiNoWindowSwap
+	// only switch the layout
+	static const bool bNoSwap = FParse::Param(FCommandLine::Get(), TEXT("ZoogiNoWindowSwap"));
+	UGameViewportClient* VC = GetWorld() ? GetWorld()->GetGameViewport() : nullptr;
+	if (!bNoSwap && VC && VC->Viewport && GSystemResolution.WindowMode == EWindowMode::Windowed)
+	{
+		const FIntPoint Cur = VC->Viewport->GetSizeXY();
+		if (Cur.X > 0 && Cur.Y > 0 && bHidden != (Cur.Y > Cur.X))
+		{
+			float W = Cur.Y, H = Cur.X;
+			if (FSlateApplication::IsInitialized())
+			{
+				FDisplayMetrics DM; FSlateApplication::Get().GetInitialDisplayMetrics(DM);
+				const float MW = DM.PrimaryDisplayWorkAreaRect.Right - DM.PrimaryDisplayWorkAreaRect.Left, MH = DM.PrimaryDisplayWorkAreaRect.Bottom - DM.PrimaryDisplayWorkAreaRect.Top - 40.f;
+				const float K = (MW > 100.f && MH > 100.f) ? FMath::Min3(1.f, MW / W, MH / H) : 1.f;
+				W *= K; H *= K;
+			}
+			FSystemResolution::RequestResolutionChange(FMath::RoundToInt(W), FMath::RoundToInt(H), EWindowMode::Windowed);
+			UE_LOG(LogZoogi, Log, TEXT("FRAMED window turned %dx%d -> %dx%d (%s)"), Cur.X, Cur.Y, FMath::RoundToInt(W), FMath::RoundToInt(H), bHidden ? TEXT("portrait") : TEXT("landscape"));
+		}
+	}
+#endif
+}
+
+bool UZoogiFramedHUDWidget::PortraitTrayShown() const
+{
+	const AZoogiGameMode* G = GM();
+	return G && G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Awaken && !G->bAwakenDone && G->IsHumanAiming();
+}
+
+void UZoogiFramedHUDWidget::PaintPortraitStrip(const FGeometry& Geo, FSlateWindowElementList& Out, int32 Ly) const
+{
+	// portrait play: one small indicator plate on the top edge (turn + step on the first line, round and score / orbs on the
+	// second) and the current prompt under the strip; the HUD toggle and ZOOM are real buttons beside it
+	namespace HA = ZoogiHudArt;
+	const AZoogiGameMode* G = GM();
+	const ZoogiFramed::FLayout& L = ZoogiFramed::Current();
+	if (!G || !L.bPortrait) return;
+	const float s = LocalScale, P = L.P * s;
+	auto F = [&](float Px) { return ZoogiUIStyle::BoldFont(FMath::Max(8, FMath::RoundToInt(Px * P)), FMath::Max(1.f, 2.f * P)); };
+	const FVector2D IP = L.Indicator.Min * s, IS = L.Indicator.GetSize() * s;
+	const AZoogiBall* AB = G->GetActiveBall();
+	const FLinearColor PC = AB ? ZoogiUtil::PlayerColor(AB->PlayerIndex) : HA::Cyan;
+	const float TPop = 1.f + 0.06f * (1.f - TurnAnim) * FMath::Sin(TurnAnim * PI);
+	ZoogiUIStyle::SBox(Out, Ly, Geo, IP, IS, FLinearColor(0.03f, 0.035f, 0.06f, 0.80f), FLinearColor(PC.R, PC.G, PC.B, 0.85f), 14.f * P, 2.f * P);
+	ZoogiUIStyle::SBox(Out, Ly + 1, Geo, IP + FVector2D(14.f, IS.Y / P * 0.5f - 8.f) * P, FVector2D(16.f, 16.f) * P * TPop, PC, FLinearColor::Transparent, 8.f * P, 0.f);
+	FString Who;
+	if (G->Phase == EZoogiPhase::Forming) Who = TEXT("STAGE FORMING");
+	else if (G->Phase == EZoogiPhase::GameOver) Who = TEXT("MATCH OVER");
+	else if (AB) Who = FString::Printf(TEXT("P%d %s  %s"), AB->PlayerIndex + 1, *AB->Def.Name.ToUpper(), AB->bCPU ? TEXT("CPU") : TEXT("YOUR TURN"));
+	const float TX = IP.X + 40.f * P, TW = IS.X - 52.f * P;
+	FSlateFontInfo F1 = F(21.f);
+	while (Who.Len() > 6 && HA::Measure(Who, F1).X > TW) Who = Who.LeftChop(3) + TEXT("..");
+	HA::Text(Out, Ly + 2, Geo, FVector2D(TX, IP.Y + IS.Y * 0.32f), Who, F1, FLinearColor::White, 0.f, 0.5f);
+	const FString Score = G->bComboMode ? FString::Printf(TEXT("SCORE %d - %d"), G->TeamScore(0), G->TeamScore(1)) : FString::Printf(TEXT("ORBS %d"), G->OrbsLeft());
+	FString L2 = FString::Printf(TEXT("%s   R %d/%d   %s"), *ActionLabel(G), FMath::Clamp(G->RoundNumber, 1, FMath::Max(1, G->MenuRounds)), G->MenuRounds, *Score);
+	if (AB) L2 += FString::Printf(TEXT("   PTS %d"), AB->Score);
+	const FSlateFontInfo F2 = F(15.f);
+	while (L2.Len() > 6 && HA::Measure(L2, F2).X > TW) L2 = L2.LeftChop(3) + TEXT("..");
+	HA::Text(Out, Ly + 2, Geo, FVector2D(TX, IP.Y + IS.Y * 0.74f), L2, F2, HA::GoldText, 0.f, 0.5f);
+	// prompt line (drag-aim hint etc.) under the strip, never over the tray
+	FString Pr = LastPrompt;
+	const FVector2D PP = L.Prompt.Min * s, PS = L.Prompt.GetSize() * s;
+	const FSlateFontInfo F3 = F(16.f);
+	while (Pr.Len() > 8 && HA::Measure(Pr, F3).X > PS.X) Pr = Pr.LeftChop(4) + TEXT("..");
+	const float Sl = 1.f - FMath::Square(1.f - PromptAnim);
+	if (!Pr.IsEmpty())
+	{
+		const FVector2D TS = HA::Measure(Pr, F3);
+		ZoogiUIStyle::SBox(Out, Ly, Geo, FVector2D(PP.X + PS.X * 0.5f - TS.X * 0.5f - 12.f * P, PP.Y), FVector2D(TS.X + 24.f * P, PS.Y), FLinearColor(0.f, 0.f, 0.03f, 0.45f * Sl), FLinearColor::Transparent, 10.f * P, 0.f);
+		HA::Text(Out, Ly + 2, Geo, PP + PS * 0.5f, Pr, F3, FLinearColor(1.f, 1.f, 1.f, Sl), 0.5f, 0.5f);
+	}
+	if (EndAnim > 0.f && G->Phase == EZoogiPhase::GameOver)
+	{
+		const float Kk = FMath::Min(1.f, EndAnim * 3.f);
+		HA::Text(Out, Ly + 3, Geo, FVector2D(Geo.GetLocalSize().X * 0.5f, PP.Y + PS.Y + 40.f * P), TEXT("MATCH OVER"), F(44.f * (0.6f + 0.4f * Kk)), FLinearColor(HA::GoldText.R, HA::GoldText.G, HA::GoldText.B, Kk), 0.5f, 0.5f);
+	}
+}
+
+int32 UZoogiFramedHUDWidget::PaintRotate(const FGeometry& Geo, FSlateWindowElementList& Out, int32 Layer) const
+{
+	// rotate-phone prompt: dim, a phone outline turning 90 degrees, ROTATE TO PORTRAIT / LANDSCAPE (each way)
+	if (RotateT < 0.f) return Layer;
+	namespace HA = ZoogiHudArt;
+	const FVector2D V = Geo.GetLocalSize();
+	const float u = FMath::Min(V.X, V.Y) / 1080.f;
+	const float A = FMath::Clamp(RotateT / 0.2f, 0.f, 1.f) * FMath::Clamp((2.f - RotateT) / 0.3f, 0.f, 1.f);
+	FillRect(Out, Layer, Geo, FVector2D::ZeroVector, V, FLinearColor(0.f, 0.01f, 0.04f, 0.78f * A));
+	// the phone turns during 0.25 .. 0.9 s (layout switches at 0.95 s), then holds in the new orientation
+	const float K = ZoogiUIStyle::EaseOutBack(FMath::Clamp((RotateT - 0.25f) / 0.65f, 0.f, 1.f));
+	const bool bToPortrait = bRotateTo;
+	const float Ang = (bToPortrait ? (90.f - 90.f * K) : (90.f * K)); // portrait phone = 0 deg (tall), landscape = 90 deg
+	const FVector2D C = V * FVector2D(0.5f, 0.44f), PS = FVector2D(170.f, 300.f) * u;
+	PhoneBrush = ZoogiUIStyle::RoundBrush(FLinearColor(0.05f, 0.06f, 0.10f, A), FLinearColor(1.f, 0.82f, 0.35f, A), 6.f * u, 26.f * u);
+	PhoneScreenBrush = ZoogiUIStyle::RoundBrush(FLinearColor(HA::Cyan.R * 0.5f, HA::Cyan.G * 0.5f, HA::Cyan.B * 0.6f, 0.85f * A), FLinearColor::Transparent, 0.f, 10.f * u);
+	FSlateDrawElement::MakeRotatedBox(Out, Layer + 1, Geo.ToPaintGeometry(FVector2f(PS), FSlateLayoutTransform(FVector2f(C - PS * 0.5f))), &PhoneBrush, ESlateDrawEffect::None, FMath::DegreesToRadians(Ang));
+	const FVector2D SS = PS - FVector2D(30.f, 70.f) * u;
+	FSlateDrawElement::MakeRotatedBox(Out, Layer + 2, Geo.ToPaintGeometry(FVector2f(SS), FSlateLayoutTransform(FVector2f(C - SS * 0.5f))), &PhoneScreenBrush, ESlateDrawEffect::None, FMath::DegreesToRadians(Ang));
+	// turning arrow: dots on an arc beside the phone
+	for (int32 d = 0; d < 9; ++d)
+	{
+		const float Aa = FMath::DegreesToRadians(-60.f + d * 15.f) + (bToPortrait ? PI : 0.f);
+		const float Dd = (d == 8 ? 16.f : 9.f) * u;
+		ZoogiUIStyle::SBox(Out, Layer + 2, Geo, C + FVector2D(FMath::Cos(Aa), FMath::Sin(Aa)) * 230.f * u - FVector2D(Dd, Dd) * 0.5f, FVector2D(Dd, Dd), FLinearColor(1.f, 0.85f, 0.4f, A * (0.4f + 0.6f * d / 8.f)), FLinearColor::Transparent, Dd * 0.5f, 0.f);
+	}
+	const FSlateFontInfo F1 = ZoogiUIStyle::BoldFont(FMath::RoundToInt(44.f * u), 3.f * u), F2 = ZoogiUIStyle::BoldFont(FMath::RoundToInt(24.f * u), 2.f * u);
+	HA::Text(Out, Layer + 3, Geo, FVector2D(V.X * 0.5f, C.Y + 250.f * u), bToPortrait ? TEXT("ROTATE TO PORTRAIT") : TEXT("ROTATE TO LANDSCAPE"), F1, FLinearColor(HA::GoldText.R, HA::GoldText.G, HA::GoldText.B, A), 0.5f, 0.5f);
+	HA::Text(Out, Layer + 3, Geo, FVector2D(V.X * 0.5f, C.Y + 310.f * u), bToPortrait ? TEXT("HUD hidden - play vertically") : TEXT("HUD shown - landscape"), F2, FLinearColor(1.f, 1.f, 1.f, 0.9f * A), 0.5f, 0.5f);
+	return Layer + 4;
+}
+
+void UZoogiFramedHUDWidget::TickHudToggleTest(AZoogiGameMode* G, float Dt)
+{
+	// -ZoogiHudToggleTest (with -ZoogiShots=<dir>): landscape HUD aim -> toggle (rotate prompt shot) -> portrait aim, a shot in
+	// progress and the Standby / Awaken tray overlay -> toggle back (prompt shot) -> landscape again. Real button handler.
+	static const bool bOn = FParse::Param(FCommandLine::Get(), TEXT("ZoogiHudToggleTest"));
+	if (!bOn || !G) return;
+	ToggleTestT += Dt;
+	const bool bAim = G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Battle && G->IsAimStep() && G->HasAim();
+	const bool bHidden = ZoogiFramed::IsHudHidden();
+	auto Next = [&](int32 St) { ToggleTestStep = St; ToggleTestT = 0.f; };
+	switch (ToggleTestStep)
+	{
+	case 0: if (bAim && !bHidden && G->StepTime > 0.8f) { G->TakeShot(TEXT("hudtoggle_1_landscape_hud_aim")); OnHudToggle(); Next(1); }
+		else if (bAim && bHidden && G->StepTime > 0.8f) Next(2); break; // started portrait: skip straight to the portrait shots
+	case 1: if (ToggleTestT > 0.6f) { G->TakeShot(TEXT("hudtoggle_2_rotate_prompt_to_portrait")); Next(2); } break;
+	case 2: if (ToggleTestT > 1.0f && RotateT < 0.f && bHidden && bAim && G->StepTime > 0.5f) { G->TakeShot(TEXT("hudtoggle_3_portrait_aim")); Next(3); } break;
+	case 3: if (G->Phase == EZoogiPhase::Rolling && G->PhaseTime > 0.45f) { G->TakeShot(TEXT("hudtoggle_4_portrait_shot_in_progress")); Next(4); } break;
+	case 4: if (G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Awaken && !G->bAwakenDone && G->StageTime > 1.8f && (PortraitTrayShown() || ToggleTestT > 40.f))
+			{ G->TakeShot(TEXT("hudtoggle_5_portrait_standby")); Next(5); } break;
+	case 5: if (bAim && G->StepTime > 0.8f) { G->TakeShot(TEXT("hudtoggle_6_portrait_aim2")); OnHudToggle(); Next(6); } break;
+	case 6: if (ToggleTestT > 0.6f) { G->TakeShot(TEXT("hudtoggle_7_rotate_prompt_to_landscape")); Next(7); } break;
+	case 7: if (ToggleTestT > 1.6f && RotateT < 0.f && bAim && G->StepTime > 0.5f) { G->TakeShot(TEXT("hudtoggle_8_landscape_hud_back")); UE_LOG(LogZoogi, Log, TEXT("FRAMED hudtoggle test done (hidden=%d)"), ZoogiFramed::IsHudHidden() ? 1 : 0); Next(8); } break;
+	default: break;
 	}
 }

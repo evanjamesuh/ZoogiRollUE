@@ -25,6 +25,7 @@ class ZOOGIROLL_API UZoogiFramedPainter : public UUserWidget
 	GENERATED_BODY()
 public:
 	TWeakObjectPtr<class UZoogiFramedHUDWidget> Owner;
+	bool bRotateLayer = false; // Oct 17: the top instance paints only the rotate-phone prompt (above every button)
 protected:
 	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& Geo, const FSlateRect& Cull, FSlateWindowElementList& Out, int32 Layer, const FWidgetStyle& Style, bool bParentEnabled) const override;
 };
@@ -35,6 +36,8 @@ class ZOOGIROLL_API UZoogiFramedHUDWidget : public UUserWidget
 	GENERATED_BODY()
 public:
 	int32 PaintBack(const FGeometry& Geo, FSlateWindowElementList& Out, int32 Layer) const;
+	/** Oct 17: rotate-phone prompt while the HUD toggle switches orientation (landscape + HUD <-> portrait, HUD hidden). */
+	int32 PaintRotate(const FGeometry& Geo, FSlateWindowElementList& Out, int32 Layer) const;
 	/** The acting player's prompt / action-status text (shown in the active Zoogi's team-column action box). */
 	static FString PromptText(const AZoogiGameMode* G);
 	/** Short label for the action box header (AWAKEN / STANDBY / BATTLE: AIM / ROLLING ...). */
@@ -64,6 +67,7 @@ protected:
 	UFUNCTION() void OnOrb();
 	UFUNCTION() void OnCardConfirm();
 	UFUNCTION() void OnCardClear();
+	UFUNCTION() void OnHudToggle();
 
 private:
 	AZoogiGameMode* GM() const;
@@ -72,6 +76,21 @@ private:
 	void SetPaused(bool bPause);
 	void RouteTray(AZoogiGameMode* G, float s);
 	FString HintText(const AZoogiGameMode* G) const;
+	// Oct 17 (Evan): HUD shown = landscape, HUD hidden = portrait play (minimal edge controls). The toggle shows the rotate
+	// prompt, switches the layout at mid-prompt and asks the platform for the matching orientation (PC: swaps the window).
+	void ApplyOrientation(bool bHidden);
+	void TickHudToggleTest(AZoogiGameMode* G, float Dt);
+	void PaintPortraitStrip(const FGeometry& Geo, FSlateWindowElementList& Out, int32 Ly) const;
+	bool PortraitTrayShown() const;
+	UPROPERTY() TObjectPtr<UButton> HudBtn;
+	UPROPERTY() TObjectPtr<UTextBlock> HudText;
+	UPROPERTY() TObjectPtr<UZoogiFramedPainter> RotPainter;
+	float RotateT = -1.f;     // < 0: no prompt; else seconds since the toggle
+	bool bRotateTo = false;   // target: true = hidden (portrait)
+	bool bRotateApplied = false;
+	mutable FSlateBrush PhoneBrush, PhoneScreenBrush;
+	int32 ToggleTestStep = 0;
+	float ToggleTestT = 0.f;
 	// hud-v3: Awaken stones in the tray (artifact mode; replaces the old central picker popup while framed)
 	struct FTrayAwaken
 	{
