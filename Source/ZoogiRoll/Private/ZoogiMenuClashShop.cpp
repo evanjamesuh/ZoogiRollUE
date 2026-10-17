@@ -272,6 +272,13 @@ FVector2D UZoogiMenuRoot::ClashPopupSize(EZoogiClashPopup P) const
 	case EZoogiClashPopup::BattleLog: return FVector2D(Full, Tall);
 	case EZoogiClashPopup::ChangeNickname: return FVector2D(880.f, 520.f);
 	case EZoogiClashPopup::GemPack: return FVector2D(820.f, 640.f);
+	// M5 (DETAILED PASS 3-5)
+	case EZoogiClashPopup::CardDetails: return FVector2D(Full, 1230.f);
+	case EZoogiClashPopup::SearchClans: return FVector2D(Full, Tall);
+	case EZoogiClashPopup::CreateClan: return FVector2D(Full, 1260.f);
+	case EZoogiClashPopup::ChooseBadge: return FVector2D(900.f, 720.f);
+	case EZoogiClashPopup::AddFriend: return FVector2D(Full, 780.f);
+	case EZoogiClashPopup::Blocked: return FVector2D(860.f, 480.f);
 	default: return FVector2D(980.f, 640.f);
 	}
 }

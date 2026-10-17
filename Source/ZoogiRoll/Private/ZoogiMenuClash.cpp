@@ -1285,7 +1285,8 @@ void UZoogiMenuRoot::TickClashTour(float Dt)
 	Steps.Add({ TEXT("leaderboard_tab"), 1.f, 1.5f, [this]() { ClashPopup = EZoogiClashPopup::None; ClashLbSub = 0; SetClashTab(ZCLeader); } });
 	Steps.Add({ TEXT("leaderboard_clans"), 1.f, 1.5f, [this]() { ClashLbSub = 1; bDirty = true; } });
 	// ---- DETAILED PASS 5: BATTLE with a short deck is blocked
-	TSharedRef<TArray<FName>> SavedDeck = MakeShared<TArray<FName>>();
+	static TArray<FName> TourSavedDeck; // (the step list is rebuilt every tick, so the saved deck must outlive it)
+	TArray<FName>* SavedDeck = &TourSavedDeck;
 	Steps.Add({ TEXT("battle_deck_not_full"), 1.f, 1.5f, [this, FP, SavedDeck]()
 	{
 		ClashPopup = EZoogiClashPopup::None; SetClashTab(ZCBattle);
