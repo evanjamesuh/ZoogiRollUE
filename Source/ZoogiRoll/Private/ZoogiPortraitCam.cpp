@@ -3,24 +3,29 @@
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
 #include "Engine/World.h"
+#include "Engine/LocalPlayer.h"
+#include "ZoogiGameMode.h"
+#include "ZoogiBall.h"
 
 namespace
 {
 	TAutoConsoleVariable<int32> CVarPortrait(TEXT("zoogi.Cam.Portrait"), 1, TEXT("Portrait camera framing on narrow (aspect < 1) screens: capped vertical FOV, width-keeping boom, HUD-safe band."));
-	TAutoConsoleVariable<float> CVarSafeTop(TEXT("zoogi.Cam.SafeTop"), 0.05f, TEXT("Portrait: top screen fraction kept clear of the play focus (portrait = HUD-hidden play: show-HUD / turn-score pill / ZOOM controls; 0.12 with a full HUD)."));
+	TAutoConsoleVariable<float> CVarSafeTop(TEXT("zoogi.Cam.SafeTop"), 0.05f, TEXT("Portrait: top screen fraction kept clear of the play focus (HUD-hidden play: show-HUD / turn-score pill / ZOOM end at 92/1920 = 4.8%)."));
 	TAutoConsoleVariable<float> CVarSafeTopMin(TEXT("zoogi.Cam.SafeTopMin"), 0.05f, TEXT("Portrait: the top band never shrinks below this (HUD-hidden controls live in the top ~5%)."));
 	int32 GModeOverride = -1;
+	int32 GAxis = AspectRatio_MaintainXFOV; // the local player's aspect-ratio axis constraint (refreshed by ViewAspect)
+	TAutoConsoleVariable<float> CVarSafeBottomTray(TEXT("zoogi.Cam.SafeBottomTray"), 0.285f, TEXT("Portrait: bottom band while the human's Standby / Awaken card tray is up (Gameplay & UI: (190*1.45+272)/1920 = 28.5%)."));
 	TAutoConsoleVariable<int32> CVarAim(TEXT("zoogi.Cam.PortraitAim"), 1, TEXT("Portrait aim / rest framing from behind the shooter looking up the arena (0 = width-keeping pull-back only)."));
 	TAutoConsoleVariable<float> CVarAimPitch(TEXT("zoogi.Cam.PortraitRestPitch"), 48.f, TEXT("Portrait Draw / Awaken / PowerUp framing: boom pitch (deg)."));
 	TAutoConsoleVariable<float> CVarChasePitch(TEXT("zoogi.Cam.PortraitAimPitch"), 27.f, TEXT("Portrait aim chase view (Evan's tablet build): camera look pitch below horizontal (deg)."));
 	TAutoConsoleVariable<float> CVarChaseBoom(TEXT("zoogi.Cam.PortraitAimBoom"), 800.f, TEXT("Portrait aim chase view: camera distance from the shooter (cm, x the arena camera scale)."));
-	TAutoConsoleVariable<float> CVarChaseY(TEXT("zoogi.Cam.PortraitAimScreenY"), 0.68f, TEXT("Portrait aim chase view: shooter's screen height from the top (fraction)."));
+	TAutoConsoleVariable<float> CVarChaseY(TEXT("zoogi.Cam.PortraitAimScreenY"), 0.66f, TEXT("Portrait aim chase view: shooter's screen height from the top (fraction)."));
 	TAutoConsoleVariable<float> CVarAimAhead(TEXT("zoogi.Cam.PortraitAimAhead"), 0.5f, TEXT("Portrait aim framing: look point from the shooter toward the aim point / arena centre (fraction)."));
 	TAutoConsoleVariable<float> CVarRestAhead(TEXT("zoogi.Cam.PortraitRestAhead"), 0.4f, TEXT("Portrait Draw / Awaken framing: look point from the shooter toward the arena centre (fraction)."));
 	TAutoConsoleVariable<float> CVarAimWidth(TEXT("zoogi.Cam.PortraitAimWidth"), 1.4f, TEXT("Portrait aim framing: ground width at the look point, times the play radius."));
 	TAutoConsoleVariable<float> CVarProbeH(TEXT("zoogi.Cam.PortraitProbeHeight"), 700.f, TEXT("Portrait aim / rest: the boom's collision probe starts this high over the look point."));
 	TAutoConsoleVariable<float> CVarShooterMargin(TEXT("zoogi.Cam.PortraitShooterMargin"), 0.06f, TEXT("Portrait aim framing: the shooter stays this far (normalised) inside the safe band."));
-	TAutoConsoleVariable<float> CVarSafeBottom(TEXT("zoogi.Cam.SafeBottom"), 0.10f, TEXT("Portrait: bottom screen fraction kept clear of the play focus (HUD-hidden play: thumb / drag-aim zone; 0.22 with the card hand up)."));
+	TAutoConsoleVariable<float> CVarSafeBottom(TEXT("zoogi.Cam.SafeBottom"), 0.06f, TEXT("Portrait: bottom screen fraction kept clear of the play focus when no card tray is up (small margin)."));
 	TAutoConsoleVariable<float> CVarVFovMax(TEXT("zoogi.Cam.PortraitVFovMax"), 78.f, TEXT("Portrait: vertical FOV cap (deg)."));
 	TAutoConsoleVariable<float> CVarBoomMax(TEXT("zoogi.Cam.PortraitBoomMax"), 2.6f, TEXT("Portrait: cap on the width-keeping boom pull-back."));
 	TAutoConsoleVariable<float> CVarCourtMargin(TEXT("zoogi.Cam.CourtMargin"), 0.94f, TEXT("Portrait: whole-court views keep the court inside this fraction of the half-width."));
@@ -54,7 +59,38 @@ namespace ZoogiPortrait
 		return GModeOverride == 1 || (Enabled() && Aspect < 1.f);
 	}
 
-	float ViewAspect(const APlayerController* PC) { return ZoogiFramed::ViewAspect(PC); }
+	float ViewAspect(const APlayerController* PC)
+	{
+		if (const ULocalPlayer* LP = PC ? PC->GetLocalPlayer() : nullptr) GAxis = LP->AspectRatioAxisConstraint;
+		return ZoogiFramed::ViewAspect(PC);
+	}
+
+	static bool VerticalAxis(float Aspect)
+	{
+		return GAxis == AspectRatio_MaintainYFOV || (GAxis == AspectRatio_MajorAxisFOV && Aspect < 1.f);
+	}
+
+	void TanHalf(float Fov, float Aspect, float& OutTanH, float& OutTanV)
+	{
+		const float T = FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(Fov, 1.f, 170.f) * 0.5f));
+		const float A = FMath::Max(Aspect, 0.01f);
+		if (VerticalAxis(A)) { OutTanV = T; OutTanH = T * A; } else { OutTanH = T; OutTanV = T / A; }
+	}
+
+	float FovForTanH(float TanH, float Aspect)
+	{
+		const float A = FMath::Max(Aspect, 0.01f);
+		return 2.f * FMath::RadiansToDegrees(FMath::Atan(VerticalAxis(A) ? TanH / A : TanH));
+	}
+
+	float SafeBottomTray() { return FMath::Clamp(CVarSafeBottomTray.GetValueOnGameThread(), 0.f, 0.45f); }
+
+	bool CardTrayUp(const UWorld* W)
+	{
+		const AZoogiGameMode* G = W ? W->GetAuthGameMode<AZoogiGameMode>() : nullptr;
+		const AZoogiBall* B = G ? G->GetActiveBall() : nullptr;
+		return G && B && !B->bCPU && G->Stage == EZoogiStage::Awaken;
+	}
 
 	void Band(const APlayerController* PC, float Aspect, float& OutTop, float& OutBottom)
 	{
@@ -62,19 +98,20 @@ namespace ZoogiPortrait
 		const bool bFramed = PC && ZoogiFramed::IsActive(PC->GetWorld());
 		// framed HUD: the arena window already excludes the HUD, but the top HUD-hidden controls band still applies
 		OutTop = bOff ? 0.f : (bFramed ? SafeTopMin() : SafeTop());
-		OutBottom = (bOff || bFramed) ? 0.f : SafeBottom();
+		OutBottom = (bOff || bFramed) ? 0.f : (CardTrayUp(PC ? PC->GetWorld() : nullptr) ? FMath::Max(SafeBottom(), SafeBottomTray()) : SafeBottom());
 	}
 
 	void AdaptFov(float LandscapeHFov, float Aspect, float& OutHFov, float& OutBoomMul)
 	{
 		OutHFov = LandscapeHFov; OutBoomMul = 1.f;
 		if (!IsPortrait(Aspect)) return;
+		// LandscapeHFov is a horizontal FOV tuned on 16:9; the result is in the engine's own FOV terms for this view (horizontal
+		// for MaintainXFOV, vertical for MaintainYFOV / MajorAxisFOV on a portrait screen)
 		const float TanH = FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(LandscapeHFov, 5.f, 170.f) * 0.5f));
 		const float TanVCap = FMath::Tan(FMath::DegreesToRadians(VFovMax() * 0.5f));
-		const float TanHCap = TanVCap * Aspect;
-		if (TanH <= TanHCap) return;
-		OutHFov = 2.f * FMath::RadiansToDegrees(FMath::Atan(TanHCap));
-		OutBoomMul = FMath::Min(TanH / TanHCap, BoomMax());
+		const float TanHUse = FMath::Min(TanH, TanVCap * Aspect);
+		OutHFov = FovForTanH(TanHUse, Aspect);
+		OutBoomMul = FMath::Min(TanH / TanHUse, BoomMax());
 	}
 
 	float BandPitch(float HFov, float Aspect, float Top, float Bottom)
@@ -82,7 +119,7 @@ namespace ZoogiPortrait
 		// band in normalised y: top edge 1 - 2*Top, bottom edge -1 + 2*Bottom; centre = Bottom - Top
 		const float C = Bottom - Top;
 		if (FMath::IsNearlyZero(C) || Aspect <= 0.f) return 0.f;
-		const float TanV = FMath::Tan(FMath::DegreesToRadians(HFov * 0.5f)) / Aspect;
+		float TanH, TanV; TanHalf(HFov, Aspect, TanH, TanV);
 		return FMath::RadiansToDegrees(FMath::Atan(C * TanV)); // look point this far above the optical axis -> pitch down
 	}
 
@@ -90,8 +127,7 @@ namespace ZoogiPortrait
 	{
 		const FVector L = Rot.UnrotateVector(P - CamLoc);
 		if (L.X < 1.f) { Out = FVector2D(10.f, 10.f); return false; }
-		const float TanH = FMath::Tan(FMath::DegreesToRadians(HFov * 0.5f));
-		const float TanV = TanH / FMath::Max(Aspect, 0.01f);
+		float TanH, TanV; TanHalf(HFov, Aspect, TanH, TanV);
 		Out = FVector2D((L.Y / L.X) / TanH, (L.Z / L.X) / TanV);
 		return true;
 	}
