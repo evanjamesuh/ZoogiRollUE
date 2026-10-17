@@ -291,6 +291,11 @@ bool FZoogiCardCommitOnceTest::RunTest(const FString&)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiCardToolkitTest, "ZoogiRoll.Cards.ToolkitBackend", ZoogiCardFlags)
 bool FZoogiCardToolkitTest::RunTest(const FString&)
 {
+	// The editor-only Aura plugin (unrelated to cards) indexes the project over HTTP after startup. When its login token has expired,
+	// its reply lands on the game thread while this test synchronously loads DT_ZoogiCards (several seconds), and the automation
+	// framework attributes every Error log emitted while a test is current to that test. Ignore only Aura's auth/indexing lines;
+	// every card assertion below still runs and any other error still fails the test.
+	AddExpectedMessage(TEXT("^LogAura: .*(Response code: 401|User not authenticated|Authentication required|Failed to get UserId)"), ELogVerbosity::Warning, EAutomationExpectedMessageFlags::Contains, -1, true);
 	FString Why;
 	const TArray<FZoogiCardDef> Native = ZoogiCards::BuiltInDefs();
 	TSharedPtr<FZoogiToolkitCardBackend> T = FZoogiToolkitCardBackend::TryLoad(Native, Why);
