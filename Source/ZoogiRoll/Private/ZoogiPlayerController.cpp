@@ -25,6 +25,7 @@
 #include "ZoogiFramedLayout.h"
 #include "ZoogiCardSubsystem.h"
 #include "ZoogiSpawnElevator.h"
+#include "ZoogiAimView.h"
 
 // ============================================================================
 // Camera director tuning: every number for the per-stage cameras lives here.
@@ -1542,6 +1543,14 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	FVector WantPivot = SL, WantLook = SL;
 	float PitchOff = 0.f, DistMul = 1.f;
 	FVector ProbeFrom = SL + FVector(0, 0, 60.f);
+	// Aim view (Evan Oct 17): normal aiming (no pinpoint lock) on a landscape view, tactical camera; the portrait view keeps its own
+	const bool bAimViewWanted = !bAnimeShot && !G->bCinematicCam && Shooter && !bShooterLeaving && !Lock && ZoogiAimView::Enabled()
+		&& ZoogiFramed::ViewAspect(this) >= 1.f && (G->IsAimStep() || (bAimViewForce && G->Phase == EZoogiPhase::Aiming));
+	if (bAimViewWanted && !bAimViewActive)
+		UE_LOG(LogZoogi, Log, TEXT("CAM aim view ON for P%d: heading %.1f (pitch %.0f, boom %.0f, screen y %.2f, yaw follow %.2f s)"), Shooter->PlayerIndex + 1, Shooter->AimYaw, ZoogiAimView::Pitch(), ZoogiAimView::Boom(), ZoogiAimView::ScreenY(), ZoogiAimView::YawTime());
+	AimViewAge = bAimViewWanted ? (bAimViewActive ? AimViewAge + Dt : 0.f) : 0.f;
+	bAimViewActive = bAimViewWanted;
+	if (bAimViewActive) AimViewYaw = FRotator::NormalizeAxis(Shooter->AimYaw); // orbit with the aim arrow (Evan 2:46 PM: "the camera should rotate with it")
 	if (bAnimeShot)
 	{
 		PIdx = PAnime;
@@ -1608,6 +1617,23 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		}
 		WantLook = WantPivot;
 		ProbeFrom = WantPivot + FVector(0, 0, 150.f);
+		if (bAimViewActive)
+		{
+			// behind and above the Zoogi along the aim arrow, pitched AimPitch down, the Zoogi at AimScreenY: pivot on the Zoogi,
+			// boom at the elevation that puts it there, look point ahead along the (smoothed) camera heading
+			const FProfile& TP = Profiles[PTactical];
+			WantFov = ZoogiAimView::Fov(TP.Fov);
+			const float TanV = FMath::Tan(FMath::DegreesToRadians(WantFov * 0.5f)) / FMath::Max(ZoogiFramed::ViewAspect(this), 0.1f);
+			float Elev, Ahead;
+			ZoogiAimView::ChaseBoom(ZoogiAimView::Boom(), ZoogiAimView::Pitch(), ZoogiAimView::ScreenY(), TanV, Elev, Ahead);
+			WantYaw = TacYaw = AimViewYaw;
+			AimViewAhead = Ahead;
+			WantPivot = SL;
+			WantLook = SL + FRotator(0.f, AimViewYaw, 0.f).Vector() * Ahead;
+			DistMul = ZoogiAimView::Boom() / FMath::Max(TP.Dist, 1.f);
+			PitchOff = Elev - TP.Pitch;
+			ProbeFrom = SL + FVector(0, 0, 60.f); // occlusion: pull in only when something is between the Zoogi and the camera
+		}
 	}
 	else switch (Cine)
 	{
@@ -1782,6 +1808,22 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		Yaw = FRotator::NormalizeAxis(WantYaw);
 		YawVel = 0.f;
 	}
+	else if (bAimViewActive)
+	{
+		// aim view: critically damped yaw follow (~AimYawTime to settle, shortest path, no overshoot / wobble); eased in from
+		// the tactical spring over the first 0.5 s of the view so the entry isn't a whip
+		const float Entry = FMath::Clamp(AimViewAge / 0.5f, 0.f, 1.f);
+		const float Wf = FMath::Lerp(W, 4.7f / ZoogiAimView::YawTime(), Entry * Entry * (3.f - 2.f * Entry));
+		const int32 Steps = FMath::Max(1, FMath::CeilToInt(Dt / (1.f / 240.f)));
+		const float H = Dt / Steps;
+		for (int32 i = 0; i < Steps; ++i)
+		{
+			const float Delta = FRotator::NormalizeAxis(WantYaw - Yaw);
+			YawVel += (Wf * Wf * Delta - 2.f * Wf * YawVel) * H;
+			Yaw = FRotator::NormalizeAxis(Yaw + YawVel * H);
+		}
+		if (FMath::Abs(FRotator::NormalizeAxis(WantYaw - Yaw)) < 0.02f && FMath::Abs(YawVel) < 0.5f) { Yaw = FRotator::NormalizeAxis(WantYaw); YawVel = 0.f; }
+	}
 	else
 	{
 		const int32 Steps = FMath::Max(1, FMath::CeilToInt(Dt / (1.f / 120.f)));
@@ -1813,6 +1855,14 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		Look = Damp(Look, WantLook, P.PosLag, Dt);
 	}
 
+	// aim view: the look point rides the smoothed heading exactly (so the Zoogi and its arrow stay centred while the camera
+	// orbits), blended in over the view's first 0.5 s
+	if (bAimViewActive)
+	{
+		const FVector AimLook = FVector(Pivot.X, Pivot.Y, Pivot.Z) + FRotator(0.f, Yaw, 0.f).Vector() * AimViewAhead;
+		const float A = FMath::Clamp(AimViewAge / 0.5f, 0.f, 1.f);
+		Look = FMath::Lerp(Look, AimLook, A * A * (3.f - 2.f * A));
+	}
 	// Ring-out safety: pivots and the look point never sink below the court.
 	Pivot.Z = FMath::Max(Pivot.Z, CourtZ - 100.f);
 	Look.Z = FMath::Max(Look.Z, CourtZ - 100.f);
