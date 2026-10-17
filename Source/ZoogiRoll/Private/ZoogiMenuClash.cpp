@@ -14,6 +14,7 @@
 #include "ZoogiTypes.h"
 #include "ZoogiUIFx.h"
 #include "ZoogiUIStyle.h"
+#include "ZoogiWinnerOverlay.h"
 #include "Blueprint/WidgetTree.h"
 #include "Components/BackgroundBlur.h"
 #include "Components/Border.h"
@@ -496,6 +497,50 @@ UTexture2D* UZoogiMenuRoot::ClashArt(const FString& Key)
 		S.Add(ZCRect(14, 8, 66, 66, ZCHex(TEXT("DDE8FA")), ZCHex(TEXT("A9BCDD")), 5.f, false));
 		S.Add(ZCRect(34, 30, 86, 92, FLinearColor::White, ZCHex(TEXT("C9D7F2")), 5.f, false));
 	}
+	// ---- DETAILED PASS 3 icons: clan badges (bolt, phoenix, axe, wolf), magnifier, elixir drop, up arrow, sort arrow
+	else if (Key == TEXT("bolt"))
+	{
+		S.Add(ZCPoly({ { 58, 4 }, { 22, 54 }, { 46, 54 }, { 36, 96 }, { 80, 40 }, { 54, 40 }, { 66, 4 } }, ZCHex(TEXT("D9A6FF")), ZCHex(TEXT("7B3FBF")), 4.f));
+	}
+	else if (Key == TEXT("phoenix"))
+	{
+		const FLinearColor A = ZCHex(TEXT("FFC24A")), B = ZCHex(TEXT("E2591C"));
+		S.Add(ZCPoly({ { 50, 30 }, { 30, 12 }, { 6, 14 }, { 20, 30 }, { 8, 40 }, { 30, 50 }, { 42, 60 } }, A, B, 3.f));
+		S.Add(ZCPoly({ { 50, 30 }, { 70, 12 }, { 94, 14 }, { 80, 30 }, { 92, 40 }, { 70, 50 }, { 58, 60 } }, A, B, 3.f));
+		S.Add(ZCPoly({ { 50, 18 }, { 60, 34 }, { 58, 62 }, { 66, 92 }, { 50, 80 }, { 34, 92 }, { 42, 62 }, { 40, 34 } }, ZCHex(TEXT("FFE07A")), B, 3.f));
+	}
+	else if (Key == TEXT("axe"))
+	{
+		S.Add(ZCRect(46, 14, 56, 94, ZCHex(TEXT("B07A3E")), ZCHex(TEXT("6E4518")), 3.f));
+		S.Add(ZCPoly({ { 54, 18 }, { 84, 8 }, { 94, 30 }, { 88, 52 }, { 54, 44 } }, ZCHex(TEXT("8CF07A")), ZCHex(TEXT("2E9A3C")), 4.f));
+		S.Add(ZCPoly({ { 48, 18 }, { 26, 12 }, { 20, 30 }, { 26, 46 }, { 48, 42 } }, ZCHex(TEXT("8CF07A")), ZCHex(TEXT("2E9A3C")), 4.f));
+	}
+	else if (Key == TEXT("wolf"))
+	{
+		const FLinearColor A = ZCHex(TEXT("D6DEE8")), B = ZCHex(TEXT("6E7C90"));
+		S.Add(ZCPoly({ { 20, 8 }, { 38, 30 }, { 62, 30 }, { 80, 8 }, { 84, 46 }, { 70, 70 }, { 50, 94 }, { 30, 70 }, { 16, 46 } }, A, B, 4.f));
+		S.Add(ZCPoly({ { 30, 46 }, { 44, 50 }, { 32, 54 } }, ZCDark, ZCDark, 0.f, false));
+		S.Add(ZCPoly({ { 70, 46 }, { 56, 50 }, { 68, 54 } }, ZCDark, ZCDark, 0.f, false));
+		S.Add(ZCPoly({ { 42, 74 }, { 58, 74 }, { 50, 86 } }, ZCDark, ZCDark, 0.f, false));
+	}
+	else if (Key == TEXT("search"))
+	{
+		S.Add(ZCPoly({ { 58, 62 }, { 66, 54 }, { 92, 82 }, { 84, 90 } }, FLinearColor::White, ZCHex(TEXT("C9D7F2")), 3.f));
+		S.Add(ZCCircle({ 40, 40 }, 28, FLinearColor::White, ZCHex(TEXT("C9D7F2")), 4.f));
+		S.Add(ZCCircle({ 40, 40 }, 17, ZCHex(TEXT("6FB4FF")), ZCHex(TEXT("2D74D6")), 2.f, false));
+	}
+	else if (Key == TEXT("drop"))
+	{
+		S.Add(ZCPoly({ { 50, 4 }, { 70, 34 }, { 82, 56 }, { 80, 74 }, { 66, 90 }, { 50, 95 }, { 34, 90 }, { 20, 74 }, { 18, 56 }, { 30, 34 } }, ZCHex(TEXT("FF7AE6")), ZCHex(TEXT("B0129A")), 4.f));
+	}
+	else if (Key == TEXT("arrow_up"))
+	{
+		S.Add(ZCPoly({ { 50, 6 }, { 90, 50 }, { 66, 50 }, { 66, 94 }, { 34, 94 }, { 34, 50 }, { 10, 50 } }, ZCHex(TEXT("FFE45C")), ZCHex(TEXT("E0A000")), 4.f));
+	}
+	else if (Key == TEXT("arrow_down"))
+	{
+		S.Add(ZCPoly({ { 50, 94 }, { 90, 50 }, { 66, 50 }, { 66, 6 }, { 34, 6 }, { 34, 50 }, { 10, 50 } }, FLinearColor::White, ZCHex(TEXT("C9D7F2")), 4.f));
+	}
 	else if (Key == TEXT("check"))
 	{
 		S.Add(ZCCircle({ 50, 50 }, 44, ZCHex(TEXT("7BF07B")), ZCHex(TEXT("2FAE2F")), 5.f));
@@ -619,22 +664,31 @@ void UZoogiMenuRoot::BuildClash()
 	if (UZoogiFrontProfileSubsystem* FP = UZoogiFrontProfileSubsystem::Get(this))
 		if (FP->Data().LastMatch.bPending && ClashTab == ZCBattle && ClashPopup == EZoogiClashPopup::None)
 		{
+			// DETAILED PASS 5: no separate results screen (the Winner overlay was the end screen); straight to Home
 			FP->Mutable().LastMatch.bPending = false;
 			FP->Save();
-			OpenClashPopup(EZoogiClashPopup::MatchResult, TEXT("MATCH RESULT"));
-			bDirty = false;
+			UE_LOG(LogZoogi, Log, TEXT("CLASH back from match (outcome %d): Home, no results popup"), FP->Data().LastMatch.Outcome);
 		}
 	switch (ClashTab)
 	{
 	case ZCBattle: BuildClashBattleTab(); break;
 	case ZCShop: BuildClashShopTab(); break;
 	case ZCCards: BuildClashCardsTab(); break;
-	case ZCClan: BuildClashEmptyTab(TEXT("CLAN"), TEXT("Clans, chat and donations need the online backend."), false); break;
-	default: BuildClashEmptyTab(TEXT("LEADERBOARD"), TEXT("Global and friends leaderboards need the online backend."), false); break;
+	case ZCClan: BuildClashClanTab(); break;
+	default: BuildClashLeaderboardTab(); break;
 	}
 	bAnimEnter = false;
 	if (ClashPopup != EZoogiClashPopup::None) BuildClashPopup();
 	else { ClashPopupW.Reset(); ClashPopupScrim.Reset(); }
+	// toast (DETAILED PASS 4: "Card removed from deck." etc.), 2 s, above everything
+	if (!ClashToastMsg.IsEmpty() && Time - ClashToastT < 2.f)
+	{
+		const float TW = FMath::Min(DesignW - 80.f, 120.f + ClashToastMsg.Len() * 17.f), TY = ClashNavY() - 150.f;
+		UWidget* Pl = CPlate(DesignW * 0.5f - TW * 0.5f, TY, TW, 90.f, ZCHex(TEXT("0B1E44")).CopyWithNewOpacity(0.94f), 45.f, 4.f, false);
+		UWidget* Tx = CText(ClashToastMsg, DesignW * 0.5f - TW * 0.5f, TY, TW, 90.f, 30.f, FLinearColor::White, 1, 3.f);
+		if (Pl) Pl->SetVisibility(ESlateVisibility::HitTestInvisible);
+		if (Tx) Tx->SetVisibility(ESlateVisibility::HitTestInvisible);
+	}
 }
 
 void UZoogiMenuRoot::BuildClashTopBar()
@@ -796,8 +850,8 @@ void UZoogiMenuRoot::BuildClashBattleTab()
 	Y += 76.f + 24.f + Extra * 0.3f;
 	CChunky(TEXT("BATTLE"), ZCYellow, [this]()
 	{
-		UE_LOG(LogZoogi, Log, TEXT("CLASH BATTLE pressed -> MenuAction Start (current arena / players)"));
-		Fire("Start", 0);
+		UE_LOG(LogZoogi, Log, TEXT("CLASH BATTLE pressed -> matchmaking screen -> MenuAction Start (current arena / players)"));
+		ClashStartMatchmaking(); // DETAILED PASS 3: search screen first, then the real match
 	}, C - 270.f, Y, 540.f, 150.f, 66.f, nullptr, true);
 	Y += 150.f + 30.f + Extra * 0.15f;
 	BuildClashChestSlots(Y);
@@ -843,7 +897,7 @@ void UZoogiMenuRoot::BuildClashNav()
 			if (t > 0) CAt(CBox(ZCNavy, ZCDark, 0.f, 0.f), 0.f, 30.f, 3.f, H - 50.f);
 			CImg(ClashArt(Icons[t]), TW * 0.5f - 46.f, 28.f, 92.f, 92.f, 0.f, false, FLinearColor(0.82f, 0.86f, 1.f, 1.f));
 		}
-		if (t == ZCCards && FP && FP->Data().bCardsNew) CDot(TW * 0.5f + 26.f, bSel ? 0.f : 18.f, 38.f, TEXT("!"));
+		if (t == ZCCards && FP && (FP->Data().bCardsNew || FP->UpgradableCount() > 0)) CDot(TW * 0.5f + 26.f, bSel ? 0.f : 18.f, 38.f, TEXT("!"));
 		CGroupEnd();
 		CAt(CButton(Grp, [this, t]() { SetClashTab(t); }), X, bSel ? Y - 24.f : Y, TW, bSel ? H + 24.f : H);
 	}
@@ -855,6 +909,8 @@ void UZoogiMenuRoot::BuildClashPopup()
 	// full-screen flows (no popup panel): chest opening, replay viewer
 	if (ClashPopup == EZoogiClashPopup::ChestOpen) { ClashPopupW.Reset(); ClashPopupScrim.Reset(); BuildClashChestOpen(); return; }
 	if (ClashPopup == EZoogiClashPopup::Replay) { ClashPopupW.Reset(); ClashPopupScrim.Reset(); BuildClashReplay(); return; }
+	if (ClashPopup == EZoogiClashPopup::LevelUp) { ClashPopupW.Reset(); ClashPopupScrim.Reset(); BuildClashLevelUp(); return; }
+	if (ClashPopup == EZoogiClashPopup::Matchmaking) { ClashPopupW.Reset(); ClashPopupScrim.Reset(); BuildClashMatchmaking(); return; }
 	// background dims and blurs behind every popup (DETAILED PASS 1)
 	{
 		UBackgroundBlur* Blur = WidgetTree->ConstructWidget<UBackgroundBlur>(UBackgroundBlur::StaticClass());
@@ -902,13 +958,16 @@ void UZoogiMenuRoot::BuildClashPopup()
 		// sub-popups close back to their parent (Battle Log -> Profile, Change Nickname -> Settings)
 		if (ClashPopup == EZoogiClashPopup::BattleLog) OpenClashPopup(EZoogiClashPopup::Profile);
 		else if (ClashPopup == EZoogiClashPopup::ChangeNickname) OpenClashPopup(EZoogiClashPopup::Settings);
+		else if (ClashPopup == EZoogiClashPopup::ChooseBadge) OpenClashPopup(EZoogiClashPopup::CreateClan, TEXT("CREATE CLAN"));
+		else if (ClashPopup == EZoogiClashPopup::Blocked) OpenClashPopup(EZoogiClashPopup::AddFriend, TEXT("ADD FRIEND"));
 		else { ClashPopup = EZoogiClashPopup::None; bDirty = true; }
 	}, PW - 96.f, -20.f, 104.f, 100.f, 46.f);
 
 	const UZoogiFrontProfileSubsystem* FP = UZoogiFrontProfileSubsystem::Get(this);
 	const FZoogiFrontProfileData Dflt;
 	const FZoogiFrontProfileData& D = FP ? FP->Data() : Dflt;
-	if (BuildClashShopPopup(ClashPopup, PW, PH) || BuildClashHomePopup(ClashPopup, PW, PH) || BuildClashProfilePopup(ClashPopup, PW, PH)) {}
+	if (BuildClashShopPopup(ClashPopup, PW, PH) || BuildClashHomePopup(ClashPopup, PW, PH) || BuildClashProfilePopup(ClashPopup, PW, PH)
+		|| BuildClashPass3Popup(ClashPopup, PW, PH) || BuildClashSocialPopup(ClashPopup, PW, PH)) {}
 	else if (ClashPopup == EZoogiClashPopup::Profile) // (replaced by BuildClashProfilePopup; kept as a fallback)
 	{
 		AZoogiGameMode* GMode = GM();
@@ -1030,6 +1089,23 @@ void UZoogiMenuRoot::TickClash(float Dt)
 		ClashReplayApply();
 	}
 	if (ClashCopiedT > 0.f && Time - ClashCopiedT > 1.5f) { ClashCopiedT = -100.f; bDirty = true; } // hide "Copied!"
+	if (!ClashToastMsg.IsEmpty() && Time - ClashToastT >= 2.f) { ClashToastMsg.Reset(); bDirty = true; } // hide the toast
+	// matchmaking (offline): short search screen, then the REAL match through the same MenuAction the old BATTLE button fired
+	if (ClashPopup == EZoogiClashPopup::Matchmaking && ClashMMT0 >= 0.f)
+	{
+		const float E = Time - ClashMMT0;
+		const int32 Ph = E < ClashMMSearch ? 0 : E < ClashMMSearch + ClashMMFound ? 1 : 2;
+		if (Ph != ClashMMPhase) { ClashMMPhase = Ph; bDirty = true; UE_LOG(LogZoogi, Log, TEXT("CLASH matchmaking phase %d"), Ph); }
+		if (UWidget* Bar = ClashMMBar.Get()) if (UCanvasPanelSlot* BS = Cast<UCanvasPanelSlot>(Bar->Slot)) BS->SetSize(FVector2D((DesignW - 192.f) * ClashMMLoadPct() / 100.f, 48.f));
+	}
+	if (ClashPopup == EZoogiClashPopup::Matchmaking && ClashMMT0 >= 0.f && Time - ClashMMT0 >= ClashMMSearch + ClashMMFound + ClashMMLoad)
+	{
+		ClashMMT0 = -1.f;
+		ClashPopup = EZoogiClashPopup::None;
+		UE_LOG(LogZoogi, Log, TEXT("CLASH matchmaking -> MenuAction Start (local match)"));
+		Fire("Start", 0);
+		return;
+	}
 	ClashLiveClock += Dt;
 	if (ClashLiveClock >= 0.25f)
 	{
@@ -1142,31 +1218,106 @@ void UZoogiMenuRoot::TickClashTour(float Dt)
 	Steps.Add({ TEXT("arenas"), 1.f, 1.5f, [this]() { ClashPopup = EZoogiClashPopup::None; SetClashTab(ZCBattle); ClashArenaSel = -1; OpenClashPopup(EZoogiClashPopup::Arenas, TEXT("ARENAS")); } });
 	Steps.Add({ TEXT("trophy_road"), 1.f, 1.5f, [this]() { OpenClashPopup(EZoogiClashPopup::TrophyRoad, TEXT("TROPHY ROAD")); } });
 	Steps.Add({ TEXT("battle_pass"), 1.f, 1.5f, [this]() { OpenClashPopup(EZoogiClashPopup::BattlePass, TEXT("BATTLE PASS")); } });
-	Steps.Add({ TEXT("cards_decks"), 1.f, 1.5f, [this]() { ClashPopup = EZoogiClashPopup::None; SetClashTab(ZCCards); ClashCardsSub = 0; ClashScrollKey = -1; bDirty = true; } });
-	Steps.Add({ TEXT("cards_collection"), 1.f, 1.5f, [this]() { ClashCardsSub = 1; ClashScrollOffset = 0.f; ClashPendingScroll = 0.f; ClashScrollKey = -1; bDirty = true; } });
-	Steps.Add({ TEXT("cards_locked"), 1.f, 1.5f, [this]() { ClashPendingScroll = ClashLockedY; bDirty = true; } });
-	Steps.Add({ TEXT("card_popover"), 1.f, 1.5f, [this]()
+	// ---- DETAILED PASS 3 + 4: Cards (5 decks, 8 slots, name edit, pills, popovers, Details, Level Up, sort, emotes)
+	auto OwnedIds = [FP]() { TArray<FName> R; if (FP) for (const FZoogiCardDef& Df : UZoogiFrontProfileSubsystem::CardDefs()) if (FP->IsCardOwned(Df.Id)) R.Add(Df.Id); return R; };
+	Steps.Add({ TEXT("cards_decks"), 1.f, 1.5f, [this]() { ClashPopup = EZoogiClashPopup::None; SetClashTab(ZCCards); ClashCardsSub = 0; ClashDeckView = -1; ClashScrollKey = -1; bDirty = true; } });
+	Steps.Add({ TEXT("deck_name_edit"), 1.f, 1.5f, [this]() { ClashDeckNameDraft = TEXT("Rush Deck"); bClashDeckNameEdit = true; bDirty = true; } });
+	Steps.Add({ TEXT("deck_name_saved"), 1.f, 1.5f, [this, FP]()
 	{
-		const TArray<FZoogiCardDef>& Defs = UZoogiFrontProfileSubsystem::CardDefs();
-		if (Defs.Num() > 0) { ClashSelId = Defs[0].Id; OpenClashPopup(EZoogiClashPopup::Card, Defs[0].Name.ToUpper()); }
+		if (FP) FP->SetDeckName(FP->Data().ActiveDeck, TEXT("Rush Deck"));
+		bClashDeckNameEdit = false; bDirty = true;
 	} });
-	Steps.Add({ TEXT("cards_emotes"), 1.f, 1.5f, [this]() { ClashPopup = EZoogiClashPopup::None; ClashCardsSub = 2; ClashScrollKey = -1; bDirty = true; } });
-	Steps.Add({ TEXT("clan_tab"), 1.f, 1.5f, [this]() { SetClashTab(ZCClan); } });
-	Steps.Add({ TEXT("leaderboard_tab"), 1.f, 1.5f, [this]() { SetClashTab(ZCLeader); } });
-	Steps.Add({ TEXT("home_before_battle"), 1.f, 1.5f, [this]() { ClashPopup = EZoogiClashPopup::None; SetClashTab(ZCBattle); } });
+	Steps.Add({ TEXT("deck_tab_2"), 1.f, 1.5f, [this]() { ClashDeckView = 1; bDirty = true; } });
+	Steps.Add({ TEXT("deck_card_popover"), 1.f, 1.5f, [this]() { ClashDeckView = 0; ClashPopoverSlot = 0; ClashPopoverW = 0.f; bDirty = true; } });
+	Steps.Add({ TEXT("deck_card_removed_toast"), 1.f, 0.8f, [this, FP]()
+	{
+		if (FP) { TArray<FName> Dk = FP->Deck(0); if (Dk.Num() > 0) { Dk.RemoveAt(Dk.Num() - 1); FP->SetDeck(0, Dk); } }
+		ClashPopoverSlot = -1; ClashToast(TEXT("Card removed from deck."));
+	} });
+	Steps.Add({ TEXT("cards_collection"), 1.f, 1.5f, [this]() { ClashCardsSub = 1; ClashCollSub = 0; ClashScrollOffset = 0.f; ClashPendingScroll = 0.f; ClashScrollKey = -1; bDirty = true; } });
+	Steps.Add({ TEXT("collection_popover"), 1.f, 1.5f, [this, FP, OwnedIds]()
+	{
+		const TArray<FName> Ids = OwnedIds(); FName Pick = Ids.Num() ? Ids[0] : NAME_None;
+		for (const FName& Id : Ids) if (FP && FP->CanUpgrade(Id)) { Pick = Id; break; } // show Upgrade/Use when one is upgradable
+		ClashPopoverId = Pick; bDirty = true;
+	} });
+	Steps.Add({ TEXT("use_card_back_to_decks"), 1.f, 0.8f, [this, FP, OwnedIds]()
+	{
+		const TArray<FName> Ids = OwnedIds(); const TArray<FName> Dk = FP ? FP->Deck(0) : TArray<FName>();
+		for (const FName& Id : Ids) if (!Dk.Contains(Id)) { ClashDeckView = 0; ClashUseCard(Id); break; }
+	} });
+	Steps.Add({ TEXT("sort_by_elixir_desc"), 1.f, 1.5f, [this, FP]()
+	{
+		if (FP) { FP->Mutable().CollectionSort = 1; FP->Mutable().bSortDesc = true; FP->Save(); }
+		ClashCardsSub = 1; ClashCollSub = 0; ClashPopoverId = NAME_None; ClashScrollKey = -1; bDirty = true;
+	} });
+	Steps.Add({ TEXT("sort_by_name"), 1.f, 1.5f, [this, FP]() { if (FP) { FP->Mutable().CollectionSort = 2; FP->Mutable().bSortDesc = false; FP->Save(); } bDirty = true; } });
+	Steps.Add({ TEXT("sort_by_rarity"), 1.f, 1.5f, [this, FP]() { if (FP) { FP->Mutable().CollectionSort = 0; FP->Mutable().bSortDesc = false; FP->Save(); } bDirty = true; } });
+	Steps.Add({ TEXT("cards_locked"), 1.f, 1.5f, [this]() { ClashPendingScroll = ClashLockedY; bDirty = true; } });
+	Steps.Add({ TEXT("card_details"), 1.f, 1.5f, [this, OwnedIds, FP]()
+	{
+		const TArray<FName> Ids = OwnedIds(); FName Pick = Ids.Num() ? Ids[0] : NAME_None;
+		for (const FName& Id : Ids) if (FP && FP->CanUpgrade(Id)) { Pick = Id; break; }
+		ClashSelId = Pick; ClashDetailsBack = EZoogiClashPopup::None; OpenClashPopup(EZoogiClashPopup::CardDetails, Pick.ToString().ToUpper());
+	} });
+	Steps.Add({ TEXT("level_up"), 1.f, 1.2f, [this, FP]()
+	{
+		FString Why; int32 XPGot = 0; bool bUp = false;
+		const int32 From = FP ? FP->CardLevelOf(ClashSelId) : 1;
+		if (FP && FP->UpgradeCard(ClashSelId, Why, XPGot, bUp))
+		{
+			ClashLvId = ClashSelId; ClashLvFrom = From; ClashLvXP = XPGot; bClashLvPlayerUp = bUp; ClashDetailsBack = EZoogiClashPopup::CardDetails;
+			OpenClashPopup(EZoogiClashPopup::LevelUp, TEXT("LEVEL UP"));
+		}
+		else OpenClashPopup(EZoogiClashPopup::Info, TEXT("LEVEL UP"), Why);
+	} });
+	Steps.Add({ TEXT("level_up_done"), 2.f, 1.5f, [this]() { bDirty = true; } });
+	Steps.Add({ TEXT("cards_emotes"), 1.f, 1.5f, [this]() { ClashPopup = EZoogiClashPopup::None; SetClashTab(ZCCards); ClashCardsSub = 1; ClashCollSub = 1; ClashScrollKey = -1; bDirty = true; } });
+	// ---- Clan / Friends / Leaderboard (offline: honest empty states, local player only)
+	Steps.Add({ TEXT("clan_tab"), 1.f, 1.5f, [this]() { ClashSocialSub = 0; SetClashTab(ZCClan); } });
+	Steps.Add({ TEXT("search_clans"), 1.f, 1.5f, [this]() { ClashSearchText = TEXT("Zoogi"); ClashSearchNote.Reset(); OpenClashPopup(EZoogiClashPopup::SearchClans, TEXT("SEARCH CLANS")); } });
+	Steps.Add({ TEXT("search_clans_offline"), 1.f, 1.5f, [this]() { ClashSearchNote = TEXT("Clan search needs the online backend (not connected yet). No clans to show."); bDirty = true; } });
+	Steps.Add({ TEXT("create_clan"), 1.f, 1.5f, [this]() { ClashClanName = TEXT("Zoogi Rollers"); ClashClanTag = TEXT("ZROLL"); ClashClanType = 1; ClashClanReq = 400; OpenClashPopup(EZoogiClashPopup::CreateClan, TEXT("CREATE CLAN")); } });
+	Steps.Add({ TEXT("choose_badge"), 1.f, 1.5f, [this]() { ClashBadgeSel = 3; OpenClashPopup(EZoogiClashPopup::ChooseBadge, TEXT("Choose a Badge")); } });
+	Steps.Add({ TEXT("friends_tab"), 1.f, 1.5f, [this]() { ClashPopup = EZoogiClashPopup::None; ClashSocialSub = 1; bDirty = true; } });
+	Steps.Add({ TEXT("add_friend"), 1.f, 1.5f, [this]() { ClashSearchNote.Reset(); ClashFriendText.Reset(); OpenClashPopup(EZoogiClashPopup::AddFriend, TEXT("ADD FRIEND")); } });
+	Steps.Add({ TEXT("blocked_players"), 1.f, 1.5f, [this]() { OpenClashPopup(EZoogiClashPopup::Blocked, TEXT("BLOCKED PLAYERS")); } });
+	Steps.Add({ TEXT("leaderboard_tab"), 1.f, 1.5f, [this]() { ClashPopup = EZoogiClashPopup::None; ClashLbSub = 0; SetClashTab(ZCLeader); } });
+	Steps.Add({ TEXT("leaderboard_clans"), 1.f, 1.5f, [this]() { ClashLbSub = 1; bDirty = true; } });
+	// ---- DETAILED PASS 5: BATTLE with a short deck is blocked
+	TSharedRef<TArray<FName>> SavedDeck = MakeShared<TArray<FName>>();
+	Steps.Add({ TEXT("battle_deck_not_full"), 1.f, 1.5f, [this, FP, SavedDeck]()
+	{
+		ClashPopup = EZoogiClashPopup::None; SetClashTab(ZCBattle);
+		if (!FP) return;
+		const int32 A = FP->Data().ActiveDeck;
+		*SavedDeck = FP->Deck(A);
+		TArray<FName> Short = *SavedDeck; if (Short.Num() > 0) Short.RemoveAt(Short.Num() - 1);
+		FP->SetDeck(A, Short);
+		ClashStartMatchmaking(); // same call as the BATTLE button
+	} });
+	Steps.Add({ TEXT("home_before_battle"), 1.f, 1.5f, [this, FP, SavedDeck]()
+	{
+		if (FP && SavedDeck->Num() > 0) FP->SetDeck(FP->Data().ActiveDeck, *SavedDeck); // deck full again
+		ClashPopup = EZoogiClashPopup::None; SetClashTab(ZCBattle);
+	} });
 	const int32 BattleStep = Steps.Num();
 	if (bBattle)
 	{
-		Steps.Add({ TEXT("match_result"), 1.f, 2.2f, [this, Res]()
+		Steps.Add({ TEXT("matchmaking"), 1.f, 1.5f, [this, Res]()
 		{
 			AZoogiGameMode* G = GM();
 			if (G && G->MenuPlayers.IsValidIndex(0) && !G->MenuPlayers[0].bCPU) Fire("ToggleCPU", 0); // capture run: P1 plays itself
-			UE_LOG(LogZoogi, Log, TEXT("CLASH TOUR: pressing BATTLE"));
-			Fire("Start", 0);
+			UE_LOG(LogZoogi, Log, TEXT("CLASH TOUR: pressing BATTLE (matchmaking screen, then the real match)"));
+			UZoogiWinnerOverlay::TourPrefix = FPaths::Combine(ClashTourDir, FString::Printf(TEXT("clash_%s_%02d"), *Res, ClashTourStep + 1)); // overlay shots + its OK press
+			ClashStartMatchmaking();
 			const FString P = FPaths::Combine(ClashTourDir, FString::Printf(TEXT("clash_%s_%02d_in_battle.png"), *Res, ClashTourStep + 1));
 			FTimerHandle H;
-			GetWorld()->GetTimerManager().SetTimer(H, FTimerDelegate::CreateWeakLambda(this, [P]() { FScreenshotRequest::RequestScreenshot(P, true, false); UE_LOG(LogZoogi, Log, TEXT("CLASH TOUR screenshot %s"), *P); }), 14.f, false);
+			GetWorld()->GetTimerManager().SetTimer(H, FTimerDelegate::CreateWeakLambda(this, [P]() { FScreenshotRequest::RequestScreenshot(P, true, false); UE_LOG(LogZoogi, Log, TEXT("CLASH TOUR screenshot %s"), *P); }), ClashMMSearch + ClashMMFound + ClashMMLoad + 14.f, false);
 		} });
+		Steps.Add({ TEXT("opponent_found"), ClashMMSearch - 2.f, 1.5f, [this]() { bDirty = true; } });   // ~11 s into matchmaking
+		Steps.Add({ TEXT("loading_battle"), 1.f, 1.0f, [this]() { bDirty = true; } });                   // ~13 s: logo loading, then the real match
+		Steps.Add({ TEXT("home_after_match"), 2.f, 2.2f, [this]() { bDirty = true; } });                 // Winner overlay -> OK -> loading -> Home (no results popup)
 		Steps.Add({ TEXT("slot_locked"), 1.f, 1.5f, [this]()
 		{
 			ClashPopup = EZoogiClashPopup::None; bDirty = true;
@@ -1227,7 +1378,7 @@ void UZoogiMenuRoot::TickClashTour(float Dt)
 	if (ClashTourClock < St.Shot) return;
 	// a battle step whose match lost: no chest was won. Retry the real match (max 3 battles) so the chest flow can be shown.
 	static int32 TourBattles = 0;
-	if (ClashTourStep == BattleStep + 1 && FP && FirstChestSlot() < 0 && ++TourBattles < 4)
+	if (ClashTourStep == BattleStep + 4 && FP && FirstChestSlot() < 0 && ++TourBattles < 4)
 	{
 		UE_LOG(LogZoogi, Log, TEXT("CLASH TOUR: no chest won (outcome %d), playing another real match"), FP->Data().LastMatch.Outcome);
 		ClashPopup = EZoogiClashPopup::None;

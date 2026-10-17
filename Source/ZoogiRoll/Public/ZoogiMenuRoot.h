@@ -28,7 +28,8 @@ enum class EZoogiMenuAnchor : uint8 { Left, Center, Right };
 
 /** clash-menu: popups of the Clash-style front end (ZoogiMenuClash.cpp). */
 enum class EZoogiClashPopup : uint8 { None, Profile, Settings, TrophyRoad, Info, Deal, Chest, Gold, Rewards, Card, MatchResult, ChestSlot, Arenas, BattlePass, PremiumUnlock,
-	BattleLog, Replay, ChangeNickname, ChestOpen, GemPack };
+	BattleLog, Replay, ChangeNickname, ChestOpen, GemPack,
+	/* DETAILED PASS 3 */ CardDetails, LevelUp, SearchClans, CreateClan, ChooseBadge, AddFriend, Blocked, Matchmaking };
 
 UENUM()
 enum class EZoogiScreen : uint8
@@ -69,6 +70,8 @@ public:
 	/** Forward to AZoogiGameMode::MenuAction (unchanged match logic). */
 	void Fire(FName Action, int32 Index);
 	void ShowComingSoon(const FString& What);
+	/** The Clash menu's procedural icons (e.g. "crown"), shared with UZoogiWinnerOverlay. */
+	UTexture2D* SharedClashArt(const FString& Key) { return ClashArt(Key); }
 
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
@@ -285,4 +288,37 @@ private:
 	TArray<TWeakObjectPtr<UWidget>> ClashReplayZW, ClashReplayLW, ClashReplayOW;
 	TWeakObjectPtr<UWidget> ClashReplayBar;
 	float ClashReplayS = 800.f, ClashReplayCX = 0.f, ClashReplayCY = 0.f, ClashReplayBarW = 0.f;
+	// ---- DETAILED PASS 3 + 4 (Oct 17): Cards (5 decks x 8, levels / upgrade, details, level-up, sort, emotes),
+	// Clan / Friends, Leaderboard, Matchmaking (ZoogiMenuClashCards.cpp, ZoogiMenuClashSocial.cpp)
+	void BuildClashClanTab();
+	void BuildClashLeaderboardTab();
+	void BuildClashMatchmaking();
+	void BuildClashLevelUp();
+	bool BuildClashPass3Popup(EZoogiClashPopup P, float PW, float PH);
+	bool BuildClashSocialPopup(EZoogiClashPopup P, float PW, float PH);
+	void ClashStartMatchmaking();
+	void ClashUseCard(FName Id);
+	void ClashToast(const FString& Msg);
+	UWidget* CBadge(int32 Badge, float X, float Y, float S);
+	UWidget* CField(const FString& Text, const FString& Hint, float X, float Y, float Wd, float Ht, TWeakObjectPtr<class UEditableTextBox>* Out, bool bMulti = false);
+	int32 ClashCollSub = 0;              // Collection: 0 Cards, 1 Emotes
+	FName ClashPopoverId; int32 ClashPopoverSlot = -1; // tapped card (collection) / deck slot; popover under it
+	FVector2D ClashPopoverPos = FVector2D::ZeroVector; float ClashPopoverW = 0.f;
+	bool bClashDeckNameEdit = false; FString ClashDeckNameDraft;
+	TWeakObjectPtr<class UEditableTextBox> ClashDeckNameBox, ClashFieldA, ClashFieldB, ClashFieldC;
+	TWeakObjectPtr<class UMultiLineEditableTextBox> ClashDescBox;
+	FString ClashToastMsg; float ClashToastT = -100.f;
+	int32 ClashSocialSub = 0;            // Clan tab: 0 Clan, 1 Friends
+	int32 ClashLbSub = 0, ClashLbPage = 0; // Leaderboard: 0 Players, 1 Clans
+	int32 ClashBadgeSel = 0, ClashBadgePick = 0, ClashClanType = 0, ClashClanReq = 0;
+	FString ClashClanName, ClashClanTag, ClashClanDesc, ClashSearchText, ClashFriendText, ClashSearchNote;
+	float ClashMMT0 = -1.f; int32 ClashMMTip = 0;
+	int32 ClashMMPhase = 0;               // 0 searching, 1 opponent found, 2 loading
+	TWeakObjectPtr<UWidget> ClashMMBar;
+	static constexpr float ClashMMSearch = 10.f; // DETAILED PASS 5: search ~10 s, "Opponent found!" ~2 s, logo loading ~2 s
+	static constexpr float ClashMMFound = 2.f;
+	static constexpr float ClashMMLoad = 2.f;
+	int32 ClashMMLoadPct() const { return FMath::RoundToInt(100.f * FMath::Clamp((Time - ClashMMT0 - ClashMMSearch - ClashMMFound) / (ClashMMLoad * 0.8f), 0.f, 1.f)); }
+	FName ClashLvId; int32 ClashLvFrom = 1, ClashLvXP = 0; bool bClashLvPlayerUp = false;
+	EZoogiClashPopup ClashDetailsBack = EZoogiClashPopup::None;
 };

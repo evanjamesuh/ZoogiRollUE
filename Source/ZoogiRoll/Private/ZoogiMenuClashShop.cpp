@@ -77,9 +77,8 @@ UWidget* UZoogiMenuRoot::CCard(FName Id, float X, float Y, float Wd, float Ht, b
 	}
 	else if (bLevel && !bLocked)
 	{
-		int32 Into = 0, Need = 1;
 		const UZoogiFrontProfileSubsystem* FP = UZoogiFrontProfileSubsystem::Get(this);
-		const int32 Lv = UZoogiFrontProfileSubsystem::CardLevel(FP ? FP->Copies(Id) : 1, Into, Need);
+		const int32 Lv = FP ? FP->CardLevelOf(Id) : 1;
 		const float BW = FMath::Clamp(Wd * 0.44f, 48.f, 96.f), BH = FMath::Clamp(Wd * 0.2f, 24.f, 42.f);
 		CAt(CBox(ZCBlueDeep, ZCDark, 3.f, BH * 0.5f), Wd - BW + 6.f, -6.f, BW, BH);
 		CText(FString::Printf(TEXT("LV %d"), Lv), Wd - BW + 6.f, -6.f, BW, BH - 2.f, BH * 0.55f, FLinearColor::White, 1, 2.f);
@@ -214,16 +213,16 @@ void UZoogiMenuRoot::BuildClashChestOpen()
 		CCard(R.Id, C - 140.f, 190.f + OY, 280.f, 350.f, false, FString::Printf(TEXT("x%d"), R.Amount));
 		CText(ZCCardName(R.Id), C - 500.f, 552.f + OY, 1000.f, 70.f, 54.f, FLinearColor::White);
 		CText(UZoogiFrontProfileSubsystem::RarityName(Rar), C - 400.f, 620.f + OY, 800.f, 44.f, 32.f, ZCRarityLabel(Rar), 1, 4.f);
-		const int32 Have = FP ? FP->Copies(R.Id) : R.Amount;
-		int32 Into = 0, Need = 1, I0 = 0, N0 = 1;
-		const int32 Lv = UZoogiFrontProfileSubsystem::CardLevel(Have, Into, Need);
-		const int32 Lv0 = UZoogiFrontProfileSubsystem::CardLevel(FMath::Max(1, Have - R.Amount), I0, N0);
+		// DETAILED PASS 3 levels: copies collect as spares; UPGRADE (Cards tab) spends them
+		const int32 Lv = FP ? FP->CardLevelOf(R.Id) : 1;
+		const int32 Into = FP ? FP->Spare(R.Id) : R.Amount, Need = UZoogiFrontProfileSubsystem::UpgradeCopies(Lv);
+		const bool bReadyNow = FP && FP->CanUpgrade(R.Id), bReadyBefore = Into - R.Amount >= Need;
 		CText(FString::Printf(TEXT("Level %d"), Lv), C - 440.f, 680.f + OY, 160.f, 56.f, 30.f, ZCGold, 2, 4.f);
 		CBar(C - 260.f, 684.f + OY, 520.f, 50.f, float(Into) / FMath::Max(1, Need), ZCGreen, FString::Printf(TEXT("%d/%d"), Into, Need), 24.f);
-		if (Lv > Lv0)
+		if (bReadyNow && !bReadyBefore)
 		{
 			CImg(ClashArt(TEXT("chevron")), C + 276.f, 674.f + OY, 64.f, 64.f);
-			CText(TEXT("LEVEL UP!"), C - 200.f, 744.f + OY, 400.f, 50.f, 30.f, ZCGreen, 1, 4.f);
+			CText(TEXT("UPGRADE READY!"), C - 250.f, 744.f + OY, 500.f, 50.f, 30.f, ZCGreen, 1, 4.f);
 		}
 		ChestBadge(80.f, 800.f + OY, 170.f, N - 1 - ClashOpenIdx + (ClashOpenGold > 0 ? 1 : 0));
 	}
@@ -369,8 +368,7 @@ void UZoogiMenuRoot::BuildClashShopTab()
 			CText(UZoogiFrontProfileSubsystem::RarityName(Rar), 0.f, 6.f, TW, 34.f, 24.f, Deal.bBought ? ZCMuted : ZCRarityLabel(Rar), 1, 3.f);
 			CCard(Deal.CardId, TW * 0.5f - 72.f, 44.f, 144.f, 180.f, false, FString::Printf(TEXT("x%d"), Deal.Count));
 			CText(ZCCardName(Deal.CardId), 0.f, 230.f, TW, 34.f, 24.f, Deal.bBought ? ZCHex(TEXT("8C96A8")) : FLinearColor::White);
-			int32 Into = 0, Need = 1;
-			UZoogiFrontProfileSubsystem::CardLevel(FMath::Max(1, FP->Copies(Deal.CardId)), Into, Need);
+			const int32 Into = FP->Spare(Deal.CardId), Need = UZoogiFrontProfileSubsystem::UpgradeCopies(FP->CardLevelOf(Deal.CardId));
 			const bool bOwned = FP->Copies(Deal.CardId) > 0;
 			CBar(22.f, 272.f, TW - 44.f, 38.f, float(Into + (Deal.bBought ? 0 : Deal.Count)) / FMath::Max(1, Need), ZCGreen,
 				Deal.bBought ? FString::Printf(TEXT("%d / %d"), Into, Need) : FString::Printf(TEXT("%d +%d / %d"), bOwned ? Into : 0, Deal.Count, Need), 19.f);
@@ -494,204 +492,7 @@ void UZoogiMenuRoot::BuildClashShopTab()
 	Sc->SetScrollOffset(ClashPendingScroll);
 }
 
-// ------------------------------------------------------------------------------------------------ Cards
-void UZoogiMenuRoot::BuildClashCardsTab()
-{
-	UZoogiFrontProfileSubsystem* FP = UZoogiFrontProfileSubsystem::Get(this);
-	if (!FP) return;
-	const float W = DesignW, C = W * 0.5f;
-	// sub-tabs
-	const TCHAR* Subs[] = { TEXT("DECKS"), TEXT("COLLECTION"), TEXT("EMOTES") };
-	for (int32 k = 0; k < 3; ++k)
-	{
-		const float BW = 316.f, BH = 80.f, BX = C - (BW * 1.5f + 24.f) + k * (BW + 24.f);
-		CChunky(Subs[k], ClashCardsSub == k ? ZCYellow : ZCBlueDeep, [this, k]()
-		{
-			if (ClashCardsSub != k) { ClashCardsSub = k; ClashScrollOffset = 0.f; ClashPendingScroll = -1.f; ClashScrollKey = -1; UE_LOG(LogZoogi, Log, TEXT("CLASH cards sub %d"), k); }
-			bDirty = true;
-		}, BX, 116.f, BW, BH, 30.f);
-	}
-	const TArray<FZoogiCardDef>& Defs = UZoogiFrontProfileSubsystem::CardDefs();
-	TArray<FName> Owned, Locked;
-	for (const FZoogiCardDef& Def : Defs) (FP->IsCardOwned(Def.Id) ? Owned : Locked).Add(Def.Id);
-
-	if (ClashCardsSub == 0)
-	{
-		// ---- Decks: Deck 1/2/3, 15 slots (tap to remove), owned cards (tap to add), USE THIS DECK (mirrors the saved deck matches use)
-		const int32 Active = FP->Data().ActiveDeck;
-		const int32 View = ClashDeckView < 0 ? Active : FMath::Clamp(ClashDeckView, 0, 2);
-		const TArray<FName> Deck = FP->Deck(View);
-		// M4 portrait: deck panel across the column, owned cards to add below it
-		const float LX = 24.f, LY = 214.f, LW = W - 48.f, LH = 940.f;
-		CGoldPanel(LX, LY, LW, LH, ZCPanel, 26.f);
-		for (int32 d = 0; d < 3; ++d)
-			CChunky(FString::Printf(TEXT("DECK %d"), d + 1), d == View ? ZCYellow : ZCBlueDeep, [this, d]() { ClashDeckView = d; bDirty = true; }, LX + 24.f + d * 162.f, LY + 22.f, 150.f, 72.f, 26.f);
-		if (View == Active) { CPlate(LX + LW - 24.f - 210.f, LY + 28.f, 210.f, 60.f, ZCHex(TEXT("2E9A3C")), 16.f, 4.f, true); CText(TEXT("IN USE"), LX + LW - 24.f - 210.f, LY + 28.f, 210.f, 60.f, 26.f, FLinearColor::White); }
-		else CChunky(TEXT("USE THIS DECK"), ZCGreen, [this, View]() { if (UZoogiFrontProfileSubsystem* F = UZoogiFrontProfileSubsystem::Get(this)) { F->SetActiveDeck(View); UE_LOG(LogZoogi, Log, TEXT("CLASH active deck %d"), View + 1); } bDirty = true; },
-			LX + LW - 24.f - 250.f, LY + 22.f, 250.f, 72.f, 24.f);
-		CText(FString::Printf(TEXT("%d/%d CARDS"), Deck.Num(), UZoogiFrontProfileSubsystem::DeckSize), LX + 24.f, LY + 104.f, 300.f, 36.f, 24.f, Deck.Num() == UZoogiFrontProfileSubsystem::DeckSize ? ZCGold : FLinearColor::White, 0, 3.f);
-		CText(Deck.Num() < UZoogiFrontProfileSubsystem::DeckSize ? TEXT("Add cards from below (short decks are topped up)") : TEXT("Tap a card to take it out (max 2 copies)"),
-			LX + 300.f, LY + 104.f, LW - 324.f, 36.f, 17.f, ZCSoft, 2, 2.f);
-		const float Gap = 14.f, SW = (LW - 48.f - Gap * 4.f) / 5.f, SH = FMath::Min(SW * 1.25f, (LH - 160.f - Gap * 2.f - 20.f) / 3.f), GX = LX + 24.f, GY = LY + 150.f;
-		const float CW = FMath::Min(SW, SH / 1.25f);
-		for (int32 s = 0; s < UZoogiFrontProfileSubsystem::DeckSize; ++s)
-		{
-			const float X = GX + (s % 5) * (SW + Gap) + (SW - CW) * 0.5f, Y = GY + (s / 5) * (SH + Gap);
-			if (Deck.IsValidIndex(s))
-			{
-				const FName Id = Deck[s];
-				UCanvasPanel* T = CGroupBegin();
-				CCard(Id, 0.f, 0.f, CW, SH, !FP->IsCardOwned(Id));
-				CGroupEnd();
-				CAt(CButton(T, [this, View, s]()
-				{
-					if (UZoogiFrontProfileSubsystem* F = UZoogiFrontProfileSubsystem::Get(this))
-					{
-						TArray<FName> Dk = F->Deck(View);
-						if (Dk.IsValidIndex(s)) { UE_LOG(LogZoogi, Log, TEXT("CLASH deck %d remove %s"), View + 1, *Dk[s].ToString()); Dk.RemoveAt(s); F->SetDeck(View, Dk); }
-					}
-					bDirty = true;
-				}), X, Y, CW, SH);
-			}
-			else
-			{
-				CPlate(X, Y, CW, SH, ZCNavyDeep.CopyWithNewOpacity(0.7f), 14.f, 3.f, false);
-				CText(TEXT("+"), X, Y, CW, SH, 54.f, ZCMuted, 1, 3.f);
-			}
-		}
-		// owned cards to add
-		const float RX = LX, RW = LW, RY = LY + LH + 18.f;
-		CText(TEXT("TAP A CARD TO ADD IT"), RX, RY, RW, 40.f, 28.f, FLinearColor::White);
-		// cards shrink (more columns) when the owned list would run under the nav
-		const float CG = 16.f, Avail = ClashNavY() - (RY + 60.f) - 56.f;
-		float CardW = 154.f, CardH = 192.f;
-		int32 Cols = FMath::Max(1, FMath::FloorToInt((RW + CG) / (CardW + CG)));
-		while (CardW > 96.f && FMath::DivideAndRoundUp(FMath::Max(1, Owned.Num()), Cols) * (CardH + CG + 4.f) > Avail)
-		{
-			CardW -= 8.f; CardH = CardW * 1.25f;
-			Cols = FMath::Max(1, FMath::FloorToInt((RW + CG) / (CardW + CG)));
-		}
-		const float RX0 = RX + (RW - (Cols * (CardW + CG) - CG)) * 0.5f;
-		for (int32 i = 0; i < Owned.Num(); ++i)
-		{
-			const FName Id = Owned[i];
-			int32 InDeck = 0; for (const FName& N : Deck) InDeck += N == Id ? 1 : 0;
-			const float X = RX0 + (i % Cols) * (CardW + CG), Y = RY + 60.f + (i / Cols) * (CardH + CG + 4.f);
-			UCanvasPanel* T = CGroupBegin();
-			CCard(Id, 0.f, 0.f, CardW, CardH, false, FString::Printf(TEXT("%d/%d"), InDeck, UZoogiFrontProfileSubsystem::MaxCopiesInDeck));
-			if (InDeck >= UZoogiFrontProfileSubsystem::MaxCopiesInDeck) CAt(CBox(ZCDark.CopyWithNewOpacity(0.45f), FLinearColor::Transparent, 0.f, 12.f), 0.f, 0.f, CardW, CardH);
-			CGroupEnd();
-			CAt(CButton(T, [this, View, Id]()
-			{
-				UZoogiFrontProfileSubsystem* F = UZoogiFrontProfileSubsystem::Get(this);
-				if (!F) return;
-				TArray<FName> Dk = F->Deck(View);
-				int32 N = 0; for (const FName& X : Dk) N += X == Id ? 1 : 0;
-				if (Dk.Num() >= UZoogiFrontProfileSubsystem::DeckSize) { ClashFail(TEXT("This deck is full (15 cards).\nTap a card in the deck to take it out first.")); return; }
-				if (N >= UZoogiFrontProfileSubsystem::MaxCopiesInDeck) { ClashFail(TEXT("A deck can hold at most 2 copies of a card.")); return; }
-				Dk.Add(Id); F->SetDeck(View, Dk);
-				UE_LOG(LogZoogi, Log, TEXT("CLASH deck %d add %s (%d)"), View + 1, *Id.ToString(), Dk.Num());
-				bDirty = true;
-			}), X, Y, CardW, CardH);
-		}
-		const float NY = RY + 60.f + FMath::DivideAndRoundUp(Owned.Num(), Cols) * (CardH + CG + 4.f) + 10.f;
-		if (Locked.Num() > 0)
-			CText(FString::Printf(TEXT("%d more cards unlock with their powers (see COLLECTION)."), Locked.Num()), RX, NY, RW, 36.f, 20.f, ZCSoft, 1, 3.f);
-		return;
-	}
-
-	if (ClashCardsSub == 1)
-	{
-		// ---- Collection: owned grid (level + copies bar), then LOCKED CARDS; tap = detail popover
-		const float TopY = 214.f, ViewH = ClashNavY() - TopY;
-		if (UScrollBox* Old = ClashScrollW.Get()) if (ClashScrollKey == 1 && ClashPendingScroll < 0.f) ClashScrollOffset = Old->GetScrollOffset();
-		ClashScrollKey = 1;
-		UCanvasPanel* G = CGroupBegin();
-		const float CardW = 170.f, CardH = 212.f, CG = 22.f, CellH = CardH + 46.f;
-		const int32 Cols = FMath::Max(1, FMath::FloorToInt((W - 96.f + CG) / (CardW + CG)));
-		const float X0 = C - (Cols * (CardW + CG) - CG) * 0.5f;
-		CText(FString::Printf(TEXT("FOUND %d/%d"), Owned.Num(), Defs.Num()), C - 300.f, 6.f, 600.f, 44.f, 30.f, ZCGold);
-		float Y = 70.f;
-		auto Grid = [&](const TArray<FName>& Ids, bool bLocked)
-		{
-			for (int32 i = 0; i < Ids.Num(); ++i)
-			{
-				const FName Id = Ids[i];
-				const float X = X0 + (i % Cols) * (CardW + CG), YY = Y + (i / Cols) * (CellH + CG);
-				UCanvasPanel* T = CGroupBegin();
-				CCard(Id, 0.f, 0.f, CardW, CardH, bLocked, FString(), true);
-				if (!bLocked)
-				{
-					int32 Into = 0, Need = 1;
-					UZoogiFrontProfileSubsystem::CardLevel(FP->Copies(Id), Into, Need);
-					CBar(0.f, CardH + 8.f, CardW, 34.f, float(Into) / FMath::Max(1, Need), ZCGreen, FString::Printf(TEXT("%d/%d"), Into, Need), 17.f);
-				}
-				else CText(TEXT("LOCKED"), 0.f, CardH + 6.f, CardW, 34.f, 18.f, ZCMuted, 1, 3.f);
-				CGroupEnd();
-				CAt(CButton(T, [this, Id]() { ClashSelId = Id; OpenClashPopup(EZoogiClashPopup::Card, ZCCardName(Id)); }), X, YY, CardW, CellH);
-			}
-			Y += FMath::DivideAndRoundUp(Ids.Num(), Cols) * (CellH + CG);
-		};
-		Grid(Owned, false);
-		Y += 30.f;
-		ClashLockedY = Y - 10.f;
-		CSection(TEXT("LOCKED CARDS"), Y);
-		Y += 120.f;
-		if (Locked.Num() == 0) { CText(TEXT("Every card is unlocked!"), C - 300.f, Y, 600.f, 50.f, 26.f, ZCSoft, 1, 3.f); Y += 60.f; }
-		else Grid(Locked, true);
-		Y += 40.f;
-		CGroupEnd();
-		USizeBox* SB = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
-		SB->SetWidthOverride(W); SB->SetHeightOverride(Y); SB->AddChild(G);
-		UScrollBox* Sc = WidgetTree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass());
-		Sc->SetAnimateWheelScrolling(true);
-		Sc->SetScrollBarVisibility(ESlateVisibility::Visible);
-		Sc->AddChild(SB);
-		CAt(Sc, 0.f, TopY, W, ViewH);
-		ClashScrollW = Sc;
-		if (ClashPendingScroll < 0.f) ClashPendingScroll = ClashScrollOffset;
-		Sc->SetScrollOffset(ClashPendingScroll);
-		return;
-	}
-
-	// ---- Emotes: emotes the progression profile really owns (affinity rewards), else an honest empty state
-	TArray<FName> Emotes;
-	const UZoogiProgressionSubsystem* PS = GetGameInstance() ? GetGameInstance()->GetSubsystem<UZoogiProgressionSubsystem>() : nullptr;
-	if (PS)
-		for (const FName& Id : PS->Core().Get().OwnedCosmetics)
-		{
-			bool bEmote = Id.ToString().StartsWith(TEXT("emote"));
-			for (const FZoogiCosmeticRow& R : PS->Core().Config().Cosmetics) if (R.Id == Id && R.Slot == FName(TEXT("emote"))) bEmote = true;
-			if (bEmote) Emotes.Add(Id);
-		}
-	Emotes.Sort([](const FName& A, const FName& B) { return A.LexicalLess(B); });
-	if (Emotes.Num() == 0)
-	{
-		const float PW = FMath::Min(1040.f, W - 200.f), PH = 600.f, PX = C - PW * 0.5f, PY = 240.f;
-		CGoldPanel(PX, PY, PW, PH, ZCPanel, 30.f);
-		CImg(ClashArt(TEXT("emote")), C - 90.f, PY + 50.f, 180.f, 180.f);
-		CText(TEXT("NO EMOTES YET"), PX, PY + 250.f, PW, 60.f, 44.f, FLinearColor::White);
-		CText(TEXT("Emotes are earned, not bought: level up a Zoogi's affinity by playing with it\n(affinity level 2 unlocks its wave emote). Earned emotes show up here."), PX + 50.f, PY + 330.f, PW - 100.f, 120.f, 24.f, ZCSoft, 1, 3.f, true);
-		CText(TEXT("Sending emotes in battle needs the battle HUD hook (later milestone)."), PX + 50.f, PY + PH - 100.f, PW - 100.f, 50.f, 20.f, ZCMuted, 1, 3.f, true);
-		return;
-	}
-	const float TW = 230.f, TH = 260.f, Gap = 24.f;
-	const int32 Cols = FMath::Max(1, FMath::FloorToInt((W - 96.f + Gap) / (TW + Gap)));
-	const float X0 = C - (FMath::Min(Cols, Emotes.Num()) * (TW + Gap) - Gap) * 0.5f;
-	for (int32 i = 0; i < Emotes.Num(); ++i)
-	{
-		const FString S = Emotes[i].ToString();
-		FString Zoogi = S; Zoogi.RemoveFromStart(TEXT("emote_")); int32 Us = INDEX_NONE;
-		if (Zoogi.FindLastChar(TEXT('_'), Us)) Zoogi = Zoogi.Left(Us);
-		FString Name = S;
-		if (PS) for (const FZoogiCosmeticRow& R : PS->Core().Config().Cosmetics) if (R.Id == Emotes[i] && !R.Name.IsEmpty()) Name = R.Name;
-		const float X = X0 + (i % Cols) * (TW + Gap), Y = 230.f + (i / Cols) * (TH + Gap);
-		CPlate(X, Y, TW, TH, ZCNavy, 22.f, 5.f, true);
-		CImg(Art(PortraitFor(FName(*Zoogi))), X + TW * 0.5f - 70.f, Y + 20.f, 140.f, 140.f, 70.f, true);
-		CImg(ClashArt(TEXT("emote")), X + TW - 90.f, Y + 10.f, 74.f, 74.f);
-		CText(Name.ToUpper(), X + 8.f, Y + 170.f, TW - 16.f, 70.f, 20.f, FLinearColor::White, 1, 3.f, true);
-	}
-}
+// Cards tab: ZoogiMenuClashCards.cpp (DETAILED PASS 3 / 4)
 
 // ------------------------------------------------------------------------------------------------ popups
 bool UZoogiMenuRoot::BuildClashShopPopup(EZoogiClashPopup P, float PW, float PH)
@@ -742,13 +543,11 @@ bool UZoogiMenuRoot::BuildClashShopPopup(EZoogiClashPopup P, float PW, float PH)
 		CText(ZCCardName(Deal.CardId), 0.f, 486.f, PW, 50.f, 40.f, FLinearColor::White);
 		CText(UZoogiFrontProfileSubsystem::RarityName(Rar), 0.f, 532.f, PW, 32.f, 24.f, ZCLighten(ZCRarityColor(Rar), 0.2f), 1, 3.f);
 		CText(FString::Printf(TEXT("Adds %d copies of this card to your collection."), Deal.Count), 40.f, 566.f, PW - 80.f, 32.f, 22.f, ZCSoft, 1, 3.f);
-		const int32 Have = FP->Copies(Deal.CardId);
-		int32 Into = 0, Need = 1, Into2 = 0, Need2 = 1;
-		const int32 Lv = UZoogiFrontProfileSubsystem::CardLevel(Have, Into, Need);
-		const int32 Lv2 = UZoogiFrontProfileSubsystem::CardLevel(Have + Deal.Count, Into2, Need2);
+		const int32 Lv = FP->CardLevelOf(Deal.CardId), Into = FP->Spare(Deal.CardId), Need = UZoogiFrontProfileSubsystem::UpgradeCopies(Lv);
+		const bool bReady = Lv < UZoogiFrontProfileSubsystem::MaxCardLevel && Into + Deal.Count >= Need;
 		CText(FString::Printf(TEXT("LV %d"), Lv), PW * 0.5f - 330.f, 606.f, 100.f, 44.f, 24.f, ZCGold, 1, 3.f);
-		CBar(PW * 0.5f - 220.f, 606.f, 440.f, 44.f, Lv2 > Lv ? 1.f : float(Into + Deal.Count) / FMath::Max(1, Need), ZCGreen,
-			Lv2 > Lv ? FString::Printf(TEXT("LEVEL UP!  %d/%d -> LV %d"), FMath::Min(Into + Deal.Count, Need), Need, Lv2) : FString::Printf(TEXT("%d/%d  (+%d)"), Into + Deal.Count, Need, Deal.Count), 22.f);
+		CBar(PW * 0.5f - 220.f, 606.f, 440.f, 44.f, FMath::Min(1.f, float(Into + Deal.Count) / FMath::Max(1, Need)), bReady ? ZCGreen : ZCSfxBlue,
+			bReady ? FString::Printf(TEXT("%d/%d  UPGRADE READY"), Into + Deal.Count, Need) : FString::Printf(TEXT("%d/%d  (+%d)"), Into + Deal.Count, Need, Deal.Count), 22.f);
 		UWidget* Inner = Deal.bFree ? (UWidget*)CTxt(TEXT("Free"), 44.f, FLinearColor::White, 5.f) : (UWidget*)PriceRow(Art(TEXT("icon_coin")), ZCNum(Deal.Price), 42.f);
 		if (!Deal.bFree && FP->Data().Gold < Deal.Price)
 			if (UHorizontalBox* HB = Cast<UHorizontalBox>(Inner))
@@ -866,13 +665,12 @@ bool UZoogiMenuRoot::BuildClashShopPopup(EZoogiClashPopup P, float PW, float PH)
 		CText(Def->Rule, X + 20.f, 244.f, TW - 40.f, 130.f, 22.f, FLinearColor::White, 0, 2.f, true);
 		if (bOwned)
 		{
-			int32 Into = 0, Need = 1;
 			const int32 Copies = FP->Copies(Def->Id);
-			const int32 Lv = UZoogiFrontProfileSubsystem::CardLevel(Copies, Into, Need);
+			const int32 Lv = FP->CardLevelOf(Def->Id), Into = FP->Spare(Def->Id), Need = UZoogiFrontProfileSubsystem::UpgradeCopies(Lv);
 			CText(FString::Printf(TEXT("LEVEL %d"), Lv), X, 402.f, 200.f, 44.f, 30.f, ZCGold, 0, 3.f);
 			CBar(X + 190.f, 404.f, TW - 190.f, 42.f, float(Into) / FMath::Max(1, Need), ZCGreen, FString::Printf(TEXT("%d/%d"), Into, Need), 22.f);
 			CText(FString::Printf(TEXT("You have %d copies. Copies come from daily deals and chests."), Copies), X, 458.f, TW, 34.f, 19.f, ZCSoft, 0, 2.f, true);
-			CText(TEXT("Upgrading with gold arrives in a later milestone."), X, 494.f, TW, 30.f, 18.f, ZCMuted, 0, 2.f);
+			CText(TEXT("Upgrade it with gold + copies: Cards > Collection > Details."), X, 494.f, TW, 30.f, 18.f, ZCMuted, 0, 2.f);
 		}
 		else
 		{

@@ -1,5 +1,6 @@
 // clash-menu: see ZoogiFrontProfile.h
 #include "ZoogiFrontProfile.h"
+#include "ZoogiWinnerOverlay.h"
 #include "ZoogiBall.h"
 #include "ZoogiArena.h"
 #include "ZoogiGameMode.h"
@@ -109,6 +110,17 @@ FString FZoogiFrontProfileData::ToJsonString() const
 	for (const TArray<FName>& Deck : Decks) Dk.Add(MakeShared<FJsonValueArray>(ZFNames(Deck)));
 	J->SetArrayField(TEXT("decks"), Dk);
 	J->SetNumberField(TEXT("active_deck"), ActiveDeck);
+	{
+		TArray<TSharedPtr<FJsonValue>> Nm; for (const FString& X : DeckNames) Nm.Add(MakeShared<FJsonValueString>(X));
+		J->SetArrayField(TEXT("deck_names"), Nm);
+		TSharedRef<FJsonObject> Lv = MakeShared<FJsonObject>();
+		for (const TPair<FName, int32>& P : CardLevels) Lv->SetNumberField(P.Key.ToString(), P.Value);
+		J->SetObjectField(TEXT("card_levels"), Lv);
+		TArray<TSharedPtr<FJsonValue>> Em; for (const FName& X : EquippedEmotes) Em.Add(MakeShared<FJsonValueString>(X.IsNone() ? FString() : X.ToString()));
+		J->SetArrayField(TEXT("equipped_emotes"), Em);
+		J->SetNumberField(TEXT("collection_sort"), CollectionSort);
+		J->SetBoolField(TEXT("sort_desc"), bSortDesc);
+	}
 	J->SetStringField(TEXT("deals_day"), DealsDay);
 	TArray<TSharedPtr<FJsonValue>> Dl;
 	for (const FZoogiFrontDeal& Deal : Deals)
@@ -210,7 +222,16 @@ bool FZoogiFrontProfileData::FromJsonString(const FString& S, FString& OutError)
 		for (const TPair<FString, TSharedPtr<FJsonValue>>& P : (*Cp)->Values) N.CardCopies.Add(FName(*P.Key), FMath::Max(0, (int32)P.Value->AsNumber()));
 	if (J->TryGetArrayField(TEXT("decks"), A) && A)
 		for (const TSharedPtr<FJsonValue>& V : *A) N.Decks.Add(V.IsValid() && V->Type == EJson::Array ? ZFReadNames(V->AsArray()) : TArray<FName>());
-	N.ActiveDeck = FMath::Clamp(ZFInt(J, TEXT("active_deck")), 0, 2);
+	N.ActiveDeck = FMath::Clamp(ZFInt(J, TEXT("active_deck")), 0, UZoogiFrontProfileSubsystem::NumDecks - 1);
+	if (J->TryGetArrayField(TEXT("deck_names"), A) && A) for (const TSharedPtr<FJsonValue>& V : *A) N.DeckNames.Add(V.IsValid() ? V->AsString() : FString());
+	{
+		const TSharedPtr<FJsonObject>* Lv = nullptr;
+		if (J->TryGetObjectField(TEXT("card_levels"), Lv) && Lv)
+			for (const TPair<FString, TSharedPtr<FJsonValue>>& P : (*Lv)->Values) N.CardLevels.Add(FName(*P.Key), FMath::Clamp((int32)P.Value->AsNumber(), 1, UZoogiFrontProfileSubsystem::MaxCardLevel));
+	}
+	if (J->TryGetArrayField(TEXT("equipped_emotes"), A) && A) for (const TSharedPtr<FJsonValue>& V : *A) { const FString E = V.IsValid() ? V->AsString() : FString(); N.EquippedEmotes.Add(E.IsEmpty() ? NAME_None : FName(*E)); }
+	N.CollectionSort = FMath::Clamp(ZFInt(J, TEXT("collection_sort")), 0, 3);
+	if (J->HasField(TEXT("sort_desc"))) J->TryGetBoolField(TEXT("sort_desc"), N.bSortDesc);
 	J->TryGetStringField(TEXT("deals_day"), N.DealsDay);
 	if (J->TryGetArrayField(TEXT("deals"), A) && A)
 		for (const TSharedPtr<FJsonValue>& V : *A)
@@ -447,12 +468,27 @@ TArray<FName> UZoogiFrontProfileSubsystem::OwnedCards() const
 // ------------------------------------------------------------------------------------------------ decks
 void UZoogiFrontProfileSubsystem::InitDecks()
 {
-	if (D.Decks.Num() >= 3) { D.Decks.SetNum(3); return; }
+	// DETAILED PASS 3: 5 decks of 8 distinct cards. Older 3 x 15 decks keep their first 8 distinct cards.
 	const UZoogiProgressionSubsystem* PS = GetGameInstance() ? GetGameInstance()->GetSubsystem<UZoogiProgressionSubsystem>() : nullptr;
-	const TArray<FName> Starter = StarterDeck();
+	auto Fit = [](const TArray<FName>& In)
+	{
+		TArray<FName> Out;
+		for (const FName& Id : In) if (!Id.IsNone() && FindCard(Id) && !Out.Contains(Id) && Out.Num() < DeckSize) Out.Add(Id);
+		return Out;
+	};
+	const TArray<FName> Starter = Fit(StarterDeck());
 	// Deck 1 = the deck the existing Deck screen saved (what matches already use), else the starter deck.
-	const TArray<FName> First = (PS && PS->SavedDeck().Num() > 0) ? PS->SavedDeck() : Starter;
-	while (D.Decks.Num() < 3) D.Decks.Add(D.Decks.Num() == 0 ? First : Starter);
+	if (D.Decks.Num() == 0) D.Decks.Add((PS && PS->SavedDeck().Num() > 0) ? PS->SavedDeck() : Starter);
+	while (D.Decks.Num() < NumDecks) D.Decks.Add(D.Decks.Num() < 3 ? Starter : TArray<FName>());
+	D.Decks.SetNum(NumDecks);
+	for (TArray<FName>& Dk : D.Decks) Dk = Fit(Dk);
+	D.DeckNames.SetNum(NumDecks);
+	for (int32 i = 0; i < NumDecks; ++i) if (D.DeckNames[i].TrimStartAndEnd().IsEmpty()) D.DeckNames[i] = FString::Printf(TEXT("Deck %d"), i + 1);
+	D.EquippedEmotes.SetNum(4);
+	D.ActiveDeck = FMath::Clamp(D.ActiveDeck, 0, NumDecks - 1);
+	// keep the match's saved deck = the deck marked IN USE (an 8-card deck; the match tops it up at start)
+	if (UZoogiProgressionSubsystem* PSW = GetGameInstance() ? GetGameInstance()->GetSubsystem<UZoogiProgressionSubsystem>() : nullptr)
+		if (PSW->SavedDeck() != D.Decks[D.ActiveDeck] && D.Decks[D.ActiveDeck].Num() > 0) PSW->SetSavedDeck(D.Decks[D.ActiveDeck]);
 }
 
 const TArray<FName>& UZoogiFrontProfileSubsystem::Deck(int32 I) const
@@ -465,16 +501,103 @@ void UZoogiFrontProfileSubsystem::SetDeck(int32 I, const TArray<FName>& Cards)
 {
 	if (!D.Decks.IsValidIndex(I)) return;
 	D.Decks[I] = Cards;
+	if (D.Decks[I].Num() > DeckSize) D.Decks[I].SetNum(DeckSize);
 	Save();
 	if (I == D.ActiveDeck)
 		if (UZoogiProgressionSubsystem* PS = GetGameInstance() ? GetGameInstance()->GetSubsystem<UZoogiProgressionSubsystem>() : nullptr)
-			PS->SetSavedDeck(Cards); // the existing saved deck (matches top short decks up to 15 at start)
+			PS->SetSavedDeck(D.Decks[I]); // the existing saved deck (the match tops a short deck up to 15 at start; battle code unchanged)
 }
 
 void UZoogiFrontProfileSubsystem::SetActiveDeck(int32 I)
 {
-	D.ActiveDeck = FMath::Clamp(I, 0, 2);
+	D.ActiveDeck = FMath::Clamp(I, 0, NumDecks - 1);
 	SetDeck(D.ActiveDeck, Deck(D.ActiveDeck));
+}
+
+FString UZoogiFrontProfileSubsystem::DeckName(int32 I) const
+{
+	return D.DeckNames.IsValidIndex(I) && !D.DeckNames[I].IsEmpty() ? D.DeckNames[I] : FString::Printf(TEXT("Deck %d"), I + 1);
+}
+
+void UZoogiFrontProfileSubsystem::SetDeckName(int32 I, const FString& Name)
+{
+	if (I < 0 || I >= NumDecks) return;
+	D.DeckNames.SetNum(NumDecks);
+	FString N = Name.TrimStartAndEnd().Left(16);
+	D.DeckNames[I] = N.IsEmpty() ? FString::Printf(TEXT("Deck %d"), I + 1) : N;
+	Save();
+}
+
+void UZoogiFrontProfileSubsystem::SetEquippedEmotes(const TArray<FName>& E)
+{
+	D.EquippedEmotes = E;
+	D.EquippedEmotes.SetNum(4);
+	Save();
+}
+
+// ------------------------------------------------------------------------------------------------ card levels (DETAILED PASS 3)
+int32 UZoogiFrontProfileSubsystem::UpgradeCopies(int32 Level)
+{
+	static const int32 T[] = { 2, 4, 10, 20, 50, 100, 200 };
+	return T[FMath::Clamp(Level - 1, 0, (int32)UE_ARRAY_COUNT(T) - 1)];
+}
+
+int32 UZoogiFrontProfileSubsystem::UpgradeGold(int32 Level)
+{
+	static const int32 T[] = { 5, 20, 50, 150, 400, 1000, 2000 };
+	return T[FMath::Clamp(Level - 1, 0, (int32)UE_ARRAY_COUNT(T) - 1)];
+}
+
+int32 UZoogiFrontProfileSubsystem::UpgradeXP(int32 Level)
+{
+	// spec example: Level 1 -> 2 takes the player from 8/20 to 13/50 XP (level 1 -> 2) = +25
+	static const int32 T[] = { 25, 40, 60, 100, 150, 250, 400 };
+	return T[FMath::Clamp(Level - 1, 0, (int32)UE_ARRAY_COUNT(T) - 1)];
+}
+
+int32 UZoogiFrontProfileSubsystem::CardLevelOf(FName Id) const
+{
+	const int32* L = D.CardLevels.Find(Id);
+	return L ? FMath::Clamp(*L, 1, MaxCardLevel) : 1;
+}
+
+int32 UZoogiFrontProfileSubsystem::Spare(FName Id) const
+{
+	const int32* N = D.CardCopies.Find(Id);
+	return N ? FMath::Max(0, *N) : 0;
+}
+
+bool UZoogiFrontProfileSubsystem::CanUpgrade(FName Id) const
+{
+	const int32 L = CardLevelOf(Id);
+	return IsCardOwned(Id) && L < MaxCardLevel && Spare(Id) >= UpgradeCopies(L);
+}
+
+bool UZoogiFrontProfileSubsystem::UpgradeCard(FName Id, FString& OutWhy, int32& OutXP, bool& bOutPlayerLevelUp)
+{
+	OutXP = 0; bOutPlayerLevelUp = false;
+	const int32 L = CardLevelOf(Id);
+	if (!IsCardOwned(Id)) { OutWhy = TEXT("Unlock this card first."); return false; }
+	if (L >= MaxCardLevel) { OutWhy = TEXT("This card is at max level."); return false; }
+	const int32 NeedC = UpgradeCopies(L), NeedG = UpgradeGold(L);
+	if (Spare(Id) < NeedC) { OutWhy = FString::Printf(TEXT("Not enough cards: %d/%d copies."), Spare(Id), NeedC); return false; }
+	if (D.Gold < NeedG) { OutWhy = FString::Printf(TEXT("Not enough gold!\nThis upgrade costs %d gold."), NeedG); return false; }
+	D.Gold -= NeedG;
+	D.CardCopies.FindOrAdd(Id) -= NeedC;
+	D.CardLevels.Add(Id, L + 1);
+	OutXP = UpgradeXP(L);
+	D.XP += OutXP;
+	while (D.XP >= XPForLevel(D.Level)) { D.XP -= XPForLevel(D.Level); ++D.Level; bOutPlayerLevelUp = true; }
+	UE_LOG(LogZoogi, Log, TEXT("FRONTEND upgrade %s L%d -> L%d (-%d gold, -%d copies, +%d xp -> L%d %d/%d)"), *Id.ToString(), L, L + 1, NeedG, NeedC, OutXP, D.Level, D.XP, XPForLevel(D.Level));
+	Save();
+	return true;
+}
+
+int32 UZoogiFrontProfileSubsystem::UpgradableCount() const
+{
+	int32 N = 0;
+	for (const FZoogiCardDef& C : CardDefs()) N += CanUpgrade(C.Id) ? 1 : 0;
+	return N;
 }
 
 // ------------------------------------------------------------------------------------------------ daily deals
@@ -720,7 +843,7 @@ void UZoogiFrontProfileSubsystem::CardLevelStats(float& OutAvg, int32& OutMax) c
 {
 	OutAvg = 0.f; OutMax = 0;
 	const TArray<FName> Owned = OwnedCards();
-	for (const FName& Id : Owned) { int32 I = 0, Nd = 1; const int32 L = CardLevel(Copies(Id), I, Nd); OutAvg += L; OutMax = FMath::Max(OutMax, L); }
+	for (const FName& Id : Owned) { const int32 L = CardLevelOf(Id); OutAvg += L; OutMax = FMath::Max(OutMax, L); }
 	if (Owned.Num()) OutAvg /= Owned.Num();
 }
 
@@ -913,9 +1036,9 @@ void UZoogiFrontProfileSubsystem::ApplyMatch(int32 Outcome, const FZoogiFrontBat
 	FRandomStream R(FMath::Rand());
 	const int32 Arena = ArenaForTrophies(D.Trophies);
 	if (Outcome == 0) { M.Trophies = R.RandRange(28, 32); M.Gold = 20 + 5 * Arena + R.RandRange(0, 10); M.XP = 10; M.BP = 25; }
-	else if (Outcome == 1) { M.Trophies = -FMath::Min(15, D.Trophies); M.Gold = 5; M.XP = 4; M.BP = 10; }
+	else if (Outcome == 1) { M.BP = 10; } // DETAILED PASS 5: a loss = Battle Pass +10 points only (no gold, XP or trophy change; chests come from wins only)
 	else if (Outcome == 2) { M.Gold = 10; M.XP = 6; M.BP = 15; }
-	else { M.Trophies = -FMath::Min(15, D.Trophies); } // left the match: counts as a loss, no other rewards
+	// left the match (3): counted as a loss in the stats, no rewards
 	D.Trophies = FMath::Max(0, D.Trophies + M.Trophies);
 	D.BestTrophies = FMath::Max(D.BestTrophies, D.Trophies);
 	D.Gold += M.Gold;
@@ -1133,6 +1256,7 @@ void UZoogiFrontRewardBridge::OnMatchEvent(EZoogiMatchEvent E, int32 Who, float 
 		bOpen = false;
 		const int32 Mine = G->bComboMode ? AZoogiGameMode::TeamOfIndex(Player) : Player;
 		int32 Outcome = Who < 0 ? 2 : (Who == Mine ? 0 : 1);
+		const int32 RealOutcome = Outcome; // the Winner overlay always shows the real result
 		bool bDev = false;
 #if !UE_BUILD_SHIPPING
 		// Dev test flag (never in Shipping, never on by default): the front-end rewards treat the match as a player win.
@@ -1143,13 +1267,16 @@ void UZoogiFrontRewardBridge::OnMatchEvent(EZoogiMatchEvent E, int32 Who, float 
 		B.bDev = bDev;
 		B.ReplayId = StopRecording(true);
 		FP->ApplyMatch(Outcome, &B);
-		if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiClashTourBattle")))
+		// DETAILED PASS 5: "Winner!" overlay (crowns + OK) a moment after the final shot; OK -> loading -> Home.
+		// No separate results screen. Capture runs press OK themselves (UZoogiWinnerOverlay::TourPrefix).
+		const FString Winner = RealOutcome == 0 ? FP->Data().GuestName : RealOutcome == 1 ? B.Opponent : FString();
+		const int32 MyS = B.MyScore, OppS = B.OppScore;
+		TWeakObjectPtr<UWorld> WW = GetWorld();
+		FTimerHandle H;
+		G->GetWorldTimerManager().SetTimer(H, FTimerDelegate::CreateWeakLambda(G, [WW, RealOutcome, Winner, MyS, OppS]()
 		{
-			// capture runs: back to the menu after the results screen, like a player pressing MENU
-			TWeakObjectPtr<AZoogiGameMode> WG = G;
-			FTimerHandle H;
-			G->GetWorldTimerManager().SetTimer(H, FTimerDelegate::CreateWeakLambda(G, [WG]() { if (AZoogiGameMode* GG = WG.Get()) GG->MenuAction(TEXT("Menu"), 0); }), 6.f, false);
-		}
+			UZoogiWinnerOverlay::Show(WW.Get(), RealOutcome, Winner, MyS, OppS);
+		}), 1.5f, false);
 	}
 	else if (E == EZoogiMatchEvent::ReturnToMenu)
 	{

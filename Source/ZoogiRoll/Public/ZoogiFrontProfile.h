@@ -106,7 +106,7 @@ struct FZoogiFrontChestDef
 
 struct ZOOGIROLL_API FZoogiFrontProfileData
 {
-	static constexpr int32 CurrentSchema = 3;
+	static constexpr int32 CurrentSchema = 4;
 	int32 SchemaVersion = CurrentSchema;
 	FString GuestName;            // PLAYER-###### (generated once)
 	int32 Level = 1;
@@ -131,7 +131,12 @@ struct ZOOGIROLL_API FZoogiFrontProfileData
 	bool bPassPremium = false;
 	int64 SeasonEndUtc = 0;        // Season 8 end (unix s), set once: 28d 11h after the profile was made
 	TMap<FName, int32> CardCopies; // extra copies collected (shop, chests); an owned card always counts at least 1
-	TArray<TArray<FName>> Decks;   // Deck 1/2/3
+	TArray<TArray<FName>> Decks;   // Deck 1-5 (DETAILED PASS 3: 5 decks of 8)
+	TArray<FString> DeckNames;     // schema 4: editable deck names ("Deck N" by default)
+	TMap<FName, int32> CardLevels; // schema 4: card level (1..8), raised by UPGRADE (gold + spare copies); missing = 1
+	TArray<FName> EquippedEmotes;  // schema 4: 4 equipped emote slots (None = empty)
+	int32 CollectionSort = 0;      // schema 4: 0 By Rarity, 1 By Elixir (card cost), 2 By Name, 3 By Level
+	bool bSortDesc = true;
 	int32 ActiveDeck = 0;
 	FString DealsDay;              // reset boundary the deals were rolled for (yyyymmdd)
 	TArray<FZoogiFrontDeal> Deals;
@@ -179,9 +184,25 @@ public:
 	static int32 CardLevel(int32 Copies, int32& OutInto, int32& OutNeed);
 	void AddCopies(FName Id, int32 N);
 
-	// ---- decks (Deck 1/2/3; the active one is mirrored into the progression saved deck the matches use)
-	static constexpr int32 DeckSize = 15;
-	static constexpr int32 MaxCopiesInDeck = 2;
+	// ---- card levels (DETAILED PASS 3): level 1..8; UPGRADE spends gold + spare copies and grants player XP
+	static constexpr int32 MaxCardLevel = 8;
+	static int32 UpgradeCopies(int32 Level);   // spare copies needed to go Level -> Level+1
+	static int32 UpgradeGold(int32 Level);
+	static int32 UpgradeXP(int32 Level);       // player XP granted by that upgrade
+	int32 CardLevelOf(FName Id) const;
+	int32 Spare(FName Id) const;               // spare copies (beyond the one owned)
+	bool CanUpgrade(FName Id) const;           // enough copies (gold is checked on tap)
+	bool UpgradeCard(FName Id, FString& OutWhy, int32& OutXP, bool& bOutPlayerLevelUp);
+	int32 UpgradableCount() const;             // red dot on the Cards nav
+	// ---- emotes (4 equipped slots, saved)
+	void SetEquippedEmotes(const TArray<FName>& E);
+
+	// ---- decks (Deck 1-5; the active one is mirrored into the progression saved deck the matches use)
+	static constexpr int32 NumDecks = 5;
+	static constexpr int32 DeckSize = 8;       // DETAILED PASS 3: 8 slots (4x2); the match tops a short saved deck up to 15
+	static constexpr int32 MaxCopiesInDeck = 1;
+	FString DeckName(int32 I) const;
+	void SetDeckName(int32 I, const FString& Name);
 	const TArray<FName>& Deck(int32 I) const;
 	void SetDeck(int32 I, const TArray<FName>& Cards);
 	void SetActiveDeck(int32 I);
