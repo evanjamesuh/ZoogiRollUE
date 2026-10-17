@@ -1907,7 +1907,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		if (PIdx == PBattle && Shooter)
 		{
 			const float Aspect = ZoogiFramed::ViewAspect(this); // framed HUD: the arena window's real view-rect aspect (full viewport otherwise)
-			const float VHalf = FMath::RadiansToDegrees(FMath::Atan(FMath::Tan(FMath::DegreesToRadians(Fov * 0.5f)) / Aspect));
+			const float VHalf = FMath::RadiansToDegrees(FMath::Atan(FMath::Tan(FMath::DegreesToRadians(ZoogiFramed::PortraitFov(Fov, Aspect) * 0.5f)) / Aspect)); // Oct 17: the FOV actually applied (portrait-aware)
 			const float ShooterLow = (SL - FVector(0, 0, ZoogiConst::ZoogiRadius) - Loc).Rotation().Pitch;
 			const float Rel = ShooterLow - Rot.Pitch; // negative = below the centre line
 			const float Limit = -VHalf * BattleShooterMaxDrop;
@@ -1945,6 +1945,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	if (FireKickAge < 2.f) FinalFov += FireFovKick * (bTac ? 0.3f : 1.f) * FMath::Exp(-FireKickDecay * FireKickAge) * FMath::Min(1.f, FireKickAge * 12.f);
 	Cam->SetActorLocation(Loc);
 	Cam->SetActorRotation(Rot);
-	Cam->GetCameraComponent()->SetFieldOfView(FMath::Clamp(FinalFov, 30.f, 120.f));
+	// Oct 17 (portrait play, HUD hidden): aspect-aware FOV only - no change at landscape aspects (ZoogiFramed::PortraitFov)
+	Cam->GetCameraComponent()->SetFieldOfView(FMath::Clamp(ZoogiFramed::PortraitFov(FinalFov, ZoogiFramed::ViewAspect(this)), 30.f, 120.f));
 	ApplyPostProcess(Dt, PIdx, Lock ? FVector::Dist(Loc, TL) : FVector::Dist(Loc, Look));
 }
