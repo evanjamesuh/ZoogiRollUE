@@ -228,6 +228,9 @@ namespace
 static float GSfxVolume = 1.f;
 float ZoogiUtil::GetSfxVolume() { return GSfxVolume; }
 void ZoogiUtil::SetSfxVolume(float V) { GSfxVolume = FMath::Clamp(V, 0.f, 1.f); }
+static float GMusicVolume = 1.f;
+float ZoogiUtil::GetMusicVolume() { return GMusicVolume; }
+void ZoogiUtil::SetMusicVolume(float V) { GMusicVolume = FMath::Clamp(V, 0.f, 1.f); }
 
 void ZoogiUtil::PlaySfx(const UObject* WorldContext, const TCHAR* Name, float Volume, float Pitch, float StartTime)
 {
