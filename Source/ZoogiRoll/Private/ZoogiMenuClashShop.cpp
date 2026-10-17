@@ -206,7 +206,8 @@ void UZoogiMenuRoot::BuildClashShopTab()
 	CLive([WFP]() { const UZoogiFrontProfileSubsystem* F = WFP.Get(); return F ? FString::Printf(TEXT("New deals in %s"), *ZCDur((int64)F->TimeToDealsReset().GetTotalSeconds())) : FString(); },
 		C - 300.f, Y + 96.f, 600.f, 40.f, 24.f, ZCSoft);
 	{
-		const float TW = 300.f, TH = 340.f, Gap = 28.f, X0 = C - (TW * 3.f + Gap * 2.f) * 0.5f, Y0 = Y + 150.f;
+		const float TW = 300.f, TH = 400.f, Gap = 28.f, X0 = C - (TW * 3.f + Gap * 2.f) * 0.5f, Y0 = Y + 150.f;
+		const float BtnY = TH - 84.f, BtnH = 66.f; // name 216-252, rarity 256-286, button 316-382
 		for (int32 i = 0; i < D.Deals.Num() && i < 6; ++i)
 		{
 			const FZoogiFrontDeal Deal = D.Deals[i];
@@ -214,14 +215,14 @@ void UZoogiMenuRoot::BuildClashShopTab()
 			UCanvasPanel* T = CGroupBegin();
 			CPlate(0.f, 0.f, TW, TH, Deal.bFree ? ZCHex(TEXT("2A7FD8")) : ZCNavy, 22.f, 5.f, true);
 			CCard(Deal.CardId, TW * 0.5f - 76.f, 18.f, 152.f, 190.f, false, FString::Printf(TEXT("x%d"), Deal.Count));
-			CText(ZCCardName(Deal.CardId), 0.f, 214.f, TW, 34.f, 24.f, FLinearColor::White);
-			CText(UZoogiFrontProfileSubsystem::RarityName(Rar), 0.f, 244.f, TW, 26.f, 18.f, ZCLighten(ZCRarityColor(Rar), 0.2f), 1, 3.f);
+			CText(ZCCardName(Deal.CardId), 0.f, 216.f, TW, 36.f, 24.f, FLinearColor::White);
+			CText(FString(UZoogiFrontProfileSubsystem::RarityName(Rar)).ToUpper(), 0.f, 256.f, TW, 30.f, 20.f, ZCLighten(ZCRarityColor(Rar), 0.3f), 1, 3.f);
 			if (Deal.bBought)
 			{
 				CAt(CBox(ZCDark.CopyWithNewOpacity(0.62f), FLinearColor::Transparent, 0.f, 20.f), 3.f, 3.f, TW - 6.f, TH - 6.f);
-				CChunkyVisual(CTxt(TEXT("PURCHASED"), 24.f, ZCMuted, 3.f), ZCHex(TEXT("4A5675")), 30.f, TH - 82.f, TW - 60.f, 66.f);
+				CChunkyVisual(CTxt(TEXT("PURCHASED"), 24.f, ZCMuted, 3.f), ZCHex(TEXT("4A5675")), 30.f, BtnY, TW - 60.f, BtnH);
 			}
-			else if (Deal.bFree) CChunkyVisual(CTxt(TEXT("FREE"), 30.f, FLinearColor::White, 4.f), ZCGreen, 30.f, TH - 82.f, TW - 60.f, 66.f);
+			else if (Deal.bFree) CChunkyVisual(CTxt(TEXT("FREE"), 30.f, FLinearColor::White, 4.f), ZCGreen, 30.f, BtnY, TW - 60.f, BtnH);
 			else
 			{
 				UHorizontalBox* H = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
@@ -229,7 +230,7 @@ void UZoogiMenuRoot::BuildClashShopTab()
 				I->SetBrush(ZCImgBrush(Art(TEXT("icon_coin")), 40.f, 40.f, 0.f, false));
 				if (UHorizontalBoxSlot* S = H->AddChildToHorizontalBox(I)) { S->SetVerticalAlignment(VAlign_Center); S->SetPadding(FMargin(0.f, 0.f, 8.f, 0.f)); }
 				if (UHorizontalBoxSlot* S = H->AddChildToHorizontalBox(CTxt(ZCNum(Deal.Price), 30.f, FLinearColor::White, 4.f))) S->SetVerticalAlignment(VAlign_Center);
-				CChunkyVisual(H, ZCGreen, 30.f, TH - 82.f, TW - 60.f, 66.f);
+				CChunkyVisual(H, ZCGreen, 30.f, BtnY, TW - 60.f, BtnH);
 			}
 			if (Deal.bFree && !Deal.bBought) CDot(TW - 34.f, -12.f, 44.f, TEXT("!"));
 			CGroupEnd();
@@ -248,7 +249,7 @@ void UZoogiMenuRoot::BuildClashShopTab()
 	CSection(TEXT("CHESTS"), Y);
 	{
 		const TArray<FZoogiFrontChestDef>& Defs = UZoogiFrontProfileSubsystem::ChestDefs();
-		const float TW = 340.f, TH = 390.f, Gap = 34.f, X0 = C - (TW * Defs.Num() + Gap * (Defs.Num() - 1)) * 0.5f, Y0 = Y + 130.f;
+		const float TW = 340.f, TH = 430.f, Gap = 34.f, X0 = C - (TW * Defs.Num() + Gap * (Defs.Num() - 1)) * 0.5f, Y0 = Y + 130.f;
 		for (int32 i = 0; i < Defs.Num(); ++i)
 		{
 			const FZoogiFrontChestDef& Def = Defs[i];
@@ -257,7 +258,7 @@ void UZoogiMenuRoot::BuildClashShopTab()
 			CImg(ClashArt(TEXT("rays")), TW * 0.5f - 150.f, -10.f, 300.f, 300.f, 0.f, false, FLinearColor(1.f, 1.f, 1.f, 0.6f));
 			CImg(ClashArt(TEXT("chest_") + Def.Id.ToString()), TW * 0.5f - 95.f, 36.f, 190.f, 190.f);
 			CText(FString(Def.Name).ToUpper(), 0.f, 222.f, TW, 40.f, 28.f, FLinearColor::White);
-			CText(FString::Printf(TEXT("%d cards  -  %d-%d gold"), Def.Cards, Def.GoldMin, Def.GoldMax), 10.f, 258.f, TW - 20.f, 30.f, 18.f, ZCSoft, 1, 3.f);
+			CText(FString::Printf(TEXT("%d cards  -  %d-%d gold"), Def.Cards, Def.GoldMin, Def.GoldMax), 10.f, 266.f, TW - 20.f, 30.f, 18.f, ZCSoft, 1, 3.f);
 			UHorizontalBox* H = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
 			UImage* I = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
 			I->SetBrush(ZCImgBrush(Art(TEXT("icon_gem")), 42.f, 42.f, 0.f, false));
@@ -276,7 +277,7 @@ void UZoogiMenuRoot::BuildClashShopTab()
 	CSection(TEXT("GOLD"), Y);
 	{
 		const TArray<UZoogiFrontProfileSubsystem::FGoldPack>& Packs = UZoogiFrontProfileSubsystem::GoldPacks();
-		const float TW = 340.f, TH = 310.f, Gap = 34.f, X0 = C - (TW * Packs.Num() + Gap * (Packs.Num() - 1)) * 0.5f, Y0 = Y + 130.f;
+		const float TW = 340.f, TH = 350.f, Gap = 34.f, X0 = C - (TW * Packs.Num() + Gap * (Packs.Num() - 1)) * 0.5f, Y0 = Y + 130.f;
 		for (int32 i = 0; i < Packs.Num(); ++i)
 		{
 			UCanvasPanel* T = CGroupBegin();
@@ -284,7 +285,7 @@ void UZoogiMenuRoot::BuildClashShopTab()
 			const float GS = 120.f + i * 22.f;
 			CImg(ClashArt(TEXT("goldpile")), TW * 0.5f - GS * 0.5f, 150.f - GS, GS, GS);
 			CText(ZCNum(Packs[i].Gold), 0.f, 156.f, TW, 44.f, 34.f, ZCGold);
-			CText(TEXT("GOLD"), 0.f, 194.f, TW, 26.f, 18.f, ZCSoft, 1, 3.f);
+			CText(TEXT("GOLD"), 0.f, 206.f, TW, 26.f, 18.f, ZCSoft, 1, 3.f);
 			UHorizontalBox* H = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
 			UImage* I = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
 			I->SetBrush(ZCImgBrush(Art(TEXT("icon_gem")), 40.f, 40.f, 0.f, false));
@@ -305,7 +306,7 @@ void UZoogiMenuRoot::BuildClashShopTab()
 		TArray<FZoogiGemPackageRow> Packs;
 		if (PS) Packs = PS->Core().Config().GemPackages;
 		const int32 N = FMath::Max(1, Packs.Num());
-		const float TW = 290.f, TH = 330.f, Gap = 26.f, X0 = C - (TW * N + Gap * (N - 1)) * 0.5f, Y0 = Y + 130.f;
+		const float TW = 290.f, TH = 370.f, Gap = 26.f, X0 = C - (TW * N + Gap * (N - 1)) * 0.5f, Y0 = Y + 130.f;
 		for (int32 i = 0; i < Packs.Num(); ++i)
 		{
 			const FZoogiGemPackageRow& P = Packs[i];
@@ -315,9 +316,9 @@ void UZoogiMenuRoot::BuildClashShopTab()
 			for (int32 g = 0; g < Gems; ++g)
 				CImg(Art(TEXT("icon_gem")), TW * 0.5f - 46.f + (g - (Gems - 1) * 0.5f) * 26.f, 34.f + (g % 2) * 12.f, 92.f, 92.f);
 			CText(ZCNum(P.Gems), 0.f, 140.f, TW, 44.f, 34.f, ZCCyan);
-			CText(P.BonusGems > 0 ? FString::Printf(TEXT("+%s BONUS"), *ZCNum(P.BonusGems)) : FString(TEXT("GEMS")), 0.f, 180.f, TW, 26.f, 18.f, P.BonusGems > 0 ? ZCYellow : ZCSoft, 1, 3.f);
-			CChunkyVisual(CTxt(FString::Printf(TEXT("$%.2f"), P.PriceUSD), 28.f, FLinearColor::White, 4.f), ZCHex(TEXT("6A7898")), 30.f, TH - 112.f, TW - 60.f, 64.f);
-			CText(TEXT("NEEDS STORE"), 0.f, TH - 46.f, TW, 30.f, 18.f, ZCYellow, 1, 3.f);
+			CText(P.BonusGems > 0 ? FString::Printf(TEXT("+%s BONUS"), *ZCNum(P.BonusGems)) : FString(TEXT("GEMS")), 0.f, 190.f, TW, 26.f, 18.f, P.BonusGems > 0 ? ZCYellow : ZCSoft, 1, 3.f);
+			CChunkyVisual(CTxt(FString::Printf(TEXT("$%.2f"), P.PriceUSD), 28.f, FLinearColor::White, 4.f), ZCHex(TEXT("6A7898")), 30.f, TH - 120.f, TW - 60.f, 64.f);
+			CText(TEXT("NEEDS STORE"), 0.f, TH - 48.f, TW, 30.f, 18.f, ZCYellow, 1, 3.f);
 			CGroupEnd();
 			const FString Body = FString::Printf(TEXT("%s gems (%s) is a real-money pack.\nIt needs the platform store (App Store / Google Play / Steam), which is not connected yet.\nNo purchase was made and no gems were added."),
 				*ZCNum(P.Gems + P.BonusGems), *FString::Printf(TEXT("$%.2f"), P.PriceUSD));
