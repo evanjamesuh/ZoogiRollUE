@@ -27,7 +27,7 @@ namespace
 	const FLinearColor ZCNavyDeep = ZCHex(TEXT("0F2A66"));
 	const FLinearColor ZCPanel = ZCHex(TEXT("2F6BD0"));
 	const FLinearColor ZCViolet = ZCHex(TEXT("6C3BD1"));
-	const FLinearColor ZCGreen = ZCHex(TEXT("62CC34"));
+	const FLinearColor ZCGreen = ZCHex(TEXT("6BD84A"));     // green buttons #6BD84A -> #2F9E2A (DETAILED PASS 2)
 	const FLinearColor ZCRed = ZCHex(TEXT("E53935"));        // close button
 	const FLinearColor ZCSoft = ZCHex(TEXT("CFE3FF"));
 	const FLinearColor ZCMuted = ZCHex(TEXT("9DB4DA"));
@@ -38,6 +38,23 @@ namespace
 	const FLinearColor ZCRibGold = ZCHex(TEXT("F5B942")), ZCRibGoldEdge = ZCHex(TEXT("5A3510")); // Trophy Road ribbon
 	const FLinearColor ZCRibPurple = ZCHex(TEXT("7B3FD0"));  // Battle Pass ribbon
 	const FLinearColor ZCRibBlue = ZCHex(TEXT("3B82D6"));    // Arenas ribbon
+	// DETAILED PASS 2 style values
+	const FLinearColor ZCGreenBot = ZCHex(TEXT("2F9E2A"));
+	const FLinearColor ZCGoldBtn = ZCHex(TEXT("FFD54A")), ZCGoldBtnBot = ZCHex(TEXT("F5A300")), ZCGoldBtnLip = ZCHex(TEXT("B86E00"));
+	const FLinearColor ZCPill = ZCHex(TEXT("0B2A5C"));       // top-bar currency pills (translucent)
+	const FLinearColor ZCPlus = ZCHex(TEXT("4CD964"));       // green '+' squares
+	const FLinearColor ZCCoinC = ZCHex(TEXT("FFA726")), ZCGemC = ZCHex(TEXT("3FD6FF"));
+	const FLinearColor ZCPopTop = ZCHex(TEXT("4A9CF0")), ZCPopBot = ZCHex(TEXT("2D74D6")), ZCPopEdge = ZCHex(TEXT("1B4FA8")); // popup body
+	const FLinearColor ZCXRed = ZCHex(TEXT("E53E3E"));       // close X
+	const FLinearColor ZCSecTop = ZCHex(TEXT("FFC93C")), ZCSecBot = ZCHex(TEXT("E8960F")), ZCSecFold = ZCHex(TEXT("7A4300")); // section ribbons
+	const FLinearColor ZCPriceRed = ZCHex(TEXT("FF4D4D"));   // unaffordable price text
+	const FLinearColor ZCBoughtBg = ZCHex(TEXT("1F2D4D")), ZCBoughtCheck = ZCHex(TEXT("5BE35B")); // Purchased pill
+	const FLinearColor ZCEpicChest = ZCHex(TEXT("7B3FBF"));
+	const FLinearColor ZCOpenTop = ZCHex(TEXT("A24BF0")), ZCOpenBot = ZCHex(TEXT("7D2BD0")); // chest-opening ribbon
+	const FLinearColor ZCLinkBlue = ZCHex(TEXT("3EA0F0")), ZCLogoutRed = ZCHex(TEXT("E5483F"));
+	const FLinearColor ZCOlive = ZCHex(TEXT("B8A533"));      // replay: selected speed
+	const FLinearColor ZCNavyBtn = ZCHex(TEXT("1D3F7E"));
+	const FLinearColor ZCMaster = ZCHex(TEXT("FFC531")), ZCSfxBlue = ZCHex(TEXT("3D8BF0")), ZCMusicGreen = ZCHex(TEXT("4CD964"));
 
 	FLinearColor ZCLighten(const FLinearColor& C, float T) { return FMath::Lerp(C, FLinearColor::White, T).CopyWithNewOpacity(C.A); }
 	FLinearColor ZCDarken(const FLinearColor& C, float T) { return FMath::Lerp(C, FLinearColor::Black, T).CopyWithNewOpacity(C.A); }
@@ -190,7 +207,32 @@ namespace
 	}
 
 	// milestone 2: rarity frames + short durations ("3h 05m", "14m 20s", "9s")
-	FLinearColor ZCRarityColor(int32 R) { return R == 2 ? ZCHex(TEXT("B45CFF")) : R == 1 ? ZCHex(TEXT("FF9A2E")) : ZCHex(TEXT("62A8F5")); }
+	// DETAILED PASS 2: Common = steel frame + grey-white label #C9D6E3; Rare = gold-orange frame #F5A623 + orange label #FF9A1F
+	FLinearColor ZCRarityColor(int32 R) { return R == 2 ? ZCHex(TEXT("B45CFF")) : R == 1 ? ZCHex(TEXT("F5A623")) : ZCHex(TEXT("8C9DB5")); }
+	FLinearColor ZCRarityLabel(int32 R) { return R == 2 ? ZCHex(TEXT("D7A2FF")) : R == 1 ? ZCHex(TEXT("FF9A1F")) : ZCHex(TEXT("C9D6E3")); }
+	// chunky button gradients / lips: gold #FFD54A -> #F5A300 (lip #B86E00), green #6BD84A -> #2F9E2A, BATTLE #FFD84A -> #F2A500
+	FLinearColor ZCGradBottom(const FLinearColor& Face)
+	{
+		if (Face.Equals(ZCYellow, 0.01f)) return ZCYellowBot;
+		if (Face.Equals(ZCGoldBtn, 0.01f)) return ZCGoldBtnBot;
+		if (Face.Equals(ZCGreen, 0.01f)) return ZCGreenBot;
+		return ZCDarken(Face, 0.18f);
+	}
+	FLinearColor ZCLip(const FLinearColor& Face)
+	{
+		if (Face.Equals(ZCGoldBtn, 0.01f) || Face.Equals(ZCYellow, 0.01f)) return ZCGoldBtnLip;
+		if (Face.Equals(ZCGreen, 0.01f)) return ZCDarken(ZCGreenBot, 0.3f);
+		return ZCDarken(Face, 0.38f);
+	}
+	FString ZCClock(float Secs) { const int32 S = FMath::Max(0, FMath::FloorToInt(Secs)); return FString::Printf(TEXT("%d:%02d"), S / 60, S % 60); }
+	FString ZCAgo(int64 Utc, int64 Now)
+	{
+		const int64 D = FMath::Max<int64>(0, Now - Utc);
+		if (D < 60) return TEXT("just now");
+		if (D < 3600) return FString::Printf(TEXT("%lldm ago"), D / 60);
+		if (D < 86400) return FString::Printf(TEXT("%lldh ago"), D / 3600);
+		return FString::Printf(TEXT("%lldd ago"), D / 86400);
+	}
 	FString ZCDur(int64 Secs)
 	{
 		Secs = FMath::Max<int64>(0, Secs);

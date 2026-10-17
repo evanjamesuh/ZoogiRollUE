@@ -27,7 +27,8 @@ struct FZoogiMenuAnimBtn { TWeakObjectPtr<UButton> B; TWeakObjectPtr<class UWidg
 enum class EZoogiMenuAnchor : uint8 { Left, Center, Right };
 
 /** clash-menu: popups of the Clash-style front end (ZoogiMenuClash.cpp). */
-enum class EZoogiClashPopup : uint8 { None, Profile, Settings, TrophyRoad, Info, Deal, Chest, Gold, Rewards, Card, MatchResult, ChestSlot, Arenas, BattlePass, PremiumUnlock };
+enum class EZoogiClashPopup : uint8 { None, Profile, Settings, TrophyRoad, Info, Deal, Chest, Gold, Rewards, Card, MatchResult, ChestSlot, Arenas, BattlePass, PremiumUnlock,
+	BattleLog, Replay, ChangeNickname, ChestOpen, GemPack };
 
 UENUM()
 enum class EZoogiScreen : uint8
@@ -248,4 +249,38 @@ private:
 	bool ClashBigPopup(EZoogiClashPopup P) const;
 	EZoogiClashPopup ClashAfterRewards = EZoogiClashPopup::None; // popup to return to after COLLECT
 	int32 ClashArenaSel = -1;            // Arenas screen: selected track marker (trophies)
+	// ---- DETAILED PASS 2 (Oct 17): Profile, Battle Log, Replay, Settings, Change Nickname (ZoogiMenuClashProfile.cpp),
+	// chest-opening sequence and the spec Shop (ZoogiMenuClashShop.cpp)
+	bool BuildClashProfilePopup(EZoogiClashPopup P, float PW, float PH);
+	void BuildClashChestOpen();
+	void BuildClashReplay();
+	void ClashReplayApply();
+	void ClashTickSettings(float Dt);
+	void ClashApplyAudio(bool bInit);
+	void ClashOpenReplay(int32 LogIdx);
+	void ClashStartOpen(const FString& Title, FName Chest, const TArray<FZoogiFrontReward>& R, EZoogiClashPopup Back);
+	void ClashBuyChestNow(FName Id);
+	bool ClashBuyDealNow(int32 Idx);
+	UWidget* CPopupBody(float X, float Y, float Wd, float Ht, float R);
+	UWidget* CTextIntl(const FString& S, float X, float Y, float Wd, float Ht, float Size, const FLinearColor& C);
+	TMap<FString, int32> ClashTourSaved;  // the user's Settings values, restored when a capture tour ends
+	float ClashCopiedT = -100.f;          // "Copied!" shown for 1.5 s after the tag copy
+	FString ClashNickDraft; FString ClashNickErr;
+	TWeakObjectPtr<class UEditableTextBox> ClashNickBox;
+	TWeakObjectPtr<class USlider> ClashSlider[3];
+	TWeakObjectPtr<UWidget> ClashSliderFill[3];
+	TWeakObjectPtr<UTextBlock> ClashSliderPct[3];
+	float ClashSliderLast[3] = { -1.f, -1.f, -1.f };
+	float ClashSliderFillW = 0.f;
+	bool bClashAudioInit = false, bClashSettingsDirty = false;
+	float ClashSettingsFlushT = 0.f;
+	TArray<FZoogiFrontReward> ClashOpenCards; int32 ClashOpenGold = 0; FName ClashOpenChest; FString ClashOpenTitle;
+	int32 ClashOpenIdx = -1;             // -1 closed chest, 0..N-1 revealed card, N = rewards grid
+	EZoogiClashPopup ClashOpenBack = EZoogiClashPopup::None;
+	TSharedPtr<FZoogiReplay> ClashReplay;
+	FZoogiFrontBattle ClashReplayInfo;
+	float ClashReplayT = 0.f, ClashReplaySpeed = 1.f; bool bClashReplayPlaying = true;
+	TArray<TWeakObjectPtr<UWidget>> ClashReplayZW, ClashReplayLW, ClashReplayOW;
+	TWeakObjectPtr<UWidget> ClashReplayBar;
+	float ClashReplayS = 800.f, ClashReplayCX = 0.f, ClashReplayCY = 0.f, ClashReplayBarW = 0.f;
 };

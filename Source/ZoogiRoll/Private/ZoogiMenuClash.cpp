@@ -62,8 +62,10 @@ void UZoogiMenuRoot::SetClashTab(int32 T)
 
 void UZoogiMenuRoot::OpenClashPopup(EZoogiClashPopup P, const FString& Title, const FString& Body)
 {
-	const bool bReturning = ClashPopup == EZoogiClashPopup::Rewards && P == ClashAfterRewards && P != EZoogiClashPopup::None;
-	if (ClashBigPopup(P) && !bReturning && P != ClashPopup) { ClashScrollKey = -1; ClashScrollOffset = 0.f; ClashPendingScroll = -1.f; }
+	const bool bReturning = (ClashPopup == EZoogiClashPopup::Rewards && P == ClashAfterRewards && P != EZoogiClashPopup::None)
+		|| (ClashPopup == EZoogiClashPopup::ChestOpen && P == ClashOpenBack && P != EZoogiClashPopup::None)
+		|| (ClashPopup == EZoogiClashPopup::Replay && P == EZoogiClashPopup::BattleLog);
+	if ((ClashBigPopup(P) || P == EZoogiClashPopup::BattleLog) && !bReturning && P != ClashPopup) { ClashScrollKey = -1; ClashScrollOffset = 0.f; ClashPendingScroll = -1.f; }
 	if (P != EZoogiClashPopup::Rewards) ClashAfterRewards = EZoogiClashPopup::None;
 	ClashPopup = P;
 	ClashInfoTitle = Title;
@@ -200,14 +202,14 @@ UWidget* UZoogiMenuRoot::CChunkyVisual(UWidget* Inner, const FLinearColor& Face,
 	const float Lip = FMath::Clamp(Ht * 0.11f, 5.f, 13.f);
 	if (R < 0.f) R = FMath::Min(22.f, Ht * 0.3f);
 	UOverlay* O = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass());
-	if (UOverlaySlot* S = O->AddChildToOverlay(CBox(ZCDarken(Face, 0.38f), ZCDark, 5.f, R))) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); }
+	if (UOverlaySlot* S = O->AddChildToOverlay(CBox(ZCLip(Face), ZCDark, 5.f, R))) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); }
 	if (UOverlaySlot* S = O->AddChildToOverlay(CBox(Face, FLinearColor::Transparent, 0.f, FMath::Max(3.f, R - 4.f)))) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); S->SetPadding(FMargin(5.f, 5.f, 5.f, 5.f + Lip)); }
 	{
 		// vertical face gradient (BATTLE: #FFD84A -> #F2A500; other faces: face -> 18% darker)
 		UImage* Grad = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
 		FSlateBrush GBr = ZCImgBrush(ClashArt(TEXT("vgrad")), Wd, Ht, FMath::Max(3.f, R - 4.f), false);
 		Grad->SetBrush(GBr);
-		Grad->SetColorAndOpacity(Face.Equals(ZCYellow, 0.01f) ? ZCYellowBot : ZCDarken(Face, 0.18f));
+		Grad->SetColorAndOpacity(ZCGradBottom(Face)); // BATTLE / gold / green per spec, other faces 18% darker
 		if (UOverlaySlot* S = O->AddChildToOverlay(Grad)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); S->SetPadding(FMargin(5.f, 5.f, 5.f, 5.f + Lip)); }
 	}
 	USizeBox* GB = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
@@ -364,13 +366,16 @@ UTexture2D* UZoogiMenuRoot::ClashArt(const FString& Key)
 		if (Key == TEXT("ribbon_gold")) { Base = ZCRibGold; Edge = ZCRibGoldEdge; }
 		else if (Key == TEXT("ribbon_purple")) Base = ZCRibPurple;
 		else if (Key == TEXT("ribbon_blue")) Base = ZCRibBlue;
-		const FLinearColor TailA = ZCDarken(Base, 0.18f), TailB = ZCDarken(Base, 0.42f), Fold = ZCDarken(Base, 0.6f);
+		FLinearColor FaceA = ZCLighten(Base, 0.25f), FaceB = ZCDarken(Base, 0.08f);
+		FLinearColor TailA = ZCDarken(Base, 0.18f), TailB = ZCDarken(Base, 0.42f), Fold = ZCDarken(Base, 0.6f);
+		if (Key == TEXT("ribbon_section")) { FaceA = ZCSecTop; FaceB = ZCSecBot; TailA = ZCDarken(ZCSecBot, 0.1f); TailB = ZCDarken(ZCSecBot, 0.3f); Fold = ZCSecFold; Edge = ZCSecFold; }
+		else if (Key == TEXT("ribbon_open")) { FaceA = ZCOpenTop; FaceB = ZCOpenBot; TailA = ZCDarken(ZCOpenBot, 0.15f); TailB = ZCDarken(ZCOpenBot, 0.4f); Fold = ZCDarken(ZCOpenBot, 0.6f); }
 		auto Add = [&S, Edge](FZCShape X) { X.EdgeC = Edge; S.Add(X); };
 		Add(ZCPoly({ { 4, 28 }, { 110, 28 }, { 110, 100 }, { 4, 100 }, { 34, 64 } }, TailA, TailB, 5.f, false));
 		Add(ZCPoly({ { 636, 28 }, { 530, 28 }, { 530, 100 }, { 636, 100 }, { 606, 64 } }, TailA, TailB, 5.f, false));
 		Add(ZCPoly({ { 80, 84 }, { 112, 84 }, { 112, 100 } }, Fold, Fold, 3.f, false));
 		Add(ZCPoly({ { 560, 84 }, { 528, 84 }, { 528, 100 } }, Fold, Fold, 3.f, false));
-		Add(ZCPoly({ { 72, 6 }, { 568, 6 }, { 568, 86 }, { 72, 86 } }, ZCLighten(Base, 0.25f), ZCDarken(Base, 0.08f), 5.f));
+		Add(ZCPoly({ { 72, 6 }, { 568, 6 }, { 568, 86 }, { 72, 86 } }, FaceA, FaceB, 5.f));
 	}
 	else if (Key == TEXT("star"))
 	{
@@ -486,6 +491,73 @@ UTexture2D* UZoogiMenuRoot::ClashArt(const FString& Key)
 		ArtCache.Add(CacheKey, T);
 		return T;
 	}
+	else if (Key == TEXT("copy"))
+	{
+		S.Add(ZCRect(14, 8, 66, 66, ZCHex(TEXT("DDE8FA")), ZCHex(TEXT("A9BCDD")), 5.f, false));
+		S.Add(ZCRect(34, 30, 86, 92, FLinearColor::White, ZCHex(TEXT("C9D7F2")), 5.f, false));
+	}
+	else if (Key == TEXT("check"))
+	{
+		S.Add(ZCCircle({ 50, 50 }, 44, ZCHex(TEXT("7BF07B")), ZCHex(TEXT("2FAE2F")), 5.f));
+		S.Add(ZCPoly({ { 24, 50 }, { 34, 40 }, { 45, 52 }, { 70, 26 }, { 80, 36 }, { 45, 72 } }, FLinearColor::White, ZCHex(TEXT("E2F5E2")), 3.f, false));
+	}
+	else if (Key == TEXT("pencil"))
+	{
+		S.Add(ZCRotRect({ 52, 48 }, 34, 10, -45, ZCHex(TEXT("FFD54A")), ZCHex(TEXT("E39410"))));
+		S.Add(ZCPoly({ { 20, 80 }, { 16, 92 }, { 28, 88 } }, ZCDark, ZCDark, 2.f, false));
+		S.Add(ZCRotRect({ 76, 24 }, 7, 10, -45, ZCHex(TEXT("FF8A80")), ZCHex(TEXT("D84339"))));
+	}
+	else if (Key == TEXT("knob"))
+	{
+		S.Add(ZCCircle({ 50, 50 }, 42, FLinearColor::White, ZCHex(TEXT("D6E2F5")), 6.f));
+	}
+	else if (Key == TEXT("cardback"))
+	{
+		// face-down card: navy with a gold star (chest opening)
+		W = 128; H = 160; UW = 100.f; UH = 125.f;
+		S.Add(ZCRect(4, 4, 96, 121, ZCHex(TEXT("2B4C9B")), ZCHex(TEXT("14295E")), 5.f));
+		S.Add(ZCRect(14, 14, 86, 111, ZCHex(TEXT("1D3A80")), ZCHex(TEXT("102454")), 2.5f, false));
+		S.Add(ZCPoly({ { 50, 34 }, { 57, 52 }, { 77, 53 }, { 61, 65 }, { 67, 85 }, { 50, 74 }, { 33, 85 }, { 39, 65 }, { 23, 53 }, { 43, 52 } }, GoldA, GoldB, 3.5f));
+	}
+	else if (Key == TEXT("zdot"))
+	{
+		// replay token: white disc (tinted per Zoogi) with a dark notch pointing +X (rotated by the recorded yaw)
+		S.Add(ZCCircle({ 50, 50 }, 40, FLinearColor::White, ZCHex(TEXT("C8CCD6")), 7.f));
+		S.Add(ZCPoly({ { 62, 40 }, { 92, 50 }, { 62, 60 } }, ZCDark, ZCDark, 0.f, false));
+	}
+	else if (Key == TEXT("play"))
+	{
+		S.Add(ZCPoly({ { 28, 14 }, { 84, 50 }, { 28, 86 } }, FLinearColor::White, ZCHex(TEXT("DDE8FA")), 4.f, false));
+	}
+	else if (Key == TEXT("pause"))
+	{
+		S.Add(ZCRect(22, 14, 42, 86, FLinearColor::White, ZCHex(TEXT("DDE8FA")), 4.f, false));
+		S.Add(ZCRect(58, 14, 78, 86, FLinearColor::White, ZCHex(TEXT("DDE8FA")), 4.f, false));
+	}
+	else if (Key == TEXT("chevron"))
+	{
+		S.Add(ZCPoly({ { 50, 10 }, { 90, 52 }, { 70, 52 }, { 70, 90 }, { 30, 90 }, { 30, 52 }, { 10, 52 } }, ZCHex(TEXT("FFE66B")), ZCHex(TEXT("F5A300")), 5.f));
+	}
+	else if (Key == TEXT("bg_shop"))
+	{
+		// DETAILED PASS 2 shop backdrop: lattice gradient #1E6BD6 -> #0E3F92
+		ZoogiUIFx::FPixels P; P.W = 512; P.H = 288; P.Px.SetNumUninitialized(P.W * P.H);
+		const FLinearColor Top = ZCHex(TEXT("1E6BD6")), Bot = ZCHex(TEXT("0E3F92"));
+		for (int32 y = 0; y < P.H; ++y)
+			for (int32 x = 0; x < P.W; ++x)
+			{
+				const float T = (float)y / (P.H - 1);
+				FLinearColor C = FMath::Lerp(Top, Bot, T);
+				const float Cell = 48.f;
+				const float U = FMath::Fmod(x + y, Cell) / Cell, V = FMath::Fmod(x - y + 4096.f, Cell) / Cell;
+				const float Line = FMath::Min(FMath::Min(U, 1.f - U), FMath::Min(V, 1.f - V));
+				C = FMath::Lerp(C, ZCLighten(C, 0.16f), FMath::Clamp((0.04f - Line) * 40.f, 0.f, 0.85f));
+				P.Px[y * P.W + x] = C.ToFColor(true);
+			}
+		UTexture2D* T = ZoogiUIFx::ToTexture(P);
+		ArtCache.Add(CacheKey, T);
+		return T;
+	}
 	else if (Key == TEXT("bg"))
 	{
 		// backdrop: bright sky blue -> royal blue with a faint diamond lattice (painted directly, no shapes)
@@ -517,7 +589,7 @@ UTexture2D* UZoogiMenuRoot::ClashArt(const FString& Key)
 // ------------------------------------------------------------------------------------------------ build
 void UZoogiMenuRoot::BuildClashBackdrop()
 {
-	if (UTexture2D* Bg = ClashArt(TEXT("bg")))
+	if (UTexture2D* Bg = ClashArt(ClashTab == ZCShop ? TEXT("bg_shop") : TEXT("bg")))
 	{
 		UScaleBox* Fill = WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass());
 		Fill->SetStretch(EStretch::ScaleToFill);
@@ -532,6 +604,7 @@ void UZoogiMenuRoot::BuildClashBackdrop()
 
 void UZoogiMenuRoot::BuildClash()
 {
+	if (!bClashAudioInit) { bClashAudioInit = true; ClashApplyAudio(true); } // saved Settings volumes -> the real audio
 	const bool bTabSwitch = ClashBuiltTab != -1 && ClashBuiltTab != ClashTab;
 	const bool bEnter = bAnimEnter || bTabSwitch;
 	ClashBuiltTab = ClashTab;
@@ -572,30 +645,26 @@ void UZoogiMenuRoot::BuildClashTopBar()
 	const float W = DesignW;
 	const float M = 36.f;
 
-	// ---- row 1 left: level badge over the XP bar (badge opens Profile)
+	// ---- row 1 left: level badge (blue hex) over the XP bar; both inert (DETAILED PASS 2)
 	const int32 Need = UZoogiFrontProfileSubsystem::XPForLevel(D.Level);
 	CBar(M + 58.f, 30.f, 300.f, 46.f, Need > 0 ? float(D.XP) / Need : 0.f, ZCCyan, FString::Printf(TEXT("%d/%d"), D.XP, Need), 24.f);
-	{
-		UCanvasPanel* G = CGroupBegin();
-		CImg(ClashArt(TEXT("level")), 0.f, 0.f, 88.f, 88.f);
-		CText(FString::FromInt(D.Level), 0.f, 0.f, 88.f, 84.f, 36.f, FLinearColor::White);
-		CGroupEnd();
-		CAt(CButton(G, [this]() { OpenClashPopup(EZoogiClashPopup::Profile); }), M, 9.f, 88.f, 88.f);
-	}
+	CImg(ClashArt(TEXT("level")), M, 9.f, 88.f, 88.f);
+	CText(FString::FromInt(D.Level), M, 9.f, 88.f, 84.f, 36.f, FLinearColor::White);
 
-	// ---- row 1 right: gold + gems pills, each with a green '+' (both jump to the Shop tab)
+	// ---- row 1 right: gold + gem pills (translucent navy #0B2A5C), green '+' squares (#4CD964): both open the Shop at the TOP
 	auto Pill = [this](float X, UTexture2D* Icon, int32 Value, TFunction<void()> Plus)
 	{
 		const float PW = 260.f, PH = 56.f, Y = 24.f;
-		CPlate(X, Y, PW, PH, ZCNavyDeep.CopyWithNewOpacity(0.88f), PH * 0.5f, 4.f, false);
-		CText(FString::FromInt(Value), X + 54.f, Y, PW - 54.f - 66.f, PH, 30.f, FLinearColor::White, 2);
+		CPlate(X, Y, PW, PH, ZCPill.CopyWithNewOpacity(0.82f), PH * 0.5f, 4.f, false);
+		CText(FText::AsNumber(Value).ToString(), X + 54.f, Y, PW - 54.f - 66.f, PH, 30.f, FLinearColor::White, 2);
 		CImg(Icon, X - 22.f, Y - 9.f, 74.f, 74.f);
-		CChunky(TEXT("+"), ZCGreen, MoveTemp(Plus), X + PW - 60.f, Y - 1.f, 58.f, 58.f, 38.f);
+		CChunky(TEXT("+"), ZCPlus, MoveTemp(Plus), X + PW - 60.f, Y - 1.f, 58.f, 58.f, 38.f);
 	};
 	const float GemX = W - M - 260.f, GoldX = GemX - 40.f - 260.f;
+	auto ShopTop = [this]() { SetClashTab(ZCShop); ClashScrollOffset = 0.f; ClashPendingScroll = 0.f; bDirty = true; }; // Daily Deals
 	// gems = the progression ledger (one balance for the menu and every purchase)
-	Pill(GoldX, Art(TEXT("icon_coin")), D.Gold, [this]() { SetClashTab(ZCShop); ClashPendingScroll = ClashShopY[2] > 0.f ? ClashShopY[2] : 1380.f; bDirty = true; });
-	Pill(GemX, Art(TEXT("icon_gem")), FP ? FP->Gems() : 0, [this]() { SetClashTab(ZCShop); ClashPendingScroll = ClashShopY[3] > 0.f ? ClashShopY[3] : 1820.f; bDirty = true; });
+	Pill(GoldX, Art(TEXT("icon_coin")), D.Gold, ShopTop);
+	Pill(GemX, Art(TEXT("icon_gem")), FP ? FP->Gems() : 0, ShopTop);
 
 	if (ClashTab != ZCBattle) return; // row 2 belongs to the Battle (home) tab
 
@@ -623,7 +692,7 @@ void UZoogiMenuRoot::BuildClashTopBar()
 		CAt(CButton(G, [this]() { OpenClashPopup(EZoogiClashPopup::Profile); }), M + 116.f, Y2, 380.f, 84.f);
 	}
 
-	// ---- row 2 right: trophy count (Trophy Road) + hamburger (Settings)
+	// ---- row 2 right: trophy count (Profile, DETAILED PASS 2) + hamburger (Settings)
 	{
 		UVerticalBox* Bars = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
 		for (int32 i = 0; i < 3; ++i)
@@ -642,7 +711,7 @@ void UZoogiMenuRoot::BuildClashTopBar()
 		CText(FString::FromInt(D.Trophies), 82.f, 12.f, 124.f, 60.f, 32.f, ZCGold, 1);
 		CImg(ClashArt(TEXT("trophy")), 0.f, 0.f, 84.f, 84.f);
 		CGroupEnd();
-		CAt(CButton(G, [this]() { OpenClashPopup(EZoogiClashPopup::TrophyRoad); }), W - M - 88.f - 24.f - 220.f, Y2, 220.f, 84.f);
+		CAt(CButton(G, [this]() { OpenClashPopup(EZoogiClashPopup::Profile); }), W - M - 88.f - 24.f - 220.f, Y2, 220.f, 84.f);
 	}
 }
 
@@ -774,6 +843,9 @@ void UZoogiMenuRoot::BuildClashNav()
 void UZoogiMenuRoot::BuildClashPopup()
 {
 	const float W = DesignW, C = W * 0.5f;
+	// full-screen flows (no popup panel): chest opening, replay viewer
+	if (ClashPopup == EZoogiClashPopup::ChestOpen) { ClashPopupW.Reset(); ClashPopupScrim.Reset(); BuildClashChestOpen(); return; }
+	if (ClashPopup == EZoogiClashPopup::Replay) { ClashPopupW.Reset(); ClashPopupScrim.Reset(); BuildClashReplay(); return; }
 	// background dims and blurs behind every popup (DETAILED PASS 1)
 	{
 		UBackgroundBlur* Blur = WidgetTree->ConstructWidget<UBackgroundBlur>(UBackgroundBlur::StaticClass());
@@ -794,7 +866,7 @@ void UZoogiMenuRoot::BuildClashPopup()
 	const FVector2D PSz = ClashPopupSize(ClashPopup);
 	const float PW = PSz.X, PH = PSz.Y, PX = C - PW * 0.5f, PY = FMath::Clamp(560.f - PH * 0.5f, 60.f, 300.f);
 	UCanvasPanel* Grp = CGroupBegin();
-	CGoldPanel(0.f, 0.f, PW, PH, ZCPanel, 30.f);
+	CPopupBody(0.f, 0.f, PW, PH, 30.f); // light-blue body #4A9CF0 -> #2D74D6, border #1B4FA8 (DETAILED PASS 2)
 	const bool bBig = ClashBigPopup(ClashPopup);
 	if (bBig)
 	{
@@ -803,21 +875,29 @@ void UZoogiMenuRoot::BuildClashPopup()
 		const TCHAR* Rib = ClashPopup == EZoogiClashPopup::TrophyRoad ? TEXT("ribbon_gold") : ClashPopup == EZoogiClashPopup::Arenas ? TEXT("ribbon_blue") : TEXT("ribbon_purple");
 		CImg(ClashArt(Rib), PW * 0.5f - 330.f, 96.f, 660.f, 110.f);
 	}
-	else CPlate(22.f, 22.f, PW - 44.f, 92.f, ZCNavy, 18.f, 4.f, true);
 	FString Title = ClashInfoTitle;
 	if (ClashPopup == EZoogiClashPopup::Profile) Title = TEXT("PROFILE");
 	else if (ClashPopup == EZoogiClashPopup::Settings) Title = TEXT("SETTINGS");
+	else if (ClashPopup == EZoogiClashPopup::BattleLog) Title = TEXT("BATTLE LOG");
+	else if (ClashPopup == EZoogiClashPopup::ChangeNickname) Title = TEXT("CHANGE NICKNAME");
 	else if (ClashPopup == EZoogiClashPopup::TrophyRoad) Title = TEXT("TROPHY ROAD");
 	if (bBig) CText(Title, PW * 0.5f - 240.f, 98.f, 480.f, 80.f, 46.f, FLinearColor::White);
-	else CText(Title, 40.f, 22.f, PW - 80.f, 92.f, Title.Len() > 22 ? 36.f : 48.f, FLinearColor::White);
-	CAt(CBox(FLinearColor::White, ZCDark, 3.f, 28.f), PW - 104.f, -26.f, 120.f, 116.f); // close: red rounded square, white border
-	CChunky(TEXT("X"), ZCRed, [this]() { if (ClashBuyT0 < 0.f) { ClashPopup = EZoogiClashPopup::None; bDirty = true; } }, PW - 96.f, -20.f, 104.f, 100.f, 46.f);
+	else CText(Title, 40.f, 22.f, PW - 80.f, 92.f, Title.Len() > 22 ? 36.f : 48.f, FLinearColor::White, 1, 5.f); // white, navy outline
+	CAt(CBox(FLinearColor::White, ZCDark, 3.f, 28.f), PW - 104.f, -26.f, 120.f, 116.f); // close: red #E53E3E, white rim, darker bevel
+	CChunky(TEXT("X"), ZCXRed, [this]()
+	{
+		if (ClashBuyT0 >= 0.f) return;
+		// sub-popups close back to their parent (Battle Log -> Profile, Change Nickname -> Settings)
+		if (ClashPopup == EZoogiClashPopup::BattleLog) OpenClashPopup(EZoogiClashPopup::Profile);
+		else if (ClashPopup == EZoogiClashPopup::ChangeNickname) OpenClashPopup(EZoogiClashPopup::Settings);
+		else { ClashPopup = EZoogiClashPopup::None; bDirty = true; }
+	}, PW - 96.f, -20.f, 104.f, 100.f, 46.f);
 
 	const UZoogiFrontProfileSubsystem* FP = UZoogiFrontProfileSubsystem::Get(this);
 	const FZoogiFrontProfileData Dflt;
 	const FZoogiFrontProfileData& D = FP ? FP->Data() : Dflt;
-	if (BuildClashShopPopup(ClashPopup, PW, PH) || BuildClashHomePopup(ClashPopup, PW, PH)) {}
-	else if (ClashPopup == EZoogiClashPopup::Profile)
+	if (BuildClashShopPopup(ClashPopup, PW, PH) || BuildClashHomePopup(ClashPopup, PW, PH) || BuildClashProfilePopup(ClashPopup, PW, PH)) {}
+	else if (ClashPopup == EZoogiClashPopup::Profile) // (replaced by BuildClashProfilePopup; kept as a fallback)
 	{
 		AZoogiGameMode* GMode = GM();
 		const TArray<FZoogiDef>& Roster = ZoogiUtil::Roster();
@@ -927,6 +1007,17 @@ void UZoogiMenuRoot::TickClash(float Dt)
 			if (ClashPendingScroll >= 0.f) { ClashScrollOffset = ClashPendingScroll; ClashPendingScroll = -1.f; }
 			--ClashScrollApply;
 		}
+	ClashTickSettings(Dt);
+	if (ClashPopup == EZoogiClashPopup::Replay && ClashReplay.IsValid())
+	{
+		if (bClashReplayPlaying)
+		{
+			ClashReplayT += Dt * ClashReplaySpeed;
+			if (ClashReplayT >= ClashReplay->Duration()) { ClashReplayT = ClashReplay->Duration(); bClashReplayPlaying = false; bDirty = true; } // stops at the end
+		}
+		ClashReplayApply();
+	}
+	if (ClashCopiedT > 0.f && Time - ClashCopiedT > 1.5f) { ClashCopiedT = -100.f; bDirty = true; } // hide "Copied!"
 	ClashLiveClock += Dt;
 	if (ClashLiveClock >= 0.25f)
 	{
@@ -945,7 +1036,7 @@ void UZoogiMenuRoot::TickClash(float Dt)
 
 // ------------------------------------------------------------------------------------------------ capture tour
 // -ZoogiClashTour=<dir>: engine viewport screenshots of Home, Shop (deals, buying, chests, gold, gems), Cards (decks,
-// collection, locked, card popover, emotes), named clash_<WxH>_NN_<what>.png. Every purchase goes through the same code
+// collection, locked, card popover, emotes) and (milestone 3) Settings / Profile / Battle Log / Replay, named clash_<WxH>_NN_<what>.png. Every purchase goes through the same code
 // as a tap. -ZoogiClashTourBattle: then play a real match (P1 switched to CPU so it finishes on its own; rewards counted
 // for P1 only with -ZoogiClashRewardsP1), capture the result popup, Home with the rewards, and the chest slot flow
 // (-ZoogiChestFast makes unlock timers seconds). -ZoogiClashTourQuit: exit when done.
@@ -954,7 +1045,12 @@ void UZoogiMenuRoot::TickClashTour(float Dt)
 	if (ClashTourStep == -1)
 	{
 		ClashTourStep = FParse::Value(FCommandLine::Get(), TEXT("ZoogiClashTour="), ClashTourDir) ? 0 : -2;
-		if (ClashTourStep == 0) { IFileManager::Get().MakeDirectory(*ClashTourDir, true); UE_LOG(LogZoogi, Log, TEXT("CLASH TOUR -> %s"), *ClashTourDir); }
+		if (ClashTourStep == 0)
+		{
+			IFileManager::Get().MakeDirectory(*ClashTourDir, true); UE_LOG(LogZoogi, Log, TEXT("CLASH TOUR -> %s"), *ClashTourDir);
+			for (const TCHAR* K : { TEXT("ClashMaster"), TEXT("ClashSfx"), TEXT("ClashMusic") }) ClashTourSaved.Add(K, GetLocalSetting(K, 50));
+			ClashTourSaved.Add(TEXT("ClashLanguage"), GetLocalSetting(TEXT("ClashLanguage"), 0));
+		}
 		ClashTourClock = 0.f;
 	}
 	if (ClashTourStep < 0) return;
@@ -966,89 +1062,74 @@ void UZoogiMenuRoot::TickClashTour(float Dt)
 
 	struct FStep { const TCHAR* Name; float Wait; float Shot; TFunction<void()> Setup; };
 	TArray<FStep> Steps;
+	auto Affordable = [FP](int32 Skip) { if (FP) for (int32 i = 0; i < FP->Data().Deals.Num(); ++i) { const FZoogiFrontDeal& Dl = FP->Data().Deals[i]; if (i != Skip && !Dl.bBought && Dl.Price <= FP->Data().Gold) return i; } return -1; };
 	Steps.Add({ TEXT("01_home"), 6.f, 1.5f, [this]() { PopToHome(); SetClashTab(ZCBattle); } });
-	// DETAILED PASS 1: Arenas, Trophy Road, Battle Pass (claim tier 1), Unlock Premium (paid from the gem ledger)
-	Steps.Add({ TEXT("arenas"), 1.f, 1.5f, [this]() { ClashArenaSel = -1; OpenClashPopup(EZoogiClashPopup::Arenas, TEXT("ARENAS")); } });
-	Steps.Add({ TEXT("arenas_locked_selected"), 1.f, 1.5f, [this]() { ClashArenaSel = 100; bDirty = true; } });
-	Steps.Add({ TEXT("trophy_road"), 1.f, 1.5f, [this]() { OpenClashPopup(EZoogiClashPopup::TrophyRoad, TEXT("TROPHY ROAD")); } });
-	Steps.Add({ TEXT("battle_pass"), 1.f, 1.5f, [this]() { OpenClashPopup(EZoogiClashPopup::BattlePass, TEXT("BATTLE PASS")); } });
-	Steps.Add({ TEXT("battle_pass_tier1_claimed"), 1.f, 1.5f, [this, FP]()
+	// ---- Settings (DETAILED PASS 2): nickname, sliders (real audio), language, account notes, version
+	Steps.Add({ TEXT("settings"), 1.f, 1.5f, [this]() { OpenClashPopup(EZoogiClashPopup::Settings); } });
+	Steps.Add({ TEXT("settings_sliders_language"), 1.f, 1.5f, [this]()
 	{
-		TArray<FZoogiFrontReward> Out; FString Why;
-		if (FP && FP->ClaimPass(1, false, Out, Why)) bDirty = true; // same call as tapping the tier-1 free tile
-	} });
-	Steps.Add({ TEXT("premium_unlock_popup"), 1.f, 1.5f, [this]() { OpenClashPopup(EZoogiClashPopup::PremiumUnlock, TEXT("PREMIUM PASS")); } });
-	Steps.Add({ TEXT("premium_unlock_pressed"), 1.f, 1.5f, [this, FP]()
-	{
-		if (!FP) return;
-		if (FP->Gems() < UZoogiFrontProfileSubsystem::PassPremiumGems)
-			ClashFail(FString::Printf(TEXT("Not enough gems: the premium track costs %d.\nYou have %d."), UZoogiFrontProfileSubsystem::PassPremiumGems, FP->Gems()));
-		else ClashBuy([this]() { FString Why; if (UZoogiFrontProfileSubsystem* F = UZoogiFrontProfileSubsystem::Get(this)) { if (F->UnlockPremium(Why)) OpenClashPopup(EZoogiClashPopup::BattlePass, TEXT("BATTLE PASS")); else ClashFail(Why); } });
-	} });
-	Steps.Add({ TEXT("home_after_claim"), 1.f, 1.5f, [this]() { ClashPopup = EZoogiClashPopup::None; bDirty = true; } });
-	Steps.Add({ TEXT("02_shop_deals"), 1.f, 1.5f, [this]() { SetClashTab(ZCShop); } });
-	Steps.Add({ TEXT("03_deal_popup"), 1.f, 1.5f, [this, FP]()
-	{
-		if (!FP) return;
-		int32 Pick = 0;
-		for (int32 i = 1; i < FP->Data().Deals.Num(); ++i) if (!FP->Data().Deals[i].bBought && FP->Data().Deals[i].Price <= FP->Data().Gold) { Pick = i; break; }
-		ClashSel = Pick; ClashSelId = FP->Data().Deals.IsValidIndex(Pick) ? FP->Data().Deals[Pick].CardId : NAME_None;
-		OpenClashPopup(EZoogiClashPopup::Deal, ClashSelId.ToString().ToUpper());
-	} });
-	Steps.Add({ TEXT("04_deal_buying_spinner"), 1.f, 0.35f, [this, FP]()
-	{
-		const int32 Idx = ClashSel;
-		if (FP && FP->Data().Deals.IsValidIndex(Idx) && FP->Data().Gold >= FP->Data().Deals[Idx].Price)
-			ClashBuy([this, Idx]() { FString Why; if (UZoogiFrontProfileSubsystem* F = UZoogiFrontProfileSubsystem::Get(this)) if (!F->BuyDeal(Idx, Why)) ClashFail(Why); });
-	} });
-	Steps.Add({ TEXT("05_shop_purchased"), 1.5f, 1.5f, [this]() { bDirty = true; } });
-	Steps.Add({ TEXT("06_shop_chests"), 1.f, 1.5f, [this]() { ClashPendingScroll = ClashShopY[1]; bDirty = true; } });
-	Steps.Add({ TEXT("07_chest_popup"), 1.f, 1.5f, [this]() { ClashSelId = FName(TEXT("wooden")); OpenClashPopup(EZoogiClashPopup::Chest, TEXT("WOODEN CHEST")); } });
-	Steps.Add({ TEXT("08_chest_bought_rewards"), 1.f, 1.7f, [this, FP]()
-	{
-		if (!FP) return;
-		if (FP->Gems() < 40) { ClashFail(FString::Printf(TEXT("Not enough gems: this chest costs 40.\nYou have %d."), FP->Gems())); return; } // same refusal as the button
-		ClashBuy([this]()
-		{
-			TArray<FZoogiFrontReward> R; FString Why;
-			UZoogiFrontProfileSubsystem* F = UZoogiFrontProfileSubsystem::Get(this);
-			if (F && F->BuyChest(FName(TEXT("wooden")), R, Why)) ClashShowRewards(TEXT("WOODEN CHEST"), FName(TEXT("wooden")), R); else ClashFail(Why);
-		});
-	} });
-	Steps.Add({ TEXT("09_shop_gold"), 1.f, 1.5f, [this]() { ClashPopup = EZoogiClashPopup::None; ClashPendingScroll = ClashShopY[2]; bDirty = true; } });
-	Steps.Add({ TEXT("10_gold_popup"), 1.f, 1.5f, [this]() { ClashSel = 0; OpenClashPopup(EZoogiClashPopup::Gold, TEXT("GOLD")); } });
-	Steps.Add({ TEXT("11_shop_gems"), 1.f, 1.5f, [this]() { ClashPopup = EZoogiClashPopup::None; ClashPendingScroll = ClashShopY[3]; bDirty = true; } });
-	Steps.Add({ TEXT("12_gems_needs_store"), 1.f, 1.5f, [this]()
-	{
-		OpenClashPopup(EZoogiClashPopup::Info, TEXT("NEEDS STORE"), TEXT("This gem pack is a real-money purchase.\nIt needs the platform store (App Store / Google Play / Steam), which is not connected yet.\nNo purchase was made and no gems were added."));
-	} });
-	Steps.Add({ TEXT("13_cards_decks"), 1.f, 1.5f, [this]() { ClashPopup = EZoogiClashPopup::None; SetClashTab(ZCCards); ClashCardsSub = 0; bDirty = true; } });
-	Steps.Add({ TEXT("14_cards_deck2_edited"), 1.f, 1.5f, [this, FP]()
-	{
-		ClashDeckView = 1;
-		if (FP) { TArray<FName> D = FP->Deck(1); if (D.Num()) { D.RemoveAt(0); FP->SetDeck(1, D); } } // same call as tapping a deck slot
+		// same values a knob drag / language tap saves + applies; the tour restores the user's values when it ends
+		SetLocalSetting(TEXT("ClashMaster"), 80);
+		SetLocalSetting(TEXT("ClashMusic"), 30);
+		ClashApplyAudio(false);
+		SetLocalSetting(TEXT("ClashLanguage"), 2);
 		bDirty = true;
 	} });
-	Steps.Add({ TEXT("15_cards_collection"), 1.f, 1.5f, [this]() { ClashCardsSub = 1; ClashScrollOffset = 0.f; ClashPendingScroll = 0.f; bDirty = true; } });
-	Steps.Add({ TEXT("16_cards_locked"), 1.f, 1.5f, [this]() { ClashPendingScroll = ClashLockedY; bDirty = true; } });
-	Steps.Add({ TEXT("17_card_popover"), 1.f, 1.5f, [this, FP]()
+	Steps.Add({ TEXT("change_nickname"), 1.f, 1.5f, [this]() { ClashNickDraft = TEXT("Zoogi Tester"); ClashNickErr.Reset(); OpenClashPopup(EZoogiClashPopup::ChangeNickname); } });
+	Steps.Add({ TEXT("nickname_changed"), 1.f, 1.5f, [this, FP]()
 	{
-		FName Best; int32 Most = -1;
-		if (FP) for (const FZoogiCardDef& C : UZoogiFrontProfileSubsystem::CardDefs()) if (FP->IsCardOwned(C.Id) && FP->Copies(C.Id) > Most) { Most = FP->Copies(C.Id); Best = C.Id; }
-		ClashSelId = Best; OpenClashPopup(EZoogiClashPopup::Card, Best.ToString().ToUpper());
+		FString Why;
+		if (FP && FP->ChangeNickname(TEXT("Zoogi Tester"), Why)) { ClashNickDraft.Reset(); OpenClashPopup(EZoogiClashPopup::Settings); }
+		else { ClashNickErr = Why; bDirty = true; }
 	} });
-	Steps.Add({ TEXT("18_card_locked_popover"), 1.f, 1.5f, [this, FP]()
+	Steps.Add({ TEXT("link_email_note"), 1.f, 1.5f, [this]() { OpenClashPopup(EZoogiClashPopup::Info, TEXT("LINK EMAIL"), TEXT("Linking an email needs the account backend, which is not connected yet.\nYour progress is saved on this device.")); } });
+	Steps.Add({ TEXT("profile"), 1.f, 1.5f, [this]() { OpenClashPopup(EZoogiClashPopup::Profile); } });
+	Steps.Add({ TEXT("battle_log_empty"), 1.f, 1.5f, [this]() { OpenClashPopup(EZoogiClashPopup::BattleLog); } });
+	// ---- Premium unlock (gems from -ZoogiDevGrant, spent from the one gem ledger)
+	Steps.Add({ TEXT("premium_unlock_popup"), 1.f, 1.5f, [this]() { OpenClashPopup(EZoogiClashPopup::PremiumUnlock, TEXT("PREMIUM PASS")); } });
+	Steps.Add({ TEXT("premium_unlocked"), 1.f, 1.5f, [this, FP]()
 	{
-		FName L;
-		if (FP) for (const FZoogiCardDef& C : UZoogiFrontProfileSubsystem::CardDefs()) if (!FP->IsCardOwned(C.Id)) { L = C.Id; break; }
-		if (const FZoogiCardDef* D = UZoogiFrontProfileSubsystem::FindCard(L)) { ClashSelId = L; OpenClashPopup(EZoogiClashPopup::Card, D->Name.ToUpper()); }
+		FString Why;
+		if (FP && FP->UnlockPremium(Why)) OpenClashPopup(EZoogiClashPopup::BattlePass, TEXT("BATTLE PASS"));
+		else ClashFail(Why);
 	} });
-	Steps.Add({ TEXT("19_cards_emotes"), 1.f, 1.5f, [this]() { ClashPopup = EZoogiClashPopup::None; ClashCardsSub = 2; bDirty = true; } });
-	Steps.Add({ TEXT("20_home_before_battle"), 1.f, 1.5f, [this]() { SetClashTab(ZCBattle); } });
+	// ---- Shop: instant buys, Purchased state, chest buy + full opening, gold, gem packs (needs store)
+	Steps.Add({ TEXT("shop_deals"), 1.f, 1.5f, [this]() { SetClashTab(ZCShop); ClashScrollOffset = 0.f; ClashPendingScroll = 0.f; } });
+	Steps.Add({ TEXT("deal_popup"), 1.f, 1.5f, [this, FP, Affordable]()
+	{
+		const int32 Pick = FMath::Max(0, Affordable(-1));
+		ClashSel = Pick; ClashSelId = FP && FP->Data().Deals.IsValidIndex(Pick) ? FP->Data().Deals[Pick].CardId : NAME_None;
+		OpenClashPopup(EZoogiClashPopup::Deal, ClashSelId.ToString().ToUpper());
+	} });
+	Steps.Add({ TEXT("deal_bought_in_popup"), 1.f, 1.5f, [this]() { ClashBuyDealNow(ClashSel); } });
+	Steps.Add({ TEXT("deal_bought_on_tile"), 1.f, 1.5f, [this, Affordable]() { const int32 I = Affordable(-1); if (I >= 0) ClashBuyDealNow(I); } });
+	Steps.Add({ TEXT("shop_chests"), 1.f, 1.5f, [this]() { ClashPendingScroll = ClashShopY[1]; bDirty = true; } });
+	Steps.Add({ TEXT("chest_popup_epic"), 1.f, 1.5f, [this]() { ClashSelId = FName(TEXT("epic")); OpenClashPopup(EZoogiClashPopup::Chest, TEXT("EPIC CHEST")); } });
+	Steps.Add({ TEXT("chest_open_closed"), 1.f, 1.5f, [this]() { ClashBuyChestNow(FName(TEXT("epic"))); } });
+	Steps.Add({ TEXT("chest_open_card1"), 1.f, 1.5f, [this]() { if (ClashPopup == EZoogiClashPopup::ChestOpen) { ++ClashOpenIdx; bDirty = true; } } });
+	Steps.Add({ TEXT("chest_open_card2"), 1.f, 1.5f, [this]() { if (ClashPopup == EZoogiClashPopup::ChestOpen && ClashOpenIdx + 1 < ClashOpenCards.Num()) { ++ClashOpenIdx; bDirty = true; } } });
+	Steps.Add({ TEXT("chest_open_rewards"), 1.f, 1.5f, [this]() { if (ClashPopup == EZoogiClashPopup::ChestOpen) { ClashOpenIdx = ClashOpenCards.Num(); bDirty = true; } } });
+	Steps.Add({ TEXT("shop_chests_after"), 1.f, 1.5f, [this]() { ClashPopup = EZoogiClashPopup::None; ClashPendingScroll = ClashShopY[1]; bDirty = true; } });
+	Steps.Add({ TEXT("shop_gold"), 1.f, 1.5f, [this]() { ClashPendingScroll = ClashShopY[2]; bDirty = true; } });
+	Steps.Add({ TEXT("gold_popup"), 1.f, 1.5f, [this]() { ClashSel = 0; OpenClashPopup(EZoogiClashPopup::Gold, UZoogiFrontProfileSubsystem::GoldPacks()[0].Name); } });
+	Steps.Add({ TEXT("gold_bought"), 1.f, 1.5f, [this, FP]()
+	{
+		FString Why;
+		if (FP && FP->BuyGold(0, Why)) { ClashPopup = EZoogiClashPopup::None; bDirty = true; } else ClashFail(Why); // same as the popup button
+	} });
+	Steps.Add({ TEXT("gold_popup_not_enough"), 1.f, 1.5f, [this]() { ClashSel = 2; OpenClashPopup(EZoogiClashPopup::Gold, UZoogiFrontProfileSubsystem::GoldPacks()[2].Name); } });
+	Steps.Add({ TEXT("shop_gems"), 1.f, 1.5f, [this]() { ClashPopup = EZoogiClashPopup::None; ClashPendingScroll = ClashShopY[3]; bDirty = true; } });
+	Steps.Add({ TEXT("gem_pack_popup"), 1.f, 1.5f, [this]() { ClashSel = 1; OpenClashPopup(EZoogiClashPopup::GemPack, UZoogiFrontProfileSubsystem::GemPacks()[1].Name); } });
+	Steps.Add({ TEXT("gem_pack_needs_store"), 1.f, 1.5f, [this]()
+	{
+		const UZoogiFrontProfileSubsystem::FGemPack Pk = UZoogiFrontProfileSubsystem::GemPacks()[1];
+		OpenClashPopup(EZoogiClashPopup::Info, TEXT("NEEDS STORE"), FString::Printf(TEXT("%d gems for $%.2f is a real-money pack.\nIt needs the platform store (App Store / Google Play / Steam), which is not connected yet.\nNo purchase was made and no gems were added."), Pk.Gems, Pk.USD));
+	} });
+	Steps.Add({ TEXT("home_before_battle"), 1.f, 1.5f, [this]() { ClashPopup = EZoogiClashPopup::None; SetClashTab(ZCBattle); } });
 	const int32 BattleStep = Steps.Num();
 	if (bBattle)
 	{
-		Steps.Add({ TEXT("22_match_result"), 1.f, 2.2f, [this, Res]()
+		Steps.Add({ TEXT("match_result"), 1.f, 2.2f, [this, Res]()
 		{
 			AZoogiGameMode* G = GM();
 			if (G && G->MenuPlayers.IsValidIndex(0) && !G->MenuPlayers[0].bCPU) Fire("ToggleCPU", 0); // capture run: P1 plays itself
@@ -1058,13 +1139,13 @@ void UZoogiMenuRoot::TickClashTour(float Dt)
 			FTimerHandle H;
 			GetWorld()->GetTimerManager().SetTimer(H, FTimerDelegate::CreateWeakLambda(this, [P]() { FScreenshotRequest::RequestScreenshot(P, true, false); UE_LOG(LogZoogi, Log, TEXT("CLASH TOUR screenshot %s"), *P); }), 14.f, false);
 		} });
-		Steps.Add({ TEXT("23_home_after_rewards"), 1.f, 1.5f, [this]()
+		Steps.Add({ TEXT("slot_locked"), 1.f, 1.5f, [this]()
 		{
 			ClashPopup = EZoogiClashPopup::None; bDirty = true;
 			if (AZoogiGameMode* G = GM()) if (G->MenuPlayers.IsValidIndex(0) && G->MenuPlayers[0].bCPU) Fire("ToggleCPU", 0); // P1 back to human
 		} });
-		Steps.Add({ TEXT("24_chest_slot_popup"), 1.f, 1.5f, [this, FirstChestSlot]() { const int32 S = FirstChestSlot(); if (S >= 0) ClashTapChestSlot(S); } });
-		Steps.Add({ TEXT("25_chest_unlocking"), 1.f, 1.5f, [this, FP, FirstChestSlot]()
+		Steps.Add({ TEXT("slot_popup"), 1.f, 1.5f, [this, FirstChestSlot]() { const int32 S = FirstChestSlot(); if (S >= 0) ClashTapChestSlot(S); } });
+		Steps.Add({ TEXT("slot_unlocking"), 1.f, 1.5f, [this, FP, FirstChestSlot]()
 		{
 			const int32 S = FirstChestSlot(); FString Why;
 			if (FP && S >= 0 && FP->StartUnlock(S, Why)) bClashChestWasUnlocking = true;
@@ -1072,15 +1153,26 @@ void UZoogiMenuRoot::TickClashTour(float Dt)
 		} });
 		const int32 Slot0 = FirstChestSlot();
 		const float WaitReady = (FP && Slot0 >= 0 && FP->SecondsLeft(Slot0) > 0) ? 1e9f : 1.5f; // hold until the chest is really ready
-		Steps.Add({ TEXT("26_chest_ready"), WaitReady, 1.0f, [this]() { bDirty = true; } });
-		Steps.Add({ TEXT("27_chest_opened_rewards"), 1.f, 1.5f, [this, FirstChestSlot]() { const int32 S = FirstChestSlot(); if (S >= 0) ClashTapChestSlot(S); } });
-		Steps.Add({ TEXT("28_home_final"), 1.f, 1.5f, [this]() { ClashPopup = EZoogiClashPopup::None; bDirty = true; } });
+		Steps.Add({ TEXT("slot_ready"), WaitReady, 1.0f, [this]() { bDirty = true; } });
+		Steps.Add({ TEXT("slot_open"), 1.f, 1.5f, [this, FirstChestSlot]() { const int32 S = FirstChestSlot(); if (S >= 0) ClashTapChestSlot(S); } });
+		Steps.Add({ TEXT("slot_open_card1"), 1.f, 1.5f, [this]() { if (ClashPopup == EZoogiClashPopup::ChestOpen) { ++ClashOpenIdx; bDirty = true; } } });
+		Steps.Add({ TEXT("slot_rewards"), 1.f, 1.5f, [this]() { if (ClashPopup == EZoogiClashPopup::ChestOpen) { ClashOpenIdx = ClashOpenCards.Num(); bDirty = true; } } });
+		Steps.Add({ TEXT("home_after_chest"), 1.f, 1.5f, [this]() { ClashPopup = EZoogiClashPopup::None; bDirty = true; } });
+		Steps.Add({ TEXT("profile_after_battle"), 1.f, 1.5f, [this]() { OpenClashPopup(EZoogiClashPopup::Profile); } });
+		Steps.Add({ TEXT("battle_log"), 1.f, 1.5f, [this]() { OpenClashPopup(EZoogiClashPopup::BattleLog); } });
+		Steps.Add({ TEXT("replay_1x"), 1.f, 3.0f, [this]() { ClashOpenReplay(0); } });
+		Steps.Add({ TEXT("replay_4x"), 0.2f, 2.5f, [this]() { ClashReplaySpeed = 4.f; bDirty = true; } });
+		Steps.Add({ TEXT("replay_paused"), 0.2f, 1.0f, [this]() { bClashReplayPlaying = false; bDirty = true; } });
+		Steps.Add({ TEXT("home_final"), 1.f, 1.5f, [this]() { ClashReplay.Reset(); ClashPopup = EZoogiClashPopup::None; bDirty = true; } });
 	}
 
 	if (ClashTourStep >= Steps.Num())
 	{
 		ClashTourStep = -100;
 		UE_LOG(LogZoogi, Log, TEXT("CLASH TOUR done (%d steps)"), Steps.Num());
+		// put the user's own Settings values back (the tour moved sliders / language to show them working)
+		for (const TPair<FString, int32>& KV : ClashTourSaved) SetLocalSetting(*KV.Key, KV.Value);
+		ClashApplyAudio(false);
 		if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiClashTourQuit")))
 		{
 			TWeakObjectPtr<UZoogiMenuRoot> WeakThis(this);
