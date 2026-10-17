@@ -677,12 +677,26 @@ const TArray<UZoogiFrontProfileSubsystem::FGoldPack>& UZoogiFrontProfileSubsyste
 	return P;
 }
 
-const TArray<UZoogiFrontProfileSubsystem::FGemPack>& UZoogiFrontProfileSubsystem::GemPacks()
+TArray<UZoogiFrontProfileSubsystem::FGemPack> UZoogiFrontProfileSubsystem::GemPacks() const
 {
-	static const TArray<FGemPack> P = {
-		{ 80, 0.99f, TEXT("Handful of Gems"), TEXT("") }, { 500, 4.99f, TEXT("Sack of Gems"), TEXT("Popular") }, { 1200, 9.99f, TEXT("Box of Gems"), TEXT("") },
-		{ 2500, 19.99f, TEXT("Chest of Gems"), TEXT("") }, { 6500, 49.99f, TEXT("Vault of Gems"), TEXT("") }, { 14000, 99.99f, TEXT("Treasure of Gems"), TEXT("Best Value") } };
-	return P;
+	// single source: GemPackages.csv via the progression config (the same rows the store pipeline grants from)
+	TArray<FGemPack> Out;
+	const UZoogiProgressionSubsystem* PS = GetGameInstance() ? GetGameInstance()->GetSubsystem<UZoogiProgressionSubsystem>() : nullptr;
+	if (!PS) return Out;
+	struct FLabel { const TCHAR* Id; const TCHAR* Name; const TCHAR* Tag; };
+	static const FLabel Labels[] = {
+		{ TEXT("gems_small"), TEXT("Handful of Gems"), TEXT("") }, { TEXT("gems_medium"), TEXT("Sack of Gems"), TEXT("Popular") },
+		{ TEXT("gems_large"), TEXT("Box of Gems"), TEXT("") }, { TEXT("gems_huge"), TEXT("Chest of Gems"), TEXT("") },
+		{ TEXT("gems_vault"), TEXT("Vault of Gems"), TEXT("") }, { TEXT("gems_treasure"), TEXT("Treasure of Gems"), TEXT("Best Value") } };
+	for (const FZoogiGemPackageRow& R : PS->Core().Config().GemPackages)
+	{
+		FGemPack P;
+		P.Id = R.PackageId; P.Gems = R.Gems + R.BonusGems; P.USD = R.PriceUSD;
+		P.Name = FString::Printf(TEXT("%d Gems"), P.Gems);
+		for (const FLabel& L : Labels) if (R.PackageId == FName(L.Id)) { P.Name = L.Name; P.Tag = L.Tag; }
+		Out.Add(P);
+	}
+	return Out;
 }
 
 // ------------------------------------------------------------------------------------------------ profile

@@ -456,7 +456,7 @@ void UZoogiMenuRoot::BuildClashShopTab()
 	ClashShopY[3] = Y - 10.f;
 	CSection(TEXT("GEMS"), Y);
 	{
-		const TArray<UZoogiFrontProfileSubsystem::FGemPack>& Packs = UZoogiFrontProfileSubsystem::GemPacks();
+		const TArray<UZoogiFrontProfileSubsystem::FGemPack> Packs = FP->GemPacks(); // GemPackages.csv
 		const float TW = 310.f, TH = 360.f, Gap = 24.f, X0 = C - (TW * 3.f + Gap * 2.f) * 0.5f, Y0 = Y + 140.f;
 		for (int32 i = 0; i < Packs.Num(); ++i)
 		{
@@ -471,8 +471,8 @@ void UZoogiMenuRoot::BuildClashShopTab()
 			CText(TEXT("NEEDS STORE"), 0.f, TH - 50.f, TW, 30.f, 18.f, ZCYellow, 1, 3.f);
 			CGroupEnd();
 			const float TX = X0 + (i % 3) * (TW + Gap), TY = Y0 + (i / 3) * (TH + Gap);
-			CAt(CButton(T, [this, i]() { ClashSel = i; OpenClashPopup(EZoogiClashPopup::GemPack, UZoogiFrontProfileSubsystem::GemPacks()[i].Name); }), TX, TY, TW, TH);
-			if (*Packs[i].Tag) Tag(TX + TW + 10.f, TY - 16.f, Packs[i].Tag, i == 5 ? ZCHex(TEXT("2E9A3C")) : ZCXRed);
+			CAt(CButton(T, [this, i, Nm = Packs[i].Name]() { ClashSel = i; OpenClashPopup(EZoogiClashPopup::GemPack, Nm); }), TX, TY, TW, TH);
+			if (!Packs[i].Tag.IsEmpty()) Tag(TX + TW + 10.f, TY - 16.f, Packs[i].Tag, Packs[i].Tag == TEXT("Best Value") ? ZCHex(TEXT("2E9A3C")) : ZCXRed);
 		}
 		const float GY = Y0 + FMath::DivideAndRoundUp(Packs.Num(), 3) * (TH + Gap);
 		CText(TEXT("Gem packs are real-money purchases: they need the store backend. Nothing is charged or granted here."), C - 480.f, GY, 960.f, 64.f, 20.f, ZCSoft, 1, 3.f, true);
@@ -807,8 +807,9 @@ bool UZoogiMenuRoot::BuildClashShopPopup(EZoogiClashPopup P, float PW, float PH)
 	}
 	if (P == EZoogiClashPopup::GemPack)
 	{
-		if (!UZoogiFrontProfileSubsystem::GemPacks().IsValidIndex(ClashSel)) return false;
-		const UZoogiFrontProfileSubsystem::FGemPack Pack = UZoogiFrontProfileSubsystem::GemPacks()[ClashSel];
+		const TArray<UZoogiFrontProfileSubsystem::FGemPack> AllPacks = FP->GemPacks();
+		if (!AllPacks.IsValidIndex(ClashSel)) return false;
+		const UZoogiFrontProfileSubsystem::FGemPack Pack = AllPacks[ClashSel];
 		Rays(PW * 0.5f, 250.f, 420.f);
 		const int32 NG = FMath::Min(5, 1 + ClashSel);
 		for (int32 g = 0; g < NG; ++g) CImg(Art(TEXT("icon_gem")), PW * 0.5f - 80.f + (g - (NG - 1) * 0.5f) * 40.f, 160.f + (g % 2) * 16.f, 160.f, 160.f);

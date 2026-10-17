@@ -211,8 +211,10 @@ public:
 	static const TArray<FGoldPack>& GoldPacks();
 	bool BuyGold(int32 I, FString& OutWhy);
 	/** Real-money gem packs (DETAILED PASS 2 list). They need the platform store: shown, never charged or granted. */
-	struct FGemPack { int32 Gems; float USD; const TCHAR* Name; const TCHAR* Tag; };
-	static const TArray<FGemPack>& GemPacks();
+	/** Gem packs straight from Content/Data/Progression/GemPackages.csv (the progression config): gems + bonus_gems, price_usd.
+	 *  Only the display name and the Popular / Best Value tag are menu-side (by package id); the csv has no column for them. */
+	struct FGemPack { FName Id; int32 Gems = 0; float USD = 0.f; FString Name; FString Tag; };
+	TArray<FGemPack> GemPacks() const;
 
 	// ---- profile / settings (DETAILED PASS 2)
 	static constexpr int32 NicknameCost = 10;

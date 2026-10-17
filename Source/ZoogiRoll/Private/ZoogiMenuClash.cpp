@@ -1131,10 +1131,11 @@ void UZoogiMenuRoot::TickClashTour(float Dt)
 	} });
 	Steps.Add({ TEXT("gold_popup_not_enough"), 1.f, 1.5f, [this]() { ClashSel = 2; OpenClashPopup(EZoogiClashPopup::Gold, UZoogiFrontProfileSubsystem::GoldPacks()[2].Name); } });
 	Steps.Add({ TEXT("shop_gems"), 1.f, 1.5f, [this]() { ClashPopup = EZoogiClashPopup::None; ClashPendingScroll = ClashShopY[3]; bDirty = true; } });
-	Steps.Add({ TEXT("gem_pack_popup"), 1.f, 1.5f, [this]() { ClashSel = 1; OpenClashPopup(EZoogiClashPopup::GemPack, UZoogiFrontProfileSubsystem::GemPacks()[1].Name); } });
-	Steps.Add({ TEXT("gem_pack_needs_store"), 1.f, 1.5f, [this]()
+	Steps.Add({ TEXT("gem_pack_popup"), 1.f, 1.5f, [this, FP]() { ClashSel = 1; if (FP && FP->GemPacks().IsValidIndex(1)) OpenClashPopup(EZoogiClashPopup::GemPack, FP->GemPacks()[1].Name); } });
+	Steps.Add({ TEXT("gem_pack_needs_store"), 1.f, 1.5f, [this, FP]()
 	{
-		const UZoogiFrontProfileSubsystem::FGemPack Pk = UZoogiFrontProfileSubsystem::GemPacks()[1];
+		if (!FP || !FP->GemPacks().IsValidIndex(1)) return;
+		const UZoogiFrontProfileSubsystem::FGemPack Pk = FP->GemPacks()[1];
 		OpenClashPopup(EZoogiClashPopup::Info, TEXT("NEEDS STORE"), FString::Printf(TEXT("%d gems for $%.2f is a real-money pack.\nIt needs the platform store (App Store / Google Play / Steam), which is not connected yet.\nNo purchase was made and no gems were added."), Pk.Gems, Pk.USD));
 	} });
 	// ---- M4 portrait: every tab + the Home popups
