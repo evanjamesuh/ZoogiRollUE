@@ -64,7 +64,7 @@ bool FZoogiAimArrowRotateTest::RunTest(const FString& Parameters)
 			Gs.Move(Fw.GetSafeNormal(), Finger, T.RotateStartPx);
 		}
 		TestTrue(*FString::Printf(TEXT("drag rotates (to %.0f deg)"), Want), Gs.bRotating);
-		TestEqual(*FString::Printf(TEXT("aim yaw follows the finger to %.0f deg"), Want), Gs.Yaw, FRotator::NormalizeAxis(Want), 0.05f);
+		TestEqual(*FString::Printf(TEXT("aim yaw follows the finger to %.0f deg"), Want), Gs.Yaw, (float)FRotator::NormalizeAxis(Want), 0.05f);
 	}
 	TestFalse(TEXT("a rotate drag is not a tap"), Gs.End());
 	// off-centre grab: relative mapping, no jump on press

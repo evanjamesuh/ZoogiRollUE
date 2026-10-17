@@ -206,7 +206,7 @@ namespace ZoogiAimArrow
 		{
 			const FVector2D Dn = FingerDir.GetSafeNormal();
 			const float Delta = FMath::RadiansToDegrees(FMath::Atan2(FVector2D::CrossProduct(Dir0, Dn), FVector2D::DotProduct(Dir0, Dn)));
-			Yaw = FRotator::NormalizeAxis(Yaw0 + Delta);
+			Yaw = (float)FRotator::NormalizeAxis(Yaw0 + Delta);
 		}
 		return bRotating;
 	}

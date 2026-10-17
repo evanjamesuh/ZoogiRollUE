@@ -970,10 +970,10 @@ bool AZoogiPlayerController::ArrowScreen(FVector2D OutS[7], FVector2D& OutBallS,
 {
 	AZoogiGameMode* G = GM();
 	AZoogiBall* B = G ? G->GetActiveBall() : nullptr;
-	float Yaw = 0.f;
-	if (!B || !PlayerCameraManager || !ZoogiAimArrow::CurrentYaw(G, Yaw)) return false;
+	float AYaw = 0.f;
+	if (!B || !PlayerCameraManager || !ZoogiAimArrow::CurrentYaw(G, AYaw)) return false;
 	FVector W[7];
-	ZoogiAimArrow::Outline(B->BallLocation(), ZoogiConst::ZoogiRadius, Yaw, ZoogiAimArrow::Tune(), W);
+	ZoogiAimArrow::Outline(B->BallLocation(), ZoogiConst::ZoogiRadius, AYaw, ZoogiAimArrow::Tune(), W);
 	for (int32 i = 0; i < 7; ++i) if (!ProjectWorldLocationToScreen(W[i], OutS[i])) return false;
 	const FVector CamRight = PlayerCameraManager->GetCameraRotation().Quaternion().GetRightVector();
 	FVector2D SR;
@@ -1378,9 +1378,9 @@ void AZoogiPlayerController::HandleInput(float Dt)
 			AZoogiBall* Me = G->GetActiveBall();
 			float Yaw0 = 0.f; ZoogiAimArrow::CurrentYaw(G, Yaw0);
 			AActor* L = (G->TargetLock.IsValid() && !G->bSoftLock) ? G->TargetLock.Get() : nullptr;
-			float Dist = ZoogiAimArrow::Tune().DefaultAimDistCm;
-			if (G->bFreeAim) Dist = FVector::Dist2D(G->FreeAimPoint, Me->BallLocation());
-			else if (G->TargetLock.IsValid()) Dist = FVector::Dist2D(ActorCenter(G->TargetLock.Get()), Me->BallLocation());
+			float ADist = ZoogiAimArrow::Tune().DefaultAimDistCm;
+			if (G->bFreeAim) ADist = FVector::Dist2D(G->FreeAimPoint, Me->BallLocation());
+			else if (G->TargetLock.IsValid()) ADist = FVector::Dist2D(ActorCenter(G->TargetLock.Get()), Me->BallLocation());
 			if (!G->bArrowAim || !bArrowCamHold)
 			{
 				bArrowCamHasAim = L != nullptr || G->bFreeAim;
@@ -1389,10 +1389,10 @@ void AZoogiPlayerController::HandleInput(float Dt)
 			}
 			FVector2D FD = FVector2D::ZeroVector;
 			ArrowFingerDir(Ptr, FD);
-			ArrowGesture.Begin(Yaw0, FD, Ptr, Dist);
+			ArrowGesture.Begin(Yaw0, FD, Ptr, ADist);
 			ArrowTapTarget = HoverTarget;
 			bArrowOwns = true;
-			UE_LOG(LogZoogi, Log, TEXT("INPUT arrow grab at (%.0f, %.0f): yaw %.1f, aim dist %.0f"), Ptr.X, Ptr.Y, Yaw0, Dist);
+			UE_LOG(LogZoogi, Log, TEXT("INPUT arrow grab at (%.0f, %.0f): yaw %.1f, aim dist %.0f"), Ptr.X, Ptr.Y, Yaw0, ADist);
 		}
 	}
 	if (ArrowGesture.bActive)
