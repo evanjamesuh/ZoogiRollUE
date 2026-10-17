@@ -57,7 +57,13 @@ namespace ZoogiPortrait
 	 *  shooter toward the aim point / arena centre), .PortraitRestAhead (0.4, Draw / Awaken), .PortraitAimWidth (1.4: ground width
 	 *  at the look point, x the play radius), .PortraitShooterMargin (0.06: shooter this far inside the band's bottom edge). */
 	ZOOGIROLL_API bool AimFraming();
-	ZOOGIROLL_API float AimPitch();
+	ZOOGIROLL_API float AimPitch(); // zoogi.Cam.PortraitRestPitch (48): Draw / Awaken / PowerUp boom pitch
+	/** Portrait AIM chase view (Evan's tablet reference): low, just behind and above the Zoogi, the arena running away up the
+	 *  screen, aim line straight up. zoogi.Cam.PortraitAimPitch (27: look pitch below horizontal), .PortraitAimBoom (800 cm x
+	 *  arena camera scale: camera to shooter), .PortraitAimScreenY (0.68: shooter's screen height from the top). */
+	ZOOGIROLL_API float ChasePitch();
+	ZOOGIROLL_API float ChaseBoom();
+	ZOOGIROLL_API float ChaseScreenY();
 	ZOOGIROLL_API float AimAhead();
 	ZOOGIROLL_API float RestAhead();
 	ZOOGIROLL_API float AimWidth();

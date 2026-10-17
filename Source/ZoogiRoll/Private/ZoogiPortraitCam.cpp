@@ -11,7 +11,10 @@ namespace
 	TAutoConsoleVariable<float> CVarSafeTopMin(TEXT("zoogi.Cam.SafeTopMin"), 0.05f, TEXT("Portrait: the top band never shrinks below this (HUD-hidden controls live in the top ~5%)."));
 	int32 GModeOverride = -1;
 	TAutoConsoleVariable<int32> CVarAim(TEXT("zoogi.Cam.PortraitAim"), 1, TEXT("Portrait aim / rest framing from behind the shooter looking up the arena (0 = width-keeping pull-back only)."));
-	TAutoConsoleVariable<float> CVarAimPitch(TEXT("zoogi.Cam.PortraitAimPitch"), 48.f, TEXT("Portrait aim / rest framing: camera pitch (deg)."));
+	TAutoConsoleVariable<float> CVarAimPitch(TEXT("zoogi.Cam.PortraitRestPitch"), 48.f, TEXT("Portrait Draw / Awaken / PowerUp framing: boom pitch (deg)."));
+	TAutoConsoleVariable<float> CVarChasePitch(TEXT("zoogi.Cam.PortraitAimPitch"), 27.f, TEXT("Portrait aim chase view (Evan's tablet build): camera look pitch below horizontal (deg)."));
+	TAutoConsoleVariable<float> CVarChaseBoom(TEXT("zoogi.Cam.PortraitAimBoom"), 800.f, TEXT("Portrait aim chase view: camera distance from the shooter (cm, x the arena camera scale)."));
+	TAutoConsoleVariable<float> CVarChaseY(TEXT("zoogi.Cam.PortraitAimScreenY"), 0.68f, TEXT("Portrait aim chase view: shooter's screen height from the top (fraction)."));
 	TAutoConsoleVariable<float> CVarAimAhead(TEXT("zoogi.Cam.PortraitAimAhead"), 0.5f, TEXT("Portrait aim framing: look point from the shooter toward the aim point / arena centre (fraction)."));
 	TAutoConsoleVariable<float> CVarRestAhead(TEXT("zoogi.Cam.PortraitRestAhead"), 0.4f, TEXT("Portrait Draw / Awaken framing: look point from the shooter toward the arena centre (fraction)."));
 	TAutoConsoleVariable<float> CVarAimWidth(TEXT("zoogi.Cam.PortraitAimWidth"), 1.4f, TEXT("Portrait aim framing: ground width at the look point, times the play radius."));
@@ -27,6 +30,9 @@ namespace ZoogiPortrait
 {
 	bool AimFraming() { return CVarAim.GetValueOnGameThread() != 0; }
 	float AimPitch() { return FMath::Clamp(CVarAimPitch.GetValueOnGameThread(), 20.f, 75.f); }
+	float ChasePitch() { return FMath::Clamp(CVarChasePitch.GetValueOnGameThread(), 5.f, 70.f); }
+	float ChaseBoom() { return FMath::Clamp(CVarChaseBoom.GetValueOnGameThread(), 200.f, 6000.f); }
+	float ChaseScreenY() { return FMath::Clamp(CVarChaseY.GetValueOnGameThread(), 0.5f, 0.9f); }
 	float AimAhead() { return FMath::Clamp(CVarAimAhead.GetValueOnGameThread(), 0.f, 1.f); }
 	float RestAhead() { return FMath::Clamp(CVarRestAhead.GetValueOnGameThread(), 0.f, 1.f); }
 	float AimWidth() { return FMath::Clamp(CVarAimWidth.GetValueOnGameThread(), 0.f, 3.f); }

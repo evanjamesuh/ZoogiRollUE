@@ -1450,6 +1450,30 @@ float AZoogiPlayerController::PortraitAimDist(const AZoogiGameMode* G, float Asp
 	return ZoogiPortrait::FitPointsDist(Pts, LookPivot, InYaw, InPitch, OutHFov, Aspect, Top, Bottom, ZoogiPortrait::ShooterMargin(), MinD, MaxD);
 }
 
+void AZoogiPlayerController::PortraitChaseBoom(const AZoogiGameMode* G, float Aspect, float LandscapeFov, float& OutElev, float& OutBoom, float& OutAhead, float& OutHFov)
+{
+	float K = 1.f;
+	ZoogiPortrait::AdaptFov(LandscapeFov, Aspect, OutHFov, K);
+	const float TanV = FMath::Tan(FMath::DegreesToRadians(OutHFov * 0.5f)) / FMath::Max(Aspect, 0.05f);
+	const float Theta = ZoogiPortrait::ChasePitch();                  // look pitch below horizontal
+	const float YS = 2.f * ZoogiPortrait::ChaseScreenY() - 1.f;       // shooter this far below the optical axis (normalised)
+	OutElev = Theta + FMath::RadiansToDegrees(FMath::Atan(YS * TanV)); // boom elevation that puts the shooter there
+	OutBoom = ZoogiPortrait::ChaseBoom() * ArenaCamScale(G);
+	// look point: where the view axis meets the shooter's floor, ahead of the shooter along the aim yaw
+	const float E = FMath::DegreesToRadians(OutElev), T = FMath::DegreesToRadians(FMath::Max(Theta, 3.f));
+	OutAhead = OutBoom * FMath::Sin(E) / FMath::Tan(T) - OutBoom * FMath::Cos(E);
+}
+
+void AZoogiPlayerController::PortraitChasePose(const AZoogiGameMode* G, const APlayerController* PC, const FVector& Shooter, float InYaw, FVector& OutLoc, FRotator& OutRot, float& OutHFov)
+{
+	using namespace ZoogiCamTune;
+	float Elev, B, Ahead;
+	PortraitChaseBoom(G, ZoogiPortrait::ViewAspect(PC), Profiles[PTactical].Fov, Elev, B, Ahead, OutHFov);
+	OutLoc = BoomLocation(Shooter, InYaw, Elev, B);
+	const FVector Look = Shooter + FRotator(0.f, InYaw, 0.f).Vector() * Ahead;
+	OutRot = (Look - OutLoc).Rotation();
+}
+
 float AZoogiPlayerController::PortraitCourtRadius(const AZoogiGameMode* G)
 {
 	const float R = FMath::Max(PlayRadius(G ? G->Arena : nullptr), AZoogiArena::OuterOutR);
@@ -1658,6 +1682,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	FVector ProbeFrom = SL + FVector(0, 0, 60.f);
 	bool bCourtView = false; FVector CourtCentre = FVector::ZeroVector; // portrait: whole-court views fit the court / Ring 2 (PortraitBoom)
 	bool bPortraitAim = false; FVector LegacyPivot = FVector::ZeroVector; // portrait aim / rest framing (tactical branch)
+	bool bPortraitChase = false; float ChaseElev = 0.f, ChaseBoomD = 0.f; // portrait AIM chase view (tablet reference)
 	if (bAnimeShot)
 	{
 		PIdx = PAnime;
@@ -1734,12 +1759,25 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 			WantPivot = FMath::Lerp(SL, FVector(Tgt.X, Tgt.Y, SL.Z), bRestStep ? ZoogiPortrait::RestAhead() : ZoogiPortrait::AimAhead());
 			WantPivot.Z = FMath::Max(SL.Z, CourtZ);
 			bPortraitAim = true;
+			if (G->BattleStep == EZoogiBattleStep::Aim && G->Stage == EZoogiStage::Battle)
+			{
+				// AIM: low chase view from just behind the Zoogi, looking along the aim line (straight up the screen)
+				float Ahead = 0.f, HF = 0.f;
+				PortraitChaseBoom(G, PAspect, Profiles[PTactical].Fov, ChaseElev, ChaseBoomD, Ahead, HF);
+				WantPivot = SL;
+				bPortraitChase = true;
+				WantLook = SL + FRotator(0.f, TacYaw, 0.f).Vector() * Ahead;
+				WantLook.Z = SL.Z;
+			}
 		}
-		WantLook = WantPivot;
+		if (!bPortraitChase) WantLook = WantPivot;
 		ProbeFrom = WantPivot + FVector(0, 0, 150.f);
 		// portrait aim / rest: the longer, lower boom behind the pad passes the court's pillars; probe from high over the look
 		// point (as the aim zoom does) so a pillar between the shooter and the camera doesn't pull the view in onto the pad
 		if (bPortraitAim) ProbeFrom = WantPivot + FVector(0, 0, ZoogiPortrait::AimProbeHeight());
+		// chase: the boom is short and low; probe from just over the shooter, so a pillar between it and the camera pulls the
+		// camera in along the boom (it never goes through one)
+		if (bPortraitChase) ProbeFrom = SL + FVector(0, 0, 60.f);
 	}
 	else switch (Cine)
 	{
@@ -1898,12 +1936,13 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	}
 	ProfileAge += Dt;
 	const float LegacyWantPitch = P.Pitch + PitchOff;
-	const float WantPitch = bPortraitAim ? ZoogiPortrait::AimPitch() : LegacyWantPitch;
+	const float WantPitch = bPortraitChase ? ChaseElev : bPortraitAim ? ZoogiPortrait::AimPitch() : LegacyWantPitch;
 	const float WantFovF = WantFov > 0.f ? WantFov : P.Fov;
 	float WantHFov = WantFovF;
 	float WantDist = PortraitBoom(G, PAspect, PTop, PBot, WantYaw, WantPitch, WantFovF, P.Dist * DistMul, bCourtView, CourtCentre, WantHFov);
 	// (rest steps too: at least the tactical aim boom, so Draw / Awaken also look up the arena instead of the landscape close-up)
-	if (bPortraitAim) WantDist = PortraitAimDist(G, PAspect, PTop, PBot, SL, WantPivot, WantYaw, WantPitch, WantFovF, FMath::Max(P.Dist * DistMul, Profiles[PTactical].Dist * Scale), WantHFov);
+	if (bPortraitChase) { WantDist = ChaseBoomD; float K0 = 1.f; ZoogiPortrait::AdaptFov(WantFovF, PAspect, WantHFov, K0); }
+	else if (bPortraitAim) WantDist = PortraitAimDist(G, PAspect, PTop, PBot, SL, WantPivot, WantYaw, WantPitch, WantFovF, FMath::Max(P.Dist * DistMul, Profiles[PTactical].Dist * Scale), WantHFov);
 	PortDbgLegacyPivot = bPortraitAim ? LegacyPivot : WantPivot; PortDbgLegacyPitch = LegacyWantPitch; PortDbgLegacyDist = P.Dist * DistMul; PortDbgAim = bPortraitAim;
 	const bool bBlending = ProfileAge < BlendDur;
 	// Yaw: spring (underdamped in Battle = arc sweep with overshoot and settle; whip on switches).
@@ -2040,7 +2079,8 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	PortDbgLook2 = ZLook; PortDbgFov = Fov; PortDbgWantDist = WantDist; PortDbgArm = ArmScale;
 	float ViewHFov = Fov, ViewK = 1.f;
 	ZoogiPortrait::AdaptFov(Fov, PAspect, ViewHFov, ViewK);
-	FRotator Rot = ZoogiPortrait::BandRotation(Loc, ZLook, ViewHFov, PAspect, PTop, PBot); // portrait: look point at the safe band's centre
+	// portrait: look point at the safe band's centre (the aim chase view places the shooter by its own screen height instead)
+	FRotator Rot = bPortraitChase ? (ZLook - Loc).Rotation() : ZoogiPortrait::BandRotation(Loc, ZLook, ViewHFov, PAspect, PTop, PBot);
 	Rot.Roll = Dutch;
 	// Battle framing guard: keep the shooter's silhouette above the letterbox / bottom HUD band by tilting
 	// down just enough, without pushing the target out of the top of the frame.

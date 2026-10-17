@@ -89,6 +89,10 @@ public:
 		bool bCourt, const FVector& Centre, float& OutHFov);
 	/** Radius whole-court views must show: the play radius (per-arena knockout) or Frozen's outer Ring 2, plus a Zoogi. */
 	static float PortraitCourtRadius(const AZoogiGameMode* G);
+	/** Portrait AIM chase view (tablet reference): boom elevation / length from the shooter, look-point distance ahead of it along
+	 *  the aim yaw, and the capped FOV; the pose for a shooter at Shooter aiming along Yaw (ShotTest and the live camera). */
+	static void PortraitChaseBoom(const AZoogiGameMode* G, float Aspect, float LandscapeFov, float& OutElev, float& OutBoom, float& OutAhead, float& OutHFov);
+	static void PortraitChasePose(const AZoogiGameMode* G, const APlayerController* PC, const FVector& Shooter, float Yaw, FVector& OutLoc, FRotator& OutRot, float& OutHFov);
 	/** The tactical resolve / end overview (centre of the court at CourtZ, boom along Yaw) as the controller frames it on PC's
 	 *  view: bLegacy = the pre-portrait rule (landscape-tuned FOV / boom, no safe band) for BEFORE frames. */
 	static void PortraitOverviewPose(const AZoogiGameMode* G, const APlayerController* PC, float Yaw, float CourtZ, bool bLegacy, FVector& OutLoc, FRotator& OutRot, float& OutFov);
