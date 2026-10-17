@@ -816,7 +816,9 @@ TArray<UZoogiFrontProfileSubsystem::FGemPack> UZoogiFrontProfileSubsystem::GemPa
 		FGemPack P;
 		P.Id = R.PackageId; P.Gems = R.Gems + R.BonusGems; P.USD = R.PriceUSD;
 		P.Name = FString::Printf(TEXT("%d Gems"), P.Gems);
-		for (const FLabel& L : Labels) if (R.PackageId == FName(L.Id)) { P.Name = L.Name; P.Tag = L.Tag; }
+		for (const FLabel& L : Labels) if (R.PackageId == FName(L.Id)) { P.Name = L.Name; P.Tag = L.Tag; } // fallback when the csv has no name/tag
+		if (!R.DisplayName.IsEmpty()) P.Name = R.DisplayName; // GemPackages.csv display_name
+		if (!R.DisplayName.IsEmpty() || !R.Tag.IsEmpty()) P.Tag = R.Tag; // GemPackages.csv tag (Popular / Best Value)
 		Out.Add(P);
 	}
 	return Out;

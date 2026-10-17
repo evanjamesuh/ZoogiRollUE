@@ -102,7 +102,7 @@ struct FZoogiAchievementRow { FName Id; FString Name; FName Stat; int32 Target =
 struct FZoogiTitleRow { FName Id; FString Name; FName Source; };
 struct FZoogiCosmeticRow { FName Id; FString Name; FName Slot; FString Source; bool bDisplayed = false; };
 struct FZoogiAffinityLevelRow { int32 Level = 1; int32 CumulativeXP = 0; FName RewardKind; FString RewardId; };
-struct FZoogiGemPackageRow { FName PackageId; int32 Gems = 0; int32 BonusGems = 0; float PriceUSD = 0.f; FString AppleProductId, GoogleProductId, SteamItemId, EpicOfferId; };
+struct FZoogiGemPackageRow { FName PackageId; int32 Gems = 0; int32 BonusGems = 0; float PriceUSD = 0.f; FString AppleProductId, GoogleProductId, SteamItemId, EpicOfferId; FString DisplayName, Tag; };
 
 struct ZOOGIROLL_API FZoogiProgressionConfig
 {
