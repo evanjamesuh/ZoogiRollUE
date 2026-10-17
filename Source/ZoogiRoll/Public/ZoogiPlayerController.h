@@ -198,6 +198,9 @@ public:
 	float DragFrac = 0.f;         // live pull fraction (0..MaxDragForce)
 	FVector2D DragStart = FVector2D::ZeroVector, DragNow = FVector2D::ZeroVector;
 	bool bDragWouldCancel = false;
+	// slingshot screen frame (ball point + shot direction) frozen at press time, so an orbiting camera cannot shift the pull mid-drag
+	FVector2D DragBallS0 = FVector2D::ZeroVector, DragFwd0 = FVector2D(0.f, -1.f);
+	bool bDragFrame0 = false, bDragProj0 = false;
 	/** Scripted drag for -ZoogiDragTest (no OS input): screen positions in viewport px. */
 	void SimDrag(const FVector2D& From, const FVector2D& To, float Seconds);
 protected:

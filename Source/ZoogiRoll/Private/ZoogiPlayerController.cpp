@@ -1441,12 +1441,12 @@ void AZoogiPlayerController::HandleInput(float Dt)
 			// already aimed: this press is a drag (keeps the aim, the camera stays put) unless it is released without
 			// moving, in which case it is a tap and re-aims at the press point on release
 			bDragArmed = true; bPendingTap = true; TapPos = Ptr; TapTarget = HoverTarget;
-			DragStart = DragNow = Ptr; DragFrac = 0.f; bDragWouldCancel = true;
+			DragStart = DragNow = Ptr; DragFrac = 0.f; bDragWouldCancel = true; bDragFrame0 = false;
 		}
 		else
 		{
 			AimAt(HoverTarget.Get(), Ptr);
-			if (G->HasAim() && bPtrDown && !bSimClick) { bDragArmed = true; bPendingTap = false; DragStart = DragNow = Ptr; DragFrac = 0.f; bDragWouldCancel = true; } // scripted clicks never start a drag
+			if (G->HasAim() && bPtrDown && !bSimClick) { bDragArmed = true; bPendingTap = false; DragStart = DragNow = Ptr; DragFrac = 0.f; bDragWouldCancel = true; bDragFrame0 = false; } // scripted clicks never start a drag
 		}
 	}
 	// slingshot: hold + drag BACK (away from the shot direction) = force, release = launch; back near zero / onto the Zoogi = cancel
@@ -1455,12 +1455,18 @@ void AZoogiPlayerController::HandleInput(float Dt)
 		AZoogiBall* Me = G->GetActiveBall();
 		int32 VX = 1920, VY = 1080; GetViewportSize(VX, VY);
 		const float UPx = FMath::Max(VY, 1) / 1080.f;
-		FVector2D BallS = FVector2D::ZeroVector, AheadS = FVector2D::ZeroVector;
-		float Fr = 0.f, Imp = 0.f;
-		const FVector2D Sv = G->ComputeShotVelocity(Fr, Imp);
-		const FVector2D SDir = Sv.GetSafeNormal();
-		bool bProj = Me && !SDir.IsNearlyZero() && ProjectWorldLocationToScreen(Me->BallLocation(), BallS) && ProjectWorldLocationToScreen(Me->BallLocation() + FVector(SDir * 200.f, 0.f), AheadS);
-		const FVector2D Fwd = bProj ? (AheadS - BallS).GetSafeNormal() : FVector2D(0.f, -1.f);
+		if (!bDragFrame0) // Oct 17: project once at press time; the camera may still be orbiting toward the aim
+		{
+			FVector2D BallS0 = FVector2D::ZeroVector, AheadS = FVector2D::ZeroVector;
+			float Fr = 0.f, Imp = 0.f;
+			const FVector2D SDir = G->ComputeShotVelocity(Fr, Imp).GetSafeNormal();
+			bDragProj0 = Me && !SDir.IsNearlyZero() && ProjectWorldLocationToScreen(Me->BallLocation(), BallS0) && ProjectWorldLocationToScreen(Me->BallLocation() + FVector(SDir * 200.f, 0.f), AheadS);
+			DragBallS0 = BallS0;
+			DragFwd0 = bDragProj0 ? (AheadS - BallS0).GetSafeNormal() : FVector2D(0.f, -1.f);
+			bDragFrame0 = true;
+		}
+		const bool bProj = bDragProj0;
+		const FVector2D BallS = DragBallS0, Fwd = DragFwd0;
 		if (bPtrDown) DragNow = Ptr;
 		if (bPendingTap && FVector2D::Distance(DragNow, DragStart) > MinDragPx * UPx) bPendingTap = false;
 		const float BackPx = FMath::Max(0.f, -FVector2D::DotProduct(DragNow - DragStart, Fwd));
@@ -1470,7 +1476,7 @@ void AZoogiPlayerController::HandleInput(float Dt)
 		else G->HumanDrag(DragFrac, false);
 		if (bPtrRelease || !bPtrDown)
 		{
-			bDragArmed = false;
+			bDragArmed = false; bDragFrame0 = false;
 			if (bPendingTap)
 			{
 				bPendingTap = false; DragFrac = 0.f;
