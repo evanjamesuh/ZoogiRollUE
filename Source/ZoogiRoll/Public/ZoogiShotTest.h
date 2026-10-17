@@ -23,7 +23,7 @@ class UTextureRenderTarget2D;
 
 namespace ZoogiShotTest
 {
-	enum class ECaseKind : uint8 { Shot, Cancel, StopEased, Overlap, FocusDestroyed, TimeScaleRefused, TimeScale, TimeScaleCancel, AirborneSlowMoCancel, AirborneSlowMoRefused, AvoidParticles, AvoidOcclusion, RingOutSimLegacy, RingOutSimFixed, RingOutDirector, LevelEnd };
+	enum class ECaseKind : uint8 { Shot, Cancel, StopEased, Overlap, FocusDestroyed, TimeScaleRefused, TimeScale, TimeScaleCancel, AirborneSlowMoCancel, AirborneSlowMoRefused, AvoidParticles, AvoidOcclusion, RingOutSimLegacy, RingOutSimFixed, RingOutDirector, ElevatorPush, LevelEnd };
 	enum class EStep : uint8 { StartMatch, WaitLive, WaitSettle, Run, WaitEnd, Verify, Restored, Done, Summary };
 	struct FCase
 	{
@@ -78,6 +78,17 @@ private:
 	int32 RingFrames = 0, RingOutFrames = 0;
 	FVector FallStart = FVector::ZeroVector, FallDir = FVector::ZeroVector, SimPivot = FVector::ZeroVector;
 	UPROPERTY() TObjectPtr<class ACameraActor> SimCam = nullptr;
+	// Spawn-elevator push-in (Oct 16): the intro's forming-end window replayed on a temp camera with the real elevators,
+	// pass 0 = the unchanged sweep (BEFORE), pass 1 = with the controller's push-in (AFTER).
+	void StartElevPush();
+	void TickElevPush(float Dt);
+	bool bElevPush = false, bElevDone = false, bElevShot = false;
+	int32 ElevPass = 0;
+	float ElevT = 0.f, ElevFormLen = 6.f, ElevPeakW = 0.f, ElevEndDev = 0.f, ElevMinZ = 1e9f, ElevSpreadBase = 0.f, ElevSpreadPush = 0.f;
+	int32 ElevPadsOut = 0, ElevPads = 0;
+	bool bElevGateLive = true, bElevSpawned = false;
+	FVector ElevFitPivot = FVector::ZeroVector; float ElevFitPitch = 0.f, ElevFitDist = 0.f, ElevBaseDist = 0.f;
+	TArray<FVector> ElevPadFloors;
 	bool bBankMove = false; bool bBankHitLogged = false; float BankT = 0.f, BankTc = 0.f, BankSpeed = 0.f; FVector BankE = FVector::ZeroVector, BankIn = FVector::ZeroVector, BankOut = FVector::ZeroVector;
 	void TintProp(class AStaticMeshActor* A, const FLinearColor& C);
 	FZoogiShotHandle PlayCaseShot(EZoogiShotType Type, EZoogiShotOutput Output, FString& OutSetup);

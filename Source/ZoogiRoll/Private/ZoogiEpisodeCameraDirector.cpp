@@ -5,6 +5,7 @@
 #include "ZoogiOrb.h"
 #include "ZoogiArena.h"
 #include "ZoogiGameMode.h"
+#include "ZoogiPlayerController.h"
 #include "ZoogiShotTest.h"
 #include "Camera/CameraActor.h"
 #include "Camera/CameraComponent.h"
@@ -585,13 +586,18 @@ static bool CamDirLeavingPlay(UWorld* W, const AActor* F, const FVector& FC)
 	if (const AZoogiBall* B = Cast<AZoogiBall>(F)) { if (B->bOut) return true; }
 	if (FC.Z < CamDirFloorZ - ZoogiConst::ZoogiRadius) return true;
 	const AZoogiGameMode* G = W ? Cast<AZoogiGameMode>(W->GetAuthGameMode()) : nullptr;
-	const bool bRadial = !(G && G->Arena && G->Arena->IsNeonRect());
-	return bRadial && AZoogiArena::ActiveKnockoffR > 0.f && FVector2D(FC.X, FC.Y).Size() > AZoogiArena::ActiveKnockoffR;
+	return AZoogiPlayerController::IsOffPlayArea(G ? G->Arena : nullptr, FVector2D(FC.X, FC.Y)); // Oct 16: the arena's own court / radius
 }
 
-static FVector CamDirCourtClamp(FVector P)
+static const AZoogiArena* CamDirArena(UWorld* W)
 {
-	const float MaxR = AZoogiArena::ActiveKnockoffR * 0.92f;
+	const AZoogiGameMode* G = W ? Cast<AZoogiGameMode>(W->GetAuthGameMode()) : nullptr;
+	return G ? G->Arena : nullptr;
+}
+
+static FVector CamDirCourtClamp(FVector P, const AZoogiArena* A)
+{
+	const float MaxR = (A && A->IsNeonRect()) ? 0.f : AZoogiPlayerController::PlayRadius(A) * 0.92f; // Oct 16: this arena's radius
 	FVector2D P2(P.X, P.Y);
 	if (MaxR > 0.f && P2.Size() > MaxR) { P2 = P2.GetSafeNormal() * MaxR; P.X = P2.X; P.Y = P2.Y; }
 	P.Z = FMath::Max(P.Z, CamDirFloorZ + ZoogiConst::ZoogiRadius);
@@ -609,7 +615,7 @@ bool UZoogiEpisodeCameraDirector::EvaluateShotView(FZoogiActiveShot& S, float Dt
 	const bool bLeft = CamDirLeavingPlay(GetWorld(), F, FCraw);
 	if (!bLeft) { S.CourtFocus = FCraw; S.bHaveCourtFocus = true; S.LeftPlayAge = -1.f; }
 	else if (S.LeftPlayAge < 0.f) { S.LeftPlayAge = 0.f; UE_LOG(LogZoogi, Log, TEXT("CAMDIR shot %d: focus %s left play at %s, pivot frozen"), S.Id, *F->GetName(), *FCraw.ToString()); }
-	const FVector FC = bLeft ? CamDirCourtClamp(S.bHaveCourtFocus ? S.CourtFocus : FCraw) : FCraw;
+	const FVector FC = bLeft ? CamDirCourtClamp(S.bHaveCourtFocus ? S.CourtFocus : FCraw, CamDirArena(GetWorld())) : FCraw;
 	AActor* Sec = S.Secondary.Get();
 	const bool bSec = IsValid(Sec) && !Sec->IsActorBeingDestroyed();
 	const FVector SC = bSec ? CamDirSubjectCenter(Sec) : FC;
@@ -782,7 +788,8 @@ bool UZoogiEpisodeCameraDirector::EvaluateShotView(FZoogiActiveShot& S, float Dt
 	}
 
 	// Also floor the camera while the focus is at the rim / dropping, before it formally leaves play.
-	const bool bNearEdge = FCraw.Z < CamDirFloorZ || (AZoogiArena::ActiveKnockoffR > 0.f && FVector2D(FCraw.X, FCraw.Y).Size() > AZoogiArena::ActiveKnockoffR * 0.9f);
+	// (within ~10% of this arena's edge: the point pushed out by 1/0.9 is off its court)
+	const bool bNearEdge = FCraw.Z < CamDirFloorZ || AZoogiPlayerController::IsOffPlayArea(CamDirArena(GetWorld()), FVector2D(FCraw.X, FCraw.Y) / 0.9f);
 	if (S.LeftPlayAge >= 0.f || bNearEdge) Loc.Z = FMath::Max(Loc.Z, CamDirFloorZ + 2.f * ZoogiConst::ZoogiRadius); // never dive below the court
 	FRotator Rot = (Look - Loc).Rotation();
 	Rot.Roll = Spec.Roll;
