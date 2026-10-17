@@ -297,6 +297,7 @@ private:
 	bool BuildClashPass3Popup(EZoogiClashPopup P, float PW, float PH);
 	bool BuildClashSocialPopup(EZoogiClashPopup P, float PW, float PH);
 	void ClashStartMatchmaking();
+	void ClashCancelMatchmaking(); // CANCEL on the search screen: back to Home (Battle tab)
 	void ClashUseCard(FName Id);
 	void ClashToast(const FString& Msg);
 	UWidget* CBadge(int32 Badge, float X, float Y, float S);

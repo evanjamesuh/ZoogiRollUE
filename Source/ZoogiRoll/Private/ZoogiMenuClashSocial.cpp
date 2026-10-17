@@ -158,6 +158,16 @@ void UZoogiMenuRoot::ClashStartMatchmaking()
 	OpenClashPopup(EZoogiClashPopup::Matchmaking, TEXT("MATCHMAKING"));
 }
 
+void UZoogiMenuRoot::ClashCancelMatchmaking()
+{
+	if (ClashPopup != EZoogiClashPopup::Matchmaking) return;
+	ClashMMT0 = -1.f; ClashMMPhase = 0;
+	ClashPopup = EZoogiClashPopup::None;
+	SetClashTab(ZCBattle);
+	UE_LOG(LogZoogi, Log, TEXT("CLASH matchmaking cancelled -> Home"));
+	bDirty = true;
+}
+
 void UZoogiMenuRoot::BuildClashMatchmaking()
 {
 	const UZoogiFrontProfileSubsystem* FP = UZoogiFrontProfileSubsystem::Get(this);
@@ -236,7 +246,7 @@ void UZoogiMenuRoot::BuildClashMatchmaking()
 	}
 	CText(TEXT("Offline: online matchmaking needs the backend, so this starts a local match (CPU opponent)."), 70.f, OY + 1260.f, W - 140.f, 64.f, 21.f, ZCSoft, 1, 3.f, true);
 	if (ClashMMPhase == 0) // cancel returns to Home (spec: destination not captured, assume Home)
-		CChunky(TEXT("CANCEL"), ZCXRed, [this]() { ClashMMT0 = -1.f; ClashPopup = EZoogiClashPopup::None; SetClashTab(ZCBattle); UE_LOG(LogZoogi, Log, TEXT("CLASH matchmaking cancelled -> Home")); bDirty = true; }, C - 180.f, OY + 1350.f, 360.f, 110.f, 40.f);
+		CChunky(TEXT("CANCEL"), ZCXRed, [this]() { ClashCancelMatchmaking(); }, C - 180.f, OY + 1350.f, 360.f, 110.f, 40.f);
 	// tip box (rotates every 4 s)
 	const float TY = OY + 1520.f;
 	CGoldPanel(40.f, TY, W - 80.f, 230.f, ZCPanel, 22.f);

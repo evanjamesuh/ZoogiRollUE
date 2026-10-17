@@ -1302,6 +1302,9 @@ void UZoogiMenuRoot::TickClashTour(float Dt)
 		if (FP && SavedDeck->Num() > 0) FP->SetDeck(FP->Data().ActiveDeck, *SavedDeck); // deck full again
 		ClashPopup = EZoogiClashPopup::None; SetClashTab(ZCBattle);
 	} });
+	// matchmaking search screen (timer counting up, tip box) and CANCEL -> Home, through the same calls as the buttons
+	Steps.Add({ TEXT("matchmaking_search"), 1.f, 2.5f, [this]() { ClashPopup = EZoogiClashPopup::None; SetClashTab(ZCBattle); ClashStartMatchmaking(); } });
+	Steps.Add({ TEXT("matchmaking_cancelled"), 0.5f, 1.5f, [this]() { ClashCancelMatchmaking(); } });
 	const int32 BattleStep = Steps.Num();
 	if (bBattle)
 	{
