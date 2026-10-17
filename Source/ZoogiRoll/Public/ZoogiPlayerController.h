@@ -143,6 +143,14 @@ protected:
 	float CourtZ = ZoogiConst::ZoogiRadius; // last on-court shooter height (camera pivots stay on the floor after a fall)
 	float AnimeDistMul = 1.f;
 	float TacYaw = 0.f;            // tactical camera heading (set per turn, follows the aim gently)
+	float AimViewAge = 0.f, AimViewAhead = 0.f; // aim view (ZoogiAimView.h): time in the view, look point ahead of the Zoogi
+public:
+	/** Aim view live this frame (behind the acting Zoogi along its aim arrow; AimViewYaw = the aim heading it follows). */
+	bool bAimViewActive = false;
+	float AimViewYaw = 0.f;
+	/** ShotTest hook: run the aim view outside the aim step (Awaken test stage); the rest of the game is untouched. */
+	bool bAimViewForce = false;
+protected:
 	float AnimeYaw = 0.f;
 	TWeakObjectPtr<AActor> AnimeFocus;
 	bool bAnimeCam = false;

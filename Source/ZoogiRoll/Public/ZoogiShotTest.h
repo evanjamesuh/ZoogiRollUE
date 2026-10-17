@@ -23,7 +23,7 @@ class UTextureRenderTarget2D;
 
 namespace ZoogiShotTest
 {
-	enum class ECaseKind : uint8 { Shot, Cancel, StopEased, Overlap, FocusDestroyed, TimeScaleRefused, TimeScale, TimeScaleCancel, AirborneSlowMoCancel, AirborneSlowMoRefused, AvoidParticles, AvoidOcclusion, RingOutSimLegacy, RingOutSimFixed, RingOutDirector, ElevatorPush, Portrait, LevelEnd };
+	enum class ECaseKind : uint8 { Shot, Cancel, StopEased, Overlap, FocusDestroyed, TimeScaleRefused, TimeScale, TimeScaleCancel, AirborneSlowMoCancel, AirborneSlowMoRefused, AvoidParticles, AvoidOcclusion, RingOutSimLegacy, RingOutSimFixed, RingOutDirector, ElevatorPush, Portrait, AimView, LevelEnd };
 	enum class EStep : uint8 { StartMatch, WaitLive, WaitSettle, Run, WaitEnd, Verify, Restored, Done, Summary };
 	struct FCase
 	{
@@ -101,6 +101,13 @@ private:
 	float PortAimArm = 1.f, PortAimWant = 0.f, PortAimGot = 0.f;
 	bool bChaseRan = false; float ChaseShooterY = 0.f, ChaseAimX = 0.f, ChaseFarY = 0.f, ChasePitchGot = 0.f, ChaseCamH = 0.f, ChaseBoomGot = 0.f, ChaseArm = 1.f;
 	FString PortModeLine;
+	// Aim view (Oct 17): the live controller's aim view (forced on in the Awaken test stage), driven through several aim yaws
+	void StartAimView();
+	void TickAimView(float Dt);
+	bool bAimView = false, bAimViewDone = false, bAimViewSeen = true, bAimFreeAim0 = false;
+	int32 AimIdx = -1, AimSamples = 0, AimBadYaw = 0, AimBadY = 0, AimBadX = 0, AimBadArrow = 0;
+	float AimT = 0.f, AimHoldT = 0.f, AimYaw0 = 0.f, AimMaxYawErr = 0.f, AimMaxYErr = 0.f, AimMaxXErr = 0.f, AimEngineY = -1.f, AimPitchGot = 0.f, AimBoomGot = 0.f, AimReturnT = -1.f;
+	FVector AimFreePoint0 = FVector::ZeroVector;
 	bool bBankMove = false; bool bBankHitLogged = false; float BankT = 0.f, BankTc = 0.f, BankSpeed = 0.f; FVector BankE = FVector::ZeroVector, BankIn = FVector::ZeroVector, BankOut = FVector::ZeroVector;
 	void TintProp(class AStaticMeshActor* A, const FLinearColor& C);
 	FZoogiShotHandle PlayCaseShot(EZoogiShotType Type, EZoogiShotOutput Output, FString& OutSetup);

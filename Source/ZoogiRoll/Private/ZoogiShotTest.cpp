@@ -8,6 +8,8 @@
 #include "ZoogiPlayerController.h"
 #include "ZoogiPortraitCam.h"
 #include "ZoogiSpawnElevator.h"
+#include "ZoogiAimView.h"
+#include "ZoogiFramedLayout.h"
 #include "ZoogiStageForming.h"
 #include "Camera/CameraComponent.h"
 #include "ZoogiFX.h"
@@ -211,6 +213,7 @@ void AZoogiShotTestDriver::BuildCases()
 	Add(ZoogiShotTest::ECaseKind::RingOutDirector, TEXT("RingOutFall_Airborne_MainView"), EZoogiShotType::Airborne, EZoogiShotOutput::MainView);
 	Add(ZoogiShotTest::ECaseKind::ElevatorPush, TEXT("ElevatorPushIn_StageIntro_SpawnPads"), EZoogiShotType::Custom, EZoogiShotOutput::MainView);
 	Add(ZoogiShotTest::ECaseKind::Portrait, TEXT("Portrait_Framing_Court_Ring2_SafeBand"), EZoogiShotType::Custom, EZoogiShotOutput::MainView);
+	Add(ZoogiShotTest::ECaseKind::AimView, TEXT("AimView_BehindZoogi_FollowsAim"), EZoogiShotType::Custom, EZoogiShotOutput::MainView);
 	Add(ZoogiShotTest::ECaseKind::LevelEnd, TEXT("LevelEnd"), EZoogiShotType::TopDownImpact, EZoogiShotOutput::MainView);
 }
 
@@ -1036,6 +1039,89 @@ void AZoogiShotTestDriver::TickElevPush(float Dt)
 	}
 }
 
+// ------------------------------------------------------------------ aim view (Evan Oct 17)
+
+static const float GAimYaws[] = { 0.f, 35.f, -50.f, 120.f, -170.f, 175.f, 4.f }; // offsets from the start yaw (incl. a wrap and a small input)
+
+void AZoogiShotTestDriver::StartAimView()
+{
+	AZoogiGameMode* G = GM();
+	AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(UGameplayStatics::GetPlayerController(this, 0));
+	AZoogiBall* S = G ? G->GetActiveBall() : nullptr;
+	bAimView = true; bAimViewDone = !(PC && S); bAimViewSeen = true;
+	AimIdx = -1; AimT = 0.f; AimHoldT = 0.f; AimSamples = AimBadYaw = AimBadY = AimBadX = AimBadArrow = 0;
+	AimMaxYawErr = AimMaxYErr = AimMaxXErr = 0.f; AimEngineY = -1.f; AimReturnT = -1.f;
+	CaseMid = 1e6f;
+	if (bAimViewDone) return;
+	AimYaw0 = S->AimYaw; bAimFreeAim0 = G->bFreeAim; AimFreePoint0 = G->FreeAimPoint;
+	PC->bAimViewForce = true;
+	UE_LOG(LogZoogi, Log, TEXT("ZOOGI SHOTTEST   aim view: P%d aim yaw %.1f, pitch %.0f boom %.0f screen y %.2f yaw follow %.2f s, view aspect %.3f"),
+		S->PlayerIndex + 1, AimYaw0, ZoogiAimView::Pitch(), ZoogiAimView::Boom(), ZoogiAimView::ScreenY(), ZoogiAimView::YawTime(), ZoogiFramed::ViewAspect(PC));
+}
+
+void AZoogiShotTestDriver::TickAimView(float Dt)
+{
+	if (bAimViewDone) return;
+	AZoogiGameMode* G = GM();
+	AZoogiPlayerController* PC = Cast<AZoogiPlayerController>(UGameplayStatics::GetPlayerController(this, 0));
+	AZoogiBall* S = G ? G->GetActiveBall() : nullptr;
+	if (!PC || !S || !PC->PlayerCameraManager) { bAimViewDone = true; return; }
+	AimT += Dt;
+	const int32 N = UE_ARRAY_COUNT(GAimYaws);
+	if (AimIdx < N)
+	{
+		bAimViewSeen &= PC->bAimViewActive || AimT < 0.05f;
+		AimHoldT += Dt;
+		const float Hold = AimIdx < 0 ? 2.5f : 1.0f; // first: settle into the view from the Awaken view; then one aim yaw per second
+		if (AimHoldT >= Hold)
+		{
+			{
+				// settled on this yaw: camera yaw on the aim yaw, the Zoogi at AimScreenY centred, the arrow straight up the screen
+				const FVector CL = PC->PlayerCameraManager->GetCameraLocation();
+				const FRotator CR = PC->PlayerCameraManager->GetCameraRotation();
+				const float HF = PC->PlayerCameraManager->GetFOVAngle();
+				const float A = ZoogiFramed::ViewAspect(PC);
+				const FVector SL = S->BallLocation();
+				const FVector Dir = FRotator(0.f, S->AimYaw, 0.f).Vector();
+				FVector2D PS, PT;
+				const bool bS = ZoogiAimView::Project(CL, CR, HF, A, SL, PS);
+				const bool bT = ZoogiAimView::Project(CL, CR, HF, A, SL + Dir * 300.f, PT);
+				const float YawErr = FMath::Abs(FRotator::NormalizeAxis(CR.Yaw - S->AimYaw));
+				const float YTop = (1.f - PS.Y) * 0.5f;
+				const float YErr = FMath::Abs(YTop - ZoogiAimView::ScreenY());
+				const float XErr = FMath::Abs(PS.X) * 0.5f;
+				const bool bArrow = bS && bT && PT.Y > PS.Y + 0.05f && FMath::Abs(PT.X - PS.X) * 0.5f <= 0.02f;
+				AimSamples++;
+				AimBadYaw += YawErr > 3.f; AimBadY += !bS || YErr > 0.03f; AimBadX += !bS || XErr > 0.02f; AimBadArrow += !bArrow;
+				AimMaxYawErr = FMath::Max(AimMaxYawErr, YawErr); AimMaxYErr = FMath::Max(AimMaxYErr, YErr); AimMaxXErr = FMath::Max(AimMaxXErr, XErr);
+				AimPitchGot = -CR.Pitch; AimBoomGot = FVector::Dist(CL, SL);
+				FVector2D Scr; int32 VX = 0, VY = 0; PC->GetViewportSize(VX, VY);
+				if (AimIdx == -1 && VY > 0 && PC->ProjectWorldLocationToScreen(SL, Scr)) AimEngineY = Scr.Y / VY;
+				UE_LOG(LogZoogi, Log, TEXT("ZOOGI SHOTTEST   aim view yaw #%d: aim %.1f cam %.1f (err %.2f) | Zoogi at x %.3f y %.3f of the view (want 0.5 / %.2f) | arrow tip x %.3f y %.3f | pitch %.1f boom %.0f fov %.1f"),
+					AimIdx + 1, S->AimYaw, CR.Yaw, YawErr, 0.5f + PS.X * 0.5f, YTop, ZoogiAimView::ScreenY(), 0.5f + PT.X * 0.5f, (1.f - PT.Y) * 0.5f, AimPitchGot, AimBoomGot, HF);
+				if (AimIdx == -1) Shot(Cases[CaseIdx].Name + TEXT("_aim"));
+				if (AimIdx == 3) Shot(Cases[CaseIdx].Name + TEXT("_aim_turned"));
+			}
+			++AimIdx; AimHoldT = 0.f;
+			if (AimIdx < N) S->AimYaw = FRotator::NormalizeAxis(AimYaw0 + GAimYaws[AimIdx]); // the drag arrow's heading
+			else
+			{
+				// restore the aim and hand the camera back to the Awaken view
+				S->AimYaw = AimYaw0; G->bFreeAim = bAimFreeAim0; G->FreeAimPoint = AimFreePoint0;
+				PC->bAimViewForce = false; AimReturnT = 0.f;
+			}
+		}
+		return;
+	}
+	// back to the exact pre-case view (the generic restore check compares it at 0.05 cm / 0.01 deg)
+	AimReturnT += Dt;
+	const FMinimalViewInfo& V0 = Snap0.POV;
+	const bool bBack = FVector::Dist(PC->PlayerCameraManager->GetCameraLocation(), V0.Location) <= 0.04f
+		&& (PC->PlayerCameraManager->GetCameraRotation() - V0.Rotation).GetNormalized().Euler().GetAbsMax() <= 0.008f
+		&& FMath::Abs(PC->PlayerCameraManager->GetFOVAngle() - V0.FOV) <= 0.008f;
+	if ((bBack && AimReturnT > 1.f) || AimReturnT > 9.f) bAimViewDone = true;
+}
+
 // ------------------------------------------------------------------ cases
 
 void AZoogiShotTestDriver::StartCase()
@@ -1153,6 +1239,9 @@ void AZoogiShotTestDriver::StartCase()
 	case ZoogiShotTest::ECaseKind::Portrait:
 		StartPortrait();
 		break;
+	case ZoogiShotTest::ECaseKind::AimView:
+		StartAimView();
+		break;
 	case ZoogiShotTest::ECaseKind::AvoidParticles:
 	{
 		// A white glow burst (+ a Niagara white burst) right where the tracking camera would sit; the camera must stay out of it.
@@ -1229,6 +1318,7 @@ void AZoogiShotTestDriver::RunCase(float RealDt)
 	if (bRingOut) TickRingOut(GetWorld()->GetDeltaSeconds());
 	if (bElevPush) TickElevPush(GetWorld()->GetDeltaSeconds());
 	if (bPortrait) TickPortrait(RealDt);
+	if (bAimView) TickAimView(GetWorld()->GetDeltaSeconds());
 	// RenderTarget output must leave the main view completely alone, every frame.
 	if ((C.Kind == ZoogiShotTest::ECaseKind::Shot || C.Kind == ZoogiShotTest::ECaseKind::AirborneSlowMoRefused || C.Kind == ZoogiShotTest::ECaseKind::AvoidOcclusion) && C.Output == EZoogiShotOutput::RenderTarget)
 	{
@@ -1239,7 +1329,7 @@ void AZoogiShotTestDriver::RunCase(float RealDt)
 			if (PC->GetViewTarget() != Snap0.ViewTarget.Get()) MaxMainDev = 1e6f;
 		}
 	}
-	const float Dur = Cases[CaseIdx].Kind == ZoogiShotTest::ECaseKind::Shot ? CaseMid / 0.55f : 3.f;
+	const float Dur = Cases[CaseIdx].Kind == ZoogiShotTest::ECaseKind::Shot ? CaseMid / 0.55f : Cases[CaseIdx].Kind == ZoogiShotTest::ECaseKind::AimView ? 12.f : 3.f;
 	switch (C.Kind)
 	{
 	case ZoogiShotTest::ECaseKind::Cancel:
@@ -1314,7 +1404,7 @@ void AZoogiShotTestDriver::RunCase(float RealDt)
 		if (C.Kind == ZoogiShotTest::ECaseKind::Overlap && Handles.Num() >= 3) ExportRT(D->GetShotRenderTarget(Handles[2]), C.Name + TEXT("_rendertarget"));
 	}
 	const bool bIdle = D->NumActiveShots() == 0 && !D->IsTimeScaleActive();
-	const bool bRingWait = (bRingOut && !bRingOutDone) || (bElevPush && !bElevDone) || (bPortrait && !bPortDone);
+	const bool bRingWait = (bRingOut && !bRingOutDone) || (bElevPush && !bElevDone) || (bPortrait && !bPortDone) || (bAimView && !bAimViewDone);
 	if (bIdle && !bRingWait && StepTime > 0.2f && (C.Kind != ZoogiShotTest::ECaseKind::LevelEnd))
 	{
 		Step = ZoogiShotTest::EStep::WaitEnd;
@@ -1463,6 +1553,16 @@ void AZoogiShotTestDriver::Verify()
 		Extra.Add(FString::Printf(TEXT("AIM chase view: ran %d | shooter at %.3f of the screen height (want %.2f) | aim point |x| %.3f | far rim y %.3f (upper half, below the top band) | look pitch %.1f (want %.1f) | camera %.0f cm from the shooter, %.0f cm above | collision probe arm %.2f (1 = clear; the live camera pulls in to it)"),
 			bChaseRan, ChaseShooterY, WantY, ChaseAimX, ChaseFarY, ChasePitchGot, ZoogiPortrait::ChasePitch(), ChaseBoomGot, ChaseCamH, ChaseArm));
 	}
+	if (C.Kind == ZoogiShotTest::ECaseKind::AimView)
+	{
+		// The live aim view: behind the Zoogi along the arrow at every aim yaw (camera yaw within 3 deg once settled), the Zoogi
+		// at AimScreenY centred, the arrow straight up the screen, then back to the exact pre-case view.
+		const int32 Want = UE_ARRAY_COUNT(GAimYaws) + 1;
+		const bool bOK = bAimViewDone && bAimViewSeen && AimSamples == Want && AimBadYaw == 0 && AimBadY == 0 && AimBadX == 0 && AimBadArrow == 0 && AimReturnT >= 0.f && AimReturnT <= 9.f;
+		bPass &= bOK;
+		Extra.Add(FString::Printf(TEXT("aim view: active throughout %d | %d/%d aim yaws sampled | camera yaw off the aim yaw: max %.2f deg (need <= 3), %d bad | Zoogi height off %.2f: max %.3f (need <= 0.03), %d bad | off centre max %.3f (need <= 0.02), %d bad | arrow not straight up: %d | pitch %.1f boom %.0f | engine projection y %.3f | back at the pre-case view after %.2f s"),
+			bAimViewSeen, AimSamples, Want, AimMaxYawErr, AimBadYaw, ZoogiAimView::ScreenY(), AimMaxYErr, AimBadY, AimMaxXErr, AimBadX, AimBadArrow, AimPitchGot, AimBoomGot, AimEngineY, AimReturnT));
+	}
 	if (FinishLog.Num()) Extra.Add(TEXT("ends ") + FString::Join(FinishLog, TEXT(",")));
 	if (AZoogiGameMode* G = GM()) Extra.Add(FString::Printf(TEXT("stage %d phase %d"), (int32)G->Stage, (int32)G->Phase));
 	Result(bPass, FString::Printf(TEXT("[%s] camera restore"), *C.Name), Report + TEXT(" | ") + FString::Join(Extra, TEXT(" | ")));
@@ -1549,6 +1649,7 @@ void AZoogiShotTestDriver::Tick(float DeltaSeconds)
 			if (TrackProp) TrackProp->SetActorHiddenInGame(true);
 			if (ArcProp) ArcProp->SetActorHiddenInGame(true);
 			bBankMove = false; bBankHitLogged = false; bRingOut = false; bElevPush = false; bPortrait = false;
+			if (bAimView) { if (AZoogiPlayerController* APC = Cast<AZoogiPlayerController>(UGameplayStatics::GetPlayerController(this, 0))) APC->bAimViewForce = false; bAimView = false; }
 			if (SimCam) { SimCam->Destroy(); SimCam = nullptr; }
 			bElevPush = false;
 			if (TempProp) { TempProp->Destroy(); TempProp = nullptr; }
