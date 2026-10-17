@@ -1298,7 +1298,8 @@ void UZoogiFramedHUDWidget::TickHudToggleTest(AZoogiGameMode* G, float Dt)
 	case 2: if (ToggleTestT > 1.0f && RotateT < 0.f && bHidden && bAim && G->StepTime > 0.5f) { G->TakeShot(TEXT("hudtoggle_3_portrait_aim")); Next(3); } break;
 	case 3: if (G->Phase == EZoogiPhase::Rolling && G->PhaseTime > 0.45f) { G->TakeShot(TEXT("hudtoggle_4_portrait_shot_in_progress")); Next(4); } break;
 	case 4: if (G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Awaken && !G->bAwakenDone && G->StageTime > 1.8f && (PortraitTrayShown() || ToggleTestT > 40.f))
-			{ G->TakeShot(TEXT("hudtoggle_5_portrait_standby")); Next(5); } break;
+			{ G->TakeShot(TEXT("hudtoggle_5_portrait_standby")); Next(5); }
+		else if (ToggleTestT > 25.f && !G->IsHumanAiming()) Next(5); break; // all-CPU (-ZoogiAuto): no human tray to show, go on to the toggle back
 	case 5: if (bAim && G->StepTime > 0.8f) { G->TakeShot(TEXT("hudtoggle_6_portrait_aim2")); OnHudToggle(); Next(6); } break;
 	case 6: if (ToggleTestT > 0.6f) { G->TakeShot(TEXT("hudtoggle_7_rotate_prompt_to_landscape")); Next(7); } break;
 	case 7: if (ToggleTestT > 1.6f && RotateT < 0.f && bAim && G->StepTime > 0.5f) { G->TakeShot(TEXT("hudtoggle_8_landscape_hud_back")); UE_LOG(LogZoogi, Log, TEXT("FRAMED hudtoggle test done (hidden=%d)"), ZoogiFramed::IsHudHidden() ? 1 : 0); Next(8); } break;
