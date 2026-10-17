@@ -1,4 +1,5 @@
 #include "ZoogiEpisodeCameraDirector.h"
+#include "ZoogiPortraitCam.h"
 #include "ZoogiEpisodeTypes.h"
 #include "ZoogiRoll.h"
 #include "ZoogiBall.h"
@@ -824,6 +825,22 @@ bool UZoogiEpisodeCameraDirector::EvaluateShotView(FZoogiActiveShot& S, float Dt
 		const float SW = UE_TWO_PI * Spec.ShakeHz;
 		Rot.Pitch += A * (0.7f * FMath::Sin(SW * Tm + 0.3f) + 0.3f * FMath::Sin(1.73f * SW * Tm + 1.1f));
 		Rot.Yaw += A * (0.7f * FMath::Sin(1.21f * SW * Tm + 2.0f) + 0.3f * FMath::Sin(2.37f * SW * Tm + 0.5f));
+	}
+	// Oct 17 portrait: a MainView shot on a narrow screen caps the vertical FOV (the engine keeps the horizontal one) and backs
+	// the camera off along its view line so the focus keeps its landscape width (ZoogiPortraitCam; panels keep 16:9).
+	if (S.Output != EZoogiShotOutput::RenderTarget)
+	{
+		const float VA = ZoogiPortrait::ViewAspect(GetWorld() ? GetWorld()->GetFirstPlayerController() : nullptr);
+		float HFov = Fov, K = 1.f;
+		ZoogiPortrait::AdaptFov(Fov, VA, HFov, K);
+		if (K > 1.f)
+		{
+			const float FocusX = FMath::Max(Rot.UnrotateVector(FC - Loc).X, 50.f);
+			const float Z0 = Loc.Z;
+			Loc -= Rot.Vector() * FocusX * (K - 1.f);
+			if (Z0 >= CamDirFloorZ + 30.f) Loc.Z = FMath::Max(Loc.Z, CamDirFloorZ + 30.f); // never backs under the floor
+			Fov = HFov;
+		}
 	}
 	OutView = FMinimalViewInfo();
 	OutView.Location = Loc;

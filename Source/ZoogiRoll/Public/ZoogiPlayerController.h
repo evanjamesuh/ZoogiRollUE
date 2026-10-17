@@ -27,6 +27,17 @@ public:
 	virtual void BeginPlay() override;
 	virtual void PlayerTick(float DeltaTime) override;
 
+	/** Portrait camera framing hook (Gameplay & UI orientation toggle / rotate prompt): true = portrait framing (capped vertical FOV,
+	 *  width-keeping boom, HUD-safe band, whole-court fit), false = landscape framing, regardless of the view's aspect. Idempotent. */
+	UFUNCTION(BlueprintCallable, Category = "Zoogi|Camera")
+	void SetPortraitCameraMode(bool bPortrait);
+	/** Back to auto-detect (portrait framing whenever the view's aspect < 1). Also the default on every BeginPlay. */
+	UFUNCTION(BlueprintCallable, Category = "Zoogi|Camera")
+	void ClearPortraitCameraMode();
+	/** Whether the match camera is framing for portrait right now (hook or auto-detect). */
+	UFUNCTION(BlueprintPure, Category = "Zoogi|Camera")
+	bool IsPortraitCameraMode() const;
+
 	void OnTurnStarted(AZoogiBall* Ball);
 	void OnShotFired(AZoogiBall* Ball);
 	void OnGameOver(AZoogiBall* Winner);
@@ -68,7 +79,25 @@ public:
 	/** Push-in weight at WinT seconds into the elevator window: 0 at 0, 1 while the lifts rise, exactly 0 from ElevPushOutEnd. */
 	static float ElevatorPushWeight(float WinT);
 	/** Closest boom (pivot, pitch, distance <= BaseDist) at this yaw / FOV that keeps every spawn pad (with its lift) in frame. */
-	static void ElevatorPushFit(const TArray<FVector>& PadFloors, float Yaw, float Fov, float BaseDist, FVector& OutPivot, float& OutPitch, float& OutDist);
+	/** Aspect / Top / Bottom (portrait): the pads must fit the real view and the HUD-safe band (rotation with ZoogiPortrait::BandRotation). */
+	static void ElevatorPushFit(const TArray<FVector>& PadFloors, float Yaw, float Fov, float BaseDist, FVector& OutPivot, float& OutPitch, float& OutDist,
+		float Aspect = 16.f / 9.f, float Top = 0.f, float Bottom = 0.f);
+	/** Portrait (ZoogiPortraitCam): boom for a landscape-tuned pose and the horizontal FOV to use (OutHFov). Plain views keep the
+	 *  landscape width at the pivot (capped vertical FOV, boom pulled back); bCourt views (overviews) instead fit the whole court /
+	 *  Frozen Ring 2 (PortraitCourtRadius around Centre) across the width and inside the HUD-safe band. Dist unchanged on landscape. */
+	static float PortraitBoom(const AZoogiGameMode* G, float Aspect, float Top, float Bottom, float Yaw, float Pitch, float LandscapeFov, float Dist,
+		bool bCourt, const FVector& Centre, float& OutHFov);
+	/** Radius whole-court views must show: the play radius (per-arena knockout) or Frozen's outer Ring 2, plus a Zoogi. */
+	static float PortraitCourtRadius(const AZoogiGameMode* G);
+	/** The tactical resolve / end overview (centre of the court at CourtZ, boom along Yaw) as the controller frames it on PC's
+	 *  view: bLegacy = the pre-portrait rule (landscape-tuned FOV / boom, no safe band) for BEFORE frames. */
+	static void PortraitOverviewPose(const AZoogiGameMode* G, const APlayerController* PC, float Yaw, float CourtZ, bool bLegacy, FVector& OutLoc, FRotator& OutRot, float& OutFov);
+	/** Portrait ShotTest probe: the last gameplay-view look point, its landscape-tuned FOV and the boom multiplier PortraitBoom applied. */
+	FVector PortDbgLegacyPivot = FVector::ZeroVector; float PortDbgFov = 90.f, PortDbgLegacyPitch = 55.f, PortDbgLegacyDist = 2300.f; bool PortDbgAim = false;
+	/** Portrait aim / rest framing boom: behind the shooter at Pitch looking at LookPivot (ahead of it, up the arena); never closer
+	 *  than the landscape boom, ground width >= AimWidth x play radius, shooter inside the safe band. OutHFov = capped FOV. */
+	static float PortraitAimDist(const AZoogiGameMode* G, float Aspect, float Top, float Bottom, const FVector& Shooter, const FVector& LookPivot,
+		float Yaw, float Pitch, float LandscapeFov, float LandscapeDist, float& OutHFov);
 	static FVector BoomLocation(const FVector& Pivot, float Yaw, float Pitch, float Dist);
 	/** The arena's camera boom scale (Neon / CamScale), as UpdateCamera uses it. */
 	static float ArenaCamScale(const AZoogiGameMode* G);

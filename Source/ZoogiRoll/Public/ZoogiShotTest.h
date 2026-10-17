@@ -23,7 +23,7 @@ class UTextureRenderTarget2D;
 
 namespace ZoogiShotTest
 {
-	enum class ECaseKind : uint8 { Shot, Cancel, StopEased, Overlap, FocusDestroyed, TimeScaleRefused, TimeScale, TimeScaleCancel, AirborneSlowMoCancel, AirborneSlowMoRefused, AvoidParticles, AvoidOcclusion, RingOutSimLegacy, RingOutSimFixed, RingOutDirector, ElevatorPush, LevelEnd };
+	enum class ECaseKind : uint8 { Shot, Cancel, StopEased, Overlap, FocusDestroyed, TimeScaleRefused, TimeScale, TimeScaleCancel, AirborneSlowMoCancel, AirborneSlowMoRefused, AvoidParticles, AvoidOcclusion, RingOutSimLegacy, RingOutSimFixed, RingOutDirector, ElevatorPush, Portrait, LevelEnd };
 	enum class EStep : uint8 { StartMatch, WaitLive, WaitSettle, Run, WaitEnd, Verify, Restored, Done, Summary };
 	struct FCase
 	{
@@ -89,6 +89,16 @@ private:
 	bool bElevGateLive = true, bElevSpawned = false;
 	FVector ElevFitPivot = FVector::ZeroVector; float ElevFitPitch = 0.f, ElevFitDist = 0.f, ElevBaseDist = 0.f;
 	TArray<FVector> ElevPadFloors;
+	// Portrait framing (Oct 17): BEFORE = the pre-portrait overview / aim view on this (narrow) screen, AFTER = ZoogiPortraitCam's.
+	void StartPortrait();
+	void TickPortrait(float Dt);
+	bool bPortrait = false, bPortDone = false, bPortRestored = false;
+	int32 PortStage = 0;
+	float PortT = 0.f, PortAspect = 1.f, PortTop = 0.f, PortBot = 0.f, PortCourtR = 0.f, PortLegacyOut = 0.f, PortVFov = 0.f, PortCourtZ = 0.f;
+	int32 PortCourtOut = 0, PortCourtN = 0, PortRing2Out = 0, PortRing2N = 0, PortShooterOut = 0, PortShooterN = 0;
+	float PortCourtMaxX = 0.f, PortShooterMinY = 0.f, PortShooterMaxY = 0.f, PortAimPitch = 0.f;
+	bool bPortModeOk = false, bPortBehind = false, bPortAimMode = false;
+	FString PortModeLine;
 	bool bBankMove = false; bool bBankHitLogged = false; float BankT = 0.f, BankTc = 0.f, BankSpeed = 0.f; FVector BankE = FVector::ZeroVector, BankIn = FVector::ZeroVector, BankOut = FVector::ZeroVector;
 	void TintProp(class AStaticMeshActor* A, const FLinearColor& C);
 	FZoogiShotHandle PlayCaseShot(EZoogiShotType Type, EZoogiShotOutput Output, FString& OutSetup);
