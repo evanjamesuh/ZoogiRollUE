@@ -42,8 +42,92 @@ namespace ZoogiFramed
 		return G && G->Phase != EZoogiPhase::Menu;
 	}
 
+	// ---- Oct 17 (Evan 12:10 PM): HUD hidden = portrait play
+	static int32 GHudHidden = -1; // -1 = not decided yet (first framed frame decides by aspect)
+	bool IsHudHidden() { return GHudHidden == 1; }
+	void SetHudHidden(bool bHidden)
+	{
+		if (GHudHidden == (bHidden ? 1 : 0)) return;
+		GHudHidden = bHidden ? 1 : 0;
+		UE_LOG(LogZoogi, Log, TEXT("FRAMED HUD %s"), bHidden ? TEXT("HIDDEN -> portrait play (arena full screen, edge controls)") : TEXT("SHOWN -> landscape framed hud-v3"));
+	}
+	static void DecideHudHidden(const FVector2D& V)
+	{
+		if (GHudHidden >= 0) return;
+		const TCHAR* Cmd = FCommandLine::Get();
+		bool bHide = V.Y > V.X; // follow the device / window orientation at the first match frame
+		if (FParse::Param(Cmd, TEXT("ZoogiHudHidden"))) bHide = true;
+		if (FParse::Param(Cmd, TEXT("ZoogiHudShown"))) bHide = false;
+		SetHudHidden(bHide);
+	}
+	static TArray<FBox2D> GUiRects;
+	void SetUiRects(const TArray<FBox2D>& Rects) { GUiRects = Rects; }
+
+	// battle view mode hook (Game Camera owns the portrait framing and listens here)
+	static int32 GModeHidden = -1, GModePortrait = -1;
+	FZoogiBattleViewModeChanged& OnBattleViewModeChanged() { static FZoogiBattleViewModeChanged D; return D; }
+	void GetBattleViewMode(bool& bOutHudHidden, bool& bOutPortrait) { bOutHudHidden = GModeHidden == 1; bOutPortrait = GModePortrait == 1; }
+	bool BroadcastBattleViewMode(bool bHudHidden, bool bPortrait)
+	{
+		if (GModeHidden == (bHudHidden ? 1 : 0) && GModePortrait == (bPortrait ? 1 : 0)) return false;
+		GModeHidden = bHudHidden ? 1 : 0;
+		GModePortrait = bPortrait ? 1 : 0;
+		UE_LOG(LogZoogi, Log, TEXT("FRAMED OnBattleViewModeChanged hudHidden=%d portrait=%d"), GModeHidden, GModePortrait);
+		OnBattleViewModeChanged().Broadcast(bHudHidden, bPortrait);
+		return true;
+	}
+
+	static FLayout ComputePortrait(const FVector2D& V, const FMargin& S)
+	{
+		// Portrait play (HUD hidden): the 3D arena fills the whole screen (behind the notch too); the controls stay inside the
+		// safe insets. Top edge: HUD toggle (left), turn / score indicator (centre), ZOOM (right), all >= 58 design px, plus the
+		// prompt line - everything inside the top 5% band Game Camera reserves (96 px of 1920; below the safe-area top inset).
+		// Bottom: the tray rects (hand recess over the deck | discard + orb row) for the Standby / Awaken overlay. Design is
+		// 1080 px wide (1080x1920 .. 1080x2340; the PC's 540x1080 window is the same at P 0.5).
+		FLayout L;
+		L.Viewport = V;
+		L.Safe = S;
+		L.bPortrait = true;
+		L.bCompact = true;
+		L.TrayOpen = 1.f;
+		const float X0 = S.Left, X1 = V.X - S.Right, Y0 = S.Top, Y1 = V.Y - S.Bottom;
+		const float P = FMath::Max(0.1f, FMath::Min((X1 - X0) / 1080.f, (Y1 - Y0) / 1920.f)); // 1080-wide design (a landscape window without the turn still fits)
+		L.P = P;
+		L.U = P;
+		L.ColT = 220.f;
+		auto Box = [](float Ax, float Ay, float Bx, float By) { return FBox2D(FVector2D(Ax, Ay), FVector2D(Bx, By)); };
+		const float BH = PortraitTap * P, Ty = Y0 + 6.f * P;
+		L.HudBtn = Box(X0 + 12.f * P, Ty, X0 + 12.f * P + 150.f * P, Ty + BH);
+		L.ZoomBtn = Box(X1 - 12.f * P - 170.f * P, Ty, X1 - 12.f * P, Ty + BH);
+		L.Indicator = Box(L.HudBtn.Max.X + 14.f * P, Ty, L.ZoomBtn.Min.X - 14.f * P, Ty + BH);
+		L.Top = Box(X0, Y0, X1, Ty + BH + 28.f * P); // + one prompt line under the strip (ends at Y0 + 92 P, inside the 96 P band)
+		L.Arena = Box(0.f, 0.f, V.X, V.Y);
+		L.Left = L.Right = Box(X0, Y0, X0, Y0);
+		// tray overlay (Standby / Awaken only), bottom up
+		L.TrayT = 1.45f * P;
+		L.T = L.TrayT;
+		const float RowTop = Y1 - 190.f * L.TrayT;
+		L.BottomRow = Box(X0, RowTop, X1, Y1);
+		L.TrayL = FVector2D(X0 + 6.f * P, RowTop);
+		L.TrayR = FVector2D(X1 - 398.f * L.TrayT, RowTop);
+		L.TrayLeftX1 = L.TrayL.X + 200.f * L.TrayT; // deck slab crop of tray_left
+		L.TrayRightX0 = L.TrayR.X;
+		const float RecTop = RowTop - 272.f * P;
+		L.Tray = Box(X0, RecTop, X1, Y1);
+		L.Hand = Box(X0 + 12.f * P, RecTop + 18.f * P, X1 - 12.f * P, RowTop - 10.f * P);
+		L.Deck = L.TrayL + FVector2D(97.f, 90.f) * L.TrayT;
+		L.Discard = L.TrayR + FVector2D(72.f, 90.f) * L.TrayT;
+		L.Energy = L.TrayR + FVector2D(328.f, 123.f) * L.TrayT;
+		L.Prompt = Box(X0 + 20.f * P, Ty + BH + 2.f * P, X1 - 20.f * P, Ty + BH + 28.f * P);
+		L.bValid = true;
+		return L;
+	}
+
 	FLayout Compute(const FVector2D& V, const FMargin& S, float TrayOpen)
 	{
+		// Oct 17 (Evan): HUD hidden = portrait play layout, HUD shown = hud-v3 landscape (unchanged)
+		DecideHudHidden(V);
+		if (IsHudHidden()) return ComputePortrait(V, S);
 		// hud-v3 (Evan's 3:53 PM target): every piece sits where it sits in the 1376x768 target, scaled by T; the arena
 		// takes whatever is left between the columns (16:9 at 16:9, wider on phones up to 20:9), columns widen a little on
 		// ultra-wide screens and shrink on narrow ones. One layout for PC and phones; the tray is always open.
@@ -76,6 +160,9 @@ namespace ZoogiFramed
 		L.Discard = FVector2D(X1 - 326.f * T, TrayTop + 102.f * T);
 		L.Energy = FVector2D(X1 - 70.f * T, TrayTop + 135.f * T);
 		L.Prompt = FBox2D(FVector2D(L.Hand.Min.X + 20.f * T, L.Hand.Min.Y + 70.f * T), FVector2D(L.Hand.Max.X - 20.f * T, L.Hand.Min.Y + 100.f * T)); // system text only (forming / match over)
+		L.TrayL = FVector2D(X0, TrayTop + 12.f * T);
+		L.TrayR = FVector2D(L.TrayRightX0, TrayTop + 12.f * T);
+		L.TrayT = T;
 		L.bValid = true;
 		return L;
 	}
@@ -186,7 +273,7 @@ namespace ZoogiFramed
 
 	FMargin SafeInsets(const FVector2D& V)
 	{
-		const float U = V.Y / 1080.f;
+		const float U = FMath::Min(V.X, V.Y) / 1080.f; // portrait: design px (1080 wide); landscape: 1080p units as before
 		FString Ov;
 		if (FParse::Value(FCommandLine::Get(), TEXT("ZoogiSafeArea="), Ov, false))
 		{
@@ -234,7 +321,9 @@ namespace ZoogiFramed
 	bool IsOutsideArena(const UWorld* World, const FVector2D& P)
 	{
 		if (!GCur.bValid || !IsActive(World)) return false;
-		return !GCur.Arena.IsInside(P) || InZoomButton(P);
+		if (!GCur.Arena.IsInside(P) || InZoomButton(P)) return true;
+		for (const FBox2D& R : GUiRects) if (R.bIsValid && R.IsInside(P)) return true; // Oct 17: portrait edge controls / tray overlay
+		return false;
 	}
 
 	void Pulse(const FLinearColor& C) { GPulse = 1.f; GPulseColor = C; }

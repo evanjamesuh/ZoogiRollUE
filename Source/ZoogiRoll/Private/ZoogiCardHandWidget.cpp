@@ -284,9 +284,9 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 		{
 			// Oct 15 playtest: the energy orb is the Awaken control, so CONFIRM / CLEAR move to the slab strip between the
 			// discard portal and the orb (never over the orb, the portal or the DISCARD count)
-			const float t = FL.T * k;
-			const FVector2D TR(FL.TrayRightX0 * k, (FL.Tray.Min.Y + 12.f * FL.T) * k);
-			const float X0 = TR.X + 126.f * t, X1 = TR.X + 248.f * t, BH = FMath::Max(36.f * t, 48.f * FL.U * k);
+			const float t = FL.TrayT * k;
+			const FVector2D TR = FL.TrayR * k; // tray_right art origin (landscape: (TrayRightX0, TrayTop + 12 T)); portrait tray overlay too
+			const float X0 = TR.X + 126.f * t, X1 = TR.X + 248.f * t, BH = FMath::Max(36.f * t, (FL.bPortrait ? ZoogiFramed::PortraitTap : 48.f) * FL.U * k);
 			auto Put = [&](UButton* Bt, float Y1) { if (UCanvasPanelSlot* S = Bt ? Cast<UCanvasPanelSlot>(Bt->Slot) : nullptr) { S->SetPosition(FVector2D(X1 - ViewSize.X, Y1 - ViewSize.Y)); S->SetSize(FVector2D(X1 - X0, BH)); } };
 			Put(ConfirmBtn, TR.Y + 172.f * t);
 			Put(ClearBtn, TR.Y + 172.f * t - BH - 10.f * t);
@@ -305,7 +305,9 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 	UZoogiCardSubsystem* Cards = UZoogiCardSubsystem::Get(this);
 	AZoogiBall* B = G ? G->GetActiveBall() : nullptr;
 	const FZoogiCardPlayerState* S = (Cards && B && IsEnabled(G)) ? Cards->Rules().Player(B->PlayerIndex) : nullptr;
-	const bool bShow = S && G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Awaken && !G->bAwakenDone && S->bStandbyOpen;
+	// Oct 17 portrait play (HUD hidden): the hand shows only in the human's tray overlay (no CPU hand over the full-screen arena)
+	const bool bPortraitPlay = ZoogiFramed::IsActive(GetWorld()) && ZoogiFramed::Current().bValid && ZoogiFramed::Current().bPortrait;
+	const bool bShow = S && G->Phase == EZoogiPhase::Aiming && G->Stage == EZoogiStage::Awaken && !G->bAwakenDone && S->bStandbyOpen && !(bPortraitPlay && !G->IsHumanAiming());
 	bInteractive = bShow && G->IsHumanAiming() && !S->bCommitted;
 	// Oct 15 Choose-your-Awaken: while the 3 tablets show, the cards are lowered out of the recess (not playable)
 	bAwView = bShow && G->CardsAwakenViewOpen();
@@ -501,7 +503,7 @@ void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 		BaseY = FMath::Min(TB - 8.f * TU, (TT + LiftRoom + TB) * 0.5f + UZoogiCardWidget::CardH * Sc0 * 0.5f); // centred in the recess
 		ArcK = 0.f; TiltK = 0.f; HoverSc = Sc0; HoverY = BaseY - LiftRoom; Spread = 0.f;
 		FanCX = (HX0 + HX1) * 0.5f;
-		if (bAwView) BaseY = HoverY = TB + UZoogiCardWidget::CardH * Sc0 + 40.f; // Choose-your-Awaken: cards lowered out of the recess
+		if (bAwView) BaseY = HoverY = (FL.bPortrait ? ViewSize.Y : TB) + UZoogiCardWidget::CardH * Sc0 + 40.f; // Choose-your-Awaken: cards lowered out of the recess (portrait: below the deck / orb row)
 		FramedFanL = FanCX - ((N - 1) * Spacing + UZoogiCardWidget::CardW * Sc0) * 0.5f;
 	}
 	TMap<int32, FVector4> Layout; // x, y, angle, scale
@@ -963,7 +965,7 @@ void UZoogiCardHandWidget::TickPlaytest1(AZoogiGameMode* G, float Dt)
 				const TArray<FBox2D> R = TrayCardRects();
 				const ZoogiFramed::FLayout& FL = ZoogiFramed::Current();
 				const float k = FL.Viewport.X > 0.f ? ViewSize.X / FL.Viewport.X : 1.f;
-				const FBox2D Rec(FL.Hand.Min * k, FVector2D(FL.Hand.Max.X * k, ViewSize.Y));
+				const FBox2D Rec(FL.Hand.Min * k, FVector2D(FL.Hand.Max.X * k, FL.bPortrait ? FL.Hand.Max.Y * k : ViewSize.Y));
 				bool bOk = R.Num() == S->Hand.Num() && R.Num() > 0; FString Why;
 				for (int32 i = 0; i < R.Num(); ++i)
 				{

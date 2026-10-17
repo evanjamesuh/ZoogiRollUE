@@ -1358,6 +1358,7 @@ void AZoogiHUD::DrawAwaken(AZoogiGameMode* G)
 void AZoogiHUD::DrawArtifacts(AZoogiGameMode* G)
 {
 	if (G && G->CardsOn() && UZoogiCardHandWidget::IsEnabled(G)) return; // UMG card hand is up: no old 'NO ARTIFACT ACTIVE' panel behind it
+	if (ZoogiFramed::IsActive(GetWorld()) && ZoogiFramed::Current().bPortrait) return; // Oct 17 portrait play (HUD hidden): keep the launch area at the bottom clear; the top strip carries the state
 	AZoogiBall* B = G->GetActiveBall();
 	if (!B || !B->Artifact || G->Phase == EZoogiPhase::GameOver) return;
 	if (G->Stage == EZoogiStage::Awaken && G->Phase == EZoogiPhase::Aiming && !G->bAwakenDone) return; // the Awaken panel shows it all

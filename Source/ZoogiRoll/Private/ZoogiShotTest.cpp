@@ -6,6 +6,7 @@
 #include "ZoogiOrb.h"
 #include "ZoogiArena.h"
 #include "ZoogiPlayerController.h"
+#include "ZoogiPortraitCam.h"
 #include "ZoogiSpawnElevator.h"
 #include "ZoogiStageForming.h"
 #include "Camera/CameraComponent.h"
@@ -209,6 +210,7 @@ void AZoogiShotTestDriver::BuildCases()
 	Add(ZoogiShotTest::ECaseKind::RingOutDirector, TEXT("RingOutFall_Tracking_MainView"), EZoogiShotType::Tracking, EZoogiShotOutput::MainView);
 	Add(ZoogiShotTest::ECaseKind::RingOutDirector, TEXT("RingOutFall_Airborne_MainView"), EZoogiShotType::Airborne, EZoogiShotOutput::MainView);
 	Add(ZoogiShotTest::ECaseKind::ElevatorPush, TEXT("ElevatorPushIn_StageIntro_SpawnPads"), EZoogiShotType::Custom, EZoogiShotOutput::MainView);
+	Add(ZoogiShotTest::ECaseKind::Portrait, TEXT("Portrait_Framing_Court_Ring2_SafeBand"), EZoogiShotType::Custom, EZoogiShotOutput::MainView);
 	Add(ZoogiShotTest::ECaseKind::LevelEnd, TEXT("LevelEnd"), EZoogiShotType::TopDownImpact, EZoogiShotOutput::MainView);
 }
 
@@ -752,6 +754,188 @@ void AZoogiShotTestDriver::TickRingOut(float Dt)
 	}
 }
 
+// ------------------------------------------------------------------ portrait framing (Oct 17)
+
+void AZoogiShotTestDriver::StartPortrait()
+{
+	bPortrait = true; bPortDone = false; bPortRestored = false; PortStage = 0; PortT = 0.f;
+	PortCourtOut = PortCourtN = PortRing2Out = PortRing2N = PortShooterOut = PortShooterN = 0;
+	PortCourtMaxX = 0.f; PortShooterMinY = 1e9f; PortShooterMaxY = -1e9f; PortLegacyOut = 0.f; PortVFov = 0.f;
+	bPortModeOk = false; bPortBehind = false; bPortAimMode = false; PortAimPitch = 0.f; PortModeLine = TEXT("mode hook: not run");
+	bChaseRan = false; ChaseShooterY = ChaseAimX = ChaseFarY = ChasePitchGot = ChaseCamH = ChaseBoomGot = 0.f; ChaseArm = 1.f;
+	APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
+	PortAspect = ZoogiPortrait::ViewAspect(PC);
+	ZoogiPortrait::Band(PC, PortAspect, PortTop, PortBot);
+	PortCourtR = AZoogiPlayerController::PortraitCourtRadius(GM());
+	AZoogiGameMode* G = GM();
+	const AZoogiBall* B = G ? G->GetActiveBall() : nullptr;
+	PortCourtZ = B ? B->BallLocation().Z : 50.f; // the controller's CourtZ (shooter centre height)
+	CaseMid = 1e6f;
+	FActorSpawnParameters SP; SP.ObjectFlags |= RF_Transient;
+	SimCam = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), Snap0.POV.Location, Snap0.POV.Rotation, SP);
+	if (SimCam) SimCam->GetCameraComponent()->bConstrainAspectRatio = false;
+	if (PC && SimCam) PC->SetViewTarget(SimCam);
+	UE_LOG(LogZoogi, Log, TEXT("ZOOGI SHOTTEST   portrait framing: view aspect %.3f (%s), safe band top %.2f bottom %.2f, court radius %.0f (Ring 2 outer %.0f)"),
+		PortAspect, ZoogiPortrait::IsPortrait(PortAspect) ? TEXT("portrait") : TEXT("landscape"), PortTop, PortBot, PortCourtR, AZoogiArena::OuterOutR);
+}
+
+void AZoogiShotTestDriver::TickPortrait(float Dt)
+{
+	if (bPortDone) return;
+	APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
+	AZoogiPlayerController* ZPC = Cast<AZoogiPlayerController>(PC);
+	AZoogiGameMode* G = GM();
+	if (!SimCam || !PC) { bPortDone = true; return; }
+	PortT += FMath::Max(Dt, 1.f / 120.f);
+	const float Yaw = Snap0.POV.Rotation.Yaw;
+	const FString& N = Cases[CaseIdx].Name;
+	auto Place = [&](const FVector& L, const FRotator& R, float F) { SimCam->SetActorLocation(L); SimCam->SetActorRotation(R); SimCam->GetCameraComponent()->SetFieldOfView(F); };
+	const float Y1 = 1.f - 2.f * PortTop + 0.01f, Y0 = -1.f + 2.f * PortBot - 0.01f;
+	auto CountCircle = [&](const FVector& L, const FRotator& R, float F, float Rad, int32& Out, int32& Num, float* MaxX)
+	{
+		for (int32 k = 0; k < 48; ++k)
+		{
+			const float A = FMath::DegreesToRadians(7.5f * k);
+			FVector2D S;
+			const bool bFront = ZoogiPortrait::Project(L, R, F, PortAspect, FVector(FMath::Cos(A) * Rad, FMath::Sin(A) * Rad, PortCourtZ), S);
+			++Num;
+			if (!bFront || FMath::Abs(S.X) > 1.f || S.Y > Y1 || S.Y < Y0) ++Out;
+			if (MaxX) *MaxX = FMath::Max(*MaxX, FMath::Abs(S.X));
+		}
+	};
+	if (PortStage == 0 && PortT >= 0.1f)
+	{
+		// BEFORE overview: the pre-portrait resolve / end view (landscape FOV as horizontal, no band) on this screen
+		FVector L; FRotator R; float F;
+		AZoogiPlayerController::PortraitOverviewPose(G, PC, Yaw, PortCourtZ, true, L, R, F);
+		Place(L, R, F);
+		int32 O = 0, Nn = 0; CountCircle(L, R, F, PortCourtR, O, Nn, nullptr);
+		PortLegacyOut = Nn ? float(O) / Nn : 0.f;
+		PortStage = 1;
+	}
+	else if (PortStage == 1 && PortT >= 0.4f) { Shot(N + TEXT("_before")); PortStage = 2; }
+	else if (PortStage == 2 && PortT >= 0.7f)
+	{
+		// BEFORE aim view: the pre-portrait aim / rest pose (landscape pivot, pitch, boom and FOV-as-horizontal) at the live yaw
+		const FMinimalViewInfo V = Snap0.POV;
+		if (ZPC)
+		{
+			const FVector L = AZoogiPlayerController::BoomLocation(ZPC->PortDbgLegacyPivot, V.Rotation.Yaw, ZPC->PortDbgLegacyPitch, ZPC->PortDbgLegacyDist);
+			Place(L, (ZPC->PortDbgLegacyPivot - L).Rotation(), ZPC->PortDbgFov);
+		}
+		else Place(V.Location, V.Rotation, V.FOV);
+		PortStage = 3;
+	}
+	else if (PortStage == 3 && PortT >= 1.0f) { Shot(N + TEXT("_before_aim")); PortStage = 4; }
+	else if (PortStage == 4 && PortT >= 1.3f)
+	{
+		// AFTER overview: what the controller frames now (court / Ring 2 across the width, inside the HUD-safe band)
+		FVector L; FRotator R; float F;
+		AZoogiPlayerController::PortraitOverviewPose(G, PC, Yaw, PortCourtZ, false, L, R, F);
+		Place(L, R, F);
+		CountCircle(L, R, F, PortCourtR, PortCourtOut, PortCourtN, &PortCourtMaxX);
+		if (AZoogiArena::OuterOutR > 0.f) CountCircle(L, R, F, AZoogiArena::OuterOutR, PortRing2Out, PortRing2N, nullptr);
+		PortVFov = 2.f * FMath::RadiansToDegrees(FMath::Atan(FMath::Tan(FMath::DegreesToRadians(F * 0.5f)) / PortAspect));
+		PortStage = 5;
+	}
+	else if (PortStage == 5 && PortT >= 1.6f) { Shot(N + TEXT("_after")); PortStage = 6; }
+	else if (PortStage == 6 && PortT >= 1.9f)
+	{
+		// mode switch (SetPortraitCameraMode hook): forced landscape = the pre-portrait overview exactly, forced portrait = the
+		// portrait overview, clear = back to auto-detect; all in this one frame (the live camera never ticks in between)
+		if (ZPC)
+		{
+			const bool bAuto0 = ZPC->IsPortraitCameraMode();
+			const bool bWantAuto = ZoogiPortrait::Enabled() && PortAspect < 1.f;
+			FVector LL, LA, LB; FRotator RL, RA, RB; float FL, FA, FB;
+			AZoogiPlayerController::PortraitOverviewPose(G, PC, Yaw, PortCourtZ, true, LL, RL, FL);
+			ZPC->SetPortraitCameraMode(false);
+			const bool bOffOk = !ZPC->IsPortraitCameraMode();
+			AZoogiPlayerController::PortraitOverviewPose(G, PC, Yaw, PortCourtZ, false, LA, RA, FA);
+			const bool bOffSame = LA.Equals(LL, 0.01f) && RA.Equals(RL, 0.001f) && FMath::IsNearlyEqual(FA, FL, 0.001f);
+			ZPC->SetPortraitCameraMode(true);
+			const bool bOnOk = ZPC->IsPortraitCameraMode();
+			AZoogiPlayerController::PortraitOverviewPose(G, PC, Yaw, PortCourtZ, false, LB, RB, FB);
+			const bool bOnDiff = PortAspect >= 1.f || !LB.Equals(LL, 1.f);
+			ZPC->ClearPortraitCameraMode();
+			const bool bAutoOk = ZPC->IsPortraitCameraMode() == bWantAuto && bAuto0 == bWantAuto;
+			bPortModeOk = bOffOk && bOffSame && bOnOk && bOnDiff && bAutoOk;
+			PortModeLine = FString::Printf(TEXT("mode hook: auto %d (want %d) | forced off %d, overview == pre-portrait %d | forced on %d, overview changed %d (boom %.0f vs %.0f) | cleared -> auto %d"),
+				bAuto0, bWantAuto, bOffOk, bOffSame, bOnOk, bOnDiff, FVector::Dist(LB, FVector(0, 0, PortCourtZ)), FVector::Dist(LL, FVector(0, 0, PortCourtZ)), bAutoOk);
+		}
+		// AIM chase view (the controller's PortraitChasePose) for the shooter aiming at the arena centre: shooter at its screen
+		// height, aim line straight up the screen, the far side of the court up top, the boom's collision probe
+		const AZoogiBall* CB = G ? G->GetActiveBall() : nullptr;
+		if (CB && ZoogiPortrait::IsPortrait(PortAspect))
+		{
+			const FVector S = CB->BallLocation();
+			const FVector2D ToC(-S.X, -S.Y);
+			const float CY = ToC.Size() > 150.f ? FMath::RadiansToDegrees(FMath::Atan2(ToC.Y, ToC.X)) : Yaw;
+			FVector L; FRotator R; float F;
+			AZoogiPlayerController::PortraitChasePose(G, PC, S, CY, L, R, F);
+			Place(L, R, F);
+			const FVector Dir = FRotator(0.f, CY, 0.f).Vector();
+			FVector2D SS, AS, FS;
+			ZoogiPortrait::Project(L, R, F, PortAspect, S, SS);
+			ZoogiPortrait::Project(L, R, F, PortAspect, FVector(0.f, 0.f, S.Z), AS);  // the aim point (arena centre)
+			const FVector Far = FVector(0.f, 0.f, S.Z) + Dir * AZoogiPlayerController::PlayRadius(G->Arena);
+			const bool bFarFront = ZoogiPortrait::Project(L, R, F, PortAspect, Far, FS); // far rim along the aim line
+			ChaseShooterY = (1.f - SS.Y) * 0.5f; ChaseAimX = FMath::Abs(AS.X); ChaseFarY = bFarFront ? FS.Y : -9.f; ChasePitchGot = -R.Pitch;
+			ChaseCamH = L.Z - S.Z; ChaseBoomGot = FVector::Dist(L, S);
+			FCollisionQueryParams Q(TEXT("ShotTestChaseProbe"), false);
+			for (TActorIterator<AZoogiBall> It(GetWorld()); It; ++It) Q.AddIgnoredActor(*It);
+			for (TActorIterator<AZoogiOrb> It(GetWorld()); It; ++It) Q.AddIgnoredActor(*It);
+			FHitResult Hit; const FVector From = S + FVector(0, 0, 60.f);
+			ChaseArm = (GetWorld()->SweepSingleByChannel(Hit, From, L, FQuat::Identity, ECC_Camera, FCollisionShape::MakeSphere(20.f), Q) && !Hit.bStartPenetrating) ? FMath::Clamp(Hit.Time - 0.02f, 0.08f, 1.f) : 1.f;
+			bChaseRan = true;
+		}
+		PortStage = 20;
+	}
+	else if (PortStage == 20 && PortT >= 2.2f)
+	{
+		if (bChaseRan) Shot(N + TEXT("_after_aim_chase"));
+		PortStage = 21;
+	}
+	else if (PortStage == 21 && PortT >= 2.5f)
+	{
+		PC->SetViewTarget(Snap0.ViewTarget.Get()); // the live portrait view
+		bPortRestored = true;
+		PortStage = 7;
+	}
+	else if (PortStage == 7 && PortT >= 2.9f && PC->PlayerCameraManager)
+	{
+		// shooter (centre and its silhouette extremes) inside the safe band of the live view
+		const FMinimalViewInfo V = PC->PlayerCameraManager->GetCameraCacheView();
+		const AZoogiBall* B = G ? G->GetActiveBall() : nullptr;
+		if (B)
+		{
+			const FVector C = B->BallLocation(); const float Rr = ZoogiConst::ZoogiRadius;
+			// tablet framing: the camera behind the shooter, looking up the arena (shooter in front, below the look point)
+			FVector2D SC; ZoogiPortrait::Project(V.Location, V.Rotation, V.FOV, PortAspect, C, SC);
+			const FVector2D ToS = FVector2D(C - V.Location).GetSafeNormal(), Fwd = FVector2D(V.Rotation.Vector()).GetSafeNormal();
+			PortAimPitch = -V.Rotation.Pitch;
+			bPortBehind = FVector2D::DotProduct(ToS, Fwd) > 0.5f && SC.Y < (PortBot - PortTop); // shooter ahead, below the band centre
+			bPortAimMode = ZPC && ZPC->PortDbgAim;
+			if (ZPC) { PortAimArm = ZPC->PortDbgArm; PortAimWant = ZPC->PortDbgWantDist; PortAimGot = FVector::Dist(V.Location, ZPC->PortDbgLook2); }
+			const FVector Right = FRotator(0.f, V.Rotation.Yaw, 0.f).RotateVector(FVector(0.f, Rr, 0.f));
+			for (const FVector& P : { C, C + FVector(0, 0, Rr), C - FVector(0, 0, Rr), C + Right, C - Right })
+			{
+				FVector2D S; ++PortShooterN;
+				const bool bFront = ZoogiPortrait::Project(V.Location, V.Rotation, V.FOV, PortAspect, P, S);
+				if (!bFront || FMath::Abs(S.X) > 1.f || S.Y > Y1 || S.Y < Y0) ++PortShooterOut;
+				PortShooterMinY = FMath::Min(PortShooterMinY, S.Y); PortShooterMaxY = FMath::Max(PortShooterMaxY, S.Y);
+			}
+		}
+		Shot(N + TEXT("_after_aim"));
+		PortStage = 8;
+	}
+	else if (PortStage == 8 && PortT >= 3.2f)
+	{
+		if (SimCam) { SimCam->Destroy(); SimCam = nullptr; }
+		bPortDone = true;
+	}
+}
+
 // ------------------------------------------------------------------ spawn-elevator push-in
 
 void AZoogiShotTestDriver::StartElevPush()
@@ -766,8 +950,14 @@ void AZoogiShotTestDriver::StartElevPush()
 	const float Scale = AZoogiPlayerController::ArenaCamScale(G);
 	float Yaw, Pitch, Fov; FVector Pv;
 	AZoogiPlayerController::FormingSweepPose(1.f, Scale, Yaw, Pitch, ElevBaseDist, Fov, Pv);
+	// portrait: exactly the controller's Forming branch (PortraitBoom + band; identical to before on landscape)
+	const APlayerController* EPC = UGameplayStatics::GetPlayerController(this, 0);
+	const float EA = ZoogiPortrait::ViewAspect(EPC);
+	float ET = 0.f, EB = 0.f; ZoogiPortrait::Band(EPC, EA, ET, EB);
+	float EH = Fov;
+	ElevBaseDist = AZoogiPlayerController::PortraitBoom(G, EA, ET, EB, Yaw, Pitch, Fov, ElevBaseDist, true, Pv, EH);
 	ElevFitPivot = Pv; ElevFitPitch = Pitch; ElevFitDist = ElevBaseDist;
-	AZoogiPlayerController::ElevatorPushFit(ElevPadFloors, Yaw, Fov, ElevBaseDist, ElevFitPivot, ElevFitPitch, ElevFitDist);
+	AZoogiPlayerController::ElevatorPushFit(ElevPadFloors, Yaw, EH, ElevBaseDist, ElevFitPivot, ElevFitPitch, ElevFitDist, EA, ET, EB);
 	CaseMid = 1e6f; // explicit _before / _after frames instead of the generic mid frame
 	FActorSpawnParameters SP; SP.ObjectFlags |= RF_Transient;
 	SimCam = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(), Snap0.POV.Location, Snap0.POV.Rotation, SP);
@@ -790,8 +980,11 @@ void AZoogiShotTestDriver::TickElevPush(float Dt)
 	const float Scale = AZoogiPlayerController::ArenaCamScale(G);
 	float Yaw, Pitch, Dist, Fov; FVector Pv;
 	AZoogiPlayerController::FormingSweepPose(Pg, Scale, Yaw, Pitch, Dist, Fov, Pv);
+	const float EA = ZoogiPortrait::ViewAspect(PC);
+	float ET = 0.f, EB = 0.f; ZoogiPortrait::Band(PC, EA, ET, EB);
+	{ float EH = Fov; Dist = AZoogiPlayerController::PortraitBoom(G, EA, ET, EB, Yaw, Pitch, Fov, Dist, true, Pv, EH); Fov = EH; }
 	const FVector BaseLoc = AZoogiPlayerController::BoomLocation(Pv, Yaw, Pitch, Dist);
-	const FRotator BaseRot = (Pv - BaseLoc).Rotation();
+	const FRotator BaseRot = ZoogiPortrait::BandRotation(BaseLoc, Pv, Fov, EA, ET, EB);
 	FVector Loc = BaseLoc; FRotator Rot = BaseRot;
 	if (ElevPass == 1 && ElevT > 0.f && ElevT < W)
 	{
@@ -801,19 +994,19 @@ void AZoogiShotTestDriver::TickElevPush(float Dt)
 		const float Pi2 = FMath::Lerp(Pitch, ElevFitPitch, Wt);
 		const float D2 = FMath::Lerp(Dist, ElevFitDist, Wt);
 		Loc = AZoogiPlayerController::BoomLocation(P2, Yaw, Pi2, D2);
-		Rot = (P2 - Loc).Rotation();
+		Rot = ZoogiPortrait::BandRotation(Loc, P2, Fov, EA, ET, EB);
 		ElevPeakW = FMath::Max(ElevPeakW, Wt);
 		if (ElevT >= AZoogiPlayerController::ElevPushOutEnd) ElevEndDev = FMath::Max(ElevEndDev, FMath::Max(FVector::Dist(Loc, BaseLoc), (Rot - BaseRot).GetNormalized().Euler().GetAbsMax()));
 		ElevMinZ = FMath::Min(ElevMinZ, Loc.Z);
 		if (Wt >= 0.999f)
 		{
-			const float TanH = FMath::Tan(FMath::DegreesToRadians(Fov * 0.5f)), TanV = TanH / (16.f / 9.f);
+			const float TanH = FMath::Tan(FMath::DegreesToRadians(Fov * 0.5f)), TanV = TanH / (ZoogiPortrait::IsPortrait(EA) ? EA : 16.f / 9.f);
 			for (const FVector& P : ElevPadFloors)
 				for (const FVector& O : { FVector(0.f, 0.f, 0.f), FVector(0.f, 0.f, 130.f) })
 				{
 					const FVector L = Rot.UnrotateVector(P + O - Loc);
 					ElevPads++;
-					if (L.X < 1.f || FMath::Abs(L.Y) / L.X > TanH || FMath::Abs(L.Z) / L.X > TanV) ElevPadsOut++;
+					if (L.X < 1.f || FMath::Abs(L.Y) / L.X > TanH || L.Z / L.X > TanV * (1.f - 2.f * ET) || -L.Z / L.X > TanV * (1.f - 2.f * EB)) ElevPadsOut++;
 				}
 		}
 	}
@@ -957,6 +1150,9 @@ void AZoogiShotTestDriver::StartCase()
 	case ZoogiShotTest::ECaseKind::ElevatorPush:
 		StartElevPush();
 		break;
+	case ZoogiShotTest::ECaseKind::Portrait:
+		StartPortrait();
+		break;
 	case ZoogiShotTest::ECaseKind::AvoidParticles:
 	{
 		// A white glow burst (+ a Niagara white burst) right where the tracking camera would sit; the camera must stay out of it.
@@ -1032,6 +1228,7 @@ void AZoogiShotTestDriver::RunCase(float RealDt)
 	}
 	if (bRingOut) TickRingOut(GetWorld()->GetDeltaSeconds());
 	if (bElevPush) TickElevPush(GetWorld()->GetDeltaSeconds());
+	if (bPortrait) TickPortrait(RealDt);
 	// RenderTarget output must leave the main view completely alone, every frame.
 	if ((C.Kind == ZoogiShotTest::ECaseKind::Shot || C.Kind == ZoogiShotTest::ECaseKind::AirborneSlowMoRefused || C.Kind == ZoogiShotTest::ECaseKind::AvoidOcclusion) && C.Output == EZoogiShotOutput::RenderTarget)
 	{
@@ -1117,7 +1314,7 @@ void AZoogiShotTestDriver::RunCase(float RealDt)
 		if (C.Kind == ZoogiShotTest::ECaseKind::Overlap && Handles.Num() >= 3) ExportRT(D->GetShotRenderTarget(Handles[2]), C.Name + TEXT("_rendertarget"));
 	}
 	const bool bIdle = D->NumActiveShots() == 0 && !D->IsTimeScaleActive();
-	const bool bRingWait = (bRingOut && !bRingOutDone) || (bElevPush && !bElevDone);
+	const bool bRingWait = (bRingOut && !bRingOutDone) || (bElevPush && !bElevDone) || (bPortrait && !bPortDone);
 	if (bIdle && !bRingWait && StepTime > 0.2f && (C.Kind != ZoogiShotTest::ECaseKind::LevelEnd))
 	{
 		Step = ZoogiShotTest::EStep::WaitEnd;
@@ -1241,6 +1438,31 @@ void AZoogiShotTestDriver::Verify()
 			*ElevFitPivot.ToString(), ElevFitPitch, ElevFitDist, ElevBaseDist, ElevPeakW, ElevPadsOut, ElevPads, Gain, AZoogiPlayerController::ElevPushWindow - AZoogiPlayerController::ElevPushOutEnd, ElevEndDev, ElevMinZ,
 			bElevGateLive ? TEXT("ON (should be skipped)") : TEXT("skipped"), bElevSpawned));
 	}
+	if (C.Kind == ZoogiShotTest::ECaseKind::Portrait)
+	{
+		const bool bPort = ZoogiPortrait::IsPortrait(PortAspect);
+		const bool bCourt = PortCourtN > 0 && PortCourtOut == 0;
+		const bool bRing2 = AZoogiArena::OuterOutR <= 0.f || (PortRing2N > 0 && PortRing2Out == 0);
+		const bool bShooter = PortShooterN > 0 && PortShooterOut == 0;
+		const bool bVFov = PortVFov <= ZoogiPortrait::VFovMax() + 0.5f;
+		const bool bTablet = bPortAimMode && bPortBehind && PortAimPitch >= 40.f && PortAimPitch <= 62.f;
+		bool bOk = bPortDone && bPortRestored && bPortModeOk;
+		// AIM chase view: shooter at PortraitAimScreenY (+-0.03), aim line straight up (|x| <= 0.02), the far rim in the upper half
+		// of the frame below the top band, look pitch = PortraitAimPitch
+		const float WantY = ZoogiPortrait::ChaseScreenY();
+		const bool bChase = bChaseRan && FMath::Abs(ChaseShooterY - WantY) <= 0.03f && ChaseAimX <= 0.02f && ChaseFarY > 0.f && ChaseFarY <= 1.f - 2.f * PortTop
+			&& FMath::Abs(ChasePitchGot - ZoogiPortrait::ChasePitch()) <= 0.5f;
+		if (bPort) bOk &= bCourt && bRing2 && bShooter && bVFov && bTablet && bChase;
+		bPass &= bOk;
+		Extra.Add(FString::Printf(TEXT("portrait framing: view aspect %.3f (%s) band top %.2f bottom %.2f | court r%.0f samples outside width/band %d/%d (widest |x| %.3f) | Ring 2 %s | shooter samples outside the band %d/%d (y %.3f..%.3f, band %.2f..%.2f) | overview vertical FOV %.1f (cap %.0f) | BEFORE rule: %.0f%% of the court outside (informational)"),
+			PortAspect, bPort ? TEXT("portrait") : TEXT("landscape: checks informational"), PortTop, PortBot, PortCourtR, PortCourtOut, PortCourtN, PortCourtMaxX,
+			AZoogiArena::OuterOutR > 0.f ? *FString::Printf(TEXT("r%.0f outside %d/%d"), AZoogiArena::OuterOutR, PortRing2Out, PortRing2N) : TEXT("n/a (no outer ring)"),
+			PortShooterOut, PortShooterN, PortShooterMinY, PortShooterMaxY, -1.f + 2.f * PortBot, 1.f - 2.f * PortTop, PortVFov, ZoogiPortrait::VFovMax(), PortLegacyOut * 100.f));
+		Extra.Add(FString::Printf(TEXT("aim view: portrait aim framing %d, camera behind the shooter looking up the arena %d, pitch %.1f (need 40..62), boom %.0f of %.0f wanted (probe arm %.2f) | %s"),
+			bPortAimMode, bPortBehind, PortAimPitch, PortAimGot, PortAimWant, PortAimArm, *PortModeLine));
+		Extra.Add(FString::Printf(TEXT("AIM chase view: ran %d | shooter at %.3f of the screen height (want %.2f) | aim point |x| %.3f | far rim y %.3f (upper half, below the top band) | look pitch %.1f (want %.1f) | camera %.0f cm from the shooter, %.0f cm above | collision probe arm %.2f (1 = clear; the live camera pulls in to it)"),
+			bChaseRan, ChaseShooterY, WantY, ChaseAimX, ChaseFarY, ChasePitchGot, ZoogiPortrait::ChasePitch(), ChaseBoomGot, ChaseCamH, ChaseArm));
+	}
 	if (FinishLog.Num()) Extra.Add(TEXT("ends ") + FString::Join(FinishLog, TEXT(",")));
 	if (AZoogiGameMode* G = GM()) Extra.Add(FString::Printf(TEXT("stage %d phase %d"), (int32)G->Stage, (int32)G->Phase));
 	Result(bPass, FString::Printf(TEXT("[%s] camera restore"), *C.Name), Report + TEXT(" | ") + FString::Join(Extra, TEXT(" | ")));
@@ -1326,7 +1548,7 @@ void AZoogiShotTestDriver::Tick(float DeltaSeconds)
 			HidePanel();
 			if (TrackProp) TrackProp->SetActorHiddenInGame(true);
 			if (ArcProp) ArcProp->SetActorHiddenInGame(true);
-			bBankMove = false; bBankHitLogged = false; bRingOut = false; bElevPush = false;
+			bBankMove = false; bBankHitLogged = false; bRingOut = false; bElevPush = false; bPortrait = false;
 			if (SimCam) { SimCam->Destroy(); SimCam = nullptr; }
 			bElevPush = false;
 			if (TempProp) { TempProp->Destroy(); TempProp = nullptr; }

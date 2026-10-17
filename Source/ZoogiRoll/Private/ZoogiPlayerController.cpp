@@ -1,4 +1,5 @@
 #include "ZoogiPlayerController.h"
+#include "ZoogiPortraitCam.h"
 #include "ZoogiStageForming.h"
 #include "ZoogiArena.h"
 #include "ZoogiRoll.h"
@@ -161,6 +162,7 @@ AZoogiGameMode* AZoogiPlayerController::GM() const
 void AZoogiPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
+	ZoogiPortrait::SetModeOverride(-1); // portrait camera: auto-detect until SetPortraitCameraMode
 	FInputModeGameAndUI Mode;
 	Mode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
 	Mode.SetHideCursorDuringCapture(false);
@@ -652,6 +654,16 @@ bool AZoogiPlayerController::ZoomStageLive(const AZoogiGameMode* G)
 	return G && G->IsHumanAiming() && ((G->Stage == EZoogiStage::Battle && G->IsAimStep()) || (G->Stage == EZoogiStage::Awaken && !G->bAwakenDone));
 }
 
+// Default zoom anchor height (screen fraction from the top): landscape 0.45; portrait the safe band's centre (0.475 at the
+// default 5% / 10% band), so key / button zoom closes in on the play focus, not under the top controls or the thumb zone.
+static float ZoomAnchorY(const APlayerController* PC)
+{
+	const float A = ZoogiPortrait::ViewAspect(PC);
+	if (!ZoogiPortrait::IsPortrait(A)) return 0.45f;
+	float T = 0.f, B = 0.f; ZoogiPortrait::Band(PC, A, T, B);
+	return 0.5f - 0.5f * (B - T);
+}
+
 bool AZoogiPlayerController::CanZoom() const
 {
 	const AZoogiGameMode* G = GM();
@@ -719,7 +731,7 @@ void AZoogiPlayerController::SetZoomMode(bool bOn, const TCHAR* Why)
 		AActor* Lk = G && G->TargetLock.IsValid() ? G->TargetLock.Get() : nullptr;
 		if (Lk) ZoomAnchor = FVector(ActorCenter(Lk).X, ActorCenter(Lk).Y, CourtZ);
 		else if (G && G->bFreeAim) ZoomAnchor = FVector(G->FreeAimPoint.X, G->FreeAimPoint.Y, CourtZ);
-		else { int32 VX = 1920, VY = 1080; GetViewportSize(VX, VY); SetZoomAnchor(FVector2D(VX * 0.5f, VY * 0.45f)); }
+		else { int32 VX = 1920, VY = 1080; GetViewportSize(VX, VY); SetZoomAnchor(FVector2D(VX * 0.5f, VY * ZoomAnchorY(this))); }
 		ZoomAbout(FMath::Max(ZoomWant, ZoomTune.EnterZoom));
 	}
 	else { ZoomWant = 1.f; ZoomOffWant = FVector::ZeroVector; }
@@ -781,7 +793,7 @@ bool AZoogiPlayerController::UpdateZoomInput(AZoogiGameMode* G, bool bAimStage, 
 	if (bZoomMode && (Steps != 0 || KSteps != 0))
 	{
 		if (Steps != 0) SetZoomAnchor(Mouse);
-		else { int32 VX = 1920, VY = 1080; GetViewportSize(VX, VY); SetZoomAnchor(FVector2D(VX * 0.5f, VY * 0.45f)); }
+		else { int32 VX = 1920, VY = 1080; GetViewportSize(VX, VY); SetZoomAnchor(FVector2D(VX * 0.5f, VY * ZoomAnchorY(this))); }
 		const float Old = ZoomWant;
 		ZoomAbout(ZoomWant * FMath::Pow(1.f + T.WheelStep, (float)Steps) * FMath::Pow(1.f + T.KeyStep, (float)KSteps));
 		if (ZoomLogN++ < 80) UE_LOG(LogZoogi, Log, TEXT("AIMZOOM %s %.2fx -> %.2fx (max %.2fx) toward (%.0f, %.0f)"), Steps ? TEXT("wheel") : TEXT("key"), Old, ZoomWant, T.MaxZoom, ZoomAnchor.X, ZoomAnchor.Y);
@@ -1367,19 +1379,23 @@ FVector AZoogiPlayerController::BoomLocation(const FVector& P, float InYaw, floa
 	return P - FRotator(0.f, InYaw, 0.f).Vector() * InDist * FMath::Cos(Pr) + FVector(0.f, 0.f, InDist * FMath::Sin(Pr));
 }
 
-void AZoogiPlayerController::ElevatorPushFit(const TArray<FVector>& PadFloors, float InYaw, float InFov, float BaseDist, FVector& OutPivot, float& OutPitch, float& OutDist)
+void AZoogiPlayerController::ElevatorPushFit(const TArray<FVector>& PadFloors, float InYaw, float InFov, float BaseDist, FVector& OutPivot, float& OutPitch, float& OutDist,
+	float Aspect, float Top, float Bottom)
 {
 	FVector C = FVector::ZeroVector;
 	for (const FVector& P : PadFloors) C += P;
 	C /= FMath::Max(1, PadFloors.Num());
 	OutPivot = FVector(C.X, C.Y, C.Z + 40.f); // pad centroid at lift-top height
 	OutPitch = 38.f;                           // a little lower than the sweep's 52: the lifts read as rising
-	const float TanH = FMath::Tan(FMath::DegreesToRadians(InFov * 0.5f)) * 0.82f; // keep a margin inside the frame
-	const float TanV = TanH / (16.f / 9.f);
+	// keep a margin inside the frame; portrait: the same margin as the court fit (the narrow width is the only limit there, so
+	// the landscape 0.82 left the pads hardly bigger than the court-wide sweep end)
+	const float TanH = FMath::Tan(FMath::DegreesToRadians(InFov * 0.5f)) * (Aspect < 1.f ? ZoogiPortrait::CourtMargin() : 0.82f);
+	const float TanV = TanH / FMath::Max(Aspect, 0.1f);
+	const float VTop = TanV * (1.f - 2.f * Top), VBot = TanV * (1.f - 2.f * Bottom); // portrait: inside the HUD-safe band
 	auto Fits = [&](float D)
 	{
 		const FVector Loc = BoomLocation(OutPivot, InYaw, OutPitch, D);
-		const FRotator Rot = (OutPivot - Loc).Rotation();
+		const FRotator Rot = ZoogiPortrait::BandRotation(Loc, OutPivot, InFov, Aspect, Top, Bottom);
 		for (const FVector& P : PadFloors)
 			for (int32 k = 0; k < 10; ++k)
 			{
@@ -1387,7 +1403,7 @@ void AZoogiPlayerController::ElevatorPushFit(const TArray<FVector>& PadFloors, f
 				const float A = k * 72.f;
 				const FVector Off = k < 5 ? FVector(FMath::Cos(FMath::DegreesToRadians(A)) * 150.f, FMath::Sin(FMath::DegreesToRadians(A)) * 150.f, 0.f) : FVector(0.f, 0.f, 130.f);
 				const FVector L = Rot.UnrotateVector(P + Off - Loc);
-				if (L.X < 50.f || FMath::Abs(L.Y) / L.X > TanH || FMath::Abs(L.Z) / L.X > TanV) return false;
+				if (L.X < 50.f || FMath::Abs(L.Y) / L.X > TanH || L.Z / L.X > VTop || -L.Z / L.X > VBot) return false;
 			}
 		return true;
 	};
@@ -1395,6 +1411,113 @@ void AZoogiPlayerController::ElevatorPushFit(const TArray<FVector>& PadFloors, f
 	if (!Fits(Hi)) { OutDist = BaseDist; return; }
 	for (int32 i = 0; i < 18; ++i) { const float M = 0.5f * (Lo + Hi); if (Fits(M)) Hi = M; else Lo = M; }
 	OutDist = Hi;
+}
+
+void AZoogiPlayerController::SetPortraitCameraMode(bool bPortrait)
+{
+	const int32 M = bPortrait ? 1 : 0;
+	if (ZoogiPortrait::GetModeOverride() == M) return;
+	ZoogiPortrait::SetModeOverride(M);
+	UE_LOG(LogZoogi, Log, TEXT("CAM portrait camera mode -> %s (hook; view aspect %.3f)"), bPortrait ? TEXT("PORTRAIT") : TEXT("LANDSCAPE"), ZoogiPortrait::ViewAspect(this));
+}
+
+void AZoogiPlayerController::ClearPortraitCameraMode()
+{
+	if (ZoogiPortrait::GetModeOverride() == -1) return;
+	ZoogiPortrait::SetModeOverride(-1);
+	UE_LOG(LogZoogi, Log, TEXT("CAM portrait camera mode -> AUTO (view aspect %.3f)"), ZoogiPortrait::ViewAspect(this));
+}
+
+bool AZoogiPlayerController::IsPortraitCameraMode() const
+{
+	return ZoogiPortrait::IsPortrait(ZoogiPortrait::ViewAspect(this));
+}
+
+float AZoogiPlayerController::PortraitAimDist(const AZoogiGameMode* G, float Aspect, float Top, float Bottom, const FVector& Shooter, const FVector& LookPivot,
+	float InYaw, float InPitch, float LandscapeFov, float LandscapeDist, float& OutHFov)
+{
+	float K = 1.f;
+	ZoogiPortrait::AdaptFov(LandscapeFov, Aspect, OutHFov, K);
+	// never closer than the landscape boom; wide enough to show AimWidth x the play radius across the look point
+	const float TanH = FMath::Tan(FMath::DegreesToRadians(OutHFov * 0.5f));
+	const float DW = ZoogiPortrait::AimWidth() * PlayRadius(G ? G->Arena : nullptr) / FMath::Max(2.f * TanH * ZoogiPortrait::CourtMargin(), 0.05f);
+	const float MinD = FMath::Max(LandscapeDist, DW);
+	const float MaxD = FMath::Max(MinD, LandscapeDist * ZoogiPortrait::BoomMax());
+	// and the shooter's silhouette inside the HUD-safe band (it sits low in the frame: the arena runs up the screen)
+	const float R = ZoogiConst::ZoogiRadius;
+	const FVector Right = FRotator(0.f, InYaw, 0.f).RotateVector(FVector(0.f, R, 0.f));
+	const FVector Pts[] = { Shooter + FVector(0, 0, R), Shooter - FVector(0, 0, R), Shooter + Right, Shooter - Right };
+	return ZoogiPortrait::FitPointsDist(Pts, LookPivot, InYaw, InPitch, OutHFov, Aspect, Top, Bottom, ZoogiPortrait::ShooterMargin(), MinD, MaxD);
+}
+
+void AZoogiPlayerController::PortraitChaseBoom(const AZoogiGameMode* G, float Aspect, float LandscapeFov, float& OutElev, float& OutBoom, float& OutAhead, float& OutHFov)
+{
+	float K = 1.f;
+	ZoogiPortrait::AdaptFov(LandscapeFov, Aspect, OutHFov, K);
+	const float TanV = FMath::Tan(FMath::DegreesToRadians(OutHFov * 0.5f)) / FMath::Max(Aspect, 0.05f);
+	const float Theta = ZoogiPortrait::ChasePitch();                  // look pitch below horizontal
+	const float YS = 2.f * ZoogiPortrait::ChaseScreenY() - 1.f;       // shooter this far below the optical axis (normalised)
+	OutElev = Theta + FMath::RadiansToDegrees(FMath::Atan(YS * TanV)); // boom elevation that puts the shooter there
+	OutBoom = ZoogiPortrait::ChaseBoom() * ArenaCamScale(G);
+	// look point: where the view axis meets the shooter's floor, ahead of the shooter along the aim yaw
+	const float E = FMath::DegreesToRadians(OutElev), T = FMath::DegreesToRadians(FMath::Max(Theta, 3.f));
+	OutAhead = OutBoom * FMath::Sin(E) / FMath::Tan(T) - OutBoom * FMath::Cos(E);
+}
+
+void AZoogiPlayerController::PortraitChasePose(const AZoogiGameMode* G, const APlayerController* PC, const FVector& Shooter, float InYaw, FVector& OutLoc, FRotator& OutRot, float& OutHFov)
+{
+	using namespace ZoogiCamTune;
+	float Elev, B, Ahead;
+	PortraitChaseBoom(G, ZoogiPortrait::ViewAspect(PC), Profiles[PTactical].Fov, Elev, B, Ahead, OutHFov);
+	OutLoc = BoomLocation(Shooter, InYaw, Elev, B);
+	const FVector Look = Shooter + FRotator(0.f, InYaw, 0.f).Vector() * Ahead;
+	OutRot = (Look - OutLoc).Rotation();
+}
+
+float AZoogiPlayerController::PortraitCourtRadius(const AZoogiGameMode* G)
+{
+	const float R = FMath::Max(PlayRadius(G ? G->Arena : nullptr), AZoogiArena::OuterOutR);
+	return R > 0.f ? R + ZoogiConst::ZoogiRadius : 0.f;
+}
+
+float AZoogiPlayerController::PortraitBoom(const AZoogiGameMode* G, float Aspect, float Top, float Bottom, float InYaw, float InPitch, float LandscapeFov, float InDist,
+	bool bCourt, const FVector& Centre, float& OutHFov)
+{
+	float K = 1.f;
+	ZoogiPortrait::AdaptFov(LandscapeFov, Aspect, OutHFov, K);
+	if (!ZoogiPortrait::IsPortrait(Aspect)) return InDist;
+	const float R = bCourt ? PortraitCourtRadius(G) : 0.f;
+	if (R <= 0.f) return InDist * K;
+	// overview: the court fills the width (never closer than the landscape boom)
+	return FMath::Max(InDist, ZoogiPortrait::FitCircleDist(Centre, R, InYaw, InPitch, OutHFov, Aspect, Top, Bottom, 100.f, 40000.f));
+}
+
+void AZoogiPlayerController::PortraitOverviewPose(const AZoogiGameMode* G, const APlayerController* PC, float InYaw, float CourtZ, bool bLegacy, FVector& OutLoc, FRotator& OutRot, float& OutFov)
+{
+	using namespace ZoogiCamTune;
+	// same numbers as UpdateCamera's tactical resolve / end branch at rest
+	const float InPitch = Profiles[PTactical].Pitch, LFov = Profiles[PTactical].Fov;
+	float D = Profiles[PTactical].Dist * TacResolveDist * ArenaCamScale(G);
+	const FVector C0(0.f, 0.f, CourtZ);
+	const float A = ZoogiPortrait::ViewAspect(PC);
+	const bool bPortraitView = !bLegacy && ZoogiPortrait::IsPortrait(A);
+	if (AZoogiArena::OuterOutR > 0.f && !bPortraitView)
+	{
+		float V = 1.3f; FParse::Value(FCommandLine::Get(), TEXT("ZoogiR2ViewMul="), V);
+		D *= FMath::Clamp(V, 1.f, 2.f);
+	}
+	if (bLegacy)
+	{
+		OutFov = LFov;
+		OutLoc = BoomLocation(C0, InYaw, InPitch, D);
+		OutRot = (C0 - OutLoc).Rotation();
+		return;
+	}
+	float T = 0.f, B = 0.f;
+	ZoogiPortrait::Band(PC, A, T, B);
+	D = PortraitBoom(G, A, T, B, InYaw, InPitch, LFov, D, true, C0, OutFov);
+	OutLoc = BoomLocation(C0, InYaw, InPitch, D);
+	OutRot = ZoogiPortrait::BandRotation(OutLoc, C0, OutFov, A, T, B);
 }
 
 bool AZoogiPlayerController::ElevatorPushAllowed(const AZoogiGameMode* G)
@@ -1419,12 +1542,19 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	AZoogiGameMode* G = GM();
 	if (!Cam || !G) return;
 	const float Scale = (G->Arena && G->Arena->IsNeon()) ? NeonScale : (G->Arena ? G->Arena->CamScale : 1.f); // Oct 14: Frozen Ring 2 1.39 (frames r2300), A 1.3 courts 1.15
+	// Oct 17 portrait (9:16 .. 9:20): capped vertical FOV, width-keeping boom, HUD-safe band (ZoogiPortraitCam; no-op on landscape)
+	const float PAspect = ZoogiPortrait::ViewAspect(this);
+	const bool bPortrait = ZoogiPortrait::IsPortrait(PAspect);
+	float PTop = 0.f, PBot = 0.f;
+	ZoogiPortrait::Band(this, PAspect, PTop, PBot);
 
 	if (G->Phase == EZoogiPhase::Forming)
 	{
 		// Stage forming: a slow sweep in to the art orientation (screen up = -Y) while the stage assembles.
 		const float Pg = (G->Arena && G->Arena->Forming) ? G->Arena->Forming->GetProgress() : 1.f;
 		FormingSweepPose(Pg, Scale, Yaw, Pitch, Dist, Fov, Pivot);
+		float HFov = Fov;
+		Dist = PortraitBoom(G, PAspect, PTop, PBot, Yaw, Pitch, Fov, Dist, true, Pivot, HFov);
 		Dutch = 0.f;
 		// Spawn-elevator push-in over the intro's last 1.25 s (same window the GameMode starts the elevators in), timed off the
 		// forming progress so the weight is exactly 0 for the intro's final frames.
@@ -1438,8 +1568,10 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 				for (const AZoogiBall* B : G->Balls) if (B && !B->bOut) Pads.Add(B->BallLocation() - FVector(0.f, 0.f, ZoogiConst::ZoogiRadius));
 				float FYaw, FPitch, FDist, FFov; FVector FPivot;
 				FormingSweepPose(1.f, Scale, FYaw, FPitch, FDist, FFov, FPivot);
+				float FHFov = FFov;
+				FDist = PortraitBoom(G, PAspect, PTop, PBot, FYaw, FPitch, FFov, FDist, true, FPivot, FHFov);
 				ElevPushPivot = FPivot; ElevPushPitch = FPitch; ElevPushDist = FDist;
-				if (Pads.Num()) ElevatorPushFit(Pads, FYaw, FFov, FDist, ElevPushPivot, ElevPushPitch, ElevPushDist);
+				if (Pads.Num()) ElevatorPushFit(Pads, FYaw, FHFov, FDist, ElevPushPivot, ElevPushPitch, ElevPushDist, PAspect, PTop, PBot);
 				bElevPushFit = true;
 				UE_LOG(LogZoogi, Log, TEXT("CAM elevator push-in: %d pads, pivot %s pitch %.1f dist %.0f (sweep end %.0f)"), Pads.Num(), *ElevPushPivot.ToString(), ElevPushPitch, ElevPushDist, FDist);
 			}
@@ -1454,14 +1586,15 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 			// Pillar close-up (forming shots): low view across the floor at the 22.5 deg Resonance pillar and its neighbour.
 			Yaw = 22.5f + 25.f; Pitch = 10.f; Dist = 1250.f; Fov = 60.f;
 			Pivot = FVector(560.f, 360.f, 120.f);
+			Dist = PortraitBoom(G, PAspect, PTop, PBot, Yaw, Pitch, Fov, Dist, false, Pivot, HFov);
 		}
 		Look = Pivot;
 		const FRotator Heading(0.f, Yaw, 0.f);
 		const float Pr = FMath::DegreesToRadians(Pitch);
 		const FVector Loc = Pivot - Heading.Vector() * Dist * FMath::Cos(Pr) + FVector(0, 0, Dist * FMath::Sin(Pr));
 		Cam->SetActorLocation(Loc);
-		Cam->SetActorRotation((Look - Loc).Rotation());
-		Cam->GetCameraComponent()->SetFieldOfView(Fov);
+		Cam->SetActorRotation(ZoogiPortrait::BandRotation(Loc, Look, HFov, PAspect, PTop, PBot));
+		Cam->GetCameraComponent()->SetFieldOfView(HFov);
 		ApplyPostProcess(Dt, PMenu, FVector::Dist(Loc, Look));
 		CurProfile = PMenu;
 		return;
@@ -1478,7 +1611,10 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		MenuOrbit += Dt * 6.f;
 		Yaw = FRotator::NormalizeAxis(Yaw + FRotator::NormalizeAxis(MenuOrbit - Yaw) * (1.f - FMath::Exp(-2.f * Dt)));
 		Pitch = Damp(Pitch, 38.f, 1.f, Dt);
-		Dist = Damp(Dist, (G->Phase == EZoogiPhase::GameOver ? 2600.f : 3600.f) * Scale, 1.f, Dt);
+		float MenuHFov = 90.f;
+		const float MenuDist = PortraitBoom(G, PAspect, PTop, PBot, Yaw, 38.f, 90.f, (G->Phase == EZoogiPhase::GameOver ? 2600.f : 3600.f) * Scale,
+			G->Phase != EZoogiPhase::GameOver, FVector(0, 0, -150.f), MenuHFov);
+		Dist = Damp(Dist, MenuDist, 1.f, Dt);
 		Fov = Damp(Fov, 90.f, 2.f, Dt);
 		Dutch = Damp(Dutch, 0.f, 4.f, Dt);
 		const FVector Target = (G->Phase == EZoogiPhase::GameOver && W) ? W->BallLocation() : FVector(0, 0, -150.f);
@@ -1487,9 +1623,11 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		const FRotator Heading(0.f, Yaw, 0.f);
 		const float Pr = FMath::DegreesToRadians(Pitch);
 		const FVector Loc = Pivot - Heading.Vector() * Dist * FMath::Cos(Pr) + FVector(0, 0, Dist * FMath::Sin(Pr));
+		float MenuFov = Fov, MenuK = 1.f;
+		ZoogiPortrait::AdaptFov(Fov, PAspect, MenuFov, MenuK);
 		Cam->SetActorLocation(Loc);
-		Cam->SetActorRotation((Look - Loc).Rotation());
-		Cam->GetCameraComponent()->SetFieldOfView(Fov);
+		Cam->SetActorRotation(ZoogiPortrait::BandRotation(Loc, Look, MenuFov, PAspect, PTop, PBot));
+		Cam->GetCameraComponent()->SetFieldOfView(MenuFov);
 		ApplyPostProcess(Dt, PMenu, FVector::Dist(Loc, Look));
 		CurProfile = PMenu;
 		return;
@@ -1542,6 +1680,9 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	FVector WantPivot = SL, WantLook = SL;
 	float PitchOff = 0.f, DistMul = 1.f;
 	FVector ProbeFrom = SL + FVector(0, 0, 60.f);
+	bool bCourtView = false; FVector CourtCentre = FVector::ZeroVector; // portrait: whole-court views fit the court / Ring 2 (PortraitBoom)
+	bool bPortraitAim = false; FVector LegacyPivot = FVector::ZeroVector; // portrait aim / rest framing (tactical branch)
+	bool bPortraitChase = false; float ChaseElev = 0.f, ChaseBoomD = 0.f; // portrait AIM chase view (tablet reference)
 	if (bAnimeShot)
 	{
 		PIdx = PAnime;
@@ -1597,17 +1738,46 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		{
 			WantPivot = C0;
 			DistMul = TacResolveDist * Scale;
+			bCourtView = true; CourtCentre = C0;
 			// Oct 15 Frozen Ring 2: the resolve / end view frames the whole outer ring (r2300) inside the HUD frame's
 			// viewport (~0.65 of the screen width): 1.39 alone clipped its left / right / front edges. -ZoogiR2ViewMul=
-			if (AZoogiArena::OuterOutR > 0.f)
+			if (AZoogiArena::OuterOutR > 0.f && !bPortrait) // portrait: PortraitBoom fits Ring 2 itself
 			{
 				static const float R2ViewMul = [] { float V = 1.3f; FParse::Value(FCommandLine::Get(), TEXT("ZoogiR2ViewMul="), V); return FMath::Clamp(V, 1.f, 2.f); }();
 				DistMul *= R2ViewMul;
 			}
 			if (G->Arena && G->Arena->IsNeonRect()) WantYaw = TacYaw = (FMath::Abs(FRotator::NormalizeAxis(Yaw - 90.f)) <= 90.f ? 90.f : -90.f);
 		}
-		WantLook = WantPivot;
+		// Oct 17 portrait aim / rest (Evan's tablet build): from behind the shooter on its pad, looking up the arena along the
+		// screen's long axis; the safe band replaces the landscape aim-bar / card-panel slides (PortraitAimDist fits the shooter)
+		const bool bRestStep = G->Stage == EZoogiStage::Draw || G->Stage == EZoogiStage::Awaken;
+		const bool bAimStep = G->Stage == EZoogiStage::Battle && (G->BattleStep == EZoogiBattleStep::Aim || G->BattleStep == EZoogiBattleStep::PowerUp);
+		if (bPortrait && ZoogiPortrait::AimFraming() && Shooter && !bShooterLeaving && (bRestStep || bAimStep))
+		{
+			LegacyPivot = WantPivot;
+			const FVector Tgt = (bHasAim && !bRestStep) ? AimP : C0;
+			WantPivot = FMath::Lerp(SL, FVector(Tgt.X, Tgt.Y, SL.Z), bRestStep ? ZoogiPortrait::RestAhead() : ZoogiPortrait::AimAhead());
+			WantPivot.Z = FMath::Max(SL.Z, CourtZ);
+			bPortraitAim = true;
+			if (G->BattleStep == EZoogiBattleStep::Aim && G->Stage == EZoogiStage::Battle)
+			{
+				// AIM: low chase view from just behind the Zoogi, looking along the aim line (straight up the screen)
+				float Ahead = 0.f, HF = 0.f;
+				PortraitChaseBoom(G, PAspect, Profiles[PTactical].Fov, ChaseElev, ChaseBoomD, Ahead, HF);
+				WantPivot = SL;
+				bPortraitChase = true;
+				WantLook = SL + FRotator(0.f, TacYaw, 0.f).Vector() * Ahead;
+				WantLook.Z = SL.Z;
+			}
+		}
+		if (!bPortraitChase) WantLook = WantPivot;
 		ProbeFrom = WantPivot + FVector(0, 0, 150.f);
+		// portrait aim / rest: the longer, lower boom behind the pad passes the court's pillars; probe from high over the look
+		// point (as the aim zoom does) so a pillar between the shooter and the camera doesn't pull the view in onto the pad
+		if (bPortraitAim) ProbeFrom = WantPivot + FVector(0, 0, ZoogiPortrait::AimProbeHeight());
+		// chase: the boom is short and low; probe from just over the shooter, so a pillar between it and the camera pulls the
+		// camera in along the boom (it never goes through one)
+		if (bPortraitChase) ProbeFrom = SL + FVector(0, 0, 60.f);
 	}
 	else switch (Cine)
 	{
@@ -1631,6 +1801,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		WantLook = WantPivot;
 		DistMul = Scale;
 		ProbeFrom = FVector(0, 0, 200.f);
+		bCourtView = true; CourtCentre = WantPivot;
 		break;
 	}
 	case ECine::Main:
@@ -1697,7 +1868,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 			const float SP = (SL - FVector(0, 0, ZoogiConst::ZoogiRadius) - CL).Rotation().Pitch;
 			const float TP = (TL + FVector(0, 0, 2.f * ZoogiConst::ZoogiRadius) - CL).Rotation().Pitch;
 			const float Span = TP - SP;
-			if (Span > 0.f)
+			if (Span > 0.f && !bPortrait) // portrait: the capped vertical FOV is already far taller than the landscape view
 			{
 				const float VNeed = Span / (BattleShooterMaxDrop + BattleTargetMaxRise);
 				const float HNeed = 2.f * FMath::RadiansToDegrees(FMath::Atan(FMath::Tan(FMath::DegreesToRadians(VNeed)) * Aspect));
@@ -1732,6 +1903,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 			WantPivot = FVector(0, 0, 0);
 			WantLook = FVector(0, 0, 0);
 			DistMul = Scale;
+			bCourtView = true; CourtCentre = FVector(0, 0, CourtZ);
 			if (G->Arena && G->Arena->IsNeonRect())
 			{
 				// Rectangular court: square up so the long side runs across the screen, and come in closer to fill it.
@@ -1763,9 +1935,15 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		BlendFrom.Yaw = Yaw; BlendFrom.Pitch = Pitch; BlendFrom.Dist = Dist; BlendFrom.Fov = Fov; BlendFrom.Dutch = Dutch; BlendFrom.Pivot = Pivot; BlendFrom.Look = Look;
 	}
 	ProfileAge += Dt;
-	const float WantPitch = P.Pitch + PitchOff;
-	const float WantDist = P.Dist * DistMul;
+	const float LegacyWantPitch = P.Pitch + PitchOff;
+	const float WantPitch = bPortraitChase ? ChaseElev : bPortraitAim ? ZoogiPortrait::AimPitch() : LegacyWantPitch;
 	const float WantFovF = WantFov > 0.f ? WantFov : P.Fov;
+	float WantHFov = WantFovF;
+	float WantDist = PortraitBoom(G, PAspect, PTop, PBot, WantYaw, WantPitch, WantFovF, P.Dist * DistMul, bCourtView, CourtCentre, WantHFov);
+	// (rest steps too: at least the tactical aim boom, so Draw / Awaken also look up the arena instead of the landscape close-up)
+	if (bPortraitChase) { WantDist = ChaseBoomD; float K0 = 1.f; ZoogiPortrait::AdaptFov(WantFovF, PAspect, WantHFov, K0); }
+	else if (bPortraitAim) WantDist = PortraitAimDist(G, PAspect, PTop, PBot, SL, WantPivot, WantYaw, WantPitch, WantFovF, FMath::Max(P.Dist * DistMul, Profiles[PTactical].Dist * Scale), WantHFov);
+	PortDbgLegacyPivot = bPortraitAim ? LegacyPivot : WantPivot; PortDbgLegacyPitch = LegacyWantPitch; PortDbgLegacyDist = P.Dist * DistMul; PortDbgAim = bPortraitAim;
 	const bool bBlending = ProfileAge < BlendDur;
 	// Yaw: spring (underdamped in Battle = arc sweep with overshoot and settle; whip on switches).
 	float W = P.YawFreq, Z = P.YawZeta;
@@ -1898,7 +2076,11 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	}
 	else ViewBadT = 0.f;
 
-	FRotator Rot = (ZLook - Loc).Rotation();
+	PortDbgLook2 = ZLook; PortDbgFov = Fov; PortDbgWantDist = WantDist; PortDbgArm = ArmScale;
+	float ViewHFov = Fov, ViewK = 1.f;
+	ZoogiPortrait::AdaptFov(Fov, PAspect, ViewHFov, ViewK);
+	// portrait: look point at the safe band's centre (the aim chase view places the shooter by its own screen height instead)
+	FRotator Rot = bPortraitChase ? (ZLook - Loc).Rotation() : ZoogiPortrait::BandRotation(Loc, ZLook, ViewHFov, PAspect, PTop, PBot);
 	Rot.Roll = Dutch;
 	// Battle framing guard: keep the shooter's silhouette above the letterbox / bottom HUD band by tilting
 	// down just enough, without pushing the target out of the top of the frame.
@@ -1907,10 +2089,13 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		if (PIdx == PBattle && Shooter)
 		{
 			const float Aspect = ZoogiFramed::ViewAspect(this); // framed HUD: the arena window's real view-rect aspect (full viewport otherwise)
-			const float VHalf = FMath::RadiansToDegrees(FMath::Atan(FMath::Tan(FMath::DegreesToRadians(Fov * 0.5f)) / Aspect));
+			const float TanVH = FMath::Tan(FMath::DegreesToRadians(ViewHFov * 0.5f)) / Aspect;
+			const float VHalf = FMath::RadiansToDegrees(FMath::Atan(TanVH));
 			const float ShooterLow = (SL - FVector(0, 0, ZoogiConst::ZoogiRadius) - Loc).Rotation().Pitch;
 			const float Rel = ShooterLow - Rot.Pitch; // negative = below the centre line
-			const float Limit = -VHalf * BattleShooterMaxDrop;
+			// portrait: the HUD-safe band's edges (top SafeTop / bottom SafeBottom of the screen)
+			const float Limit = bPortrait ? -FMath::RadiansToDegrees(FMath::Atan((1.f - 2.f * PBot) * TanVH)) : -VHalf * BattleShooterMaxDrop;
+			const float TopLimit = bPortrait ? FMath::RadiansToDegrees(FMath::Atan((1.f - 2.f * PTop) * TanVH)) : VHalf * BattleTargetMaxRise;
 			if (Rel < Limit)
 			{
 				Want = Rel - Limit; // negative: tilt down by this much
@@ -1918,7 +2103,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 				{
 					// Don't let the target's top leave the frame.
 					const float TargetTop = (TL + FVector(0, 0, 2.f * ZoogiConst::ZoogiRadius) - Loc).Rotation().Pitch - Rot.Pitch;
-					const float Room = VHalf * BattleTargetMaxRise - TargetTop; // stay below the top HUD band // how far we can tilt down before the target exits
+					const float Room = TopLimit - TargetTop; // stay below the top HUD band // how far we can tilt down before the target exits
 					Want = FMath::Max(Want, -FMath::Max(Room, 0.f));
 				}
 			}
@@ -1945,6 +2130,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	if (FireKickAge < 2.f) FinalFov += FireFovKick * (bTac ? 0.3f : 1.f) * FMath::Exp(-FireKickDecay * FireKickAge) * FMath::Min(1.f, FireKickAge * 12.f);
 	Cam->SetActorLocation(Loc);
 	Cam->SetActorRotation(Rot);
+	if (bPortrait) { float K2 = 1.f; ZoogiPortrait::AdaptFov(FinalFov, PAspect, FinalFov, K2); }
 	Cam->GetCameraComponent()->SetFieldOfView(FMath::Clamp(FinalFov, 30.f, 120.f));
 	ApplyPostProcess(Dt, PIdx, Lock ? FVector::Dist(Loc, TL) : FVector::Dist(Loc, Look));
 }
