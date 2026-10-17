@@ -101,6 +101,9 @@ private:
 	float RotateT = -1.f;     // < 0: no prompt; else seconds since the toggle
 	bool bRotateTo = false;   // target: true = hidden (portrait)
 	bool bRotateApplied = false;
+	int32 RotateReason = 0;   // 0 = HUD toggle, 1 = entering battle, 2 = leaving battle (prompt only: menus are portrait)
+	bool bWasActive = false;  // match-screen edge detection for the entering / leaving battle prompt
+	void StartBattleEdgePrompt(bool bEntering, const FVector2D& ViewSize);
 	mutable FSlateBrush PhoneBrush, PhoneScreenBrush;
 	int32 ToggleTestStep = 0;
 	float ToggleTestT = 0.f;

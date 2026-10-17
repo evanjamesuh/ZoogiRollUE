@@ -336,7 +336,10 @@ void UZoogiFramedHUDWidget::NativeTick(const FGeometry& Geo, float Dt)
 	if (!bActive)
 	{
 		if (bPaused) SetPaused(false);
-		RotateT = -1.f;
+		// Oct 17 (Evan): leaving battle -> rotate prompt back to portrait (menus are portrait); it keeps running over the menu
+		if (bWasActive) { bWasActive = false; StartBattleEdgePrompt(false, Geo.GetLocalSize()); }
+		if (RotateT >= 0.f && RotateReason == 2) { RotateT += FMath::Min(Dt, 0.1f); if (RotateT >= 2.0f) RotateT = -1.f; }
+		else RotateT = -1.f;
 		ZoogiFramed::SetUiRects(TArray<FBox2D>());
 		for (UWidget* W : { (UWidget*)HudBtn.Get(), (UWidget*)ColL.Get(), (UWidget*)ColR.Get(), (UWidget*)CamBtn.Get(), (UWidget*)ZoomBtn.Get(), (UWidget*)MenuBtn.Get(), (UWidget*)PauseShade.Get(), (UWidget*)PausePanel.Get(), (UWidget*)PauseTitle.Get(),
 			(UWidget*)VolDown.Get(), (UWidget*)VolUp.Get(), (UWidget*)VolText.Get(), (UWidget*)SetCamBtn.Get() }) PlaceW(W, FVector2D::ZeroVector, FVector2D::ZeroVector, false);
@@ -403,6 +406,14 @@ void UZoogiFramedHUDWidget::NativeTick(const FGeometry& Geo, float Dt)
 		ZoogiFramed::SetZoomButtonRect(s > 0.f ? FBox2D(ZP / s, (ZP + FVector2D(ZW, ZH)) / s) : FBox2D(ForceInit), bShowZ);
 	}
 	ZoogiFramed::SetUiRects(UiRects);
+	// Oct 17 (Evan): entering battle -> rotate prompt when the battle's view (HUD shown = landscape, hidden = portrait) differs
+	if (!bWasActive)
+	{
+		bWasActive = true;
+		if (RotateReason == 2) RotateT = -1.f;
+		bModeEventPending = true; ModeEventT = 0.f; bRotateApplied = false; // every match entry reports its mode (and tells the camera) once
+		StartBattleEdgePrompt(true, Geo.GetLocalSize());
+	}
 	// Oct 17: HUD toggle -> rotate prompt; the layout + platform orientation switch at mid-prompt
 	if (RotateT >= 0.f)
 	{
@@ -1067,7 +1078,50 @@ void UZoogiFramedHUDWidget::OnHudToggle()
 	bRotateTo = !ZoogiFramed::IsHudHidden();
 	RotateT = 0.f;
 	bRotateApplied = false;
+	RotateReason = 0;
 	UE_LOG(LogZoogi, Log, TEXT("FRAMED HUD toggle pressed -> rotate prompt (to %s)"), bRotateTo ? TEXT("PORTRAIT, HUD hidden") : TEXT("LANDSCAPE, HUD shown"));
+}
+
+void UZoogiFramedHUDWidget::StartBattleEdgePrompt(bool bEntering, const FVector2D& V)
+{
+	// Oct 17 (Evan): the rotate-phone prompt also shows when entering / leaving battle, whenever the view has to turn.
+	// Entering: the battle keeps the HUD state (shown = landscape, hidden = portrait; the very first match follows the device),
+	// so the prompt runs only when the current view doesn't match - the orientation switch happens at mid-prompt as for the toggle.
+	// Leaving: menus are portrait. Mobile asks for portrait under the prompt; PC keeps its window (the menus own it) and shows
+	// nothing unless -ZoogiRotatePromptTest.
+	if (V.X <= 0.f || V.Y <= 0.f) return;
+	const bool bPortraitNow = V.Y > V.X;
+	if (bEntering)
+	{
+		const bool bWantPortrait = ZoogiFramed::IsHudHidden();
+		if (bWantPortrait == bPortraitNow || RotateT >= 0.f)
+		{
+#if PLATFORM_IOS || PLATFORM_ANDROID
+			// already facing the right way: just pin the battle's orientation (the config allows both)
+			FPlatformMisc::SetAllowedDeviceOrientation(bWantPortrait ? EDeviceScreenOrientation::Portrait : EDeviceScreenOrientation::LandscapeSensor);
+#endif
+			return;
+		}
+		bRotateTo = bWantPortrait;
+		RotateT = 0.f;
+		bRotateApplied = false;
+		RotateReason = 1;
+		UE_LOG(LogZoogi, Log, TEXT("FRAMED entering battle -> rotate prompt (to %s)"), bWantPortrait ? TEXT("PORTRAIT, HUD hidden") : TEXT("LANDSCAPE, HUD shown"));
+		return;
+	}
+	if (bPortraitNow) return;
+#if !(PLATFORM_IOS || PLATFORM_ANDROID)
+	static const bool bForce = FParse::Param(FCommandLine::Get(), TEXT("ZoogiRotatePromptTest"));
+	if (!bForce) return;
+#endif
+	bRotateTo = true;
+	RotateT = 0.f;
+	bRotateApplied = true; // nothing to apply in the HUD: the menus take over
+	RotateReason = 2;
+#if PLATFORM_IOS || PLATFORM_ANDROID
+	FPlatformMisc::SetAllowedDeviceOrientation(EDeviceScreenOrientation::Portrait);
+#endif
+	UE_LOG(LogZoogi, Log, TEXT("FRAMED leaving battle -> rotate prompt (to PORTRAIT, menus)"));
 }
 
 void UZoogiFramedHUDWidget::ApplyOrientation(bool bHidden)
@@ -1222,7 +1276,7 @@ int32 UZoogiFramedHUDWidget::PaintRotate(const FGeometry& Geo, FSlateWindowEleme
 	}
 	const FSlateFontInfo F1 = ZoogiUIStyle::BoldFont(FMath::RoundToInt(44.f * u), 3.f * u), F2 = ZoogiUIStyle::BoldFont(FMath::RoundToInt(24.f * u), 2.f * u);
 	HA::Text(Out, Layer + 3, Geo, FVector2D(V.X * 0.5f, C.Y + 250.f * u), bToPortrait ? TEXT("ROTATE TO PORTRAIT") : TEXT("ROTATE TO LANDSCAPE"), F1, FLinearColor(HA::GoldText.R, HA::GoldText.G, HA::GoldText.B, A), 0.5f, 0.5f);
-	HA::Text(Out, Layer + 3, Geo, FVector2D(V.X * 0.5f, C.Y + 310.f * u), bToPortrait ? TEXT("HUD hidden - play vertically") : TEXT("HUD shown - landscape"), F2, FLinearColor(1.f, 1.f, 1.f, 0.9f * A), 0.5f, 0.5f);
+	HA::Text(Out, Layer + 3, Geo, FVector2D(V.X * 0.5f, C.Y + 310.f * u), RotateReason == 2 ? TEXT("Menus are portrait") : RotateReason == 1 ? (bToPortrait ? TEXT("Battle - HUD hidden, play vertically") : TEXT("Battle - HUD shown, landscape")) : (bToPortrait ? TEXT("HUD hidden - play vertically") : TEXT("HUD shown - landscape")), F2, FLinearColor(1.f, 1.f, 1.f, 0.9f * A), 0.5f, 0.5f);
 	return Layer + 4;
 }
 
