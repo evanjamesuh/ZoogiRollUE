@@ -6,8 +6,9 @@
  * looking up the field ahead of it along the aim arrow.
  * The chase-boom math here is shared with the portrait low aim view (which keeps its own tunables).
  *   zoogi.Cam.AimView     1    landscape aim view on (0 = the Oct 4 tactical aim view)
- *   zoogi.Cam.AimPitch    38   camera pitch (deg down)
- *   zoogi.Cam.AimBoom     700  camera distance from the Zoogi (cm, ~7 Zoogi diameters)
+ *   zoogi.Cam.AimPitch    0    camera pitch (deg down); 0 = auto from AimHorizonY and the view's real vertical FOV
+ *   zoogi.Cam.AimHorizonY 0.33 auto pitch: the horizon's screen height from the top (reference clip ~1/3)
+ *   zoogi.Cam.AimBoom     450  camera distance from the Zoogi (cm, ~4.5 Zoogi diameters, low behind it)
  *   zoogi.Cam.AimScreenY  0.72 the Zoogi's screen height from the top (fraction of the view)
  *   zoogi.Cam.AimFov      0    horizontal FOV (0 = the tactical profile's)
  *   zoogi.Cam.AimYawTime  0.12 seconds for the critically damped yaw follow to settle on the aim heading
@@ -16,7 +17,11 @@
 namespace ZoogiAimView
 {
 	ZOOGIROLL_API bool Enabled();
+	/** zoogi.Cam.AimPitch (0 = auto). */
 	ZOOGIROLL_API float Pitch();
+	ZOOGIROLL_API float HorizonY();
+	/** The view pitch to use for a view with this vertical half-FOV tangent (AimPitch, or auto: the horizon at AimHorizonY). */
+	ZOOGIROLL_API float ViewPitch(float TanV);
 	ZOOGIROLL_API float Boom();
 	ZOOGIROLL_API float ScreenY();
 	ZOOGIROLL_API float Fov(float ProfileFov);

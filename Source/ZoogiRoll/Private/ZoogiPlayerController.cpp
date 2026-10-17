@@ -1945,7 +1945,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	const bool bAimViewWanted = !bAnimeShot && !G->bCinematicCam && Shooter && !bShooterLeaving && !Lock && ZoogiAimView::Enabled()
 		&& ZoogiFramed::ViewAspect(this) >= 1.f && (G->IsAimStep() || (bAimViewForce && G->Phase == EZoogiPhase::Aiming));
 	if (bAimViewWanted && !bAimViewActive)
-		UE_LOG(LogZoogi, Log, TEXT("CAM aim view ON for P%d: heading %.1f (pitch %.0f, boom %.0f, screen y %.2f, yaw follow %.2f s)"), Shooter->PlayerIndex + 1, Shooter->AimYaw, ZoogiAimView::Pitch(), ZoogiAimView::Boom(), ZoogiAimView::ScreenY(), ZoogiAimView::YawTime());
+		UE_LOG(LogZoogi, Log, TEXT("CAM aim view ON for P%d: heading %.1f (pitch %.1f [0 = auto, horizon at %.2f], boom %.0f, screen y %.2f, yaw follow %.2f s)"), Shooter->PlayerIndex + 1, Shooter->AimYaw, ZoogiAimView::Pitch(), ZoogiAimView::HorizonY(), ZoogiAimView::Boom(), ZoogiAimView::ScreenY(), ZoogiAimView::YawTime());
 	AimViewAge = bAimViewWanted ? (bAimViewActive ? AimViewAge + Dt : 0.f) : 0.f;
 	bAimViewActive = bAimViewWanted;
 	if (bAimViewActive) AimViewYaw = FRotator::NormalizeAxis(Shooter->AimYaw); // orbit with the aim arrow (Evan 2:46 PM: "the camera should rotate with it")
@@ -2054,7 +2054,9 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 			WantFov = ZoogiAimView::Fov(TP.Fov);
 			const float TanV = FMath::Tan(FMath::DegreesToRadians(WantFov * 0.5f)) / FMath::Max(ZoogiFramed::ViewAspect(this), 0.1f);
 			float Elev, Ahead;
-			ZoogiAimView::ChaseBoom(ZoogiAimView::Boom(), ZoogiAimView::Pitch(), ZoogiAimView::ScreenY(), TanV, Elev, Ahead);
+			AimViewPitchUsed = ZoogiAimView::ViewPitch(TanV);
+			ZoogiAimView::ChaseBoom(ZoogiAimView::Boom(), AimViewPitchUsed, ZoogiAimView::ScreenY(), TanV, Elev, Ahead);
+			AimViewElevUsed = Elev;
 			WantYaw = TacYaw = AimViewYaw;
 			AimViewAhead = Ahead;
 			WantPivot = SL;
@@ -2337,6 +2339,9 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		const float A = ZT.MaxZoom > 1.001f ? FMath::Clamp((ZoomCur - 1.f) / (ZT.MaxZoom - 1.f), 0.f, 1.f) : 0.f;   // 0 wide .. 1 close
 		const float M = FMath::Clamp((ZoomCur - 1.f) / FMath::Max(ZT.EnterZoom - 1.f, 0.05f), 0.f, 1.f);            // mode blend
 		ZPitch = FMath::Max(ZT.PitchMin, FMath::Lerp(Pitch, FMath::Lerp(ZT.PitchWide, ZT.PitchClose, A), M));
+		// the aim zoom's PitchMin (30) is a floor for the zoomed view; it must not lift the low aim view's boom when not zoomed
+		// (it raised its elevation to 30 deg and pushed the Zoogi down / the horizon off the top)
+		if (bAimViewActive && M <= 0.f) ZPitch = Pitch;
 		ZPivot = Pivot + ZoomOff; ZLook = Look + ZoomOff; ZDist = Dist / ZoomCur;
 		// stay above the pillars / props: the camera never drops below MinHeight over the court while zoomed
 		if (ZoomCur > 1.001f && ZDist > 1.f && ZDist * FMath::Sin(FMath::DegreesToRadians(ZPitch)) < ZT.MinHeight)
@@ -2355,7 +2360,8 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	// back to the battle view (zoom off) instead of staying stuck high over the map
 	if (G->Phase == EZoogiPhase::Aiming && !bAnimeShot && !bBlending)
 	{
-		const float ExpD = WantDist / FMath::Max(ZoomCur, 1.f);
+		float ExpD = WantDist / FMath::Max(ZoomCur, 1.f);
+		if (bAimViewActive) ExpD = FMath::Max(ExpD, FVector::Dist(Desired, ZLook)); // the low aim view looks far ahead of its short boom
 		const float GotD = FVector::Dist(Loc, ZLook);
 		const bool bFar = GotD > ExpD * 1.6f + 600.f || FVector::Dist2D(Pivot, WantPivot) > 3000.f || Loc.Z - CourtZ > ExpD * 1.5f + 800.f;
 		CamBadT = bFar ? CamBadT + Dt : 0.f;
@@ -2391,6 +2397,13 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	// portrait: look point at the safe band's centre (the aim chase view places the shooter by its own screen height instead)
 	FRotator Rot = bPortraitChase ? (ZLook - Loc).Rotation() : ZoogiPortrait::BandRotation(Loc, ZLook, ViewHFov, PAspect, PTop, PBot);
 	Rot.Roll = Dutch;
+	AimViewLogT = bAimViewActive ? AimViewLogT + Dt : 0.f;
+	if (bAimViewActive && (AimViewLogT >= 1.f || AimViewAge <= Dt))
+	{
+		AimViewLogT = 0.f;
+		UE_LOG(LogZoogi, Log, TEXT("CAM aim view live: cam %s pitch %.1f yaw %.1f fov %.1f | want view pitch %.1f boom elev %.1f (got %.1f) boom %.0f (got %.0f, arm %.2f) | height over the Zoogi %.0f | aim yaw %.1f"),
+			*Loc.ToString(), -Rot.Pitch, Rot.Yaw, Fov, AimViewPitchUsed, AimViewElevUsed, ZPitch, ZoogiAimView::Boom(), FVector::Dist(Loc, SL), ArmScale, Loc.Z - SL.Z, AimViewYaw);
+	}
 	// Battle framing guard: keep the shooter's silhouette above the letterbox / bottom HUD band by tilting
 	// down just enough, without pushing the target out of the top of the frame.
 	{

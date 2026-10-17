@@ -107,7 +107,7 @@ private:
 	void TickAimView(float Dt);
 	bool bAimView = false, bAimViewDone = false, bAimViewSeen = true, bAimFreeAim0 = false;
 	int32 AimIdx = -1, AimSamples = 0, AimBadYaw = 0, AimBadY = 0, AimBadX = 0, AimBadArrow = 0;
-	float AimT = 0.f, AimHoldT = 0.f, AimYaw0 = 0.f, AimMaxYawErr = 0.f, AimMaxYErr = 0.f, AimMaxXErr = 0.f, AimEngineY = -1.f, AimPitchGot = 0.f, AimBoomGot = 0.f, AimReturnT = -1.f;
+	float AimT = 0.f, AimHoldT = 0.f, AimYaw0 = 0.f, AimMaxYawErr = 0.f, AimMaxYErr = 0.f, AimMaxXErr = 0.f, AimEngineY = -1.f, AimMaxHErr = 0.f, AimHorizonGot = -1.f, AimPitchGot = 0.f, AimBoomGot = 0.f, AimReturnT = -1.f;
 	FVector AimFreePoint0 = FVector::ZeroVector;
 	bool bBankMove = false; bool bBankHitLogged = false; float BankT = 0.f, BankTc = 0.f, BankSpeed = 0.f; FVector BankE = FVector::ZeroVector, BankIn = FVector::ZeroVector, BankOut = FVector::ZeroVector;
 	void TintProp(class AStaticMeshActor* A, const FLinearColor& C);
