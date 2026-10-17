@@ -349,7 +349,6 @@ bool FZoogiCardPowerUnlockTest::RunTest(const FString&)
 	return true;
 }
 
-#endif
 
 // Oct 14 (deck-edit): Powers.csv card_id links the power cards; with those powers locked the deck drops them and refills to 15.
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiCardPowerLinkTest, "ZoogiRoll.Cards.PowerLinks", ZoogiCardFlags)
@@ -373,3 +372,5 @@ bool FZoogiCardPowerLinkTest::RunTest(const FString&)
 	TestTrue(TEXT("project Powers.csv links the 6 power cards"), ZoogiCards::LinkRequiredPowersFromData(Data, L2) >= 4);
 	return true;
 }
+
+#endif // WITH_DEV_AUTOMATION_TESTS (Shipping build: the Oct 14 deck-edit tests were outside the guard)
