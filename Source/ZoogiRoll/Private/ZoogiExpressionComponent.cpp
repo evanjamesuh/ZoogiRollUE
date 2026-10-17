@@ -4,6 +4,7 @@
 #include "ZoogiGameMode.h"
 #include "ZoogiArena.h"
 #include "ZoogiArtifactComponent.h"
+#include "ZoogiAimArrow.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
@@ -390,6 +391,9 @@ void UZoogiExpressionComponent::TickFace(AZoogiGameMode* GM, float Dt)
 
 	if (GM && GM->Phase == EZoogiPhase::Aiming && GM->GetActiveBall() == B)
 	{
+		// aim-arrow: while the arrow shows, the shooter turns in place with it (visual yaw only; [ZoogiRoll.AimArrow] bFaceArrow)
+		float ArrowYaw = 0.f;
+		if (ZoogiAimArrow::FaceYaw(GM, B, ArrowYaw)) { B->SetFaceTarget(true, FRotator(0.f, ArrowYaw, 0.f).Quaternion(), ZoogiAimArrow::Tune().FaceRate); return; }
 		FVector D = FVector::ZeroVector;
 		if (GM->Preview.bValid && GM->Preview.ContactActor.IsValid() && GM->Preview.ContactActor.Get() != B)
 			D = GM->Preview.ContactActor->GetActorLocation() - B->GetActorLocation();

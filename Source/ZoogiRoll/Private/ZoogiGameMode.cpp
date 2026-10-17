@@ -124,7 +124,7 @@ void AZoogiGameMode::BeginPlay()
 	if (bAuto)
 	{
 		for (FZoogiPlayerSetup& P : MenuPlayers) P.bCPU = true;
-		if (FParse::Param(Cmd, TEXT("ZoogiHumanTest")) || FParse::Param(Cmd, TEXT("ZoogiUiTest")) || FParse::Param(Cmd, TEXT("ZoogiUIPolish"))) MenuPlayers[0].bCPU = false; // ui-polish capture: hold Awaken without UITEST scripts
+		if (FParse::Param(Cmd, TEXT("ZoogiHumanTest")) || FParse::Param(Cmd, TEXT("ZoogiUiTest")) || FParse::Param(Cmd, TEXT("ZoogiUIPolish")) || FParse::Param(Cmd, TEXT("ZoogiArrowTest"))) MenuPlayers[0].bCPU = false; // ui-polish capture: hold Awaken without UITEST scripts
 		if (ComboDemo > 0) for (FZoogiPlayerSetup& P : MenuPlayers) P.bCPU = false; // the demo director plays every Zoogi through the human controls
 		if (!bMenuShot)
 		{

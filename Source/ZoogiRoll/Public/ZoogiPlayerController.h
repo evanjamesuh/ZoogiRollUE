@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/PlayerController.h"
 #include "ZoogiGameMode.h"
+#include "ZoogiAimArrow.h"
 #include "ZoogiPlayerController.generated.h"
 
 class ACameraActor;
@@ -263,4 +264,20 @@ protected:
 	float UiSnapCut = 0.f;
 	bool bUiControlDone = false;
 	FName UiAct;
+
+	// aim-arrow (Evan, Oct 17): grab the arrow to rotate the aim round the Zoogi; presses elsewhere keep the slingshot.
+	ZoogiAimArrow::FGesture ArrowGesture;
+	TWeakObjectPtr<AActor> ArrowTapTarget;
+	bool bArrowCamHold = false, bArrowCamHasAim = false; // camera framing frozen at the grab (the camera never turns with the arrow)
+	FVector ArrowCamAim = FVector::ZeroVector;
+	/** Projected arrow outline + the shooter's screen disc; false when hidden / off screen. */
+	bool ArrowScreen(FVector2D OutS[7], FVector2D& OutBallS, float& OutBallRpx) const;
+	/** World floor direction from the shooter's centre to the finger (false when the finger is on the ball / above the horizon). */
+	bool ArrowFingerDir(const FVector2D& Screen, FVector2D& OutDir) const;
+	// -ZoogiArrowTest: real touch events on P1's aim steps: grab + rotate left / right, release, drag elsewhere = launch, zoom hides
+	bool bArrowTest = false; float ArrowTestT = 0.f, ArrowAwakenT = 0.f, ArrowSeqT = 0.f, ArrowExitT = -1.f; int32 ArrowTestPhase = 0, ArrowPass = 0, ArrowFail = 0, ArrowSeqN = 0;
+	float ArrowYaw0 = 0.f, ArrowHeadDist = 0.f, ArrowCamYaw0 = 0.f, ArrowWantPull = 0.f, ArrowWantYaw = 0.f; FVector ArrowCamPivot0 = FVector::ZeroVector;
+	FVector2D ArrowTouch = FVector2D::ZeroVector, ArrowDragFrom = FVector2D::ZeroVector, ArrowDragFwd = FVector2D::ZeroVector;
+	bool bArrowSeq = false;
+	void UpdateArrowTest(class AZoogiGameMode* G, float Dt);
 };

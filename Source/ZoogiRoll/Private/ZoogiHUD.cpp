@@ -17,6 +17,7 @@
 #include "ZoogiAnimeSubsystem.h"
 #include "ZoogiCardSubsystem.h"
 #include "ZoogiCardHandWidget.h"
+#include "ZoogiAimArrow.h"
 #include "MediaTexture.h"
 #include "Misc/App.h"
 #include "Misc/CommandLine.h"
@@ -162,6 +163,7 @@ void AZoogiHUD::DrawHUD()
 	U = Canvas->ClipY / 1080.f;
 	FrameOrg = Canvas->SceneView ? FVector2D(Canvas->SceneView->UnscaledViewRect.Min.X, Canvas->SceneView->UnscaledViewRect.Min.Y) : FVector2D::ZeroVector;
 	Time += FApp::GetDeltaTime(); // real time (independent of pause / fixed step)
+	ZoogiAimArrow::Draw(Canvas, G, PlayerOwner); // aim-arrow: world-space aim arrow, also with the HUD hidden (no-op unless the human aims)
 	static const bool bNoHUD = FParse::Param(FCommandLine::Get(), TEXT("ZoogiNoHUD")); // clean captures (portraits)
 	if (bNoHUD && G->Phase != EZoogiPhase::Menu) { UpdateAwakenWidget(G, true); return; }
 

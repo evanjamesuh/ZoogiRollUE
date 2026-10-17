@@ -300,6 +300,10 @@ public:
 	int32 AimPowerStep = 0;
 	/** Oct 14 drag aim (human only): pull fraction from the slingshot drag (-1 = none). Combo maps it onto CONTROL / DRIVE / LAUNCH. */
 	float HumanDragFrac = -1.f;
+	/** aim-arrow (Oct 17): the aim was last set by rotating the aim arrow (ZoogiAimArrow); the tactical camera holds its framing. */
+	bool bArrowAim = false;
+	/** aim-arrow: free aim along YawDeg at Dist cm (clamped onto the court like a floor tap). Quiet: no click, no lock swing. */
+	void SetArrowAim(float YawDeg, float Dist);
 	FZoogiAimPreview Preview;
 	void SetFreeAim(const FVector& GroundPoint);
 	void NudgeAim(int32 Steps);

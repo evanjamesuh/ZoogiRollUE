@@ -26,6 +26,9 @@
 #include "ZoogiFramedLayout.h"
 #include "ZoogiCardSubsystem.h"
 #include "ZoogiSpawnElevator.h"
+#include "ZoogiAimArrow.h"
+#include "UnrealClient.h"
+#include "Misc/Paths.h"
 
 // ============================================================================
 // Camera director tuning: every number for the per-stage cameras lives here.
@@ -185,6 +188,7 @@ void AZoogiPlayerController::BeginPlay()
 	bHumanTest = bUiTest || FParse::Param(FCommandLine::Get(), TEXT("ZoogiHumanTest"));
 	bPinchTest = FParse::Param(FCommandLine::Get(), TEXT("ZoogiPinchTest"));
 	bCamStuckTest = FParse::Param(FCommandLine::Get(), TEXT("ZoogiCamStuckTest"));
+	bArrowTest = FParse::Param(FCommandLine::Get(), TEXT("ZoogiArrowTest"));
 }
 
 FVector2D AZoogiPlayerController::GetCursor() const
@@ -477,6 +481,8 @@ void AZoogiPlayerController::OnTurnStarted(AZoogiBall* Ball)
 	bMenuCam = false;
 	HoverTarget.Reset();
 	AZoogiGameMode* G = GM();
+	ArrowGesture.Cancel(); bArrowCamHold = false; // aim-arrow
+	if (G) G->bArrowAim = false;
 	if (Ball) TacYaw = Ball->AimYaw;
 	if (Ball && G && !G->bCinematicCam && !bFromMenu)
 	{
@@ -613,6 +619,7 @@ void AZoogiPlayerController::PlayerTick(float DeltaTime)
 	else if (bHumanTest) UpdateHumanTest(Dt);
 	if (bPinchTest) UpdatePinchTest(GM(), Dt);
 	if (bCamStuckTest) UpdateCamStuckTest(GM(), Dt);
+	if (bArrowTest) UpdateArrowTest(GM(), Dt);
 	HandleInput(Dt);
 	UpdateCamera(Dt);
 	UpdateMarkers();
@@ -969,6 +976,204 @@ void AZoogiPlayerController::UpdatePinchTest(AZoogiGameMode* G, float Dt)
 	}
 }
 
+// ------------------------------------------------------------------ aim arrow (Oct 17)
+
+bool AZoogiPlayerController::ArrowScreen(FVector2D OutS[7], FVector2D& OutBallS, float& OutBallRpx) const
+{
+	AZoogiGameMode* G = GM();
+	AZoogiBall* B = G ? G->GetActiveBall() : nullptr;
+	float AYaw = 0.f;
+	if (!B || !PlayerCameraManager || !ZoogiAimArrow::CurrentYaw(G, AYaw)) return false;
+	FVector W[7];
+	ZoogiAimArrow::Outline(B->BallLocation(), ZoogiConst::ZoogiRadius, AYaw, ZoogiAimArrow::Tune(), W);
+	for (int32 i = 0; i < 7; ++i) if (!ProjectWorldLocationToScreen(W[i], OutS[i])) return false;
+	const FVector CamRight = PlayerCameraManager->GetCameraRotation().Quaternion().GetRightVector();
+	FVector2D SR;
+	if (!ProjectWorldLocationToScreen(B->BallLocation(), OutBallS) || !ProjectWorldLocationToScreen(B->BallLocation() + CamRight * ZoogiConst::ZoogiRadius, SR)) return false;
+	OutBallRpx = (SR - OutBallS).Size();
+	return true;
+}
+
+bool AZoogiPlayerController::ArrowFingerDir(const FVector2D& Screen, FVector2D& OutDir) const
+{
+	AZoogiGameMode* G = GM();
+	AZoogiBall* B = G ? G->GetActiveBall() : nullptr;
+	FVector P;
+	if (!B || !FloorPoint(Screen, P)) return false;
+	const FVector2D D = FVector2D(P) - FVector2D(B->BallLocation());
+	if (D.Size() < ZoogiConst::ZoogiRadius * 0.6f) return false; // on the ball: the angle is unstable, hold
+	OutDir = D.GetSafeNormal();
+	return true;
+}
+
+void AZoogiPlayerController::UpdateArrowTest(AZoogiGameMode* G, float Dt)
+{
+	// -ZoogiArrowTest (with -ZoogiAuto -ZoogiShots=<dir>): drives P1's aim through real touch events (InputTouch, the same
+	// path a phone uses) and logs ARROWTEST PASS / FAIL + screenshots. No OS input needed.
+	if (!G) return;
+	if (ArrowExitT >= 0.f) { ArrowExitT += Dt; if (ArrowExitT > 1.5f) { ArrowExitT = -2.f; FGenericPlatformMisc::RequestExit(false); } return; }
+	if (ArrowExitT < -1.f) return;
+	auto Check = [&](bool bOk, const FString& What) { (bOk ? ArrowPass : ArrowFail)++; UE_LOG(LogZoogi, Log, TEXT("ARROWTEST %s %s"), bOk ? TEXT("PASS") : TEXT("FAIL"), *What); };
+	auto Touch = [&](ETouchType::Type Ty, const FVector2D& P) { ArrowTouch = P; InputTouch(0, Ty, P, 1.f, FDateTime::Now(), 0); };
+	auto CurYaw = [&]() { float Y = 0.f; ZoogiAimArrow::CurrentYaw(G, Y); return Y; };
+	auto AngDiff = [](float A, float B) { return FMath::Abs(FRotator::NormalizeAxis(A - B)); };
+	// PNG sequence of rotate + launch (15 fps), viewport + HUD canvas (the arrow is drawn on the canvas)
+	if (bArrowSeq && !G->ShotDir.IsEmpty())
+	{
+		ArrowSeqT += Dt;
+		if (ArrowSeqT >= 1.f / 15.f) { ArrowSeqT = 0.f; FScreenshotRequest::RequestScreenshot(FPaths::Combine(G->ShotDir, TEXT("seq"), FString::Printf(TEXT("f_%04d.png"), ArrowSeqN++)), true, false); }
+	}
+	// pass P1's Awaken / Standby (no OS input)
+	if (G->IsHumanAiming() && G->Stage == EZoogiStage::Awaken && !G->bAwakenDone)
+	{
+		ArrowAwakenT += Dt;
+		if (ArrowAwakenT > 1.2f) { ArrowAwakenT = -3.f; UE_LOG(LogZoogi, Log, TEXT("ARROWTEST auto-commit P1 Awaken (cards=%d)"), G->CardsOn() ? 1 : 0); G->MenuAction(G->CardsOn() ? TEXT("CardCommit") : TEXT("Infuse"), G->CardsOn() ? 0 : -1); }
+		return;
+	}
+	ArrowAwakenT = 0.f;
+	AZoogiBall* Me = G->GetActiveBall();
+	const bool bAim = G->IsHumanAiming() && G->IsAimStep() && Me;
+	int32 VX = 1920, VY = 1080; GetViewportSize(VX, VY);
+	const float UPx = FMath::Max(VY, 1) / 1080.f; // the slingshot's own px scale
+	ArrowTestT += Dt;
+	auto Next = [&](int32 P) { ArrowTestPhase = P; ArrowTestT = 0.f; };
+	auto FingerAt = [&](float A) { FVector2D S; const FVector C = Me->BallLocation(); const float Rad = FMath::DegreesToRadians(A);
+		ProjectWorldLocationToScreen(FVector(C.X, C.Y, C.Z - ZoogiConst::ZoogiRadius) + FVector(FMath::Cos(Rad), FMath::Sin(Rad), 0.f) * ArrowHeadDist, S); return S; };
+	switch (ArrowTestPhase)
+	{
+	case 0: // aim start: arrow visible
+		if (!bAim) { ArrowTestT = 0.f; break; }
+		if (ArrowTestT > 1.5f)
+		{
+			Check(ZoogiAimArrow::IsShown(G, this), FString::Printf(TEXT("arrow visible at aim start (yaw %.1f, hasAim=%d, viewport %dx%d)"), CurYaw(), G->HasAim() ? 1 : 0, VX, VY));
+			G->TakeShot(TEXT("arrow_1_aim_start"));
+			ArrowCamYaw0 = Yaw; ArrowCamPivot0 = Pivot;
+			Next(1);
+		}
+		break;
+	case 1: // grab on the arrowhead
+		if (ArrowTestT > 0.4f)
+		{
+			FVector2D S[7], BallS; float BallRpx = 0.f;
+			if (!ArrowScreen(S, BallS, BallRpx)) { Check(false, TEXT("arrow projects on screen")); Next(90); break; }
+			const ZoogiAimArrow::FTune& T = ZoogiAimArrow::Tune();
+			ArrowHeadDist = ZoogiConst::ZoogiRadius + 2.f * ZoogiConst::ZoogiRadius * (T.LengthD - 0.5f * T.HeadLengthD); // middle of the head, on the axis
+			ArrowYaw0 = CurYaw();
+			bArrowSeq = true;
+			Touch(ETouchType::Began, FingerAt(ArrowYaw0));
+			Next(2);
+		}
+		break;
+	case 2: // rotate left 45 deg (screen left = yaw down for a camera behind the shooter)
+	case 3: // rotate right to +45
+	{
+		if (ArrowTestT < 0.05f && ArrowTestPhase == 2) { Check(ArrowGesture.bActive, TEXT("press on the arrowhead grabs the arrow")); }
+		const float From = ArrowTestPhase == 2 ? ArrowYaw0 : ArrowYaw0 - 45.f, To = ArrowTestPhase == 2 ? ArrowYaw0 - 45.f : ArrowYaw0 + 45.f;
+		const float Len = ArrowTestPhase == 2 ? 0.8f : 1.4f;
+		const float A = FMath::Clamp(ArrowTestT / Len, 0.f, 1.f);
+		if (A < 1.f || ArrowTestT < Len + 0.02f) Touch(ETouchType::Moved, FingerAt(FMath::Lerp(From, To, FMath::SmoothStep(0.f, 1.f, A))));
+		if (ArrowTestT > Len + 0.35f)
+		{
+			const float Got = CurYaw();
+			Check(AngDiff(Got, To) < 1.5f, FString::Printf(TEXT("grab-and-drag rotated %s: yaw %.1f (expected %.1f)"), ArrowTestPhase == 2 ? TEXT("left") : TEXT("right"), Got, FRotator::NormalizeAxis(To)));
+			Check(FMath::Abs(FRotator::NormalizeAxis(Yaw - ArrowCamYaw0)) < 0.5f && FVector::Dist(Pivot, ArrowCamPivot0) < 5.f, FString::Printf(TEXT("camera still while rotating (yaw moved %.2f deg, pivot %.1f cm)"), FRotator::NormalizeAxis(Yaw - ArrowCamYaw0), FVector::Dist(Pivot, ArrowCamPivot0)));
+			float FY = 0.f;
+			Check(ZoogiAimArrow::FaceYaw(G, Me, FY) == ZoogiAimArrow::Tune().bFaceArrow && (!ZoogiAimArrow::Tune().bFaceArrow || AngDiff(FY, Got) < 0.5f), FString::Printf(TEXT("Zoogi faces the arrow (visual yaw target %.1f)"), FY));
+			Check(G->Phase == EZoogiPhase::Aiming && G->IsAimStep() && !bDragArmed, TEXT("rotating never arms / fires the slingshot"));
+			G->TakeShot(ArrowTestPhase == 2 ? TEXT("arrow_2_rotated_left") : TEXT("arrow_3_rotated_right"));
+			Next(ArrowTestPhase + 1);
+		}
+		break;
+	}
+	case 4: // release the grab: aim kept, no launch
+		if (ArrowTestT < 0.02f) Touch(ETouchType::Ended, ArrowTouch);
+		if (ArrowTestT > 0.4f)
+		{
+			ArrowWantYaw = CurYaw();
+			Check(G->Phase == EZoogiPhase::Aiming && G->IsAimStep() && G->HasAim() && G->bArrowAim && AngDiff(ArrowWantYaw, ArrowYaw0 + 45.f) < 1.5f, FString::Printf(TEXT("release after rotating keeps the aim (yaw %.1f), no launch"), ArrowWantYaw));
+			// press elsewhere: beside the shooter, perpendicular to the shot, the same Fwd the slingshot uses
+			float Fr = 0.f, Imp = 0.f;
+			const FVector2D SDir = G->ComputeShotVelocity(Fr, Imp).GetSafeNormal();
+			FVector2D BallS, AheadS;
+			ProjectWorldLocationToScreen(Me->BallLocation(), BallS); ProjectWorldLocationToScreen(Me->BallLocation() + FVector(SDir * 200.f, 0.f), AheadS);
+			ArrowDragFwd = (AheadS - BallS).GetSafeNormal();
+			const FVector2D Perp(-ArrowDragFwd.Y, ArrowDragFwd.X);
+			FVector2D S[7], BS; float BR = 0.f; ArrowScreen(S, BS, BR);
+			const float APx = FMath::Max(FMath::Min(VX, VY), 1) / 1080.f;
+			ArrowDragFrom = BallS + Perp * 300.f * APx - ArrowDragFwd * 60.f * APx;
+			if (ZoogiAimArrow::HitTest(S, BS, BR, ArrowDragFrom, APx, ZoogiAimArrow::Tune())) ArrowDragFrom = BallS - Perp * 300.f * APx - ArrowDragFwd * 60.f * APx;
+			Check(!ZoogiAimArrow::HitTest(S, BS, BR, ArrowDragFrom, APx, ZoogiAimArrow::Tune()), FString::Printf(TEXT("press elsewhere (%.0f, %.0f) is not an arrow grab"), ArrowDragFrom.X, ArrowDragFrom.Y));
+			Touch(ETouchType::Began, ArrowDragFrom);
+			ArrowWantPull = ZoogiAimArrow::SlingshotPull(130.f * UPx, UPx, MaxDragDistancePx, MaxDragForce);
+			Next(5);
+		}
+		break;
+	case 5: // drag back 130 px (1080p) along -Fwd: the unchanged slingshot
+	{
+		const float A = FMath::Clamp(ArrowTestT / 0.5f, 0.f, 1.f);
+		Touch(ETouchType::Moved, ArrowDragFrom - ArrowDragFwd * 130.f * UPx * A);
+		if (ArrowTestT > 0.7f)
+		{
+			Check(!ArrowGesture.bActive && bDragArmed && FMath::Abs(DragFrac - ArrowWantPull) < 0.01f && FMath::Abs(G->HumanDragFrac - ArrowWantPull) < 0.01f,
+				FString::Printf(TEXT("drag elsewhere arms the normal slingshot: pull %.1f%% (expected %.1f%%, max %.0f px)"), DragFrac * 100.f, ArrowWantPull * 100.f, MaxDragDistancePx));
+			Check(AngDiff(CurYaw(), ArrowWantYaw) < 0.5f, TEXT("drag elsewhere does not rotate the arrow"));
+			Touch(ETouchType::Ended, ArrowDragFrom - ArrowDragFwd * 130.f * UPx);
+			Next(6);
+		}
+		break;
+	}
+	case 6: // launch along the arrow, power from the pull
+		if (G->Phase == EZoogiPhase::Rolling && Me)
+		{
+			const FVector V = Me->GetBallVelocity();
+			const float VYaw = FMath::RadiansToDegrees(FMath::Atan2(V.Y, V.X));
+			const float WantSpeed = ZoogiConst::LaunchSpeedForPull(FMath::Clamp(ArrowWantPull, 0.08f, 1.f));
+			Check(AngDiff(VYaw, ArrowWantYaw) < 3.f, FString::Printf(TEXT("launch follows the arrow: velocity yaw %.1f (arrow %.1f)"), VYaw, ArrowWantYaw));
+			UE_LOG(LogZoogi, Log, TEXT("ARROWTEST note shot speed %.0f cm/s (pull %.0f%% -> %.0f cm/s before card / combo multipliers)"), G->GetShotSpeed(), ArrowWantPull * 100.f, WantSpeed);
+			Check(G->bComboMode || FMath::Abs(G->GetShotSpeed() / FMath::Max(WantSpeed, 1.f) - 1.f) < 0.25f, TEXT("launch speed from the drag pull (same curve)"));
+			Next(7);
+		}
+		else if (ArrowTestT > 4.f) { Check(false, TEXT("drag release launched the shot")); Next(7); }
+		break;
+	case 7:
+		if (ArrowTestT > 0.25f && ArrowTestT - Dt <= 0.25f) G->TakeShot(TEXT("arrow_4_mid_launch"));
+		if (ArrowTestT > 0.9f) { bArrowSeq = false; Check(!ZoogiAimArrow::IsShown(G, this), TEXT("arrow hidden once the shot rolls")); Next(8); }
+		break;
+	case 8: // next human aim step: AIM ZOOM (crosshair / tap-to-lock) hides the arrow
+		if (!bAim) { ArrowTestT = 0.f; break; }
+		if (ArrowTestT > 1.2f)
+		{
+			Check(ZoogiAimArrow::IsShown(G, this), TEXT("arrow visible again at the next aim start"));
+			SetZoomMode(true, TEXT("arrowtest"));
+			Next(9);
+		}
+		break;
+	case 9:
+		if (ArrowTestT > 0.5f)
+		{
+			Check(IsZoomMode() && !ZoogiAimArrow::IsShown(G, this), TEXT("arrow hidden in AIM ZOOM (crosshair / tap-to-lock unchanged)"));
+			G->TakeShot(TEXT("arrow_5_zoom_hidden"));
+			SetZoomMode(false, TEXT("arrowtest"));
+			Next(10);
+		}
+		break;
+	case 10:
+		if (ArrowTestT > 0.5f)
+		{
+			Check(ZoogiAimArrow::IsShown(G, this), TEXT("arrow back after leaving AIM ZOOM"));
+			Next(90);
+		}
+		break;
+	case 90:
+		UE_LOG(LogZoogi, Log, TEXT("ARROWTEST SUMMARY %d passed, %d failed (%d sequence frames)"), ArrowPass, ArrowFail, ArrowSeqN);
+		bArrowSeq = false;
+		ArrowExitT = 0.f;
+		Next(99);
+		break;
+	default: break;
+	}
+}
+
 // ------------------------------------------------------------------ input
 
 AActor* AZoogiPlayerController::PickTarget(float MX, float MY) const
@@ -1169,7 +1374,57 @@ void AZoogiPlayerController::HandleInput(float Dt)
 		if (bFloor) G->SetFreeAim(P); // tap the floor: free (angled) aim at that point
 		UE_LOG(LogZoogi, Log, TEXT("INPUT aim click: floor=%d at (%.0f, %.0f) -> hasAim=%d"), bFloor ? 1 : 0, P.X, P.Y, G->HasAim() ? 1 : 0);
 	};
-	if (bClick)
+	// aim-arrow (Evan, Oct 17): a press that starts ON / near the arrow (generous area round the arrowhead and shaft) grabs it
+	// and rotates the aim round the Zoogi (G->SetArrowAim: a free aim along the arrow, so the launch follows it); released
+	// without moving it is the old tap (tap-to-aim at the press point). A press anywhere else runs the slingshot below unchanged.
+	const bool bArrowShown = ZoogiAimArrow::IsShown(G, this);
+	if (!bArrowShown && ArrowGesture.bActive) ArrowGesture.Cancel();
+	bool bArrowOwns = false;
+	if (bClick && bArrowShown && bPtrDown && !bSimClick && !bDragArmed && !ArrowGesture.bActive)
+	{
+		FVector2D AS[7], BallS; float BallRpx = 0.f;
+		int32 AVX = 1920, AVY = 1080; GetViewportSize(AVX, AVY);
+		const float APx = FMath::Max(FMath::Min(AVX, AVY), 1) / 1080.f;
+		if (ArrowScreen(AS, BallS, BallRpx) && ZoogiAimArrow::HitTest(AS, BallS, BallRpx, Ptr, APx, ZoogiAimArrow::Tune()))
+		{
+			AZoogiBall* Me = G->GetActiveBall();
+			float Yaw0 = 0.f; ZoogiAimArrow::CurrentYaw(G, Yaw0);
+			AActor* L = (G->TargetLock.IsValid() && !G->bSoftLock) ? G->TargetLock.Get() : nullptr;
+			float ADist = ZoogiAimArrow::Tune().DefaultAimDistCm;
+			if (G->bFreeAim) ADist = FVector::Dist2D(G->FreeAimPoint, Me->BallLocation());
+			else if (G->TargetLock.IsValid()) ADist = FVector::Dist2D(ActorCenter(G->TargetLock.Get()), Me->BallLocation());
+			if (!G->bArrowAim || !bArrowCamHold)
+			{
+				bArrowCamHasAim = L != nullptr || G->bFreeAim;
+				ArrowCamAim = L ? ActorCenter(L) : (G->bFreeAim ? FVector(G->FreeAimPoint.X, G->FreeAimPoint.Y, Me->BallLocation().Z) : FVector::ZeroVector);
+				bArrowCamHold = true;
+			}
+			FVector2D FD = FVector2D::ZeroVector;
+			ArrowFingerDir(Ptr, FD);
+			ArrowGesture.Begin(Yaw0, FD, Ptr, ADist);
+			ArrowTapTarget = HoverTarget;
+			bArrowOwns = true;
+			UE_LOG(LogZoogi, Log, TEXT("INPUT arrow grab at (%.0f, %.0f): yaw %.1f, aim dist %.0f"), Ptr.X, Ptr.Y, Yaw0, ADist);
+		}
+	}
+	if (ArrowGesture.bActive)
+	{
+		bArrowOwns = true;
+		int32 AVX = 1920, AVY = 1080; GetViewportSize(AVX, AVY);
+		const float APx = FMath::Max(FMath::Min(AVX, AVY), 1) / 1080.f;
+		FVector2D FD = FVector2D::ZeroVector;
+		const bool bDir = bPtrDown && ArrowFingerDir(Ptr, FD);
+		if (bPtrDown && ArrowGesture.Move(bDir ? FD : FVector2D::ZeroVector, Ptr, ZoogiAimArrow::Tune().RotateStartPx * APx)) G->SetArrowAim(ArrowGesture.Yaw, ArrowGesture.AimDist);
+		if (bPtrRelease || !bPtrDown)
+		{
+			const float EndYaw = ArrowGesture.Yaw;
+			const FVector2D PressAt = ArrowGesture.Press;
+			if (ArrowGesture.End()) { UE_LOG(LogZoogi, Log, TEXT("INPUT arrow tap (no rotate): old tap-to-aim")); AimAt(ArrowTapTarget.Get(), PressAt); }
+			else UE_LOG(LogZoogi, Log, TEXT("INPUT arrow release: yaw %.1f (aim kept, no launch)"), EndYaw);
+		}
+		HoverTarget.Reset();
+	}
+	if (bClick && !bArrowOwns)
 	{
 		if (G->HasAim() && bPtrDown && !bSimClick)
 		{
@@ -1199,7 +1454,7 @@ void AZoogiPlayerController::HandleInput(float Dt)
 		if (bPtrDown) DragNow = Ptr;
 		if (bPendingTap && FVector2D::Distance(DragNow, DragStart) > MinDragPx * UPx) bPendingTap = false;
 		const float BackPx = FMath::Max(0.f, -FVector2D::DotProduct(DragNow - DragStart, Fwd));
-		DragFrac = FMath::Min(BackPx / (MaxDragDistancePx * UPx), 1.f) * MaxDragForce;
+		DragFrac = ZoogiAimArrow::SlingshotPull(BackPx, UPx, MaxDragDistancePx, MaxDragForce); // unchanged formula (shared with ZoogiRoll.Aim.ArrowRotate)
 		bDragWouldCancel = BackPx < MinDragPx * UPx || (bProj && FVector2D::Distance(DragNow, BallS) < CancelOnZoogiPx * UPx);
 		if (bDragWouldCancel) { if (G->HumanDragFrac >= 0.f) G->HumanDragFrac = -1.f; }
 		else G->HumanDrag(DragFrac, false);
@@ -1701,6 +1956,8 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		bool bHasAim = false;
 		if (Lock) { AimP = TL; bHasAim = true; }
 		else if (G->bFreeAim) { AimP = FVector(G->FreeAimPoint.X, G->FreeAimPoint.Y, SL.Z); bHasAim = true; }
+		// aim-arrow (Evan, Oct 17): the camera stays completely still while the arrow rotates the aim (framing from the grab)
+		if (G->bArrowAim && bArrowCamHold) { bHasAim = bArrowCamHasAim; AimP = bArrowCamHasAim ? ArrowCamAim : C0; }
 		const bool bSettled = G->Stage == EZoogiStage::Resolve || G->Stage == EZoogiStage::End;
 		if (G->Phase == EZoogiPhase::Aiming && !bSettled)
 		{
