@@ -98,6 +98,7 @@ private:
 	int32 PortCourtOut = 0, PortCourtN = 0, PortRing2Out = 0, PortRing2N = 0, PortShooterOut = 0, PortShooterN = 0;
 	float PortCourtMaxX = 0.f, PortShooterMinY = 0.f, PortShooterMaxY = 0.f, PortAimPitch = 0.f;
 	bool bPortModeOk = false, bPortBehind = false, bPortAimMode = false;
+	float PortAimArm = 1.f, PortAimWant = 0.f, PortAimGot = 0.f;
 	FString PortModeLine;
 	bool bBankMove = false; bool bBankHitLogged = false; float BankT = 0.f, BankTc = 0.f, BankSpeed = 0.f; FVector BankE = FVector::ZeroVector, BankIn = FVector::ZeroVector, BankOut = FVector::ZeroVector;
 	void TintProp(class AStaticMeshActor* A, const FLinearColor& C);

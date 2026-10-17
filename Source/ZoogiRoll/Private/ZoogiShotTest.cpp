@@ -880,6 +880,7 @@ void AZoogiShotTestDriver::TickPortrait(float Dt)
 			PortAimPitch = -V.Rotation.Pitch;
 			bPortBehind = FVector2D::DotProduct(ToS, Fwd) > 0.5f && SC.Y < (PortBot - PortTop); // shooter ahead, below the band centre
 			bPortAimMode = ZPC && ZPC->PortDbgAim;
+			if (ZPC) { PortAimArm = ZPC->PortDbgArm; PortAimWant = ZPC->PortDbgWantDist; PortAimGot = FVector::Dist(V.Location, ZPC->PortDbgLook2); }
 			const FVector Right = FRotator(0.f, V.Rotation.Yaw, 0.f).RotateVector(FVector(0.f, Rr, 0.f));
 			for (const FVector& P : { C, C + FVector(0, 0, Rr), C - FVector(0, 0, Rr), C + Right, C - Right })
 			{
@@ -1416,8 +1417,8 @@ void AZoogiShotTestDriver::Verify()
 			PortAspect, bPort ? TEXT("portrait") : TEXT("landscape: checks informational"), PortTop, PortBot, PortCourtR, PortCourtOut, PortCourtN, PortCourtMaxX,
 			AZoogiArena::OuterOutR > 0.f ? *FString::Printf(TEXT("r%.0f outside %d/%d"), AZoogiArena::OuterOutR, PortRing2Out, PortRing2N) : TEXT("n/a (no outer ring)"),
 			PortShooterOut, PortShooterN, PortShooterMinY, PortShooterMaxY, -1.f + 2.f * PortBot, 1.f - 2.f * PortTop, PortVFov, ZoogiPortrait::VFovMax(), PortLegacyOut * 100.f));
-		Extra.Add(FString::Printf(TEXT("aim view: portrait aim framing %d, camera behind the shooter looking up the arena %d, pitch %.1f (need 40..62) | %s"),
-			bPortAimMode, bPortBehind, PortAimPitch, *PortModeLine));
+		Extra.Add(FString::Printf(TEXT("aim view: portrait aim framing %d, camera behind the shooter looking up the arena %d, pitch %.1f (need 40..62), boom %.0f of %.0f wanted (probe arm %.2f) | %s"),
+			bPortAimMode, bPortBehind, PortAimPitch, PortAimGot, PortAimWant, PortAimArm, *PortModeLine));
 	}
 	if (FinishLog.Num()) Extra.Add(TEXT("ends ") + FString::Join(FinishLog, TEXT(",")));
 	if (AZoogiGameMode* G = GM()) Extra.Add(FString::Printf(TEXT("stage %d phase %d"), (int32)G->Stage, (int32)G->Phase));

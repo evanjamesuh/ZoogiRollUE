@@ -15,6 +15,7 @@ namespace
 	TAutoConsoleVariable<float> CVarAimAhead(TEXT("zoogi.Cam.PortraitAimAhead"), 0.5f, TEXT("Portrait aim framing: look point from the shooter toward the aim point / arena centre (fraction)."));
 	TAutoConsoleVariable<float> CVarRestAhead(TEXT("zoogi.Cam.PortraitRestAhead"), 0.4f, TEXT("Portrait Draw / Awaken framing: look point from the shooter toward the arena centre (fraction)."));
 	TAutoConsoleVariable<float> CVarAimWidth(TEXT("zoogi.Cam.PortraitAimWidth"), 1.4f, TEXT("Portrait aim framing: ground width at the look point, times the play radius."));
+	TAutoConsoleVariable<float> CVarProbeH(TEXT("zoogi.Cam.PortraitProbeHeight"), 700.f, TEXT("Portrait aim / rest: the boom's collision probe starts this high over the look point."));
 	TAutoConsoleVariable<float> CVarShooterMargin(TEXT("zoogi.Cam.PortraitShooterMargin"), 0.06f, TEXT("Portrait aim framing: the shooter stays this far (normalised) inside the safe band."));
 	TAutoConsoleVariable<float> CVarSafeBottom(TEXT("zoogi.Cam.SafeBottom"), 0.10f, TEXT("Portrait: bottom screen fraction kept clear of the play focus (HUD-hidden play: thumb / drag-aim zone; 0.22 with the card hand up)."));
 	TAutoConsoleVariable<float> CVarVFovMax(TEXT("zoogi.Cam.PortraitVFovMax"), 78.f, TEXT("Portrait: vertical FOV cap (deg)."));
@@ -29,6 +30,7 @@ namespace ZoogiPortrait
 	float AimAhead() { return FMath::Clamp(CVarAimAhead.GetValueOnGameThread(), 0.f, 1.f); }
 	float RestAhead() { return FMath::Clamp(CVarRestAhead.GetValueOnGameThread(), 0.f, 1.f); }
 	float AimWidth() { return FMath::Clamp(CVarAimWidth.GetValueOnGameThread(), 0.f, 3.f); }
+	float AimProbeHeight() { return FMath::Clamp(CVarProbeH.GetValueOnGameThread(), 150.f, 3000.f); }
 	float ShooterMargin() { return FMath::Clamp(CVarShooterMargin.GetValueOnGameThread(), 0.f, 0.3f); }
 	bool Enabled() { return CVarPortrait.GetValueOnGameThread() != 0; }
 	float SafeTopMin() { return FMath::Clamp(CVarSafeTopMin.GetValueOnGameThread(), 0.f, 0.4f); }

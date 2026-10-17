@@ -93,7 +93,7 @@ public:
 	 *  view: bLegacy = the pre-portrait rule (landscape-tuned FOV / boom, no safe band) for BEFORE frames. */
 	static void PortraitOverviewPose(const AZoogiGameMode* G, const APlayerController* PC, float Yaw, float CourtZ, bool bLegacy, FVector& OutLoc, FRotator& OutRot, float& OutFov);
 	/** Portrait ShotTest probe: the last gameplay-view look point, its landscape-tuned FOV and the boom multiplier PortraitBoom applied. */
-	FVector PortDbgLegacyPivot = FVector::ZeroVector; float PortDbgFov = 90.f, PortDbgLegacyPitch = 55.f, PortDbgLegacyDist = 2300.f; bool PortDbgAim = false;
+	FVector PortDbgLegacyPivot = FVector::ZeroVector; float PortDbgFov = 90.f, PortDbgLegacyPitch = 55.f, PortDbgLegacyDist = 2300.f; bool PortDbgAim = false; FVector PortDbgLook2 = FVector::ZeroVector; float PortDbgWantDist = 0.f, PortDbgArm = 1.f;
 	/** Portrait aim / rest framing boom: behind the shooter at Pitch looking at LookPivot (ahead of it, up the arena); never closer
 	 *  than the landscape boom, ground width >= AimWidth x play radius, shooter inside the safe band. OutHFov = capped FOV. */
 	static float PortraitAimDist(const AZoogiGameMode* G, float Aspect, float Top, float Bottom, const FVector& Shooter, const FVector& LookPivot,

@@ -62,6 +62,8 @@ namespace ZoogiPortrait
 	ZOOGIROLL_API float RestAhead();
 	ZOOGIROLL_API float AimWidth();
 	ZOOGIROLL_API float ShooterMargin();
+	/** zoogi.Cam.PortraitProbeHeight (700): the aim / rest boom's collision probe starts this high over the look point. */
+	ZOOGIROLL_API float AimProbeHeight();
 
 	/** Camera rotation for a boom looking at Look from Loc, with the band pitch applied. */
 	ZOOGIROLL_API FRotator BandRotation(const FVector& Loc, const FVector& Look, float HFov, float Aspect, float Top, float Bottom);

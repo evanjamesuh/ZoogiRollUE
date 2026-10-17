@@ -1387,7 +1387,9 @@ void AZoogiPlayerController::ElevatorPushFit(const TArray<FVector>& PadFloors, f
 	C /= FMath::Max(1, PadFloors.Num());
 	OutPivot = FVector(C.X, C.Y, C.Z + 40.f); // pad centroid at lift-top height
 	OutPitch = 38.f;                           // a little lower than the sweep's 52: the lifts read as rising
-	const float TanH = FMath::Tan(FMath::DegreesToRadians(InFov * 0.5f)) * 0.82f; // keep a margin inside the frame
+	// keep a margin inside the frame; portrait: the same margin as the court fit (the narrow width is the only limit there, so
+	// the landscape 0.82 left the pads hardly bigger than the court-wide sweep end)
+	const float TanH = FMath::Tan(FMath::DegreesToRadians(InFov * 0.5f)) * (Aspect < 1.f ? ZoogiPortrait::CourtMargin() : 0.82f);
 	const float TanV = TanH / FMath::Max(Aspect, 0.1f);
 	const float VTop = TanV * (1.f - 2.f * Top), VBot = TanV * (1.f - 2.f * Bottom); // portrait: inside the HUD-safe band
 	auto Fits = [&](float D)
@@ -1735,6 +1737,9 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		}
 		WantLook = WantPivot;
 		ProbeFrom = WantPivot + FVector(0, 0, 150.f);
+		// portrait aim / rest: the longer, lower boom behind the pad passes the court's pillars; probe from high over the look
+		// point (as the aim zoom does) so a pillar between the shooter and the camera doesn't pull the view in onto the pad
+		if (bPortraitAim) ProbeFrom = WantPivot + FVector(0, 0, ZoogiPortrait::AimProbeHeight());
 	}
 	else switch (Cine)
 	{
@@ -1897,7 +1902,8 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	const float WantFovF = WantFov > 0.f ? WantFov : P.Fov;
 	float WantHFov = WantFovF;
 	float WantDist = PortraitBoom(G, PAspect, PTop, PBot, WantYaw, WantPitch, WantFovF, P.Dist * DistMul, bCourtView, CourtCentre, WantHFov);
-	if (bPortraitAim) WantDist = PortraitAimDist(G, PAspect, PTop, PBot, SL, WantPivot, WantYaw, WantPitch, WantFovF, P.Dist * DistMul, WantHFov);
+	// (rest steps too: at least the tactical aim boom, so Draw / Awaken also look up the arena instead of the landscape close-up)
+	if (bPortraitAim) WantDist = PortraitAimDist(G, PAspect, PTop, PBot, SL, WantPivot, WantYaw, WantPitch, WantFovF, FMath::Max(P.Dist * DistMul, Profiles[PTactical].Dist * Scale), WantHFov);
 	PortDbgLegacyPivot = bPortraitAim ? LegacyPivot : WantPivot; PortDbgLegacyPitch = LegacyWantPitch; PortDbgLegacyDist = P.Dist * DistMul; PortDbgAim = bPortraitAim;
 	const bool bBlending = ProfileAge < BlendDur;
 	// Yaw: spring (underdamped in Battle = arc sweep with overshoot and settle; whip on switches).
@@ -2031,7 +2037,7 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 	}
 	else ViewBadT = 0.f;
 
-	PortDbgFov = Fov;
+	PortDbgLook2 = ZLook; PortDbgFov = Fov; PortDbgWantDist = WantDist; PortDbgArm = ArmScale;
 	float ViewHFov = Fov, ViewK = 1.f;
 	ZoogiPortrait::AdaptFov(Fov, PAspect, ViewHFov, ViewK);
 	FRotator Rot = ZoogiPortrait::BandRotation(Loc, ZLook, ViewHFov, PAspect, PTop, PBot); // portrait: look point at the safe band's centre
