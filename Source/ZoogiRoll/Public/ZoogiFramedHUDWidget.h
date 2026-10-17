@@ -18,6 +18,9 @@ class UBorder;
 class UZoogiTeamColumnWidget;
 class AZoogiGameMode;
 
+/** Oct 17 battle view mode (Blueprint twin of ZoogiFramed::OnBattleViewModeChanged). */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FZoogiOnBattleViewModeChanged, bool, bHudHidden, bool, bPortrait);
+
 /** Backdrop / frame / header / tray painter: a child placed first so buttons and columns draw above it. */
 UCLASS()
 class ZOOGIROLL_API UZoogiFramedPainter : public UUserWidget
@@ -42,6 +45,12 @@ public:
 	static FString PromptText(const AZoogiGameMode* G);
 	/** Short label for the action box header (AWAKEN / STANDBY / BATTLE: AIM / ROLLING ...). */
 	static FString ActionLabel(const AZoogiGameMode* G);
+	/** Fired after the HUD toggle's orientation switch actually happened (and once for the initial mode). Same timing as the
+	 *  native ZoogiFramed::OnBattleViewModeChanged(). */
+	UPROPERTY(BlueprintAssignable, Category = "Zoogi|View")
+	FZoogiOnBattleViewModeChanged OnBattleViewModeChanged;
+	UFUNCTION(BlueprintPure, Category = "Zoogi|View") bool IsBattleHudHidden() const;
+	UFUNCTION(BlueprintPure, Category = "Zoogi|View") bool IsBattlePortrait() const;
 protected:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
 	virtual void NativeTick(const FGeometry& Geo, float Dt) override;
@@ -82,6 +91,10 @@ private:
 	void TickHudToggleTest(AZoogiGameMode* G, float Dt);
 	void PaintPortraitStrip(const FGeometry& Geo, FSlateWindowElementList& Out, int32 Ly) const;
 	bool PortraitTrayShown() const;
+	void CallPortraitCameraMode(bool bPortrait); // Game Camera's AZoogiPlayerController::SetPortraitCameraMode(bool), by name
+	void TickViewModeEvent(float Dt);
+	bool bModeEventPending = true; // the initial mode fires on the first active frame
+	float ModeEventT = 0.f;
 	UPROPERTY() TObjectPtr<UButton> HudBtn;
 	UPROPERTY() TObjectPtr<UTextBlock> HudText;
 	UPROPERTY() TObjectPtr<UZoogiFramedPainter> RotPainter;

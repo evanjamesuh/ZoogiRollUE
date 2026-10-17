@@ -11,6 +11,11 @@ class UWorld;
 class APlayerController;
 class AZoogiGameMode;
 
+/** Oct 17 battle view mode hook (for Game Camera): (bHudHidden, bPortrait). Fired after the orientation actually switched
+ *  (viewport aspect matches the requested mode, or a 1.5 s timeout when the platform / fullscreen window can't turn), and
+ *  once for the initial mode on the first active match frame. bPortrait = the viewport is taller than wide at that moment. */
+DECLARE_MULTICAST_DELEGATE_TwoParams(FZoogiBattleViewModeChanged, bool /*bHudHidden*/, bool /*bPortrait*/);
+
 namespace ZoogiFramed
 {
 	/** Pixel-space layout of one frame (viewport pixels, origin top-left). */
@@ -78,9 +83,15 @@ namespace ZoogiFramed
 	ZOOGIROLL_API void SetHudHidden(bool bHidden);
 	/** Extra UI rects (viewport px) that count as UI, never world picks (portrait edge controls, the Standby tray overlay). */
 	ZOOGIROLL_API void SetUiRects(const TArray<FBox2D>& Rects);
-	/** Aspect-aware battle FOV (portrait only): the horizontal FOV is narrowed to the geometric mean of the landscape (16:9)
-	 *  and portrait views, so the arena stretches up the tall screen without a fish-eye vertical FOV. Aspect >= 1: unchanged. */
-	ZOOGIROLL_API float PortraitFov(float HorizontalFov, float Aspect);
+	/** Battle view mode hook (native, game-wide): ZoogiFramed::OnBattleViewModeChanged().AddUObject(this, &X::OnMode).
+	 *  The framed HUD widget also exposes a BlueprintAssignable twin (UZoogiFramedHUDWidget::OnBattleViewModeChanged). */
+	ZOOGIROLL_API FZoogiBattleViewModeChanged& OnBattleViewModeChanged();
+	/** Last broadcast mode (queryable any time; false/false before the first match frame). */
+	ZOOGIROLL_API void GetBattleViewMode(bool& bOutHudHidden, bool& bOutPortrait);
+	/** Records + broadcasts a mode (called by the framed HUD widget). Returns false when unchanged. */
+	ZOOGIROLL_API bool BroadcastBattleViewMode(bool bHudHidden, bool bPortrait);
+	/** Portrait (HUD hidden) top control band, as a fraction of the viewport height (Game Camera reserves the top ~5%). */
+	constexpr float PortraitTopBand = 0.05f;
 	/** Minimum tap target in portrait design px (Evan, Oct 17: 58 px at 1080 wide). */
 	constexpr float PortraitTap = 58.f;
 	/** Last layout applied by the viewport client (bValid false when the frame is not active). */

@@ -63,19 +63,25 @@ namespace ZoogiFramed
 	static TArray<FBox2D> GUiRects;
 	void SetUiRects(const TArray<FBox2D>& Rects) { GUiRects = Rects; }
 
-	float PortraitFov(float HFov, float Aspect)
+	// battle view mode hook (Game Camera owns the portrait framing and listens here)
+	static int32 GModeHidden = -1, GModePortrait = -1;
+	FZoogiBattleViewModeChanged& OnBattleViewModeChanged() { static FZoogiBattleViewModeChanged D; return D; }
+	void GetBattleViewMode(bool& bOutHudHidden, bool& bOutPortrait) { bOutHudHidden = GModeHidden == 1; bOutPortrait = GModePortrait == 1; }
+	bool BroadcastBattleViewMode(bool bHudHidden, bool bPortrait)
 	{
-		if (Aspect >= 1.f || Aspect <= 0.05f) return HFov;
-		// keep XFOV (the engine's constraint below 16:9) but scale tan(h/2) by sqrt(aspect / (16/9)): 0.5 aspect -> 70 deg h
-		// becomes ~41 deg h x ~73 deg v (landscape 70 x 43): the same area of arena, turned up the screen
-		const float K = FMath::Sqrt(Aspect / (16.f / 9.f));
-		return 2.f * FMath::RadiansToDegrees(FMath::Atan(FMath::Tan(FMath::DegreesToRadians(HFov * 0.5f)) * K));
+		if (GModeHidden == (bHudHidden ? 1 : 0) && GModePortrait == (bPortrait ? 1 : 0)) return false;
+		GModeHidden = bHudHidden ? 1 : 0;
+		GModePortrait = bPortrait ? 1 : 0;
+		UE_LOG(LogZoogi, Log, TEXT("FRAMED OnBattleViewModeChanged hudHidden=%d portrait=%d"), GModeHidden, GModePortrait);
+		OnBattleViewModeChanged().Broadcast(bHudHidden, bPortrait);
+		return true;
 	}
 
 	static FLayout ComputePortrait(const FVector2D& V, const FMargin& S)
 	{
 		// Portrait play (HUD hidden): the 3D arena fills the whole screen (behind the notch too); the controls stay inside the
-		// safe insets. Top edge: HUD toggle (left), turn / score indicator (centre), ZOOM (right), all >= 58 design px.
+		// safe insets. Top edge: HUD toggle (left), turn / score indicator (centre), ZOOM (right), all >= 58 design px, plus the
+		// prompt line - everything inside the top 5% band Game Camera reserves (96 px of 1920; below the safe-area top inset).
 		// Bottom: the tray rects (hand recess over the deck | discard + orb row) for the Standby / Awaken overlay. Design is
 		// 1080 px wide (1080x1920 .. 1080x2340; the PC's 540x1080 window is the same at P 0.5).
 		FLayout L;
@@ -90,11 +96,11 @@ namespace ZoogiFramed
 		L.U = P;
 		L.ColT = 220.f;
 		auto Box = [](float Ax, float Ay, float Bx, float By) { return FBox2D(FVector2D(Ax, Ay), FVector2D(Bx, By)); };
-		const float BH = PortraitTap * P, Ty = Y0 + 12.f * P;
+		const float BH = PortraitTap * P, Ty = Y0 + 6.f * P;
 		L.HudBtn = Box(X0 + 12.f * P, Ty, X0 + 12.f * P + 150.f * P, Ty + BH);
 		L.ZoomBtn = Box(X1 - 12.f * P - 170.f * P, Ty, X1 - 12.f * P, Ty + BH);
 		L.Indicator = Box(L.HudBtn.Max.X + 14.f * P, Ty, L.ZoomBtn.Min.X - 14.f * P, Ty + BH);
-		L.Top = Box(X0, Y0, X1, Ty + BH + 40.f * P); // + one prompt line under the strip
+		L.Top = Box(X0, Y0, X1, Ty + BH + 28.f * P); // + one prompt line under the strip (ends at Y0 + 92 P, inside the 96 P band)
 		L.Arena = Box(0.f, 0.f, V.X, V.Y);
 		L.Left = L.Right = Box(X0, Y0, X0, Y0);
 		// tray overlay (Standby / Awaken only), bottom up
@@ -112,7 +118,7 @@ namespace ZoogiFramed
 		L.Deck = L.TrayL + FVector2D(97.f, 90.f) * L.TrayT;
 		L.Discard = L.TrayR + FVector2D(72.f, 90.f) * L.TrayT;
 		L.Energy = L.TrayR + FVector2D(328.f, 123.f) * L.TrayT;
-		L.Prompt = Box(X0 + 20.f * P, Ty + BH + 6.f * P, X1 - 20.f * P, Ty + BH + 38.f * P);
+		L.Prompt = Box(X0 + 20.f * P, Ty + BH + 2.f * P, X1 - 20.f * P, Ty + BH + 28.f * P);
 		L.bValid = true;
 		return L;
 	}

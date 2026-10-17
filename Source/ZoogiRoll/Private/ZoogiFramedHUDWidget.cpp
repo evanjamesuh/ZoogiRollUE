@@ -398,9 +398,10 @@ void UZoogiFramedHUDWidget::NativeTick(const FGeometry& Geo, float Dt)
 	if (RotateT >= 0.f)
 	{
 		RotateT += FMath::Min(Dt, 0.1f);
-		if (!bRotateApplied && RotateT >= 0.95f) { bRotateApplied = true; ApplyOrientation(bRotateTo); }
+		if (!bRotateApplied && RotateT >= 0.95f) { bRotateApplied = true; ApplyOrientation(bRotateTo); bModeEventPending = true; ModeEventT = 0.f; }
 		if (RotateT >= 2.0f) RotateT = -1.f;
 	}
+	TickViewModeEvent(Dt);
 	TickHudToggleTest(G, Dt);
 	CamText->SetText(FText::FromString(G->bCinematicCam ? TEXT("      CAM: CINE") : TEXT("      CAM: TACT"))); // leading space = room for the camera icon
 	CamBtn->SetIsEnabled(G->Phase != EZoogiPhase::GameOver && G->Phase != EZoogiPhase::Forming); // disabled state when the camera style can't matter
@@ -1049,7 +1050,7 @@ void UZoogiFramedHUDWidget::PaintTrayAwaken(const FGeometry& Geo, FSlateWindowEl
 
 // ------------------------------------------------------------------ Oct 17 (Evan 12:10 PM): HUD toggle = orientation switch
 // HUD shown = landscape framed hud-v3; HUD hidden = portrait play: the arena fills the tall screen, the camera frames it
-// vertically (aspect-aware battle FOV, ZoogiFramed::PortraitFov) and only the HUD toggle, the turn / score indicator and ZOOM
+// vertically (Game Camera: SetPortraitCameraMode + OnBattleViewModeChanged) and only the HUD toggle, the turn / score indicator and ZOOM
 // stay on the top edge (+ the tray overlay during the human's Awaken / Standby). Each toggle shows the rotate-phone prompt.
 void UZoogiFramedHUDWidget::OnHudToggle()
 {
@@ -1063,6 +1064,7 @@ void UZoogiFramedHUDWidget::OnHudToggle()
 void UZoogiFramedHUDWidget::ApplyOrientation(bool bHidden)
 {
 	ZoogiFramed::SetHudHidden(bHidden);
+	CallPortraitCameraMode(bHidden); // while the rotate prompt still covers the screen
 #if PLATFORM_IOS || PLATFORM_ANDROID
 	// Config allows both orientations (DefaultEngine.ini); the battle picks one at runtime
 	FPlatformMisc::SetAllowedDeviceOrientation(bHidden ? EDeviceScreenOrientation::Portrait : EDeviceScreenOrientation::LandscapeSensor);
@@ -1091,6 +1093,42 @@ void UZoogiFramedHUDWidget::ApplyOrientation(bool bHidden)
 	}
 #endif
 }
+
+void UZoogiFramedHUDWidget::CallPortraitCameraMode(bool bPortrait)
+{
+	// HOOK (Game Camera, branch game-camera-portrait): BlueprintCallable AZoogiPlayerController::SetPortraitCameraMode(bool).
+	// Looked up by name so this compiles and runs without their branch; once it is merged this can become a direct call.
+	APlayerController* PC = GetOwningPlayer();
+	UFunction* Fn = PC ? PC->FindFunction(FName(TEXT("SetPortraitCameraMode"))) : nullptr;
+	FBoolProperty* Arg = Fn ? CastField<FBoolProperty>(Fn->ChildProperties) : nullptr;
+	if (!Fn || !Arg || Fn->NumParms != 1)
+	{
+		UE_LOG(LogZoogi, Log, TEXT("FRAMED SetPortraitCameraMode(%d): not available on %s (Game Camera branch not merged) - skipped"), bPortrait ? 1 : 0, PC ? *PC->GetClass()->GetName() : TEXT("no PC"));
+		return;
+	}
+	uint8* Parms = (uint8*)FMemory_Alloca(FMath::Max<int32>(1, (int32)Fn->ParmsSize));
+	FMemory::Memzero(Parms, FMath::Max<int32>(1, (int32)Fn->ParmsSize));
+	Arg->SetPropertyValue_InContainer(Parms, bPortrait);
+	PC->ProcessEvent(Fn, Parms);
+	UE_LOG(LogZoogi, Log, TEXT("FRAMED SetPortraitCameraMode(%d) called"), bPortrait ? 1 : 0);
+}
+
+void UZoogiFramedHUDWidget::TickViewModeEvent(float Dt)
+{
+	// fire OnBattleViewModeChanged once the orientation really switched: the viewport aspect matches the requested mode, or
+	// after 1.5 s (fullscreen / -ZoogiNoWindowSwap / a device locked by the user) with whatever aspect it has then
+	if (!bModeEventPending || !bActive) return;
+	ModeEventT += Dt;
+	const FVector2D V = ZoogiFramed::Current().Viewport;
+	const bool bHidden = ZoogiFramed::IsHudHidden(), bPortrait = V.Y > V.X;
+	if (bPortrait != bHidden && ModeEventT < 1.5f) return;
+	bModeEventPending = false;
+	if (!bRotateApplied && RotateT < 0.f) CallPortraitCameraMode(bHidden); // initial mode (no toggle yet): tell the camera once too
+	if (ZoogiFramed::BroadcastBattleViewMode(bHidden, bPortrait)) OnBattleViewModeChanged.Broadcast(bHidden, bPortrait);
+}
+
+bool UZoogiFramedHUDWidget::IsBattleHudHidden() const { bool H, P; ZoogiFramed::GetBattleViewMode(H, P); return H; }
+bool UZoogiFramedHUDWidget::IsBattlePortrait() const { bool H, P; ZoogiFramed::GetBattleViewMode(H, P); return P; }
 
 bool UZoogiFramedHUDWidget::PortraitTrayShown() const
 {
