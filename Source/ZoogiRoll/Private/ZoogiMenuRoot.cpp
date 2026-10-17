@@ -178,6 +178,7 @@ void UZoogiMenuRoot::MarkDirty()
 	Stack.Reset();
 	Stack.Add(EZoogiScreen::Home);
 	bModal = false;
+	ClashTab = 2; ClashPopup = EZoogiClashPopup::None; // clash-menu: back on the Battle tab after a match
 	bDirty = true;
 }
 
@@ -205,6 +206,8 @@ void UZoogiMenuRoot::PopToHome()
 void UZoogiMenuRoot::HandleBack()
 {
 	if (bModal) { bModal = false; bDirty = true; return; }
+	if (ClashHome() && ClashPopup != EZoogiClashPopup::None) { ClashPopup = EZoogiClashPopup::None; bDirty = true; return; } // clash-menu
+	if (ClashHome() && ClashTab != 2) { SetClashTab(2); return; }
 	if (!DeckPreview.IsNone()) { DeckPreview = NAME_None; bDirty = true; return; }
 	if (bAnimeView)
 	{
@@ -244,6 +247,7 @@ void UZoogiMenuRoot::Refresh(float DeltaSeconds)
 		Rebuild();
 	}
 	TickAnims(DeltaSeconds);
+	if (ClashOn()) TickClash(DeltaSeconds);
 }
 
 // ---------------------------------------------------------------------------------------------------------- art
@@ -533,6 +537,15 @@ void UZoogiMenuRoot::Rebuild()
 	AnimScreen = (int32)Top();
 	Canvas = nullptr;
 	DesignW = FMath::Max(1440.f, 1080.f * BuiltViewport.X / FMath::Max(1.f, BuiltViewport.Y));
+	DesignH = 1080.f;
+	if (ClashHome())
+	{
+		// clash-menu M4 (portrait phone): 1080-wide canvas, 1920 tall at 9:16, taller (to 2400) on 9:19.5 / 9:20 phones.
+		// A landscape window keeps 1080x1920 and ScaleToFit pillar-boxes it over the full-bleed backdrop.
+		const float Aspect = BuiltViewport.Y / FMath::Max(1.f, BuiltViewport.X);
+		DesignW = 1080.f;
+		DesignH = Aspect >= 16.f / 9.f ? FMath::Clamp(1080.f * Aspect, 1920.f, 2400.f) : 1920.f;
+	}
 
 	// Full-bleed backdrop: game art per screen (or the optional menu video), with a navy wash.
 	FString Bg = TEXT("meadows_background"); // Evan 9:37: Meadow arena art (1456x816 PNG) replaces Frozen on Home/Play/etc.
@@ -544,8 +557,9 @@ void UZoogiMenuRoot::Rebuild()
 	}
 	// Evan 9:28/9:37 AM CT: HOME uses the same opaque Meadow art backdrop as PLAY (covers the live menu-map preview).
 	const bool bLiveMap = false;
-	UObject* BgRes = (EnsureBackdrop() && BackdropTexture) ? (UObject*)BackdropTexture.Get() : bLiveMap ? nullptr : (UObject*)Art(Bg);
-	if (BgRes)
+	UObject* BgRes = ClashHome() ? nullptr : (EnsureBackdrop() && BackdropTexture) ? (UObject*)BackdropTexture.Get() : bLiveMap ? nullptr : (UObject*)Art(Bg);
+	if (ClashHome()) BuildClashBackdrop(); // clash-menu: own sky-blue backdrop, no navy wash
+	else if (BgRes)
 	{
 		UScaleBox* Fill = WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass());
 		Fill->SetStretch(EStretch::ScaleToFill);
@@ -560,7 +574,7 @@ void UZoogiMenuRoot::Rebuild()
 		if (UOverlaySlot* S = Root->AddChildToOverlay(Fill)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); }
 	}
 	UBorder* Wash = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
-	Wash->SetBrushColor(FLinearColor(0.02f, 0.08f, 0.35f, bLiveMap ? 0.25f : 0.55f));
+	Wash->SetBrushColor(FLinearColor(0.02f, 0.08f, 0.35f, ClashHome() ? 0.f : bLiveMap ? 0.25f : 0.55f));
 	Wash->SetVisibility(ESlateVisibility::HitTestInvisible);
 	if (UOverlaySlot* S = Root->AddChildToOverlay(Wash)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); }
 
@@ -572,7 +586,7 @@ void UZoogiMenuRoot::Rebuild()
 	Safe->AddChild(Fit);
 	USizeBox* Size = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
 	Size->SetWidthOverride(DesignW);
-	Size->SetHeightOverride(1080.f);
+	Size->SetHeightOverride(DesignH);
 	Fit->AddChild(Size);
 	Canvas = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass());
 	Size->AddChild(Canvas);
@@ -580,7 +594,7 @@ void UZoogiMenuRoot::Rebuild()
 	if (bAnimeView) { BuildAnimeView(); return; }
 	switch (Top())
 	{
-	case EZoogiScreen::Home: BuildHome(); break;
+	case EZoogiScreen::Home: if (ClashOn()) BuildClash(); else BuildHome(); break;
 	case EZoogiScreen::Play: BuildPlay(); break;
 	case EZoogiScreen::ZoogiSelect: BuildZoogiSelect(); break;
 	case EZoogiScreen::Powers: BuildPowers(); break;

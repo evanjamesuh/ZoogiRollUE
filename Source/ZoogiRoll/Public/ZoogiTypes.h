@@ -152,6 +152,9 @@ namespace ZoogiUtil
 	/** SFX volume setting 0..1 (menu "SFX" row, or -ZoogiSfxVol=0..100). */
 	ZOOGIROLL_API float GetSfxVolume();
 	ZOOGIROLL_API void SetSfxVolume(float V);
+	/** Music volume setting 0..1 (clash-menu Settings "Music" slider): scales the menu loop and the match stems. */
+	ZOOGIROLL_API float GetMusicVolume();
+	ZOOGIROLL_API void SetMusicVolume(float V);
 	ZOOGIROLL_API class USoundBase* LoadSound(const TCHAR* Name);
 
 	ZOOGIROLL_API UStaticMesh* BasicShape(const TCHAR* Name); // Sphere, Cube, Cylinder, Cone, Plane

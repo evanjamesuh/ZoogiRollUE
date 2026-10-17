@@ -189,6 +189,12 @@ void AZoogiGameMode::MenuAction(FName Action, int32 Index)
 	}
 	else if (Action == "Rounds") MenuRounds = FMath::Clamp(Index, 1, 30);
 	else if (Action == "SfxVol") ZoogiUtil::SetSfxVolume(FMath::Clamp(Index, 0, 100) / 100.f);
+	else if (Action == "MusicVol")
+	{
+		// clash-menu Settings "Music" slider: the menu loop follows right away; match stems read it every frame
+		ZoogiUtil::SetMusicVolume(FMath::Clamp(Index, 0, 100) / 100.f);
+		if (MusicComp) MusicComp->SetVolumeMultiplier(0.35f * ZoogiUtil::GetMusicVolume());
+	}
 	else if (Action == "Start") StartMatch();
 	else if (Action == "Power") { if (!bArtifactMode) TryPower(); }
 	// Milestone "Awaken": Awaken actions and clickable aiming (Canvas HUD buttons -> here).
@@ -2297,7 +2303,7 @@ void AZoogiGameMode::PlayMusic(const TCHAR* Name)
 	UE_LOG(LogZoogi, Log, TEXT("Music: %s (%s)"), Name, S ? TEXT("loaded") : TEXT("missing"));
 	if (S)
 	{
-		MusicComp = UGameplayStatics::CreateSound2D(this, S, 0.35f, 1.f, 0.f, nullptr, false, false);
+		MusicComp = UGameplayStatics::CreateSound2D(this, S, 0.35f * ZoogiUtil::GetMusicVolume(), 1.f, 0.f, nullptr, false, false);
 		if (MusicComp) MusicComp->FadeIn(1.5f, 0.35f);
 	}
 }

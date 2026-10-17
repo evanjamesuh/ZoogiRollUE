@@ -305,7 +305,7 @@ bool FZoogiProgressionConfig::LoadFromDir(const FString& Dir, FString& OutLog)
 	{
 		TArray<FZoogiGemPackageRow> Out;
 		for (const TMap<FString, FString>& R : Rows)
-			Out.Add({ Nm(R, TEXT("package_id")), I(R, TEXT("gems")), I(R, TEXT("bonus_gems")), F(R, TEXT("price_usd")), S(R, TEXT("apple_product_id")), S(R, TEXT("google_product_id")), S(R, TEXT("steam_item_id")), S(R, TEXT("epic_offer_id")) });
+			Out.Add({ Nm(R, TEXT("package_id")), I(R, TEXT("gems")), I(R, TEXT("bonus_gems")), F(R, TEXT("price_usd")), S(R, TEXT("apple_product_id")), S(R, TEXT("google_product_id")), S(R, TEXT("steam_item_id")), S(R, TEXT("epic_offer_id")), S(R, TEXT("display_name")), S(R, TEXT("tag")) });
 		GemPackages = Out; return true;
 	});
 	Source = bAll ? TEXT("csv") : TEXT("csv+builtin");

@@ -5,6 +5,7 @@
 #include "ZoogiBall.h"
 #include "ZoogiCombo.h"
 #include "ZoogiRoll.h"
+#include "ZoogiTypes.h"
 #include "Components/AudioComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Quartz/QuartzSubsystem.h"
@@ -169,7 +170,7 @@ void UZoogiMusicSubsystem::EnsureBound()
 
 float UZoogiMusicSubsystem::MasterGain() const
 {
-	return GMusicBus * DuckCur * ClimaxMul;
+	return GMusicBus * DuckCur * ClimaxMul * ZoogiUtil::GetMusicVolume(); // user music volume (Settings slider)
 }
 
 bool UZoogiMusicSubsystem::IsShifted() const
@@ -281,7 +282,7 @@ void UZoogiMusicSubsystem::EndMatch(int32 Result)
 	for (int32 i = 0; i < 3; ++i) if (Stem[i]) Stem[i]->AdjustVolume(0.4f, 0.f);
 	USoundBase* S = Result == 1 ? VictoryS.Get() : DefeatS.Get();
 	if (S)
-		if (UAudioComponent* C = UGameplayStatics::CreateSound2D(this, S, GMusicBus, 1.f, 0.f, nullptr, false, true)) { C->bIsUISound = true; C->Play(); }
+		if (UAudioComponent* C = UGameplayStatics::CreateSound2D(this, S, GMusicBus * ZoogiUtil::GetMusicVolume(), 1.f, 0.f, nullptr, false, true)) { C->bIsUISound = true; C->Play(); }
 	UE_LOG(LogZoogi, Log, TEXT("MUSIC end: stems out (0.4 s), %s stinger%s"), Result == 1 ? TEXT("Victory") : (Result == 2 ? TEXT("Defeat (draw)") : TEXT("Defeat")), S ? TEXT("") : TEXT(" (missing)"));
 }
 
@@ -311,7 +312,7 @@ void UZoogiMusicSubsystem::ClimaxLand()
 void UZoogiMusicSubsystem::PlayShiftHit(bool bNextBeat)
 {
 	if (!bActive || !ShiftHitS) return;
-	UAudioComponent* C = UGameplayStatics::CreateSound2D(this, ShiftHitS, GMusicBus * 0.71f, 1.f, 0.f, nullptr, false, true); // -3 dB under the stems
+	UAudioComponent* C = UGameplayStatics::CreateSound2D(this, ShiftHitS, GMusicBus * 0.71f * ZoogiUtil::GetMusicVolume(), 1.f, 0.f, nullptr, false, true); // -3 dB under the stems
 	const double Beat = BarLen / FMath::Max(1, Def ? Def->BeatsPerBar : 4);
 	if (C)
 	{
