@@ -10,7 +10,6 @@ namespace
 	constexpr EAutomationTestFlags ZoogiAimFlags = EAutomationTestFlags_ApplicationContextMask | EAutomationTestFlags::ProductFilter;
 	// top-down test camera: world +X = screen up, +Y = screen right, 0.5 px per cm, ball at the screen centre
 	FVector2D TopDown(const FVector& W) { return FVector2D(960.f + W.Y * 0.5f, 540.f - W.X * 0.5f); }
-	FVector2D Dir(float YawDeg) { const float R = FMath::DegreesToRadians(YawDeg); return FVector2D(FMath::Cos(R), FMath::Sin(R)); }
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiAimArrowRotateTest, "ZoogiRoll.Aim.ArrowRotate", ZoogiAimFlags)
@@ -49,34 +48,33 @@ bool FZoogiAimArrowRotateTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("press on the arrowhead grabs"), HitTest(S, BallS, BallRpx, HeadMid, 1.f, T));
 	TestTrue(TEXT("press just beside the arrowhead (generous area) grabs"), HitTest(S, BallS, BallRpx, HeadMid + FVector2D(55.f, 0.f), 1.f, T));
 	TestFalse(TEXT("press on the Zoogi itself keeps the old press (bGrabOnZoogi off)"), HitTest(S, BallS, BallRpx, BallS, 1.f, T));
-	const float HeadDist = 0.5f * (W[2].X + W[3].X); // cm from the ball centre along the arrow
+	// rotation follows the finger's HORIZONTAL screen travel (camera independent: no world point under the finger)
+	const float Dp = T.RotateDegPerPx; // deg per px at Px = 1
 	FGesture Gs;
-	Gs.Begin(0.f, Dir(0.f), HeadMid, 800.f);
+	Gs.Begin(0.f, HeadMid, 800.f);
 	const float Targets[] = { -40.f, -90.f, 40.f, 135.f };
 	for (float Want : Targets)
 	{
-		// finger walks round the ball to Want (screen point -> world floor direction, as the controller derives it)
-		for (int32 Step = 1; Step <= 10; ++Step)
-		{
-			const float A = FMath::Lerp(Gs.Yaw, Want, Step / 10.f);
-			const FVector2D Finger = TopDown(FVector(Dir(A) * HeadDist, 0.f));
-			const FVector2D Fw((540.f - Finger.Y) / 0.5f, (Finger.X - 960.f) / 0.5f);
-			Gs.Move(Fw.GetSafeNormal(), Finger, T.RotateStartPx);
-		}
+		for (int32 Step = 1; Step <= 10; ++Step) Gs.Move(HeadMid + FVector2D(Want / Dp * Step / 10.f, 3.f * Step), T.RotateStartPx, Dp);
 		TestTrue(*FString::Printf(TEXT("drag rotates (to %.0f deg)"), Want), Gs.bRotating);
-		TestEqual(*FString::Printf(TEXT("aim yaw follows the finger to %.0f deg"), Want), Gs.Yaw, (float)FRotator::NormalizeAxis(Want), 0.05f);
+		TestEqual(*FString::Printf(TEXT("aim yaw follows the finger to %.0f deg (horizontal px x %.2f)"), Want, Dp), Gs.Yaw, (float)FRotator::NormalizeAxis(Want), 0.05f);
 	}
+	// holding the finger still keeps the yaw exactly (camera orbiting under a still finger cannot feed back)
+	for (int32 i = 0; i < 30; ++i) Gs.Move(HeadMid + FVector2D(135.f / Dp, 30.f), T.RotateStartPx, Dp);
+	TestEqual(TEXT("still finger = no drift"), Gs.Yaw, 135.f, 0.001f);
 	TestFalse(TEXT("a rotate drag is not a tap"), Gs.End());
-	// off-centre grab: relative mapping, no jump on press
-	Gs.Begin(30.f, Dir(55.f), FVector2D(100, 100), 800.f);
-	Gs.Move(Dir(55.f), FVector2D(130, 100), T.RotateStartPx);
-	TestEqual(TEXT("off-centre grab does not jump the arrow"), Gs.Yaw, 30.f, 0.05f);
-	Gs.Move(Dir(75.f), FVector2D(140, 110), T.RotateStartPx);
-	TestEqual(TEXT("off-centre grab rotates by the finger's angle change"), Gs.Yaw, 50.f, 0.05f);
+	TestFalse(TEXT("release clears the gesture (inactive)"), Gs.bActive || Gs.bRotating);
+	TestFalse(TEXT("moves after release do nothing"), Gs.Move(HeadMid + FVector2D(400.f, 0.f), T.RotateStartPx, Dp));
+	// any starting yaw: same px -> same degrees, no jump on press
+	Gs.Begin(30.f, FVector2D(100, 100), 800.f);
+	Gs.Move(FVector2D(100, 130), T.RotateStartPx, Dp);
+	TestEqual(TEXT("vertical travel alone does not rotate / no jump on press"), Gs.Yaw, 30.f, 0.05f);
+	Gs.Move(FVector2D(100.f + 20.f / Dp, 130), T.RotateStartPx, Dp);
+	TestEqual(TEXT("+20 deg of horizontal travel from any start yaw"), Gs.Yaw, 50.f, 0.05f);
 	Gs.End();
 	// a press on the arrow released without moving stays the old tap (tap-to-target on release)
-	Gs.Begin(0.f, Dir(0.f), HeadMid, 800.f);
-	Gs.Move(Dir(0.f), HeadMid + FVector2D(2.f, 1.f), T.RotateStartPx);
+	Gs.Begin(0.f, HeadMid, 800.f);
+	Gs.Move(HeadMid + FVector2D(2.f, 1.f), T.RotateStartPx, Dp);
 	TestTrue(TEXT("press + release on the arrow without moving = tap (old tap-to-aim)"), Gs.End());
 
 	// 3) a drag that starts elsewhere is the normal launch, power unchanged
