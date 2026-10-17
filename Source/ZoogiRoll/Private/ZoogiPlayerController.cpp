@@ -1389,8 +1389,10 @@ void AZoogiPlayerController::ElevatorPushFit(const TArray<FVector>& PadFloors, f
 	OutPitch = 38.f;                           // a little lower than the sweep's 52: the lifts read as rising
 	// keep a margin inside the frame; portrait: the same margin as the court fit (the narrow width is the only limit there, so
 	// the landscape 0.82 left the pads hardly bigger than the court-wide sweep end)
-	const float TanH = FMath::Tan(FMath::DegreesToRadians(InFov * 0.5f)) * (Aspect < 1.f ? ZoogiPortrait::CourtMargin() : 0.82f);
-	const float TanV = TanH / FMath::Max(Aspect, 0.1f);
+	const float Margin = Aspect < 1.f ? ZoogiPortrait::CourtMargin() : 0.82f;
+	float TanH, TanV;
+	if (Aspect < 1.f) { ZoogiPortrait::TanHalf(InFov, Aspect, TanH, TanV); TanH *= Margin; TanV *= Margin; }
+	else { TanH = FMath::Tan(FMath::DegreesToRadians(InFov * 0.5f)) * Margin; TanV = TanH / FMath::Max(Aspect, 0.1f); } // landscape: unchanged
 	const float VTop = TanV * (1.f - 2.f * Top), VBot = TanV * (1.f - 2.f * Bottom); // portrait: inside the HUD-safe band
 	auto Fits = [&](float D)
 	{
@@ -1439,7 +1441,7 @@ float AZoogiPlayerController::PortraitAimDist(const AZoogiGameMode* G, float Asp
 	float K = 1.f;
 	ZoogiPortrait::AdaptFov(LandscapeFov, Aspect, OutHFov, K);
 	// never closer than the landscape boom; wide enough to show AimWidth x the play radius across the look point
-	const float TanH = FMath::Tan(FMath::DegreesToRadians(OutHFov * 0.5f));
+	float TanH, TanV0; ZoogiPortrait::TanHalf(OutHFov, Aspect, TanH, TanV0);
 	const float DW = ZoogiPortrait::AimWidth() * PlayRadius(G ? G->Arena : nullptr) / FMath::Max(2.f * TanH * ZoogiPortrait::CourtMargin(), 0.05f);
 	const float MinD = FMath::Max(LandscapeDist, DW);
 	const float MaxD = FMath::Max(MinD, LandscapeDist * ZoogiPortrait::BoomMax());
@@ -1454,7 +1456,7 @@ void AZoogiPlayerController::PortraitChaseBoom(const AZoogiGameMode* G, float As
 {
 	float K = 1.f;
 	ZoogiPortrait::AdaptFov(LandscapeFov, Aspect, OutHFov, K);
-	const float TanV = FMath::Tan(FMath::DegreesToRadians(OutHFov * 0.5f)) / FMath::Max(Aspect, 0.05f);
+	float TanH0, TanV; ZoogiPortrait::TanHalf(OutHFov, Aspect, TanH0, TanV);
 	const float Theta = ZoogiPortrait::ChasePitch();                  // look pitch below horizontal
 	const float YS = 2.f * ZoogiPortrait::ChaseScreenY() - 1.f;       // shooter this far below the optical axis (normalised)
 	OutElev = Theta + FMath::RadiansToDegrees(FMath::Atan(YS * TanV)); // boom elevation that puts the shooter there
@@ -2089,7 +2091,9 @@ void AZoogiPlayerController::UpdateCamera(float Dt)
 		if (PIdx == PBattle && Shooter)
 		{
 			const float Aspect = ZoogiFramed::ViewAspect(this); // framed HUD: the arena window's real view-rect aspect (full viewport otherwise)
-			const float TanVH = FMath::Tan(FMath::DegreesToRadians(ViewHFov * 0.5f)) / Aspect;
+			float TanHH = 0.f, TanVH = 0.f;
+			if (bPortrait) ZoogiPortrait::TanHalf(ViewHFov, Aspect, TanHH, TanVH);
+			else TanVH = FMath::Tan(FMath::DegreesToRadians(ViewHFov * 0.5f)) / Aspect; // landscape: unchanged
 			const float VHalf = FMath::RadiansToDegrees(FMath::Atan(TanVH));
 			const float ShooterLow = (SL - FVector(0, 0, ZoogiConst::ZoogiRadius) - Loc).Rotation().Pitch;
 			const float Rel = ShooterLow - Rot.Pitch; // negative = below the centre line

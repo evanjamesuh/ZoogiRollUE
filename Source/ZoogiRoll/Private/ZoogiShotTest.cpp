@@ -7,6 +7,7 @@
 #include "ZoogiArena.h"
 #include "ZoogiPlayerController.h"
 #include "ZoogiPortraitCam.h"
+#include "Engine/LocalPlayer.h"
 #include "ZoogiSpawnElevator.h"
 #include "ZoogiStageForming.h"
 #include "Camera/CameraComponent.h"
@@ -762,9 +763,10 @@ void AZoogiShotTestDriver::StartPortrait()
 	PortCourtOut = PortCourtN = PortRing2Out = PortRing2N = PortShooterOut = PortShooterN = 0;
 	PortCourtMaxX = 0.f; PortShooterMinY = 1e9f; PortShooterMaxY = -1e9f; PortLegacyOut = 0.f; PortVFov = 0.f;
 	bPortModeOk = false; bPortBehind = false; bPortAimMode = false; PortAimPitch = 0.f; PortModeLine = TEXT("mode hook: not run");
-	bChaseRan = false; ChaseShooterY = ChaseAimX = ChaseFarY = ChasePitchGot = ChaseCamH = ChaseBoomGot = 0.f; ChaseArm = 1.f;
+	ChaseEngineY = -1.f; bChaseRan = false; ChaseShooterY = ChaseAimX = ChaseFarY = ChasePitchGot = ChaseCamH = ChaseBoomGot = 0.f; ChaseArm = 1.f;
 	APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0);
 	PortAspect = ZoogiPortrait::ViewAspect(PC);
+	PortAxis = (PC && PC->GetLocalPlayer()) ? (int32)PC->GetLocalPlayer()->AspectRatioAxisConstraint : -1;
 	ZoogiPortrait::Band(PC, PortAspect, PortTop, PortBot);
 	PortCourtR = AZoogiPlayerController::PortraitCourtRadius(GM());
 	AZoogiGameMode* G = GM();
@@ -835,7 +837,7 @@ void AZoogiShotTestDriver::TickPortrait(float Dt)
 		Place(L, R, F);
 		CountCircle(L, R, F, PortCourtR, PortCourtOut, PortCourtN, &PortCourtMaxX);
 		if (AZoogiArena::OuterOutR > 0.f) CountCircle(L, R, F, AZoogiArena::OuterOutR, PortRing2Out, PortRing2N, nullptr);
-		PortVFov = 2.f * FMath::RadiansToDegrees(FMath::Atan(FMath::Tan(FMath::DegreesToRadians(F * 0.5f)) / PortAspect));
+		{ float TH, TV; ZoogiPortrait::TanHalf(F, PortAspect, TH, TV); PortVFov = 2.f * FMath::RadiansToDegrees(FMath::Atan(TV)); }
 		PortStage = 5;
 	}
 	else if (PortStage == 5 && PortT >= 1.6f) { Shot(N + TEXT("_after")); PortStage = 6; }
@@ -893,6 +895,12 @@ void AZoogiShotTestDriver::TickPortrait(float Dt)
 	}
 	else if (PortStage == 20 && PortT >= 2.2f)
 	{
+		// cross-check the helper projection against the engine's own (axis constraint, aspect) on the rendered frame
+		if (bChaseRan && G && G->GetActiveBall())
+		{
+			FVector2D Scr; int32 VX = 0, VY = 0; PC->GetViewportSize(VX, VY);
+			if (PC->ProjectWorldLocationToScreen(G->GetActiveBall()->BallLocation(), Scr) && VY > 0) ChaseEngineY = Scr.Y / VY;
+		}
 		if (bChaseRan) Shot(N + TEXT("_after_aim_chase"));
 		PortStage = 21;
 	}
@@ -1000,7 +1008,8 @@ void AZoogiShotTestDriver::TickElevPush(float Dt)
 		ElevMinZ = FMath::Min(ElevMinZ, Loc.Z);
 		if (Wt >= 0.999f)
 		{
-			const float TanH = FMath::Tan(FMath::DegreesToRadians(Fov * 0.5f)), TanV = TanH / (ZoogiPortrait::IsPortrait(EA) ? EA : 16.f / 9.f);
+			float TanH = FMath::Tan(FMath::DegreesToRadians(Fov * 0.5f)), TanV = TanH / (16.f / 9.f);
+			if (ZoogiPortrait::IsPortrait(EA)) ZoogiPortrait::TanHalf(Fov, EA, TanH, TanV);
 			for (const FVector& P : ElevPadFloors)
 				for (const FVector& O : { FVector(0.f, 0.f, 0.f), FVector(0.f, 0.f, 130.f) })
 				{
@@ -1450,7 +1459,7 @@ void AZoogiShotTestDriver::Verify()
 		// AIM chase view: shooter at PortraitAimScreenY (+-0.03), aim line straight up (|x| <= 0.02), the far rim in the upper half
 		// of the frame below the top band, look pitch = PortraitAimPitch
 		const float WantY = ZoogiPortrait::ChaseScreenY();
-		const bool bChase = bChaseRan && FMath::Abs(ChaseShooterY - WantY) <= 0.03f && ChaseAimX <= 0.02f && ChaseFarY > 0.f && ChaseFarY <= 1.f - 2.f * PortTop
+		const bool bChase = bChaseRan && FMath::Abs(ChaseShooterY - WantY) <= 0.03f && FMath::Abs(ChaseEngineY - ChaseShooterY) <= 0.02f && ChaseEngineY <= 1.f - ZoogiPortrait::SafeBottomTray() && ChaseAimX <= 0.02f && ChaseFarY > 0.f && ChaseFarY <= 1.f - 2.f * PortTop
 			&& FMath::Abs(ChasePitchGot - ZoogiPortrait::ChasePitch()) <= 0.5f;
 		if (bPort) bOk &= bCourt && bRing2 && bShooter && bVFov && bTablet && bChase;
 		bPass &= bOk;
@@ -1460,8 +1469,8 @@ void AZoogiShotTestDriver::Verify()
 			PortShooterOut, PortShooterN, PortShooterMinY, PortShooterMaxY, -1.f + 2.f * PortBot, 1.f - 2.f * PortTop, PortVFov, ZoogiPortrait::VFovMax(), PortLegacyOut * 100.f));
 		Extra.Add(FString::Printf(TEXT("aim view: portrait aim framing %d, camera behind the shooter looking up the arena %d, pitch %.1f (need 40..62), boom %.0f of %.0f wanted (probe arm %.2f) | %s"),
 			bPortAimMode, bPortBehind, PortAimPitch, PortAimGot, PortAimWant, PortAimArm, *PortModeLine));
-		Extra.Add(FString::Printf(TEXT("AIM chase view: ran %d | shooter at %.3f of the screen height (want %.2f) | aim point |x| %.3f | far rim y %.3f (upper half, below the top band) | look pitch %.1f (want %.1f) | camera %.0f cm from the shooter, %.0f cm above | collision probe arm %.2f (1 = clear; the live camera pulls in to it)"),
-			bChaseRan, ChaseShooterY, WantY, ChaseAimX, ChaseFarY, ChasePitchGot, ZoogiPortrait::ChasePitch(), ChaseBoomGot, ChaseCamH, ChaseArm));
+		Extra.Add(FString::Printf(TEXT("AIM chase view: ran %d | shooter at %.3f of the screen height (want %.2f; engine projection %.3f, axis constraint %d) | aim point |x| %.3f | far rim y %.3f (upper half, below the top band) | look pitch %.1f (want %.1f) | camera %.0f cm from the shooter, %.0f cm above | collision probe arm %.2f (1 = clear; the live camera pulls in to it)"),
+			bChaseRan, ChaseShooterY, WantY, ChaseEngineY, PortAxis, ChaseAimX, ChaseFarY, ChasePitchGot, ZoogiPortrait::ChasePitch(), ChaseBoomGot, ChaseCamH, ChaseArm));
 	}
 	if (FinishLog.Num()) Extra.Add(TEXT("ends ") + FString::Join(FinishLog, TEXT(",")));
 	if (AZoogiGameMode* G = GM()) Extra.Add(FString::Printf(TEXT("stage %d phase %d"), (int32)G->Stage, (int32)G->Phase));

@@ -32,9 +32,17 @@ namespace ZoogiPortrait
 	ZOOGIROLL_API int32 GetModeOverride();
 	/** Portrait framing for a view of this aspect: forced on / off by the hook, otherwise aspect < 1 with zoogi.Cam.Portrait on. */
 	ZOOGIROLL_API bool IsPortrait(float Aspect);
-	/** The view's aspect (framed HUD: the arena window; otherwise the viewport). */
+	/** The view's aspect (framed HUD: the arena window; otherwise the viewport). Also refreshes the local player's aspect-ratio
+	 *  axis constraint every FOV helper below uses (UE's MajorAxisFOV applies the FOV to the vertical on a portrait screen). */
 	ZOOGIROLL_API float ViewAspect(const APlayerController* PC);
-	/** Safe band fractions for this PC at Aspect: 0 / 0 on landscape, and while the framed HUD already keeps the HUD out of the
+	/** tan of the half-FOVs for an engine FOV value on a view of this aspect, honouring the axis constraint. */
+	ZOOGIROLL_API void TanHalf(float Fov, float Aspect, float& OutTanH, float& OutTanV);
+	/** The engine FOV value that gives this horizontal half-FOV tangent on a view of this aspect. */
+	ZOOGIROLL_API float FovForTanH(float TanH, float Aspect);
+	/** zoogi.Cam.SafeBottomTray (0.285): bottom band while the human's Standby / Awaken card tray is up. */
+	ZOOGIROLL_API float SafeBottomTray();
+	ZOOGIROLL_API bool CardTrayUp(const UWorld* W);
+	/** Safe band fractions for this PC at Aspect (bottom = the card tray's 28.5% while it is up): 0 / 0 on landscape, and while the framed HUD already keeps the HUD out of the
 	 *  arena window. */
 	ZOOGIROLL_API void Band(const APlayerController* PC, float Aspect, float& OutTop, float& OutBottom);
 
@@ -60,7 +68,7 @@ namespace ZoogiPortrait
 	ZOOGIROLL_API float AimPitch(); // zoogi.Cam.PortraitRestPitch (48): Draw / Awaken / PowerUp boom pitch
 	/** Portrait AIM chase view (Evan's tablet reference): low, just behind and above the Zoogi, the arena running away up the
 	 *  screen, aim line straight up. zoogi.Cam.PortraitAimPitch (27: look pitch below horizontal), .PortraitAimBoom (800 cm x
-	 *  arena camera scale: camera to shooter), .PortraitAimScreenY (0.68: shooter's screen height from the top). */
+	 *  arena camera scale: camera to shooter), .PortraitAimScreenY (0.66, clears the 28.5% card tray too: shooter's screen height from the top). */
 	ZOOGIROLL_API float ChasePitch();
 	ZOOGIROLL_API float ChaseBoom();
 	ZOOGIROLL_API float ChaseScreenY();

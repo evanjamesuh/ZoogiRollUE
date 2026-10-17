@@ -99,6 +99,7 @@ private:
 	float PortCourtMaxX = 0.f, PortShooterMinY = 0.f, PortShooterMaxY = 0.f, PortAimPitch = 0.f;
 	bool bPortModeOk = false, bPortBehind = false, bPortAimMode = false;
 	float PortAimArm = 1.f, PortAimWant = 0.f, PortAimGot = 0.f;
+	float ChaseEngineY = -1.f; int32 PortAxis = -1;
 	bool bChaseRan = false; float ChaseShooterY = 0.f, ChaseAimX = 0.f, ChaseFarY = 0.f, ChasePitchGot = 0.f, ChaseCamH = 0.f, ChaseBoomGot = 0.f, ChaseArm = 1.f;
 	FString PortModeLine;
 	bool bBankMove = false; bool bBankHitLogged = false; float BankT = 0.f, BankTc = 0.f, BankSpeed = 0.f; FVector BankE = FVector::ZeroVector, BankIn = FVector::ZeroVector, BankOut = FVector::ZeroVector;
