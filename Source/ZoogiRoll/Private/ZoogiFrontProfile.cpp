@@ -1,7 +1,9 @@
 // clash-menu: see ZoogiFrontProfile.h
 #include "ZoogiFrontProfile.h"
 #include "ZoogiBall.h"
+#include "ZoogiArena.h"
 #include "ZoogiGameMode.h"
+#include "ZoogiOrb.h"
 #include "ZoogiPowerUnlockSubsystem.h"
 #include "ZoogiProgression.h"
 #include "ZoogiProgressionSubsystem.h"
@@ -11,12 +13,15 @@
 #include "Engine/World.h"
 #include "HAL/FileManager.h"
 #include "Misc/CommandLine.h"
+#include "Misc/Compression.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Serialization/JsonWriter.h"
+#include "Serialization/MemoryReader.h"
+#include "Serialization/MemoryWriter.h"
 #include "TimerManager.h"
 
 namespace
@@ -51,6 +56,35 @@ FString FZoogiFrontProfileData::ToJsonString() const
 	J->SetNumberField(TEXT("battle_pass_xp"), BattlePassXP);
 	J->SetNumberField(TEXT("wins"), Wins);
 	J->SetNumberField(TEXT("battles"), Battles);
+	J->SetNumberField(TEXT("losses"), Losses);
+	J->SetNumberField(TEXT("draws"), Draws);
+	J->SetNumberField(TEXT("three_crown_wins"), ThreeCrownWins);
+	J->SetNumberField(TEXT("win_streak"), WinStreak);
+	J->SetNumberField(TEXT("best_streak"), BestStreak);
+	J->SetStringField(TEXT("tag"), Tag);
+	J->SetStringField(TEXT("chest_stock_day"), ChestStockDay);
+	{
+		TSharedRef<FJsonObject> CB = MakeShared<FJsonObject>();
+		for (const TPair<FName, int32>& P : ChestBought) CB->SetNumberField(P.Key.ToString(), P.Value);
+		J->SetObjectField(TEXT("chest_bought"), CB);
+		TArray<TSharedPtr<FJsonValue>> BL;
+		for (const FZoogiFrontBattle& B : BattleLog)
+		{
+			TSharedRef<FJsonObject> O = MakeShared<FJsonObject>();
+			O->SetStringField(TEXT("utc"), LexToString(B.Utc));
+			O->SetNumberField(TEXT("outcome"), B.Outcome);
+			O->SetStringField(TEXT("opponent"), B.Opponent);
+			O->SetNumberField(TEXT("trophies"), B.Trophies);
+			O->SetNumberField(TEXT("my_score"), B.MyScore);
+			O->SetNumberField(TEXT("opp_score"), B.OppScore);
+			O->SetNumberField(TEXT("duration"), B.Duration);
+			O->SetStringField(TEXT("replay"), B.ReplayId);
+			O->SetNumberField(TEXT("arena"), B.Arena);
+			O->SetBoolField(TEXT("dev"), B.bDev);
+			BL.Add(MakeShared<FJsonValueObject>(O));
+		}
+		J->SetArrayField(TEXT("battle_log"), BL);
+	}
 	J->SetBoolField(TEXT("cards_new"), bCardsNew);
 	auto IntSet = [](const TSet<int32>& Set) { TArray<int32> A = Set.Array(); A.Sort(); TArray<TSharedPtr<FJsonValue>> V; for (int32 X : A) V.Add(MakeShared<FJsonValueNumber>(X)); return V; };
 	J->SetArrayField(TEXT("trophy_claimed"), IntSet(TrophyClaimed));
@@ -123,6 +157,29 @@ bool FZoogiFrontProfileData::FromJsonString(const FString& S, FString& OutError)
 	N.BattlePassXP = ZFInt(J, TEXT("battle_pass_xp"));
 	N.Wins = ZFInt(J, TEXT("wins"));
 	N.Battles = ZFInt(J, TEXT("battles"));
+	N.Losses = ZFInt(J, TEXT("losses")); N.Draws = ZFInt(J, TEXT("draws")); N.ThreeCrownWins = ZFInt(J, TEXT("three_crown_wins"));
+	N.WinStreak = ZFInt(J, TEXT("win_streak")); N.BestStreak = ZFInt(J, TEXT("best_streak"));
+	J->TryGetStringField(TEXT("tag"), N.Tag);
+	J->TryGetStringField(TEXT("chest_stock_day"), N.ChestStockDay);
+	{
+		const TSharedPtr<FJsonObject>* CB = nullptr;
+		if (J->TryGetObjectField(TEXT("chest_bought"), CB) && CB)
+			for (const TPair<FString, TSharedPtr<FJsonValue>>& P : (*CB)->Values) N.ChestBought.Add(FName(*P.Key), FMath::Max(0, (int32)P.Value->AsNumber()));
+		const TArray<TSharedPtr<FJsonValue>>* BL = nullptr;
+		if (J->TryGetArrayField(TEXT("battle_log"), BL) && BL)
+			for (const TSharedPtr<FJsonValue>& V : *BL)
+			{
+				if (!V.IsValid() || V->Type != EJson::Object) continue;
+				const TSharedPtr<FJsonObject> O = V->AsObject();
+				FZoogiFrontBattle B; FString U;
+				O->TryGetStringField(TEXT("utc"), U); LexFromString(B.Utc, *U);
+				B.Outcome = ZFInt(O, TEXT("outcome")); O->TryGetStringField(TEXT("opponent"), B.Opponent);
+				B.Trophies = ZFInt(O, TEXT("trophies")); B.MyScore = ZFInt(O, TEXT("my_score")); B.OppScore = ZFInt(O, TEXT("opp_score"));
+				B.Duration = ZFInt(O, TEXT("duration")); O->TryGetStringField(TEXT("replay"), B.ReplayId);
+				B.Arena = (uint8)FMath::Clamp(ZFInt(O, TEXT("arena")), 0, 255); O->TryGetBoolField(TEXT("dev"), B.bDev);
+				N.BattleLog.Add(B);
+			}
+	}
 	N.ChestCycle = ZFInt(J, TEXT("chest_cycle"));
 	J->TryGetBoolField(TEXT("cards_new"), N.bCardsNew);
 	// schema 1 files: gems_local is ignored (the progression ledger is the only gem balance)
@@ -204,8 +261,34 @@ void UZoogiFrontProfileSubsystem::Initialize(FSubsystemCollectionBase& Collectio
 	}
 	D.SchemaVersion = FZoogiFrontProfileData::CurrentSchema;
 	if (D.SeasonEndUtc <= 0) D.SeasonEndUtc = NowUtc() + (28 * 24 + 11) * 3600; // "Ends in 28d 11h" on first run, then a real countdown
+	if (D.Tag.Len() != 7)
+	{
+		static const TCHAR* Alpha = TEXT("0289CGJLPQRUVY"); // tag alphabet without look-alikes
+		D.Tag.Reset();
+		for (int32 i = 0; i < 7; ++i) D.Tag.AppendChar(Alpha[FMath::RandRange(0, 13)]);
+	}
 	InitDecks();
 	Save();
+#if !UE_BUILD_SHIPPING
+	// Dev test flag (never in Shipping, never on by default): a one-time ledger grant for capture / test runs, only on a
+	// named test profile so a real save is never touched. Recorded in the ledger as source "dev.grant".
+	int32 Grant = 0; FString ProfileArg;
+	if (FParse::Value(FCommandLine::Get(), TEXT("ZoogiDevGrant="), Grant) && Grant > 0)
+	{
+		UZoogiProgressionSubsystem* PS = GetGameInstance() ? GetGameInstance()->GetSubsystem<UZoogiProgressionSubsystem>() : nullptr;
+		if (!FParse::Value(FCommandLine::Get(), TEXT("ZoogiProfile="), ProfileArg) || ProfileArg.IsEmpty() || FPaths::GetBaseFilename(ProfileArg) == TEXT("ZoogiProgression"))
+		{
+			UE_LOG(LogZoogi, Warning, TEXT("FRONTEND dev grant ignored: needs -ZoogiProfile=<test profile>"));
+		}
+		else if (PS)
+		{
+			const FGuid Id = ZoogiProgress::DeterministicId(FString::Printf(TEXT("devgrant:%s:%d"), *D.GuestName, Grant));
+			const EZoogiTxnResult R = PS->Core().Mutable().Wallet.Grant(Id, EZoogiGemBucket::Earned, Grant, FName(TEXT("dev.grant")), FDateTime::UtcNow());
+			if (R == EZoogiTxnResult::Applied) PS->SaveProfile();
+			UE_LOG(LogZoogi, Log, TEXT("FRONTEND DEV grant %d gems (%s): %s, ledger total %d"), Grant, *ProfileArg, ZoogiProgress::TxnResultName(R), PS->Core().Get().Wallet.Total());
+		}
+	}
+#endif
 }
 
 UZoogiFrontProfileSubsystem* UZoogiFrontProfileSubsystem::Get(const UObject* WorldContext)
@@ -410,7 +493,8 @@ FTimespan UZoogiFrontProfileSubsystem::TimeToDealsReset() const
 void UZoogiFrontProfileSubsystem::EnsureDeals()
 {
 	const FString Day = ZoogiProgress::ResetBoundary(FDateTime::Now(), ZFResetHour(GetGameInstance())).ToString(TEXT("%Y%m%d"));
-	if (D.DealsDay == Day && D.Deals.Num() == 6) return;
+	const FString Key = Day + TEXT("v3"); // v3: DETAILED PASS 2 counts / prices (rolled once more on old saves)
+	if (D.DealsDay == Key && D.Deals.Num() == 6) return;
 	TArray<FName> Owned = OwnedCards();
 	if (Owned.Num() == 0) return;
 	FRandomStream R((int32)GetTypeHash(Day + D.GuestName));
@@ -423,20 +507,21 @@ void UZoogiFrontProfileSubsystem::EnsureDeals()
 		for (const FName& Id : Owned)
 		{
 			const FZoogiCardDef* C = FindCard(Id);
-			if (i == 0 && C && RarityOf(*C) != 0) continue;
+			if (i == 0 && C && RarityOf(*C) != 1) continue; // the free pick is a Rare x4 (demo: Barbarian Rare x4 Free)
 			if (!D.Deals.ContainsByPredicate([&](const FZoogiFrontDeal& X) { return X.CardId == Id; })) Pool.Add(Id);
 		}
 		if (Pool.Num() == 0) Pool = Owned;
 		Deal.CardId = Pool[R.RandRange(0, Pool.Num() - 1)];
 		const FZoogiCardDef* C = FindCard(Deal.CardId);
 		const int32 Rar = C ? RarityOf(*C) : 0;
-		static const int32 PerCopy[] = { 10, 50, 250 };
-		Deal.Count = Rar == 2 ? R.RandRange(1, 2) : Rar == 1 ? (R.FRand() < 0.5f ? 4 : 8) : (R.FRand() < 0.5f ? 10 : 20);
+		// demo prices: Common 10 gold a copy (x16 160, x21 210, x30 300), Rare 100 a copy (x6 600, x3 300); Epic 500 a copy
+		static const int32 PerCopy[] = { 10, 100, 500 };
+		Deal.Count = Rar == 2 ? R.RandRange(1, 2) : Rar == 1 ? R.RandRange(3, 6) : R.RandRange(10, 30);
 		Deal.Price = Deal.Count * PerCopy[Rar];
-		if (i == 0) { Deal.bFree = true; Deal.Count = 5; Deal.Price = 0; }
+		if (i == 0) { Deal.bFree = true; Deal.Count = 4; Deal.Price = 0; }
 		D.Deals.Add(Deal);
 	}
-	D.DealsDay = Day;
+	D.DealsDay = Key;
 	Save();
 	UE_LOG(LogZoogi, Log, TEXT("FRONTEND daily deals rolled for %s"), *Day);
 }
@@ -460,9 +545,10 @@ bool UZoogiFrontProfileSubsystem::BuyDeal(int32 I, FString& OutWhy)
 const TArray<FZoogiFrontChestDef>& UZoogiFrontProfileSubsystem::ChestDefs()
 {
 	static const TArray<FZoogiFrontChestDef> Defs = {
-		{ FName(TEXT("wooden")), TEXT("Wooden Chest"), 40, 15 * 60, 6, 30, 60, 80, 18, 2 },
-		{ FName(TEXT("royal")), TEXT("Royal Chest"), 120, 60 * 60, 15, 120, 200, 70, 25, 5 },
-		{ FName(TEXT("epic")), TEXT("Epic Chest"), 300, 4 * 60 * 60, 24, 300, 450, 50, 35, 15 },
+		// DETAILED PASS 2 shop prices: Wooden 80, Royal 400, Epic 1000 gems
+		{ FName(TEXT("wooden")), TEXT("Wooden Chest"), 80, 15 * 60, 6, 30, 60, 80, 18, 2 },
+		{ FName(TEXT("royal")), TEXT("Royal Chest"), 400, 60 * 60, 15, 120, 200, 70, 25, 5 },
+		{ FName(TEXT("epic")), TEXT("Epic Chest"), 1000, 4 * 60 * 60, 24, 300, 450, 50, 35, 15 },
 	};
 	return Defs;
 }
@@ -513,12 +599,25 @@ bool UZoogiFrontProfileSubsystem::BuyChest(FName Type, TArray<FZoogiFrontReward>
 {
 	const FZoogiFrontChestDef* C = FindChest(Type);
 	if (!C) { OutWhy = TEXT("Unknown chest."); return false; }
+	if (ChestStockLeft(Type) == 0) { OutWhy = TEXT("Sold out today. More arrive at the daily reset."); return false; }
 	if (Gems() < C->GemCost) { OutWhy = FString::Printf(TEXT("Not enough gems: %d needed."), C->GemCost); return false; }
 	if (!SpendGems(C->GemCost, FName(*(TEXT("frontend.chest.") + Type.ToString())))) { OutWhy = TEXT("The gem payment failed."); return false; }
+	const FString Day = ZoogiProgress::ResetBoundary(FDateTime::Now(), ZFResetHour(GetGameInstance())).ToString(TEXT("%Y%m%d"));
+	if (D.ChestStockDay != Day) { D.ChestStockDay = Day; D.ChestBought.Reset(); }
+	D.ChestBought.FindOrAdd(Type) += 1;
 	FRandomStream R(FMath::Rand());
 	Out = RollChest(Type, R);
 	Save();
 	return true;
+}
+
+int32 UZoogiFrontProfileSubsystem::ChestStockLeft(FName Type) const
+{
+	const int32 Limit = Type == FName(TEXT("royal")) ? 3 : Type == FName(TEXT("epic")) ? 1 : -1;
+	if (Limit < 0) return -1;
+	const FString Day = ZoogiProgress::ResetBoundary(FDateTime::Now(), ZFResetHour(GetGameInstance())).ToString(TEXT("%Y%m%d"));
+	const int32* N = D.ChestStockDay == Day ? D.ChestBought.Find(Type) : nullptr;
+	return FMath::Max(0, Limit - (N ? *N : 0));
 }
 
 bool UZoogiFrontProfileSubsystem::AnyUnlocking() const
@@ -574,8 +673,87 @@ bool UZoogiFrontProfileSubsystem::OpenChest(int32 Slot, bool bPayGems, TArray<FZ
 // ------------------------------------------------------------------------------------------------ gold packs
 const TArray<UZoogiFrontProfileSubsystem::FGoldPack>& UZoogiFrontProfileSubsystem::GoldPacks()
 {
-	static const TArray<FGoldPack> P = { { 1000, 60 }, { 5000, 250 }, { 12000, 500 } };
+	static const TArray<FGoldPack> P = { { 1000, 50, TEXT("Stack of Gold"), TEXT("") }, { 10000, 500, TEXT("Sack of Gold"), TEXT("Popular") }, { 50000, 2250, TEXT("Cart of Gold"), TEXT("Best Value") } };
 	return P;
+}
+
+const TArray<UZoogiFrontProfileSubsystem::FGemPack>& UZoogiFrontProfileSubsystem::GemPacks()
+{
+	static const TArray<FGemPack> P = {
+		{ 80, 0.99f, TEXT("Handful of Gems"), TEXT("") }, { 500, 4.99f, TEXT("Sack of Gems"), TEXT("Popular") }, { 1200, 9.99f, TEXT("Box of Gems"), TEXT("") },
+		{ 2500, 19.99f, TEXT("Chest of Gems"), TEXT("") }, { 6500, 49.99f, TEXT("Vault of Gems"), TEXT("") }, { 14000, 99.99f, TEXT("Treasure of Gems"), TEXT("Best Value") } };
+	return P;
+}
+
+// ------------------------------------------------------------------------------------------------ profile
+bool UZoogiFrontProfileSubsystem::ChangeNickname(const FString& NewName, FString& OutWhy)
+{
+	const FString N = NewName.TrimStartAndEnd();
+	if (N.Len() < 3 || N.Len() > 16) { OutWhy = TEXT("Names are 3 to 16 characters."); return false; }
+	for (TCHAR Ch : N) if (!(FChar::IsAlnum(Ch) || Ch == TEXT(' ') || Ch == TEXT('-') || Ch == TEXT('_'))) { OutWhy = TEXT("Use letters, numbers, spaces, - or _."); return false; }
+	if (N == D.GuestName) { OutWhy = TEXT("That is already your name."); return false; }
+	if (D.Gold < NicknameCost) { OutWhy = FString::Printf(TEXT("Not enough gold: changing your name costs %d."), NicknameCost); return false; }
+	D.Gold -= NicknameCost;
+	UE_LOG(LogZoogi, Log, TEXT("FRONTEND nickname %s -> %s (-%d gold)"), *D.GuestName, *N, NicknameCost);
+	D.GuestName = N;
+	Save();
+	return true;
+}
+
+int32 UZoogiFrontProfileSubsystem::CardsFound() const { return OwnedCards().Num(); }
+
+void UZoogiFrontProfileSubsystem::CardLevelStats(float& OutAvg, int32& OutMax) const
+{
+	OutAvg = 0.f; OutMax = 0;
+	const TArray<FName> Owned = OwnedCards();
+	for (const FName& Id : Owned) { int32 I = 0, Nd = 1; const int32 L = CardLevel(Copies(Id), I, Nd); OutAvg += L; OutMax = FMath::Max(OutMax, L); }
+	if (Owned.Num()) OutAvg /= Owned.Num();
+}
+
+// ------------------------------------------------------------------------------------------------ replays (files)
+FString UZoogiFrontProfileSubsystem::ReplayDir() const
+{
+	return FPaths::ProjectSavedDir() / TEXT("ZoogiReplays") / FPaths::GetBaseFilename(FPaths::GetBaseFilename(ProfilePath())); // <profile>.frontend -> <profile>
+}
+
+bool UZoogiFrontProfileSubsystem::HasReplay(const FString& Id) const
+{
+	return !Id.IsEmpty() && IFileManager::Get().FileExists(*(ReplayDir() / Id));
+}
+
+bool UZoogiFrontProfileSubsystem::LoadReplay(const FString& Id, FZoogiReplay& Out) const
+{
+	TArray<uint8> File;
+	if (Id.IsEmpty() || !FFileHelper::LoadFileToArray(File, *(ReplayDir() / Id)) || File.Num() < 12) return false;
+	uint32 Magic = 0; int32 RawSize = 0;
+	FMemory::Memcpy(&Magic, File.GetData(), 4); FMemory::Memcpy(&RawSize, File.GetData() + 4, 4);
+	if (Magic != 0x5A52505A /* ZRPZ */ || RawSize <= 0 || RawSize > 64 * 1024 * 1024) return false;
+	TArray<uint8> Raw; Raw.SetNumUninitialized(RawSize);
+	if (!FCompression::UncompressMemory(NAME_Zlib, Raw.GetData(), RawSize, File.GetData() + 8, File.Num() - 8)) return false;
+	FMemoryReader Rd(Raw);
+	int32 Version = 0, NZ = 0, NO = 0, NF = 0;
+	Rd << Version;
+	if (Version != 1) return false;
+	Rd << Out.Arena << Out.Radius << Out.Center.X << Out.Center.Y << Out.Hz << NZ;
+	if (NZ < 0 || NZ > 16) return false;
+	for (int32 i = 0; i < NZ; ++i)
+	{
+		FString Nm; FLinearColor Cl; int32 Pl = 0;
+		Rd << Nm << Cl.R << Cl.G << Cl.B << Cl.A << Pl;
+		Out.Names.Add(Nm); Out.Colors.Add(Cl); Out.Players.Add(Pl);
+	}
+	Rd << NO << NF;
+	if (NO < 0 || NO > 256 || NF < 0 || NF > 100000) return false;
+	Out.NumOrbs = NO;
+	Out.Times.SetNumUninitialized(NF); Out.Z.SetNumUninitialized(NF * NZ * 6); Out.ZFlags.SetNumUninitialized(NF * NZ);
+	Out.O.SetNumUninitialized(NF * NO * 2); Out.OFlags.SetNumUninitialized(NF * NO);
+	for (int32 f = 0; f < NF && !Rd.IsError(); ++f)
+	{
+		Rd << Out.Times[f];
+		for (int32 i = 0; i < NZ; ++i) { for (int32 k = 0; k < 6; ++k) Rd << Out.Z[(f * NZ + i) * 6 + k]; Rd << Out.ZFlags[f * NZ + i]; }
+		for (int32 i = 0; i < NO; ++i) { Rd << Out.O[(f * NO + i) * 2] << Out.O[(f * NO + i) * 2 + 1] << Out.OFlags[f * NO + i]; }
+	}
+	return !Rd.IsError();
 }
 
 bool UZoogiFrontProfileSubsystem::BuyGold(int32 I, FString& OutWhy)
@@ -713,7 +891,7 @@ FName UZoogiFrontProfileSubsystem::HeroCardFor(int32 Salt) const
 }
 
 // ------------------------------------------------------------------------------------------------ match results
-void UZoogiFrontProfileSubsystem::ApplyMatch(int32 Outcome)
+void UZoogiFrontProfileSubsystem::ApplyMatch(int32 Outcome, const FZoogiFrontBattle* Info)
 {
 	FZoogiFrontMatchResult M;
 	M.bPending = true;
@@ -733,6 +911,21 @@ void UZoogiFrontProfileSubsystem::ApplyMatch(int32 Outcome)
 	while (D.BattlePassXP >= BattlePassXPPerLevel && D.BattlePassLevel < PassTiers) { D.BattlePassXP -= BattlePassXPPerLevel; ++D.BattlePassLevel; }
 	if (D.BattlePassLevel >= PassTiers) D.BattlePassXP = FMath::Min(D.BattlePassXP, BattlePassXPPerLevel);
 	++D.Battles;
+	if (Outcome == 0) { ++D.WinStreak; D.BestStreak = FMath::Max(D.BestStreak, D.WinStreak); }
+	else D.WinStreak = 0; // a loss, draw or leaving ends the streak
+	if (Outcome == 1 || Outcome == 3) ++D.Losses;
+	else if (Outcome == 2) ++D.Draws;
+	// "Three Crown Win" (proposal: Zoogi Roll has points, not crowns) = a win where the opponent scored nothing
+	if (Outcome == 0 && Info && !Info->bDev && Info->OppScore == 0 && Info->MyScore > 0) ++D.ThreeCrownWins; // a real win, opponent held to 0
+	if (Info)
+	{
+		FZoogiFrontBattle B = *Info;
+		B.Outcome = Outcome;
+		B.Trophies = M.Trophies;
+		if (B.Utc <= 0) B.Utc = NowUtc();
+		D.BattleLog.Insert(B, 0);
+		if (D.BattleLog.Num() > MaxBattleLog) D.BattleLog.SetNum(MaxBattleLog);
+	}
 	if (Outcome == 0)
 	{
 		++D.Wins;
@@ -771,8 +964,130 @@ void UZoogiFrontRewardBridge::OnWorldBeginPlay(UWorld& InWorld)
 
 void UZoogiFrontRewardBridge::Deinitialize()
 {
+	StopRecording(false);
 	if (AZoogiGameMode* G = GM.Get()) G->OnMatchEvent.Remove(Handle);
 	Super::Deinitialize();
+}
+
+// ---- replay recorder: reads the existing actors only (positions / rotations / flags); never touches physics or rules
+static constexpr float ZFRecHz = 10.f;
+static constexpr int32 ZFRecMaxFrames = 12000; // 20 minutes at 10 Hz
+
+void UZoogiFrontRewardBridge::StartRecording()
+{
+	AZoogiGameMode* G = GM.Get();
+	if (!G) return;
+	RecBalls.Reset(); RecOrbs.Reset(); RecFrames.Reset(); RecCount = 0; bRecTruncated = false;
+	for (AZoogiBall* B : G->Balls) if (B) RecBalls.Add(B);
+	for (AZoogiOrb* O : G->Orbs) if (O) RecOrbs.Add(O);
+	RecFrames.Reserve(64 * 1024);
+	G->GetWorldTimerManager().SetTimer(RecTimer, FTimerDelegate::CreateUObject(this, &UZoogiFrontRewardBridge::SampleFrame), 1.f / ZFRecHz, true, 0.f);
+	UE_LOG(LogZoogi, Log, TEXT("FRONTEND replay: recording %d zoogis, %d orbs at %.0f Hz"), RecBalls.Num(), RecOrbs.Num(), ZFRecHz);
+}
+
+void UZoogiFrontRewardBridge::SampleFrame()
+{
+	const UWorld* W = GetWorld();
+	if (!W) return;
+	if (RecCount >= ZFRecMaxFrames) { bRecTruncated = true; return; }
+	FMemoryWriter Wr(RecFrames, false, true);
+	Wr.Seek(RecFrames.Num());
+	float T = (float)(W->GetTimeSeconds() - MatchT0);
+	Wr << T;
+	for (const TWeakObjectPtr<AZoogiBall>& WB : RecBalls)
+	{
+		const AZoogiBall* B = WB.Get();
+		const FVector P = B ? B->GetActorLocation() : FVector::ZeroVector;
+		const FRotator R = B ? B->GetActorRotation() : FRotator::ZeroRotator;
+		float V[6] = { (float)P.X, (float)P.Y, (float)P.Z, (float)R.Pitch, (float)R.Yaw, (float)R.Roll };
+		for (float& X : V) Wr << X;
+		uint8 F = (!B || B->bOut || B->bKnockedOut) ? 1 : 0;
+		Wr << F;
+	}
+	for (const TWeakObjectPtr<AZoogiOrb>& WO : RecOrbs)
+	{
+		const AZoogiOrb* O = WO.Get();
+		const FVector P = O ? O->GetActorLocation() : FVector::ZeroVector;
+		float X = (float)P.X, Y = (float)P.Y;
+		uint8 F = (!O || O->bOut ? 1 : 0) | (O && O->bStar ? 2 : 0);
+		Wr << X << Y << F;
+	}
+	++RecCount;
+}
+
+FString UZoogiFrontRewardBridge::StopRecording(bool bSave)
+{
+	AZoogiGameMode* G = GM.Get();
+	if (G) G->GetWorldTimerManager().ClearTimer(RecTimer);
+	if (!bSave || RecCount < 2 || !G) { RecFrames.Reset(); RecCount = 0; return FString(); }
+	SampleFrame(); // the final positions
+	const UZoogiFrontProfileSubsystem* FP = UZoogiFrontProfileSubsystem::Get(this);
+	if (!FP) return FString();
+	TArray<uint8> Raw;
+	FMemoryWriter Wr(Raw);
+	int32 Version = 1;
+	uint8 Arena = G->Arena ? (uint8)G->Arena->GetTheme() : (uint8)G->MenuArena;
+	float Radius = G->Arena ? G->Arena->GetKnockoffRadius() : 1000.f;
+	const FVector C = G->Arena ? G->Arena->GetActorLocation() : FVector::ZeroVector;
+	float CX = (float)C.X, CY = (float)C.Y, Hz = ZFRecHz;
+	int32 NZ = RecBalls.Num();
+	Wr << Version << Arena << Radius << CX << CY << Hz << NZ;
+	for (const TWeakObjectPtr<AZoogiBall>& WB : RecBalls)
+	{
+		const AZoogiBall* B = WB.Get();
+		FString Nm = B ? B->Def.Name : FString(TEXT("?"));
+		FLinearColor Cl = B ? B->Def.Color : FLinearColor::White;
+		int32 Pl = B ? B->PlayerIndex : -1;
+		Wr << Nm << Cl.R << Cl.G << Cl.B << Cl.A << Pl;
+	}
+	int32 NO = RecOrbs.Num(), NF = RecCount;
+	Wr << NO << NF;
+	Raw.Append(RecFrames);
+	RecFrames.Reset(); RecCount = 0;
+	int32 CompSize = FCompression::CompressMemoryBound(NAME_Zlib, Raw.Num());
+	TArray<uint8> File; File.SetNumUninitialized(8 + CompSize);
+	if (!FCompression::CompressMemory(NAME_Zlib, File.GetData() + 8, CompSize, Raw.GetData(), Raw.Num())) return FString();
+	const uint32 Magic = 0x5A52505A; const int32 RawSize = Raw.Num();
+	FMemory::Memcpy(File.GetData(), &Magic, 4); FMemory::Memcpy(File.GetData() + 4, &RawSize, 4);
+	File.SetNum(8 + CompSize);
+	const FString Dir = FP->ReplayDir();
+	IFileManager::Get().MakeDirectory(*Dir, true);
+	const FString Id = FDateTime::Now().ToString(TEXT("%Y%m%d_%H%M%S")) + TEXT(".zrp");
+	if (!FFileHelper::SaveArrayToFile(File, *(Dir / Id))) return FString();
+	// keep the newest MaxReplays
+	TArray<FString> Files;
+	IFileManager::Get().FindFiles(Files, *(Dir / TEXT("*.zrp")), true, false);
+	Files.Sort();
+	for (int32 i = 0; i + UZoogiFrontProfileSubsystem::MaxReplays < Files.Num(); ++i) IFileManager::Get().Delete(*(Dir / Files[i]));
+	UE_LOG(LogZoogi, Log, TEXT("FRONTEND replay saved %s: %d frames, %d bytes (raw %d)%s"), *Id, NF, File.Num(), RawSize, bRecTruncated ? TEXT(", truncated at 20 min") : TEXT(""));
+	return Id;
+}
+
+FZoogiFrontBattle UZoogiFrontRewardBridge::MakeBattle(int32 Outcome) const
+{
+	FZoogiFrontBattle B;
+	const AZoogiGameMode* G = GM.Get();
+	B.Outcome = Outcome;
+	B.Utc = UZoogiFrontProfileSubsystem::NowUtc();
+	if (!G) return B;
+	const UWorld* W = GetWorld();
+	B.Duration = W ? FMath::Max(0, FMath::RoundToInt((float)(W->GetTimeSeconds() - MatchT0))) : 0;
+	B.Arena = G->Arena ? (uint8)G->Arena->GetTheme() : (uint8)G->MenuArena;
+	const bool bTeams = G->bComboMode;
+	const int32 Mine = bTeams ? AZoogiGameMode::TeamOfIndex(Player) : Player;
+	TMap<int32, int32> SideScore;
+	TArray<FString> Opp;
+	for (const AZoogiBall* Ball : G->Balls)
+	{
+		if (!Ball) continue;
+		const int32 Side = bTeams ? AZoogiGameMode::TeamOfIndex(Ball->PlayerIndex) : Ball->PlayerIndex;
+		SideScore.FindOrAdd(Side) += Ball->Score;
+		if (Side != Mine) Opp.Add(Ball->Def.Name.ToUpper() + (Ball->bCPU ? TEXT(" (CPU)") : TEXT("")));
+	}
+	B.MyScore = SideScore.FindRef(Mine);
+	for (const TPair<int32, int32>& P : SideScore) if (P.Key != Mine) B.OppScore = FMath::Max(B.OppScore, P.Value);
+	B.Opponent = Opp.Num() ? FString::Join(Opp, TEXT(" + ")) : FString(TEXT("?"));
+	return B;
 }
 
 int32 UZoogiFrontRewardBridge::PlayerIndex() const
@@ -793,7 +1108,9 @@ void UZoogiFrontRewardBridge::OnMatchEvent(EZoogiMatchEvent E, int32 Who, float 
 	if (E == EZoogiMatchEvent::MatchStart)
 	{
 		Player = PlayerIndex();
-		bOpen = Player >= 0; // CPU-only demo: no rewards
+		bOpen = Player >= 0; // CPU-only demo: no rewards, no log, no replay
+		if (UWorld* W = GetWorld()) MatchT0 = W->GetTimeSeconds();
+		if (bOpen) StartRecording();
 		return;
 	}
 	if (!bOpen) return;
@@ -801,7 +1118,17 @@ void UZoogiFrontRewardBridge::OnMatchEvent(EZoogiMatchEvent E, int32 Who, float 
 	{
 		bOpen = false;
 		const int32 Mine = G->bComboMode ? AZoogiGameMode::TeamOfIndex(Player) : Player;
-		FP->ApplyMatch(Who < 0 ? 2 : (Who == Mine ? 0 : 1));
+		int32 Outcome = Who < 0 ? 2 : (Who == Mine ? 0 : 1);
+		bool bDev = false;
+#if !UE_BUILD_SHIPPING
+		// Dev test flag (never in Shipping, never on by default): the front-end rewards treat the match as a player win.
+		// The match itself, its scores and the replay are untouched; the battle log row is marked DEV.
+		if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiDevForceWin")) && Outcome != 0) { UE_LOG(LogZoogi, Log, TEXT("FRONTEND DEV force win (real outcome %d)"), Outcome); Outcome = 0; bDev = true; }
+#endif
+		FZoogiFrontBattle B = MakeBattle(Outcome);
+		B.bDev = bDev;
+		B.ReplayId = StopRecording(true);
+		FP->ApplyMatch(Outcome, &B);
 		if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiClashTourBattle")))
 		{
 			// capture runs: back to the menu after the results screen, like a player pressing MENU
@@ -813,6 +1140,8 @@ void UZoogiFrontRewardBridge::OnMatchEvent(EZoogiMatchEvent E, int32 Who, float 
 	else if (E == EZoogiMatchEvent::ReturnToMenu)
 	{
 		bOpen = false;
-		FP->ApplyMatch(3); // left mid-match
+		FZoogiFrontBattle B = MakeBattle(3);
+		B.ReplayId = StopRecording(true);
+		FP->ApplyMatch(3, &B); // left mid-match
 	}
 }

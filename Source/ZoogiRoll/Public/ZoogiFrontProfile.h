@@ -6,11 +6,19 @@
 // grant. Real-money gem packs need the store backend and are never faked.
 // M2: UZoogiFrontRewardBridge reads real match results (AZoogiGameMode::OnMatchEvent, read-only) and applies trophies,
 // XP, gold, battle-pass XP and a chest in a free slot.
+// M3 (DETAILED PASS 2): player tag, battle stats, Battle Log (last 25 real matches), nickname change (10 gold), daily
+// chest stock (Royal 3 / Epic 1), spec gold + gem packs, and match replays: during real matches the bridge samples every
+// Zoogi's position + rotation and every orb's position at 10 Hz, read-only from the existing actors (no physics or
+// gameplay change), and saves the last 10 under Saved/ZoogiReplays/<profile>/ (zlib, capped at 20 minutes per match).
+// Dev test flags (compiled out of Shipping, never on by default): -ZoogiDevGrant=<gems> (one-time ledger grant, source
+// "dev.grant", only together with a -ZoogiProfile=<test profile>) and -ZoogiDevForceWin (the front-end rewards treat the
+// match as a player win; the battle log marks it DEV).
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "Subsystems/WorldSubsystem.h"
+#include "Engine/TimerHandle.h"
 #include "ZoogiCards.h"
 #include "ZoogiMatchEvents.h"
 #include "ZoogiFrontProfile.generated.h"
@@ -56,6 +64,41 @@ struct FZoogiFrontRoadReward
 	int32 Amount = 0;
 };
 
+/** One Battle Log row (real matches only). */
+struct FZoogiFrontBattle
+{
+	int64 Utc = 0;             // match end (unix s)
+	int32 Outcome = 0;         // 0 win, 1 loss, 2 draw, 3 left
+	FString Opponent;          // e.g. "TAVI (CPU)"
+	int32 Trophies = 0;        // trophy change
+	int32 MyScore = 0, OppScore = 0; // shown as the crowns column (Zoogi Roll scores points, not crowns)
+	int32 Duration = 0;        // seconds
+	FString ReplayId;          // file name under Saved/ZoogiReplays/<profile>/ ("" = none)
+	uint8 Arena = 0;
+	bool bDev = false;         // -ZoogiDevForceWin result
+};
+
+/** A recorded match, loaded for the Replay viewer. Positions are world cm; rotations degrees. */
+struct ZOOGIROLL_API FZoogiReplay
+{
+	uint8 Arena = 0;
+	float Radius = 1000.f;     // knock-off radius of the arena (open edge)
+	FVector2f Center = FVector2f::ZeroVector;
+	float Hz = 10.f;
+	TArray<FString> Names;     // per Zoogi
+	TArray<FLinearColor> Colors;
+	TArray<int32> Players;
+	int32 NumOrbs = 0;
+	TArray<float> Times;       // per frame (s from match start)
+	TArray<float> Z;           // frame * NumZ * 6: x y z pitch yaw roll
+	TArray<uint8> ZFlags;      // frame * NumZ: 1 = out
+	TArray<float> O;           // frame * NumOrbs * 2: x y
+	TArray<uint8> OFlags;      // frame * NumOrbs: 1 = out, 2 = star
+	int32 NumZ() const { return Names.Num(); }
+	int32 NumFrames() const { return Times.Num(); }
+	float Duration() const { return Times.Num() ? Times.Last() : 0.f; }
+};
+
 struct FZoogiFrontChestDef
 {
 	FName Id; const TCHAR* Name; int32 GemCost; int32 UnlockSec; int32 Cards; int32 GoldMin, GoldMax; int32 WCommon, WRare, WEpic;
@@ -63,7 +106,7 @@ struct FZoogiFrontChestDef
 
 struct ZOOGIROLL_API FZoogiFrontProfileData
 {
-	static constexpr int32 CurrentSchema = 2;
+	static constexpr int32 CurrentSchema = 3;
 	int32 SchemaVersion = CurrentSchema;
 	FString GuestName;            // PLAYER-###### (generated once)
 	int32 Level = 1;
@@ -75,6 +118,11 @@ struct ZOOGIROLL_API FZoogiFrontProfileData
 	int32 BattlePassXP = 0;       // 0 / 100 per level
 	int32 Wins = 0;
 	int32 Battles = 0;
+	int32 Losses = 0, Draws = 0, ThreeCrownWins = 0, WinStreak = 0, BestStreak = 0; // schema 3
+	FString Tag;                   // player tag, 7 chars (shown as #XXXXXXX), generated once
+	TArray<FZoogiFrontBattle> BattleLog; // newest first, last 25
+	FString ChestStockDay;         // daily reset the chest stock belongs to
+	TMap<FName, int32> ChestBought; // chests bought today (Royal: 3 a day, Epic: 1 a day)
 	TArray<FZoogiFrontChestSlot> Chests; // 3 slots
 	int32 ChestCycle = 0;
 	bool bCardsNew = true;        // red dot on the Cards tab
@@ -149,6 +197,8 @@ public:
 	static int64 NowUtc();
 	int32 ChestSeconds(FName Type) const;   // honours -ZoogiChestFast (minutes -> seconds) for capture runs
 	bool BuyChest(FName Type, TArray<FZoogiFrontReward>& Out, FString& OutWhy);
+	/** Chests left to buy today: -1 = unlimited (Wooden), Royal 3 / Epic 1 per daily reset. */
+	int32 ChestStockLeft(FName Type) const;
 	bool AnyUnlocking() const;
 	bool StartUnlock(int32 Slot, FString& OutWhy);
 	int64 SecondsLeft(int32 Slot) const;  // -1 = not started
@@ -157,9 +207,26 @@ public:
 	bool OpenChest(int32 Slot, bool bPayGems, TArray<FZoogiFrontReward>& Out, FString& OutWhy);
 
 	// ---- gold packs (bought with gems)
-	struct FGoldPack { int32 Gold; int32 Gems; };
+	struct FGoldPack { int32 Gold; int32 Gems; const TCHAR* Name; const TCHAR* Tag; };
 	static const TArray<FGoldPack>& GoldPacks();
 	bool BuyGold(int32 I, FString& OutWhy);
+	/** Real-money gem packs (DETAILED PASS 2 list). They need the platform store: shown, never charged or granted. */
+	struct FGemPack { int32 Gems; float USD; const TCHAR* Name; const TCHAR* Tag; };
+	static const TArray<FGemPack>& GemPacks();
+
+	// ---- profile / settings (DETAILED PASS 2)
+	static constexpr int32 NicknameCost = 10;
+	/** 3-16 letters, digits, space, - or _ ; costs NicknameCost gold. */
+	bool ChangeNickname(const FString& NewName, FString& OutWhy);
+	int32 CardsFound() const;
+	void CardLevelStats(float& OutAvg, int32& OutMax) const;
+
+	// ---- replays (written by UZoogiFrontRewardBridge during real matches)
+	static constexpr int32 MaxReplays = 10;
+	static constexpr int32 MaxBattleLog = 25;
+	FString ReplayDir() const;
+	bool HasReplay(const FString& Id) const;
+	bool LoadReplay(const FString& Id, FZoogiReplay& Out) const;
 
 	// ---- Trophy Road (0-5000, DETAILED PASS 1 table) / arena gates (Arena N+1 at N*300; Arena 2 = 300 per the spec)
 	static const TArray<FZoogiFrontRoadReward>& TrophyRoad();
@@ -182,7 +249,7 @@ public:
 	FName HeroCardFor(int32 Salt) const;
 
 	// ---- match results (UZoogiFrontRewardBridge)
-	void ApplyMatch(int32 Outcome);
+	void ApplyMatch(int32 Outcome, const FZoogiFrontBattle* Info = nullptr);
 
 private:
 	FZoogiFrontProfileData D;
@@ -205,8 +272,20 @@ public:
 private:
 	void OnMatchEvent(EZoogiMatchEvent E, int32 Who, float Mag);
 	int32 PlayerIndex() const;
+	FZoogiFrontBattle MakeBattle(int32 Outcome) const;
+	// replay recorder (read-only sampling of the existing actors on a 10 Hz world timer)
+	void StartRecording();
+	void SampleFrame();
+	FString StopRecording(bool bSave);
 	TWeakObjectPtr<class AZoogiGameMode> GM;
 	FDelegateHandle Handle;
 	bool bOpen = false;
 	int32 Player = -1;
+	double MatchT0 = 0.0;
+	FTimerHandle RecTimer;
+	TArray<TWeakObjectPtr<class AZoogiBall>> RecBalls;
+	TArray<TWeakObjectPtr<class AZoogiOrb>> RecOrbs;
+	TArray<uint8> RecFrames;
+	int32 RecCount = 0;
+	bool bRecTruncated = false;
 };
