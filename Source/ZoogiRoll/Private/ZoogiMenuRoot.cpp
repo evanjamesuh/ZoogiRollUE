@@ -537,6 +537,15 @@ void UZoogiMenuRoot::Rebuild()
 	AnimScreen = (int32)Top();
 	Canvas = nullptr;
 	DesignW = FMath::Max(1440.f, 1080.f * BuiltViewport.X / FMath::Max(1.f, BuiltViewport.Y));
+	DesignH = 1080.f;
+	if (ClashHome())
+	{
+		// clash-menu M4 (portrait phone): 1080-wide canvas, 1920 tall at 9:16, taller (to 2400) on 9:19.5 / 9:20 phones.
+		// A landscape window keeps 1080x1920 and ScaleToFit pillar-boxes it over the full-bleed backdrop.
+		const float Aspect = BuiltViewport.Y / FMath::Max(1.f, BuiltViewport.X);
+		DesignW = 1080.f;
+		DesignH = Aspect >= 16.f / 9.f ? FMath::Clamp(1080.f * Aspect, 1920.f, 2400.f) : 1920.f;
+	}
 
 	// Full-bleed backdrop: game art per screen (or the optional menu video), with a navy wash.
 	FString Bg = TEXT("meadows_background"); // Evan 9:37: Meadow arena art (1456x816 PNG) replaces Frozen on Home/Play/etc.
@@ -577,7 +586,7 @@ void UZoogiMenuRoot::Rebuild()
 	Safe->AddChild(Fit);
 	USizeBox* Size = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
 	Size->SetWidthOverride(DesignW);
-	Size->SetHeightOverride(1080.f);
+	Size->SetHeightOverride(DesignH);
 	Fit->AddChild(Size);
 	Canvas = WidgetTree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass());
 	Size->AddChild(Canvas);

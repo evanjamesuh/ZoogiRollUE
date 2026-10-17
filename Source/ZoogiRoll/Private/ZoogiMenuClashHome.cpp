@@ -105,7 +105,7 @@ bool UZoogiMenuRoot::BuildClashHomePopup(EZoogiClashPopup P, float PW, float PH)
 		for (int32 a = 1; a < UZoogiFrontProfileSubsystem::NumTrophyArenas; ++a) Rows.Add({ UZoogiFrontProfileSubsystem::ArenaTrophies(a), -1, a });
 		Rows.StableSort([](const FRowE& A, const FRowE& B) { return A.Trophies != B.Trophies ? A.Trophies < B.Trophies : A.Arena > B.Arena; });
 		UCanvasPanel* G = CGroupBegin();
-		const float TX = 120.f, RowH = 116.f, GateH = 150.f, CardX = TX + 74.f, CardW = BW - CardX - 40.f;
+		const float TX = 90.f, RowH = 116.f, GateH = 150.f, CardX = TX + 64.f, CardW = BW - CardX - 20.f; // M4 portrait column
 		float Y = 20.f, InitialY = 0.f;
 		TArray<float> Centers;
 		for (const FRowE& R : Rows) { Centers.Add(Y + (R.Arena >= 0 ? GateH : RowH) * 0.5f); Y += (R.Arena >= 0 ? GateH : RowH) + 12.f; }
@@ -129,7 +129,7 @@ bool UZoogiMenuRoot::BuildClashHomePopup(EZoogiClashPopup P, float PW, float PH)
 				CGoldPanel(CardX, GY, CardW, GateH, bReached ? ZCRibBlue : ZCHex(TEXT("3B5A92")), 22.f);
 				UTexture2D* Map = Art(FString(ZCArenaSlug(R.Arena)) + TEXT("_map"));
 				CImg(Map, CardX + 16.f, GY + 16.f, 210.f, GateH - 32.f, 10.f, true, bReached ? FLinearColor::White : FLinearColor(0.4f, 0.42f, 0.5f, 1.f));
-				CText(FString::Printf(TEXT("ARENA %d  -  %s"), R.Arena + 1, *ZoogiUtil::ArenaName((EZoogiArena)R.Arena).ToUpper()), CardX + 246.f, GY + 22.f, CardW - 270.f, 50.f, 32.f, FLinearColor::White, 0);
+				CText(FString::Printf(TEXT("ARENA %d  -  %s"), R.Arena + 1, *ZoogiUtil::ArenaName((EZoogiArena)R.Arena).ToUpper()), CardX + 246.f, GY + 22.f, CardW - 270.f, 50.f, 28.f, FLinearColor::White, 0);
 				CText(bReached ? FString(TEXT("UNLOCKED")) : FString::Printf(TEXT("Reach %d trophies"), R.Trophies), CardX + 246.f, GY + 76.f, CardW - 270.f, 40.f, 24.f, bReached ? ZCGold : ZCSoft, 0, 3.f);
 				if (!bReached) CImg(ClashArt(TEXT("lock")), CardX + CardW - 96.f, GY + GateH * 0.5f - 36.f, 72.f, 72.f, 0.f, false, FLinearColor(0.75f, 0.78f, 0.85f, 1.f));
 				Medallion(TX, CY, 82.f, ZHNum(R.Trophies), bReached, R.Trophies >= 1000 ? 20.f : 24.f);
@@ -164,13 +164,13 @@ bool UZoogiMenuRoot::BuildClashHomePopup(EZoogiClashPopup P, float PW, float PH)
 	if (P == EZoogiClashPopup::Arenas)
 	{
 		const int32 Here = UZoogiFrontProfileSubsystem::ArenaForTrophies(D.Trophies);
-		TrophyPill(60.f, 212.f, D.Trophies);
-		CText(FString::Printf(TEXT("Arena %d  -  %s"), Here + 1, *ZoogiUtil::ArenaName((EZoogiArena)Here)), 320.f, 212.f, PW - 640.f, 64.f, 32.f, FLinearColor::White);
+		TrophyPill(40.f, 212.f, D.Trophies);
+		CText(FString::Printf(TEXT("Arena %d  -  %s"), Here + 1, *ZoogiUtil::ArenaName((EZoogiArena)Here)), 290.f, 212.f, PW - 330.f, 64.f, 30.f, FLinearColor::White, 0);
 		const float BX = 30.f, BY = 290.f, BW = PW - 60.f, BH = PH - BY - 26.f;
 		const int32 MaxT = UZoogiFrontProfileSubsystem::ArenaTrophies(UZoogiFrontProfileSubsystem::NumTrophyArenas - 1);
 		const TArray<FZoogiCardDef>& Defs = UZoogiFrontProfileSubsystem::CardDefs();
 		UCanvasPanel* G = CGroupBegin();
-		const float TX = 120.f, TileX = TX + 90.f, TileW = BW - TileX - 40.f, ArenaH = 300.f, SmallH = 104.f;
+		const float TX = 90.f, TileX = TX + 80.f, TileW = BW - TileX - 20.f, ArenaH = 300.f, SmallH = 104.f, MapW = 320.f, TL = MapW + 36.f; // M4 portrait
 		float Y = 20.f, InitialY = 0.f;
 		TArray<float> Centers; TArray<int32> Marks;
 		for (int32 t = 0; t <= MaxT; t += 100) { const bool bArena = t % 300 == 0; Marks.Add(t); Centers.Add(Y + (bArena ? ArenaH : SmallH) * 0.5f); Y += (bArena ? ArenaH : SmallH) + 14.f; }
@@ -193,17 +193,17 @@ bool UZoogiMenuRoot::BuildClashHomePopup(EZoogiClashPopup P, float PW, float PH)
 				UCanvasPanel* Tile = CGroupBegin();
 				CGoldPanel(0.f, 0.f, TileW, ArenaH, bOpen ? ZCRibBlue : ZCHex(TEXT("3B5A92")), 24.f);
 				if (bSel) CAt(CBox(FLinearColor::Transparent, ZCYellow, 6.f, 24.f), -4.f, -4.f, TileW + 8.f, ArenaH + 8.f);
-				CImg(Art(FString(ZCArenaSlug(A)) + TEXT("_map")), 18.f, 18.f, 400.f, ArenaH - 36.f, 14.f, true, bOpen ? FLinearColor::White : FLinearColor(0.38f, 0.4f, 0.48f, 1.f));
-				if (!bOpen) CImg(ClashArt(TEXT("lock")), 18.f + 200.f - 50.f, ArenaH * 0.5f - 50.f, 100.f, 100.f);
-				CText(FString::Printf(TEXT("ARENA %d"), A + 1), 440.f, 22.f, TileW - 460.f, 40.f, 26.f, ZCSoft, 0, 3.f);
-				CText(ZoogiUtil::ArenaName((EZoogiArena)A).ToUpper(), 440.f, 58.f, TileW - 460.f, 54.f, 38.f, FLinearColor::White, 0);
-				if (A == Here) { CPlate(440.f, 118.f, 260.f, 50.f, ZCGreen, 14.f, 4.f, true); CText(TEXT("You are here"), 440.f, 118.f, 260.f, 50.f, 24.f, FLinearColor::White); }
-				else CText(bOpen ? FString(TEXT("UNLOCKED")) : FString::Printf(TEXT("Reach %d trophies"), T), 440.f, 118.f, TileW - 460.f, 50.f, 24.f, bOpen ? ZCGold : ZCSoft, 0, 3.f);
+				CImg(Art(FString(ZCArenaSlug(A)) + TEXT("_map")), 18.f, 18.f, MapW, ArenaH - 36.f, 14.f, true, bOpen ? FLinearColor::White : FLinearColor(0.38f, 0.4f, 0.48f, 1.f));
+				if (!bOpen) CImg(ClashArt(TEXT("lock")), 18.f + MapW * 0.5f - 50.f, ArenaH * 0.5f - 50.f, 100.f, 100.f);
+				CText(FString::Printf(TEXT("ARENA %d"), A + 1), TL, 22.f, TileW - TL - 20.f, 40.f, 26.f, ZCSoft, 0, 3.f);
+				CText(ZoogiUtil::ArenaName((EZoogiArena)A).ToUpper(), TL, 58.f, TileW - TL - 20.f, 54.f, 34.f, FLinearColor::White, 0);
+				if (A == Here) { CPlate(TL, 118.f, 260.f, 50.f, ZCGreen, 14.f, 4.f, true); CText(TEXT("You are here"), TL, 118.f, 260.f, 50.f, 24.f, FLinearColor::White); }
+				else CText(bOpen ? FString(TEXT("UNLOCKED")) : FString::Printf(TEXT("Reach %d trophies"), T), TL, 118.f, TileW - TL - 20.f, 50.f, 24.f, bOpen ? ZCGold : ZCSoft, 0, 3.f);
 				// new cards in this arena (display order of Cards.csv: 6 in Arena 1, then 1 per arena; PROPOSED until cards carry an arena)
 				const int32 First = A == 0 ? 0 : 5 + A, Count = A == 0 ? 6 : 1;
-				CText(Count > 1 ? TEXT("NEW CARDS") : TEXT("NEW CARD"), 440.f, 176.f, 200.f, 30.f, 20.f, ZCSoft, 0, 3.f);
+				CText(Count > 1 ? TEXT("NEW CARDS") : TEXT("NEW CARD"), TL, 176.f, 200.f, 30.f, 20.f, ZCSoft, 0, 3.f);
 				for (int32 c = 0; c < Count && Defs.IsValidIndex(First + c); ++c)
-					CCard(Defs[First + c].Id, 440.f + c * 74.f, 206.f, 66.f, 80.f, !bOpen);
+					CCard(Defs[First + c].Id, TL + c * 68.f, 206.f, 60.f, 76.f, !bOpen);
 				CGroupEnd();
 				CAt(CButton(Tile, [this, T]() { ClashArenaSel = T; bDirty = true; }), TileX, TY, TileW, ArenaH);
 				if (A == Here) InitialY = FMath::Max(0.f, TY - 40.f);
@@ -267,7 +267,7 @@ bool UZoogiMenuRoot::BuildClashHomePopup(EZoogiClashPopup P, float PW, float PH)
 		CText(TEXT("PREMIUM"), BX + PremX, 408.f, ColW, 54.f, 28.f, FLinearColor::White);
 
 		UCanvasPanel* G = CGroupBegin();
-		const float RowH = 128.f, Gap = 12.f;
+		const float RowH = 150.f, Gap = 12.f, IconS = 104.f, TxX = IconS + 22.f; // M4 portrait: text on top, CLAIM under it
 		float InitialY = -1.f;
 		for (int32 t = 1; t <= UZoogiFrontProfileSubsystem::PassTiers; ++t)
 		{
@@ -284,11 +284,11 @@ bool UZoogiMenuRoot::BuildClashHomePopup(EZoogiClashPopup P, float PW, float PH)
 				const FLinearColor Face = bPrem ? ZCRibGold : ZCRoadCard;
 				UCanvasPanel* Tile = CGroupBegin();
 				CPlate(0.f, 0.f, ColW, RowH, bClaimed ? ZCDarken(Face, 0.35f) : Face, 18.f, 4.f, !bClaimed);
-				RewardIcon(R, 14.f, 10.f, RowH - 20.f, Salt);
-				CText(RewardText(R, Salt), RowH + 6.f, 0.f, ColW - RowH - 20.f - (bClaimable ? 170.f : 70.f), RowH, R.Kind == FName(TEXT("hero")) ? 22.f : 28.f, FLinearColor::White, 0);
-				if (bClaimable) CChunkyVisual(CTxt(TEXT("CLAIM"), 26.f, FLinearColor::White, 4.f), ZCGreen, ColW - 170.f, RowH * 0.5f - 36.f, 156.f, 72.f);
-				else if (bClaimed) CText(TEXT("CLAIMED"), ColW - 170.f, 0.f, 160.f, RowH, 22.f, ZCSoft, 1, 3.f);
-				else if (bLockedPrem) CImg(ClashArt(TEXT("lock")), ColW - 76.f, RowH * 0.5f - 30.f, 60.f, 60.f);
+				RewardIcon(R, 12.f, (RowH - IconS) * 0.5f, IconS, Salt);
+				CText(RewardText(R, Salt), TxX, 10.f, ColW - TxX - 12.f, 62.f, R.Kind == FName(TEXT("hero")) ? 19.f : 24.f, FLinearColor::White, 0, 3.f, true);
+				if (bClaimable) CChunkyVisual(CTxt(TEXT("CLAIM"), 24.f, FLinearColor::White, 4.f), ZCGreen, TxX, 80.f, FMath::Min(170.f, ColW - TxX - 12.f), 58.f);
+				else if (bClaimed) CText(TEXT("CLAIMED"), TxX, 80.f, ColW - TxX - 12.f, 58.f, 22.f, ZCSoft, 0, 3.f);
+				else if (bLockedPrem) CImg(ClashArt(TEXT("lock")), TxX, 82.f, 54.f, 54.f);
 				CGroupEnd();
 				const float TXp = bPrem ? PremX : FreeX;
 				CAt(CButton(Tile, [this, t, bPrem]()

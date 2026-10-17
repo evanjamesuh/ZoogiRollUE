@@ -133,6 +133,8 @@ private:
 	int32 BuiltRevision = -1;
 	FVector2D BuiltViewport = FVector2D::ZeroVector;
 	float DesignW = 2400.f;
+	float DesignH = 1080.f;       // clash-menu M4: portrait canvas height (1920..2400 for 1080 wide), 1080 for the classic screens
+	float ClashNavY() const { return DesignH - 150.f; }
 	float Time = 0.f;
 	// button animation (ZoogiUIStyle::FButtonAnim per live button)
 	TArray<FZoogiMenuAnimBtn> AnimBtns;
@@ -186,7 +188,7 @@ private:
 	void BuildClashPopup();
 	void TickClash(float Dt);
 	void TickClashTour(float Dt);
-	// clash layout helpers: raw DesignW x 1080 canvas units
+	// clash layout helpers: raw DesignW x DesignH canvas units (portrait 1080 x 1920..2400 on the clash menu)
 	UWidget* CAt(UWidget* W, float X, float Y, float Wd, float Ht);
 	class UTextBlock* CTxt(const FString& S, float Size, const FLinearColor& C, float Outline = 4.f);
 	UWidget* CText(const FString& S, float X, float Y, float Wd, float Ht, float Size, const FLinearColor& C, int32 Justify = 1, float Outline = 4.f, bool bWrap = false);

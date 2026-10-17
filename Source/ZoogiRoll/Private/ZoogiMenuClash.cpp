@@ -643,24 +643,24 @@ void UZoogiMenuRoot::BuildClashTopBar()
 	const FZoogiFrontProfileData Dflt;
 	const FZoogiFrontProfileData& D = FP ? FP->Data() : Dflt;
 	const float W = DesignW;
-	const float M = 36.f;
+	const float M = 24.f; // M4 portrait: 1080-wide canvas
 
 	// ---- row 1 left: level badge (blue hex) over the XP bar; both inert (DETAILED PASS 2)
 	const int32 Need = UZoogiFrontProfileSubsystem::XPForLevel(D.Level);
-	CBar(M + 58.f, 30.f, 300.f, 46.f, Need > 0 ? float(D.XP) / Need : 0.f, ZCCyan, FString::Printf(TEXT("%d/%d"), D.XP, Need), 24.f);
+	CBar(M + 54.f, 30.f, 250.f, 46.f, Need > 0 ? float(D.XP) / Need : 0.f, ZCCyan, FString::Printf(TEXT("%d/%d"), D.XP, Need), 24.f);
 	CImg(ClashArt(TEXT("level")), M, 9.f, 88.f, 88.f);
 	CText(FString::FromInt(D.Level), M, 9.f, 88.f, 84.f, 36.f, FLinearColor::White);
 
 	// ---- row 1 right: gold + gem pills (translucent navy #0B2A5C), green '+' squares (#4CD964): both open the Shop at the TOP
 	auto Pill = [this](float X, UTexture2D* Icon, int32 Value, TFunction<void()> Plus)
 	{
-		const float PW = 260.f, PH = 56.f, Y = 24.f;
+		const float PW = 232.f, PH = 56.f, Y = 24.f;
 		CPlate(X, Y, PW, PH, ZCPill.CopyWithNewOpacity(0.82f), PH * 0.5f, 4.f, false);
 		CText(FText::AsNumber(Value).ToString(), X + 54.f, Y, PW - 54.f - 66.f, PH, 30.f, FLinearColor::White, 2);
 		CImg(Icon, X - 22.f, Y - 9.f, 74.f, 74.f);
 		CChunky(TEXT("+"), ZCPlus, MoveTemp(Plus), X + PW - 60.f, Y - 1.f, 58.f, 58.f, 38.f);
 	};
-	const float GemX = W - M - 260.f, GoldX = GemX - 40.f - 260.f;
+	const float GemX = W - M - 232.f, GoldX = GemX - 34.f - 232.f;
 	auto ShopTop = [this]() { SetClashTab(ZCShop); ClashScrollOffset = 0.f; ClashPendingScroll = 0.f; bDirty = true; }; // Daily Deals
 	// gems = the progression ledger (one balance for the menu and every purchase)
 	Pill(GoldX, Art(TEXT("icon_coin")), D.Gold, ShopTop);
@@ -669,7 +669,7 @@ void UZoogiMenuRoot::BuildClashTopBar()
 	if (ClashTab != ZCBattle) return; // row 2 belongs to the Battle (home) tab
 
 	// ---- row 2 left: round avatar (Profile), name plate + clan shield
-	const float Y2 = 108.f;
+	const float Y2 = 116.f;
 	{
 		AZoogiGameMode* GMode = GM();
 		const TArray<FZoogiDef>& Roster = ZoogiUtil::Roster();
@@ -684,12 +684,12 @@ void UZoogiMenuRoot::BuildClashTopBar()
 	}
 	{
 		UCanvasPanel* G = CGroupBegin();
-		CPlate(0.f, 0.f, 380.f, 84.f, ZCNavy.CopyWithNewOpacity(0.92f), 18.f, 4.f, true);
-		CText(D.GuestName, 20.f, 6.f, 280.f, 42.f, 28.f, FLinearColor::White, 0);
-		CText(TEXT("NO CLAN"), 20.f, 44.f, 280.f, 32.f, 20.f, ZCMuted, 0, 3.f);
-		CImg(ClashArt(TEXT("shield")), 300.f, 6.f, 72.f, 72.f);
+		CPlate(0.f, 0.f, 360.f, 84.f, ZCNavy.CopyWithNewOpacity(0.92f), 18.f, 4.f, true);
+		CText(D.GuestName, 20.f, 6.f, 260.f, 42.f, 28.f, FLinearColor::White, 0);
+		CText(TEXT("NO CLAN"), 20.f, 44.f, 260.f, 32.f, 20.f, ZCMuted, 0, 3.f);
+		CImg(ClashArt(TEXT("shield")), 280.f, 6.f, 72.f, 72.f);
 		CGroupEnd();
-		CAt(CButton(G, [this]() { OpenClashPopup(EZoogiClashPopup::Profile); }), M + 116.f, Y2, 380.f, 84.f);
+		CAt(CButton(G, [this]() { OpenClashPopup(EZoogiClashPopup::Profile); }), M + 116.f, Y2, 360.f, 84.f);
 	}
 
 	// ---- row 2 right: trophy count (Profile, DETAILED PASS 2) + hamburger (Settings)
@@ -723,13 +723,55 @@ void UZoogiMenuRoot::BuildClashBattleTab()
 	const FZoogiFrontProfileData& D = FP ? FP->Data() : Dflt;
 	const float W = DesignW, C = W * 0.5f;
 	const int32 ArenaIdx = G ? (int32)G->MenuArena : 0;
+	// M4 portrait (Clash Battle demo): Battle Pass + Trophy Road cards side by side under row 2, then the centre column
+	// (Arena N, name ribbon, map, trophy bar, BATTLE, chest slots). Extra height on 9:19.5 / 9:20 goes into the gaps.
+	const float Y0 = 222.f, CardH = 196.f, CW = (W - 72.f) * 0.5f;
+	const float Extra = FMath::Max(0.f, ClashNavY() - 1520.f);
 
-	// ---- centre column: Arena N, name ribbon, map preview, trophy bar, BATTLE, chest slots
-	CText(FString::Printf(TEXT("Arena %d"), ArenaIdx + 1), C - 200.f, 196.f, 400.f, 40.f, 28.f, ZCSoft);
-	CImg(ClashArt(TEXT("ribbon")), C - 300.f, 230.f, 600.f, 100.f);
-	CText(ZoogiUtil::ArenaName((EZoogiArena)ArenaIdx).ToUpper(), C - 220.f, 232.f, 440.f, 76.f, 40.f, FLinearColor::White);
+	// ---- Battle Pass card (left)
 	{
-		const float PX = C - 290.f, PY = 330.f, PW = 580.f, PH = 284.f;
+		const float X = 24.f, Y = Y0, CH = CardH;
+		UCanvasPanel* Grp = CGroupBegin();
+		CGoldPanel(0.f, 0.f, CW, CH, ZCViolet, 26.f);
+		CText(TEXT("BATTLE PASS"), 16.f, 12.f, CW - 32.f, 44.f, 30.f, FLinearColor::White);
+		CImg(ClashArt(TEXT("crown")), 16.f, 58.f, 84.f, 84.f);
+		CImg(ClashArt(TEXT("star")), 102.f, 64.f, 68.f, 68.f);
+		CText(FString::FromInt(D.BattlePassLevel), 102.f, 70.f, 68.f, 56.f, 26.f, FLinearColor::White);
+		CBar(176.f, 76.f, CW - 196.f, 42.f, float(D.BattlePassXP) / UZoogiFrontProfileSubsystem::BattlePassXPPerLevel, ZCGreen,
+			FString::Printf(TEXT("%d/%d"), D.BattlePassXP, UZoogiFrontProfileSubsystem::BattlePassXPPerLevel), 22.f);
+		CText(FString::Printf(TEXT("Season %d"), UZoogiFrontProfileSubsystem::PassSeason), 176.f, 120.f, CW - 196.f, 30.f, 19.f, ZCSoft, 0, 3.f);
+		CText(TEXT("TAP TO VIEW"), 16.f, CH - 44.f, CW - 32.f, 34.f, 20.f, ZCGold, 1, 3.f);
+		CGroupEnd();
+		CAt(CButton(Grp, [this]() { OpenClashPopup(EZoogiClashPopup::BattlePass, TEXT("BATTLE PASS")); }), X, Y, CW, CH);
+		if (FP && FP->PassClaimableCount() > 0) CDot(X + CW - 30.f, Y - 14.f, 46.f, TEXT("!")); // red dot only while a tier is claimable
+	}
+
+	// ---- Trophy Road card (right)
+	{
+		const float X = W - 24.f - CW, Y = Y0;
+		UHorizontalBox* H = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
+		UImage* I = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
+		I->SetBrush(ZCImgBrush(ClashArt(TEXT("trophy")), 92.f, 92.f, 0.f, false));
+		if (UHorizontalBoxSlot* S = H->AddChildToHorizontalBox(I)) { S->SetVerticalAlignment(VAlign_Center); S->SetPadding(FMargin(0.f, 0.f, 14.f, 0.f)); }
+		UVerticalBox* V = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
+		V->AddChildToVerticalBox(CTxt(TEXT("TROPHY ROAD"), 34.f, FLinearColor::White, 4.f));
+		const int32 A = UZoogiFrontProfileSubsystem::ArenaForTrophies(D.Trophies);
+		V->AddChildToVerticalBox(CTxt(FString::Printf(TEXT("Next: Arena %d at %d"), A + 2, UZoogiFrontProfileSubsystem::ArenaTrophies(A + 1)), 19.f, ZCSoft, 3.f));
+		V->AddChildToVerticalBox(CTxt(TEXT("TAP TO VIEW"), 20.f, ZCGold, 3.f));
+		if (UHorizontalBoxSlot* S = H->AddChildToHorizontalBox(V)) S->SetVerticalAlignment(VAlign_Center);
+		H->SetVisibility(ESlateVisibility::HitTestInvisible);
+		CChunkyW(H, ZCBlue, [this]() { OpenClashPopup(EZoogiClashPopup::TrophyRoad); }, X, Y, CW, CardH);
+		if (FP && FP->RoadClaimableCount() > 0) CDot(X + CW - 30.f, Y - 14.f, 46.f, TEXT("!"));
+	}
+
+	// ---- centre column
+	float Y = Y0 + CardH + 26.f + Extra * 0.25f;
+	CText(FString::Printf(TEXT("Arena %d"), ArenaIdx + 1), C - 200.f, Y, 400.f, 40.f, 28.f, ZCSoft);
+	CImg(ClashArt(TEXT("ribbon")), C - 330.f, Y + 34.f, 660.f, 110.f);
+	CText(ZoogiUtil::ArenaName((EZoogiArena)ArenaIdx).ToUpper(), C - 250.f, Y + 36.f, 500.f, 84.f, 44.f, FLinearColor::White);
+	Y += 150.f;
+	{
+		const float PW = 900.f, PH = 480.f, PX = C - PW * 0.5f, PY = Y;
 		// arena preview opens the ARENAS screen (the name ribbon above does nothing, like the demo)
 		UCanvasPanel* PG = CGroupBegin();
 		CGoldPanel(0.f, 0.f, PW, PH, ZCNavyDeep, 26.f);
@@ -739,65 +781,32 @@ void UZoogiMenuRoot::BuildClashBattleTab()
 		CGroupEnd();
 		CAt(CButton(PG, [this]() { ClashArenaSel = -1; OpenClashPopup(EZoogiClashPopup::Arenas, TEXT("ARENAS")); }), PX, PY, PW, PH);
 	}
+	Y += 480.f + 22.f + Extra * 0.15f;
 	{
 		const int32 A = UZoogiFrontProfileSubsystem::ArenaForTrophies(D.Trophies);
 		const int32 From = UZoogiFrontProfileSubsystem::ArenaTrophies(A), To = UZoogiFrontProfileSubsystem::ArenaTrophies(A + 1);
-		const float BX = C - 200.f, BY = 630.f;
+		const float BarW = 560.f, BX = C - BarW * 0.5f, BY = Y + 6.f;
 		// trophy bar opens TROPHY ROAD
 		UCanvasPanel* TG = CGroupBegin();
-		CBar(40.f, 12.f, 380.f, 42.f, To > From ? float(D.Trophies - From) / (To - From) : 1.f, ZCGold, FString::Printf(TEXT("%d/%d"), D.Trophies, To), 24.f);
-		CImg(ClashArt(TEXT("trophy")), 0.f, 0.f, 62.f, 62.f);
+		CBar(44.f, 12.f, BarW - 44.f, 44.f, To > From ? float(D.Trophies - From) / (To - From) : 1.f, ZCGold, FString::Printf(TEXT("%d/%d"), D.Trophies, To), 26.f);
+		CImg(ClashArt(TEXT("trophy")), 0.f, 0.f, 66.f, 66.f);
 		CGroupEnd();
-		CAt(CButton(TG, [this]() { OpenClashPopup(EZoogiClashPopup::TrophyRoad, TEXT("TROPHY ROAD")); }), BX - 10.f, BY - 6.f, 430.f, 66.f);
-		if (FP && FP->RoadClaimableCount() > 0) CDot(BX + 400.f, BY - 16.f, 38.f, TEXT("!"));
+		CAt(CButton(TG, [this]() { OpenClashPopup(EZoogiClashPopup::TrophyRoad, TEXT("TROPHY ROAD")); }), BX - 10.f, BY - 6.f, BarW + 10.f, 70.f);
 	}
+	Y += 76.f + 24.f + Extra * 0.3f;
 	CChunky(TEXT("BATTLE"), ZCYellow, [this]()
 	{
 		UE_LOG(LogZoogi, Log, TEXT("CLASH BATTLE pressed -> MenuAction Start (current arena / players)"));
 		Fire("Start", 0);
-	}, C - 210.f, 692.f, 420.f, 118.f, 58.f, nullptr, true);
-	BuildClashChestSlots(824.f);
-
-	// ---- left: Battle Pass card
-	const float SideW = FMath::Clamp(C - 300.f - 90.f, 280.f, 420.f);
-	{
-		const float X = 56.f, Y = 330.f, CW = SideW, CH = 236.f;
-		UCanvasPanel* Grp = CGroupBegin();
-		CGoldPanel(0.f, 0.f, CW, CH, ZCViolet, 26.f);
-		CText(TEXT("BATTLE PASS"), 18.f, 18.f, CW - 36.f, 44.f, 30.f, FLinearColor::White);
-		CImg(ClashArt(TEXT("crown")), 22.f, 72.f, 96.f, 96.f);
-		CImg(ClashArt(TEXT("star")), 122.f, 76.f, 72.f, 72.f);
-		CText(FString::FromInt(D.BattlePassLevel), 122.f, 84.f, 72.f, 60.f, 28.f, FLinearColor::White);
-		CBar(196.f, 92.f, CW - 222.f, 42.f, float(D.BattlePassXP) / UZoogiFrontProfileSubsystem::BattlePassXPPerLevel, ZCGreen,
-			FString::Printf(TEXT("%d/%d"), D.BattlePassXP, UZoogiFrontProfileSubsystem::BattlePassXPPerLevel), 22.f);
-		CText(FString::Printf(TEXT("Season %d"), UZoogiFrontProfileSubsystem::PassSeason), 126.f, 150.f, CW - 146.f, 34.f, 19.f, ZCSoft, 0, 3.f);
-		CText(TEXT("TAP TO VIEW"), 18.f, CH - 52.f, CW - 36.f, 34.f, 20.f, ZCGold, 1, 3.f);
-		CGroupEnd();
-		CAt(CButton(Grp, [this]() { OpenClashPopup(EZoogiClashPopup::BattlePass, TEXT("BATTLE PASS")); }), X, Y, CW, CH);
-		if (FP && FP->PassClaimableCount() > 0) CDot(X + CW - 30.f, Y - 14.f, 46.f, TEXT("!")); // red dot only while a tier is claimable
-	}
-
-	// ---- right: Trophy Road
-	{
-		const float X = W - 56.f - SideW, Y = 330.f;
-		UHorizontalBox* H = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
-		UImage* I = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
-		I->SetBrush(ZCImgBrush(ClashArt(TEXT("trophy")), 92.f, 92.f, 0.f, false));
-		if (UHorizontalBoxSlot* S = H->AddChildToHorizontalBox(I)) { S->SetVerticalAlignment(VAlign_Center); S->SetPadding(FMargin(0.f, 0.f, 14.f, 0.f)); }
-		UVerticalBox* V = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
-		V->AddChildToVerticalBox(CTxt(TEXT("TROPHY ROAD"), 34.f, FLinearColor::White, 4.f));
-		const int32 A = UZoogiFrontProfileSubsystem::ArenaForTrophies(D.Trophies);
-		V->AddChildToVerticalBox(CTxt(FString::Printf(TEXT("Next: Arena %d at %d"), A + 2, UZoogiFrontProfileSubsystem::ArenaTrophies(A + 1)), 18.f, ZCSoft, 3.f));
-		if (UHorizontalBoxSlot* S = H->AddChildToHorizontalBox(V)) S->SetVerticalAlignment(VAlign_Center);
-		H->SetVisibility(ESlateVisibility::HitTestInvisible);
-		CChunkyW(H, ZCBlue, [this]() { OpenClashPopup(EZoogiClashPopup::TrophyRoad); }, X, Y, SideW, 170.f);
-	}
+	}, C - 270.f, Y, 540.f, 150.f, 66.f, nullptr, true);
+	Y += 150.f + 30.f + Extra * 0.15f;
+	BuildClashChestSlots(Y);
 }
 
 void UZoogiMenuRoot::BuildClashEmptyTab(const FString& Title, const FString& Sub, bool bDeckButton)
 {
 	const float W = DesignW, C = W * 0.5f;
-	const float PW = FMath::Min(1040.f, W - 200.f), PH = 560.f, PX = C - PW * 0.5f, PY = 210.f;
+	const float PW = FMath::Min(1000.f, W - 80.f), PH = 620.f, PX = C - PW * 0.5f, PY = FMath::Max(260.f, (ClashNavY() - PH) * 0.42f);
 	CGoldPanel(PX, PY, PW, PH, ZCPanel, 30.f);
 	CImg(ClashArt(TEXT("ribbon")), C - 320.f, PY - 44.f, 640.f, 106.f);
 	CText(Title, C - 240.f, PY - 42.f, 480.f, 80.f, 48.f, FLinearColor::White);
@@ -812,10 +821,10 @@ void UZoogiMenuRoot::BuildClashEmptyTab(const FString& Title, const FString& Sub
 
 void UZoogiMenuRoot::BuildClashNav()
 {
-	const float W = DesignW, TW = W / 5.f, Y = 944.f, H = 136.f;
-	// nav bar plate (gold top edge) inside the safe canvas; the full-bleed strip behind it comes from the backdrop
-	CAt(CBox(ZCNavyDeep, ZCDark, 0.f, 0.f), -400.f, Y, W + 800.f, H + 200.f);
-	CAt(CBox(ZCGoldDeep, ZCDark, 0.f, 0.f), -400.f, Y, W + 800.f, 5.f);
+	const float W = DesignW, TW = W / 5.f, Y = ClashNavY(), H = 150.f;
+	// M4 portrait: nav strip spans the 1080 column only (pillar-boxed on a landscape window), bleeds past the bottom safe edge
+	CAt(CBox(ZCNavyDeep, ZCDark, 0.f, 0.f), 0.f, Y, W, H + 300.f);
+	CAt(CBox(ZCGoldDeep, ZCDark, 0.f, 0.f), 0.f, Y, W, 5.f);
 	const TCHAR* Icons[] = { TEXT("shop"), TEXT("cards"), TEXT("swords"), TEXT("clan"), TEXT("podium") };
 	const UZoogiFrontProfileSubsystem* FP = UZoogiFrontProfileSubsystem::Get(this);
 	for (int32 t = 0; t < 5; ++t)
@@ -826,13 +835,13 @@ void UZoogiMenuRoot::BuildClashNav()
 		if (bSel)
 		{
 			CPlate(6.f, 0.f, TW - 12.f, H + 24.f, ZCBlue, 22.f, 5.f, true);
-			CImg(ClashArt(Icons[t]), TW * 0.5f - 52.f, 2.f, 104.f, 104.f);
-			CText(ZCTabName(t), 0.f, 94.f, TW, 40.f, 26.f, FLinearColor::White);
+			CImg(ClashArt(Icons[t]), TW * 0.5f - 56.f, 2.f, 112.f, 112.f);
+			CText(ZCTabName(t), 0.f, 108.f, TW, 40.f, 26.f, FLinearColor::White);
 		}
 		else
 		{
 			if (t > 0) CAt(CBox(ZCNavy, ZCDark, 0.f, 0.f), 0.f, 30.f, 3.f, H - 50.f);
-			CImg(ClashArt(Icons[t]), TW * 0.5f - 42.f, 26.f, 84.f, 84.f, 0.f, false, FLinearColor(0.82f, 0.86f, 1.f, 1.f));
+			CImg(ClashArt(Icons[t]), TW * 0.5f - 46.f, 28.f, 92.f, 92.f, 0.f, false, FLinearColor(0.82f, 0.86f, 1.f, 1.f));
 		}
 		if (t == ZCCards && FP && FP->Data().bCardsNew) CDot(TW * 0.5f + 26.f, bSel ? 0.f : 18.f, 38.f, TEXT("!"));
 		CGroupEnd();
@@ -851,7 +860,7 @@ void UZoogiMenuRoot::BuildClashPopup()
 		UBackgroundBlur* Blur = WidgetTree->ConstructWidget<UBackgroundBlur>(UBackgroundBlur::StaticClass());
 		Blur->SetBlurStrength(6.f);
 		Blur->SetVisibility(ESlateVisibility::HitTestInvisible);
-		if (UCanvasPanelSlot* S = Canvas->AddChildToCanvas(Blur)) { S->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f)); S->SetOffsets(FMargin(-400.f)); }
+		if (UCanvasPanelSlot* S = Canvas->AddChildToCanvas(Blur)) { S->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f)); S->SetOffsets(FMargin(0.f, -400.f, 0.f, -400.f)); }
 	}
 	// scrim: tap outside closes
 	{
@@ -860,11 +869,14 @@ void UZoogiMenuRoot::BuildClashPopup()
 		FButtonStyle St; St.SetNormal(Dim); St.SetHovered(Dim); St.SetPressed(Dim);
 		Scrim->SetStyle(St);
 		BindClick(Scrim, [this]() { if (ClashBuyT0 < 0.f) { ClashPopup = EZoogiClashPopup::None; bDirty = true; } });
-		if (UCanvasPanelSlot* S = Canvas->AddChildToCanvas(Scrim)) { S->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f)); S->SetOffsets(FMargin(-400.f)); }
+		if (UCanvasPanelSlot* S = Canvas->AddChildToCanvas(Scrim)) { S->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f)); S->SetOffsets(FMargin(0.f, -400.f, 0.f, -400.f)); }
 		ClashPopupScrim = Scrim;
 	}
 	const FVector2D PSz = ClashPopupSize(ClashPopup);
-	const float PW = PSz.X, PH = PSz.Y, PX = C - PW * 0.5f, PY = FMath::Clamp(560.f - PH * 0.5f, 60.f, 300.f);
+	// M4 portrait: centred in the band between the top bar and the nav (taller popups use the whole column)
+	const float PW = FMath::Min(PSz.X, W - 48.f), PH = FMath::Min(PSz.Y, DesignH - 80.f), PX = C - PW * 0.5f;
+	const float Band = ClashNavY() - 116.f;
+	const float PY = PH <= Band ? 116.f + (Band - PH) * 0.5f : FMath::Max(40.f, (DesignH - PH) * 0.5f);
 	UCanvasPanel* Grp = CGroupBegin();
 	CPopupBody(0.f, 0.f, PW, PH, 30.f); // light-blue body #4A9CF0 -> #2D74D6, border #1B4FA8 (DETAILED PASS 2)
 	const bool bBig = ClashBigPopup(ClashPopup);
@@ -1125,6 +1137,21 @@ void UZoogiMenuRoot::TickClashTour(float Dt)
 		const UZoogiFrontProfileSubsystem::FGemPack Pk = UZoogiFrontProfileSubsystem::GemPacks()[1];
 		OpenClashPopup(EZoogiClashPopup::Info, TEXT("NEEDS STORE"), FString::Printf(TEXT("%d gems for $%.2f is a real-money pack.\nIt needs the platform store (App Store / Google Play / Steam), which is not connected yet.\nNo purchase was made and no gems were added."), Pk.Gems, Pk.USD));
 	} });
+	// ---- M4 portrait: every tab + the Home popups
+	Steps.Add({ TEXT("arenas"), 1.f, 1.5f, [this]() { ClashPopup = EZoogiClashPopup::None; SetClashTab(ZCBattle); ClashArenaSel = -1; OpenClashPopup(EZoogiClashPopup::Arenas, TEXT("ARENAS")); } });
+	Steps.Add({ TEXT("trophy_road"), 1.f, 1.5f, [this]() { OpenClashPopup(EZoogiClashPopup::TrophyRoad, TEXT("TROPHY ROAD")); } });
+	Steps.Add({ TEXT("battle_pass"), 1.f, 1.5f, [this]() { OpenClashPopup(EZoogiClashPopup::BattlePass, TEXT("BATTLE PASS")); } });
+	Steps.Add({ TEXT("cards_decks"), 1.f, 1.5f, [this]() { ClashPopup = EZoogiClashPopup::None; SetClashTab(ZCCards); ClashCardsSub = 0; ClashScrollKey = -1; bDirty = true; } });
+	Steps.Add({ TEXT("cards_collection"), 1.f, 1.5f, [this]() { ClashCardsSub = 1; ClashScrollOffset = 0.f; ClashPendingScroll = 0.f; ClashScrollKey = -1; bDirty = true; } });
+	Steps.Add({ TEXT("cards_locked"), 1.f, 1.5f, [this]() { ClashPendingScroll = ClashLockedY; bDirty = true; } });
+	Steps.Add({ TEXT("card_popover"), 1.f, 1.5f, [this]()
+	{
+		const TArray<FZoogiCardDef>& Defs = UZoogiFrontProfileSubsystem::CardDefs();
+		if (Defs.Num() > 0) { ClashSelId = Defs[0].Id; OpenClashPopup(EZoogiClashPopup::Card, Defs[0].Name.ToUpper()); }
+	} });
+	Steps.Add({ TEXT("cards_emotes"), 1.f, 1.5f, [this]() { ClashPopup = EZoogiClashPopup::None; ClashCardsSub = 2; ClashScrollKey = -1; bDirty = true; } });
+	Steps.Add({ TEXT("clan_tab"), 1.f, 1.5f, [this]() { SetClashTab(ZCClan); } });
+	Steps.Add({ TEXT("leaderboard_tab"), 1.f, 1.5f, [this]() { SetClashTab(ZCLeader); } });
 	Steps.Add({ TEXT("home_before_battle"), 1.f, 1.5f, [this]() { ClashPopup = EZoogiClashPopup::None; SetClashTab(ZCBattle); } });
 	const int32 BattleStep = Steps.Num();
 	if (bBattle)
@@ -1166,7 +1193,9 @@ void UZoogiMenuRoot::TickClashTour(float Dt)
 		Steps.Add({ TEXT("home_final"), 1.f, 1.5f, [this]() { ClashReplay.Reset(); ClashPopup = EZoogiClashPopup::None; bDirty = true; } });
 	}
 
-	if (ClashTourStep >= Steps.Num())
+	int32 MaxSteps = Steps.Num();
+	if (FParse::Value(FCommandLine::Get(), TEXT("ZoogiClashTourSteps="), MaxSteps)) MaxSteps = FMath::Clamp(MaxSteps, 1, Steps.Num()); // short capture runs
+	if (ClashTourStep >= MaxSteps)
 	{
 		ClashTourStep = -100;
 		UE_LOG(LogZoogi, Log, TEXT("CLASH TOUR done (%d steps)"), Steps.Num());

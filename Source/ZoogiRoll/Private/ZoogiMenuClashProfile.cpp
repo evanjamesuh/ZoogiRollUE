@@ -198,19 +198,22 @@ void UZoogiMenuRoot::BuildClashReplay()
 {
 	const FZoogiReplay* R = ClashReplay.Get();
 	const float W = DesignW, C = W * 0.5f;
-	CAt(CBox(ZCHex(TEXT("08163A")).CopyWithNewOpacity(0.97f), FLinearColor::Transparent, 0.f, 0.f), -400.f, -400.f, W + 800.f, 1080.f + 800.f);
-	if (UButton* Block = CButton(CBox(FLinearColor::Transparent, FLinearColor::Transparent, 0.f, 0.f), []() {})) { Block->SetStyle(ZCClearStyle()); CAt(Block, -400.f, -400.f, W + 800.f, 1880.f); } // eats taps behind
+	CAt(CBox(ZCHex(TEXT("08163A")).CopyWithNewOpacity(0.97f), FLinearColor::Transparent, 0.f, 0.f), 0.f, -400.f, W, DesignH + 800.f);
+	if (UButton* Block = CButton(CBox(FLinearColor::Transparent, FLinearColor::Transparent, 0.f, 0.f), []() {})) { Block->SetStyle(ZCClearStyle()); CAt(Block, 0.f, -400.f, W, DesignH + 800.f); } // eats taps behind
 	ClashReplayZW.Reset(); ClashReplayLW.Reset(); ClashReplayOW.Reset();
-	CChunky(TEXT("EXIT"), ZCXRed, [this]() { ClashReplay.Reset(); OpenClashPopup(EZoogiClashPopup::BattleLog); }, 40.f, 28.f, 220.f, 92.f, 38.f);
+	CChunky(TEXT("EXIT"), ZCXRed, [this]() { ClashReplay.Reset(); OpenClashPopup(EZoogiClashPopup::BattleLog); }, 30.f, 40.f, 200.f, 92.f, 36.f);
 	if (!R) return;
 	const FZoogiFrontBattle& B = ClashReplayInfo;
 	const TCHAR* Res = B.Outcome == 0 ? TEXT("WIN") : B.Outcome == 1 ? TEXT("LOSS") : B.Outcome == 2 ? TEXT("DRAW") : TEXT("LEFT");
-	CText(TEXT("REPLAY"), C - 300.f, 20.f, 600.f, 64.f, 46.f, FLinearColor::White, 1, 5.f);
+	// M4 portrait: header, square map (960), timeline, PAUSE, speeds; the group is centred in the column
+	const float OY = FMath::Max(150.f, (DesignH - 1500.f) * 0.5f);
+	CText(TEXT("REPLAY"), C - 300.f, OY, 600.f, 64.f, 46.f, FLinearColor::White, 1, 5.f);
 	CText(FString::Printf(TEXT("%s  vs %s  -  %s  -  %d : %d%s"), Res, *B.Opponent, *ZoogiUtil::ArenaName((EZoogiArena)R->Arena), B.MyScore, B.OppScore, B.bDev ? TEXT("  (DEV result)") : TEXT("")),
-		C - 700.f, 84.f, 1400.f, 40.f, 24.f, ZCSoft, 1, 3.f);
+		C - 500.f, OY + 64.f, 1000.f, 60.f, 22.f, ZCSoft, 1, 3.f, true);
 	// the match's map (its own MenuArt), clipped round, with the recorded tokens on top
-	ClashReplayS = 700.f; ClashReplayCX = C; ClashReplayCY = 140.f + ClashReplayS * 0.5f;
-	const float MX = C - ClashReplayS * 0.5f, MY = 140.f;
+	const float MY = OY + 150.f;
+	ClashReplayS = 960.f; ClashReplayCX = C; ClashReplayCY = MY + ClashReplayS * 0.5f;
+	const float MX = C - ClashReplayS * 0.5f;
 	CAt(CBox(ZCNavyDeep, ZCGold, 6.f, ClashReplayS * 0.5f + 8.f), MX - 8.f, MY - 8.f, ClashReplayS + 16.f, ClashReplayS + 16.f);
 	UTexture2D* Map = Art(FString(ZCArenaSlug(R->Arena)) + TEXT("_map"));
 	CImg(Map, MX, MY, ClashReplayS, ClashReplayS, ClashReplayS * 0.5f, true, FLinearColor(0.78f, 0.82f, 0.9f, 1.f));
@@ -234,9 +237,9 @@ void UZoogiMenuRoot::BuildClashReplay()
 		ClashReplayLW.Add(CText(FString::Printf(TEXT("P%d %s"), (R->Players.IsValidIndex(i) ? R->Players[i] : i) + 1, *R->Names[i].ToUpper()), ClashReplayCX, ClashReplayCY, 240.f, 30.f, 18.f, FLinearColor::White, 1, 3.f));
 	}
 	// timeline
-	const float BarX = C - 420.f, BarY = 862.f;
-	ClashReplayBarW = 840.f - 8.f;
-	CAt(CBox(ZCNavyDeep, ZCDark, 4.f, 14.f), BarX, BarY, 840.f, 28.f);
+	const float BarX = C - 480.f, BarY = MY + ClashReplayS + 46.f, BarFull = 740.f;
+	ClashReplayBarW = BarFull - 8.f;
+	CAt(CBox(ZCNavyDeep, ZCDark, 4.f, 14.f), BarX, BarY, BarFull, 28.f);
 	{
 		UBorder* Fill = CBox(ZCGold, FLinearColor::Transparent, 0.f, 10.f);
 		Fill->SetVisibility(ESlateVisibility::HitTestInvisible);
@@ -245,7 +248,7 @@ void UZoogiMenuRoot::BuildClashReplay()
 	}
 	TWeakObjectPtr<UZoogiMenuRoot> WThis(this);
 	CLive([WThis]() { const UZoogiMenuRoot* M = WThis.Get(); return M && M->ClashReplay.IsValid() ? FString::Printf(TEXT("%s / %s"), *ZCClock(M->ClashReplayT), *ZCClock(M->ClashReplay->Duration())) : FString(); },
-		BarX + 860.f, BarY - 8.f, 220.f, 44.f, 26.f, FLinearColor::White, 0);
+		BarX + BarFull + 14.f, BarY - 8.f, 210.f, 44.f, 24.f, FLinearColor::White, 0);
 	// controls: green Pause/Play, speeds 0.5 / 1 / 2 / 4x (navy; selected = olive-gold)
 	{
 		UHorizontalBox* H = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass());
@@ -259,16 +262,16 @@ void UZoogiMenuRoot::BuildClashReplay()
 			if (!ClashReplay.IsValid()) return;
 			if (!bClashReplayPlaying && ClashReplayT >= ClashReplay->Duration() - 0.01f) ClashReplayT = 0.f; // play again from the start
 			bClashReplayPlaying = !bClashReplayPlaying; bDirty = true;
-		}, C - 520.f, 920.f, 260.f, 96.f, true);
+		}, C - 150.f, BarY + 64.f, 300.f, 96.f, true);
 	}
 	const float Speeds[] = { 0.5f, 1.f, 2.f, 4.f };
 	for (int32 i = 0; i < 4; ++i)
 	{
 		const float Sp = Speeds[i];
 		const bool bSel = FMath::IsNearlyEqual(ClashReplaySpeed, Sp);
-		CChunky(FString::Printf(TEXT("%.1fx"), Sp), bSel ? ZCOlive : ZCNavyBtn, [this, Sp]() { ClashReplaySpeed = Sp; bDirty = true; }, C - 220.f + i * 186.f, 926.f, 170.f, 84.f, 30.f);
+		CChunky(FString::Printf(TEXT("%.1fx"), Sp), bSel ? ZCOlive : ZCNavyBtn, [this, Sp]() { ClashReplaySpeed = Sp; bDirty = true; }, C - 364.f + i * 186.f, MY + ClashReplayS + 46.f + 184.f, 170.f, 84.f, 30.f);
 	}
-	CText(TEXT("Recorded from the real match at 10 Hz (positions + rotations, read-only). Top-down view."), C - 700.f, 1024.f, 1400.f, 34.f, 17.f, ZCMuted, 1, 2.f);
+	CText(TEXT("Recorded from the real match at 10 Hz (positions + rotations, read-only). Top-down view."), C - 500.f, MY + ClashReplayS + 46.f + 290.f, 1000.f, 60.f, 18.f, ZCMuted, 1, 2.f, true);
 	ClashReplayApply();
 }
 
@@ -299,7 +302,7 @@ bool UZoogiMenuRoot::BuildClashProfilePopup(EZoogiClashPopup P, float PW, float 
 		CImg(Portrait(), 63.f, 145.f, 164.f, 164.f, 82.f, true);
 		CImg(ClashArt(TEXT("level")), 176.f, 252.f, 78.f, 78.f);
 		CText(FString::FromInt(D.Level), 176.f, 252.f, 78.f, 74.f, 32.f, FLinearColor::White);
-		CText(D.GuestName, 270.f, 136.f, PW * 0.42f - 270.f, 56.f, 38.f, FLinearColor::White, 0);
+		CText(D.GuestName, 270.f, 136.f, PW - 330.f, 56.f, 38.f, FLinearColor::White, 0);
 		CText(TEXT("#") + D.Tag, 270.f, 196.f, 190.f, 44.f, 28.f, ZCSoft, 0, 3.f);
 		{
 			UCanvasPanel* G = CGroupBegin();
@@ -314,16 +317,17 @@ bool UZoogiMenuRoot::BuildClashProfilePopup(EZoogiClashPopup P, float PW, float 
 		CImg(ClashArt(TEXT("trophy")), 258.f, 240.f, 76.f, 76.f);
 		CText(FText::AsNumber(D.Trophies).ToString(), 330.f, 252.f, 150.f, 56.f, 30.f, ZCGold, 1);
 		const int32 Need = UZoogiFrontProfileSubsystem::XPForLevel(D.Level);
-		CBar(50.f, 350.f, PW * 0.42f - 70.f, 46.f, Need > 0 ? float(D.XP) / Need : 0.f, ZCCyan, FString::Printf(TEXT("Level %d  -  %d/%d XP"), D.Level, D.XP, Need), 22.f);
-		CPlate(50.f, 414.f, PW * 0.42f - 70.f, 76.f, ZCNavyDeep.CopyWithNewOpacity(0.7f), 16.f, 4.f, false);
-		CImg(ClashArt(TEXT("shield")), 62.f, 420.f, 64.f, 64.f);
-		CText(TEXT("No Clan"), 140.f, 414.f, 300.f, 76.f, 28.f, ZCMuted, 0, 3.f);
-		CChunky(TEXT("BATTLE LOG"), ZCGoldBtn, [this]() { OpenClashPopup(EZoogiClashPopup::BattleLog); }, 50.f, 516.f, PW * 0.42f - 70.f, 104.f, 38.f, ClashArt(TEXT("swords")), true);
-		CText(TEXT("Local guest profile (this device)."), 50.f, PH - 80.f, PW * 0.42f - 70.f, 40.f, 19.f, ZCSoft, 0, 2.f);
+		CBar(50.f, 350.f, PW - 100.f, 46.f, Need > 0 ? float(D.XP) / Need : 0.f, ZCCyan, FString::Printf(TEXT("Level %d  -  %d/%d XP"), D.Level, D.XP, Need), 22.f);
+		CPlate(50.f, 420.f, (PW - 120.f) * 0.5f, 92.f, ZCNavyDeep.CopyWithNewOpacity(0.7f), 16.f, 4.f, false);
+		CImg(ClashArt(TEXT("shield")), 62.f, 434.f, 64.f, 64.f);
+		CText(TEXT("No Clan"), 140.f, 420.f, 300.f, 92.f, 28.f, ZCMuted, 0, 3.f);
+		CChunky(TEXT("BATTLE LOG"), ZCGoldBtn, [this]() { OpenClashPopup(EZoogiClashPopup::BattleLog); }, PW * 0.5f + 10.f, 414.f, (PW - 120.f) * 0.5f, 104.f, 38.f, ClashArt(TEXT("swords")), true);
+		CText(TEXT("Local guest profile (this device)."), 50.f, PH - 118.f, PW - 100.f, 36.f, 19.f, ZCSoft, 1, 2.f);
 
 		// ---- right: Battle Stats (2 columns x 4) + Cards
-		const float RX = PW * 0.42f, RW = PW - RX - 50.f, TW = (RW - 18.f) * 0.5f, TH = 80.f;
-		CText(TEXT("BATTLE STATS"), RX, 126.f, RW, 46.f, 30.f, FLinearColor::White, 0);
+		// M4 portrait: stats + cards stacked under the header block
+		const float RX = 50.f, RW = PW - 100.f, TW = (RW - 18.f) * 0.5f, TH = 80.f, SY = 600.f;
+		CText(TEXT("BATTLE STATS"), RX, SY - 54.f, RW, 46.f, 30.f, FLinearColor::White, 0);
 		const int32 Rate = D.Battles > 0 ? FMath::RoundToInt(100.f * D.Wins / D.Battles) : 0;
 		struct FS { const TCHAR* Icon; const TCHAR* Label; FString V; FLinearColor C; };
 		const FS Stats[] = {
@@ -336,15 +340,15 @@ bool UZoogiMenuRoot::BuildClashProfilePopup(EZoogiClashPopup P, float PW, float 
 			{ TEXT("star"), TEXT("Win Streak"), FString::FromInt(D.WinStreak), FLinearColor::White },
 			{ TEXT("star"), TEXT("Best Streak"), FString::FromInt(D.BestStreak), FLinearColor::White } };
 		for (int32 i = 0; i < 8; ++i)
-			Tile(RX + (i % 2) * (TW + 18.f), 180.f + (i / 2) * (TH + 14.f), TW, TH, ClashArt(Stats[i].Icon), Stats[i].Label, Stats[i].V, Stats[i].C);
-		const float CY = 180.f + 4.f * (TH + 14.f) + 16.f;
+			Tile(RX + (i % 2) * (TW + 18.f), SY + (i / 2) * (TH + 14.f), TW, TH, ClashArt(Stats[i].Icon), Stats[i].Label, Stats[i].V, Stats[i].C);
+		const float CY = SY + 4.f * (TH + 14.f) + 16.f;
 		CText(TEXT("CARDS"), RX, CY, RW, 46.f, 30.f, FLinearColor::White, 0);
 		const int32 Found = FP->CardsFound(), Total = UZoogiFrontProfileSubsystem::CardDefs().Num();
 		CBar(RX, CY + 54.f, RW, 52.f, Total > 0 ? float(Found) / Total : 0.f, ZCGreen, FString::Printf(TEXT("Cards Found  %d/%d"), Found, Total), 24.f);
 		float Avg = 0.f; int32 Max = 0; FP->CardLevelStats(Avg, Max);
 		Tile(RX, CY + 124.f, TW, TH, ClashArt(TEXT("cards")), TEXT("Average Level"), FString::Printf(TEXT("%.1f"), Avg), FLinearColor::White);
 		Tile(RX + TW + 18.f, CY + 124.f, TW, TH, ClashArt(TEXT("cards")), TEXT("Highest Level"), FString::FromInt(Max), FLinearColor::White);
-		CText(TEXT("Three Crown Wins: wins with the opponent held to 0 points."), RX, PH - 80.f, RW, 40.f, 18.f, ZCSoft, 0, 2.f);
+		CText(TEXT("Three Crown Wins: wins with the opponent held to 0 points."), RX, PH - 78.f, RW, 36.f, 18.f, ZCSoft, 1, 2.f);
 		return true;
 	}
 	if (P == EZoogiClashPopup::BattleLog)
@@ -359,7 +363,7 @@ bool UZoogiMenuRoot::BuildClashProfilePopup(EZoogiClashPopup P, float PW, float 
 		}
 		if (UScrollBox* Old = ClashScrollW.Get()) if (ClashScrollKey == 13 && ClashPendingScroll < 0.f) ClashScrollOffset = Old->GetScrollOffset();
 		ClashScrollKey = 13;
-		const float RowH = 118.f, ListW = PW - 80.f;
+		const float RowH = 150.f, ListW = PW - 80.f; // M4 portrait: two-line rows
 		UCanvasPanel* G = CGroupBegin();
 		const int64 Now = UZoogiFrontProfileSubsystem::NowUtc();
 		for (int32 i = 0; i < Log.Num(); ++i)
@@ -370,16 +374,18 @@ bool UZoogiMenuRoot::BuildClashProfilePopup(EZoogiClashPopup P, float PW, float 
 			CPlate(0.f, Y, ListW, RowH, ZCNavyDeep.CopyWithNewOpacity(0.85f), 18.f, 4.f, false);
 			CPlate(12.f, Y + 12.f, 150.f, RowH - 24.f, RC, 14.f, 4.f, true);
 			CText(B.Outcome == 0 ? TEXT("WIN") : B.Outcome == 1 ? TEXT("LOSS") : B.Outcome == 2 ? TEXT("DRAW") : TEXT("LEFT"), 12.f, Y + 12.f, 150.f, RowH - 24.f, 32.f, FLinearColor::White);
-			CText(TEXT("vs ") + B.Opponent, 186.f, Y + 12.f, 420.f, 50.f, 28.f, FLinearColor::White, 0);
-			CText(ZCAgo(B.Utc, Now) + TEXT("  -  ") + ZoogiUtil::ArenaName((EZoogiArena)B.Arena), 186.f, Y + 62.f, 440.f, 40.f, 20.f, ZCSoft, 0, 3.f);
+			const float NW = ListW - 186.f - 232.f;
+			CText(TEXT("vs ") + B.Opponent, 186.f, Y + 10.f, NW, 46.f, 28.f, FLinearColor::White, 0);
+			CText(ZCAgo(B.Utc, Now) + TEXT("  -  ") + ZoogiUtil::ArenaName((EZoogiArena)B.Arena), 186.f, Y + 54.f, NW, 36.f, 20.f, ZCSoft, 0, 3.f);
 			if (B.bDev) { CPlate(40.f, Y + RowH - 30.f, 94.f, 30.f, ZCYellow, 10.f, 3.f, false); CText(TEXT("DEV"), 40.f, Y + RowH - 30.f, 94.f, 30.f, 18.f, ZCDark, 1, 0.f); }
-			CImg(ClashArt(TEXT("trophy")), 650.f, Y + 28.f, 60.f, 60.f);
-			CText(FString::Printf(TEXT("%+d"), B.Trophies), 712.f, Y, 100.f, RowH, 30.f, B.Trophies >= 0 ? ZCGold : ZCHex(TEXT("FF8A80")), 0);
-			CImg(ClashArt(TEXT("crown")), 820.f, Y + 30.f, 56.f, 56.f);
-			CText(FString::Printf(TEXT("%d - %d"), B.MyScore, B.OppScore), 880.f, Y, 110.f, RowH, 30.f, FLinearColor::White, 0);
-			CText(ZCClock((float)B.Duration), 990.f, Y, 90.f, RowH, 28.f, ZCSoft, 0, 3.f);
+			const float L2 = Y + 94.f;
+			CImg(ClashArt(TEXT("trophy")), 186.f, L2, 46.f, 46.f);
+			CText(FString::Printf(TEXT("%+d"), B.Trophies), 236.f, L2, 100.f, 46.f, 28.f, B.Trophies >= 0 ? ZCGold : ZCHex(TEXT("FF8A80")), 0);
+			CImg(ClashArt(TEXT("crown")), 340.f, L2, 46.f, 46.f);
+			CText(FString::Printf(TEXT("%d - %d"), B.MyScore, B.OppScore), 392.f, L2, 110.f, 46.f, 28.f, FLinearColor::White, 0);
+			CText(ZCClock((float)B.Duration), 510.f, L2, 100.f, 46.f, 26.f, ZCSoft, 0, 3.f);
 			const bool bHas = FP->HasReplay(B.ReplayId);
-			if (bHas) CChunky(TEXT("Replay"), ZCBlue, [this, i]() { ClashOpenReplay(i); }, ListW - 214.f, Y + 18.f, 196.f, RowH - 36.f, 28.f, ClashArt(TEXT("play")));
+			if (bHas) CChunky(TEXT("Replay"), ZCBlue, [this, i]() { ClashOpenReplay(i); }, ListW - 214.f, Y + 30.f, 196.f, RowH - 60.f, 28.f, ClashArt(TEXT("play")));
 			else CText(TEXT("No replay"), ListW - 214.f, Y, 196.f, RowH, 22.f, ZCMuted, 1, 3.f);
 		}
 		CGroupEnd();
@@ -397,7 +403,8 @@ bool UZoogiMenuRoot::BuildClashProfilePopup(EZoogiClashPopup P, float PW, float 
 	if (P == EZoogiClashPopup::Settings)
 	{
 		ClashSlider[0].Reset(); ClashSlider[1].Reset(); ClashSlider[2].Reset();
-		const float LX = 50.f, LW = PW * 0.5f - 80.f, RX = PW * 0.5f + 20.f, RW = PW - RX - 50.f;
+		// M4 portrait: one column; Language / Account / More settings sit under Sound (RY0 shift)
+		const float LX = 50.f, LW = PW - 100.f, RX = LX, RW = LW, RY0 = 524.f;
 		auto Section = [this](const TCHAR* T, float X, float Y, float Wd) { CText(T, X, Y, Wd, 44.f, 28.f, FLinearColor::White, 0); };
 		// ---- Profile: name field + #tag + blue Change (pencil)
 		Section(TEXT("PROFILE"), LX, 126.f, LW);
@@ -438,12 +445,12 @@ bool UZoogiMenuRoot::BuildClashProfilePopup(EZoogiClashPopup P, float PW, float 
 			if (UBorder* B = Cast<UBorder>(PctW)) ClashSliderPct[i] = Cast<UTextBlock>(B->GetContent());
 		}
 		// ---- Language: 5 buttons, selected = gold with a green check badge (saved; applies instantly)
-		Section(TEXT("LANGUAGE"), RX, 126.f, RW);
+		Section(TEXT("LANGUAGE"), RX, RY0 + 126.f, RW);
 		const int32 Lang = FMath::Clamp(GetLocalSetting(TEXT("ClashLanguage"), 0), 0, 4);
 		const float LBW = (RW - 24.f) / 3.f;
 		for (int32 i = 0; i < 5; ++i)
 		{
-			const float X = RX + (i % 3) * (LBW + 12.f), Y = 176.f + (i / 3) * 100.f;
+			const float X = RX + (i % 3) * (LBW + 12.f), Y = RY0 + 176.f + (i / 3) * 100.f;
 			const bool bSel = i == Lang;
 			UCanvasPanel* G = CGroupBegin();
 			CChunkyVisual(nullptr, bSel ? ZCGoldBtn : ZCNavyBtn, 0.f, 0.f, LBW, 84.f);
@@ -456,15 +463,15 @@ bool UZoogiMenuRoot::BuildClashProfilePopup(EZoogiClashPopup P, float PW, float 
 			}), X, Y, LBW, 84.f);
 			if (bSel) CImg(ClashArt(TEXT("check")), X + LBW - 34.f, Y - 14.f, 46.f, 46.f);
 		}
-		if (Lang != 0) CText(TEXT("Saved. Zoogi Roll has no translated text yet, so the menus stay in English."), RX, 380.f, RW, 34.f, 18.f, ZCYellow, 0, 2.f);
+		if (Lang != 0) CText(TEXT("Saved. Zoogi Roll has no translated text yet, so the menus stay in English."), RX, RY0 + 380.f, RW, 34.f, 18.f, ZCYellow, 0, 2.f);
 		// ---- Account (guest): Link Email / Log Out need an account backend
-		Section(TEXT("ACCOUNT"), RX, 430.f, RW);
-		CText(TEXT("Guest account. Link an email to keep your progress safe."), RX, 480.f, RW, 60.f, 22.f, FLinearColor::White, 0, 3.f, true);
+		Section(TEXT("ACCOUNT"), RX, RY0 + 430.f, RW);
+		CText(TEXT("Guest account. Link an email to keep your progress safe."), RX, RY0 + 480.f, RW, 60.f, 22.f, FLinearColor::White, 0, 3.f, true);
 		CChunky(TEXT("Link Email"), ZCLinkBlue, [this]() { OpenClashPopup(EZoogiClashPopup::Info, TEXT("LINK EMAIL"), TEXT("Linking an email needs the account backend, which is not connected yet.\nYour progress is saved on this device.")); },
-			RX, 580.f, (RW - 20.f) * 0.5f, 92.f, 30.f);
+			RX, RY0 + 566.f, (RW - 20.f) * 0.5f, 92.f, 30.f);
 		CChunky(TEXT("Log Out"), ZCLogoutRed, [this]() { OpenClashPopup(EZoogiClashPopup::Info, TEXT("LOG OUT"), TEXT("Guest accounts have no login, so there is nothing to log out of yet.\nAccounts need the backend. Nothing was changed.")); },
-			RX + (RW + 20.f) * 0.5f, 580.f, (RW - 20.f) * 0.5f, 92.f, 30.f);
-		CChunky(TEXT("More settings"), ZCNavyBtn, [this]() { ClashPopup = EZoogiClashPopup::None; Push(EZoogiScreen::Settings); }, RX, 700.f, (RW - 20.f) * 0.5f, 76.f, 24.f);
+			RX + (RW + 20.f) * 0.5f, RY0 + 566.f, (RW - 20.f) * 0.5f, 92.f, 30.f);
+		CChunky(TEXT("More settings"), ZCNavyBtn, [this]() { ClashPopup = EZoogiClashPopup::None; Push(EZoogiScreen::Settings); }, RX, RY0 + 682.f, (RW - 20.f) * 0.5f, 76.f, 24.f);
 		CText(TEXT("Version ") + ZPVersion(), 0.f, PH - 70.f, PW, 40.f, 22.f, ZCSoft, 1, 3.f);
 		return true;
 	}

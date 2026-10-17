@@ -173,7 +173,9 @@ void UZoogiMenuRoot::BuildClashChestOpen()
 	const UZoogiFrontProfileSubsystem* FP = UZoogiFrontProfileSubsystem::Get(this);
 	const float W = DesignW, C = W * 0.5f;
 	const int32 N = ClashOpenCards.Num();
-	CAt(CBox(ZCHex(TEXT("0B1E4A")).CopyWithNewOpacity(0.96f), FLinearColor::Transparent, 0.f, 0.f), -400.f, -400.f, W + 800.f, 1880.f);
+	// M4 portrait: the 1080-tall sequence is centred in the column (OY), ribbon + Skip stay at the top
+	const float OY = FMath::Max(0.f, (DesignH - 1080.f) * 0.5f), TopY = 60.f;
+	CAt(CBox(ZCHex(TEXT("0B1E4A")).CopyWithNewOpacity(0.96f), FLinearColor::Transparent, 0.f, 0.f), 0.f, -400.f, W, DesignH + 800.f);
 	auto Advance = [this]()
 	{
 		if (ClashOpenIdx < ClashOpenCards.Num()) { ++ClashOpenIdx; UE_LOG(LogZoogi, Log, TEXT("CLASH chest open step %d/%d"), ClashOpenIdx, ClashOpenCards.Num()); bDirty = true; return; }
@@ -182,11 +184,11 @@ void UZoogiMenuRoot::BuildClashChestOpen()
 		if (Back != EZoogiClashPopup::None) OpenClashPopup(Back, Back == EZoogiClashPopup::BattlePass ? TEXT("BATTLE PASS") : TEXT("TROPHY ROAD"));
 		else { ClashPopup = EZoogiClashPopup::None; bDirty = true; }
 	};
-	if (UButton* Tap = CButton(CBox(FLinearColor::Transparent, FLinearColor::Transparent, 0.f, 0.f), Advance)) { Tap->SetStyle(ZCClearStyle()); CAt(Tap, -400.f, -400.f, W + 800.f, 1880.f); }
+	if (UButton* Tap = CButton(CBox(FLinearColor::Transparent, FLinearColor::Transparent, 0.f, 0.f), Advance)) { Tap->SetStyle(ZCClearStyle()); CAt(Tap, 0.f, -400.f, W, DesignH + 800.f); }
 	// purple ribbon with the chest name + grey Skip pill
-	CImg(ClashArt(TEXT("ribbon_open")), C - 360.f, 26.f, 720.f, 120.f);
-	CText(ClashOpenTitle, C - 280.f, 30.f, 560.f, 86.f, 44.f, FLinearColor::White);
-	if (ClashOpenIdx < N) CChunky(TEXT("Skip"), ZCHex(TEXT("8A94A6")), [this]() { ClashOpenIdx = ClashOpenCards.Num(); UE_LOG(LogZoogi, Log, TEXT("CLASH chest open skipped")); bDirty = true; }, W - 250.f, 46.f, 190.f, 74.f, 30.f);
+	CImg(ClashArt(TEXT("ribbon_open")), C - 360.f, TopY + 70.f, 720.f, 120.f);
+	CText(ClashOpenTitle, C - 280.f, TopY + 74.f, 560.f, 86.f, 44.f, FLinearColor::White);
+	if (ClashOpenIdx < N) CChunky(TEXT("Skip"), ZCHex(TEXT("8A94A6")), [this]() { ClashOpenIdx = ClashOpenCards.Num(); UE_LOG(LogZoogi, Log, TEXT("CLASH chest open skipped")); bDirty = true; }, W - 220.f, TopY - 20.f, 190.f, 74.f, 30.f);
 	auto ChestBadge = [this](float X, float Y, float S, int32 Left)
 	{
 		CImg(ClashArt(TEXT("chest_") + ClashOpenChest.ToString()), X, Y, S, S);
@@ -199,43 +201,43 @@ void UZoogiMenuRoot::BuildClashChestOpen()
 	if (ClashOpenIdx < 0)
 	{
 		// face-down card (navy with a gold star), tilted; the chest with its count; "Tap to continue"
-		UWidget* Back = CImg(ClashArt(TEXT("cardback")), C - 150.f, 240.f, 300.f, 375.f);
+		UWidget* Back = CImg(ClashArt(TEXT("cardback")), C - 150.f, 240.f + OY, 300.f, 375.f);
 		if (Back) { Back->SetRenderTransformPivot(FVector2D(0.5f, 0.5f)); Back->SetRenderTransformAngle(-8.f); }
-		ChestBadge(C - 120.f, 660.f, 240.f, N + (ClashOpenGold > 0 ? 1 : 0));
+		ChestBadge(C - 120.f, 660.f + OY, 240.f, N + (ClashOpenGold > 0 ? 1 : 0));
 	}
 	else if (ClashOpenIdx < N)
 	{
 		const FZoogiFrontReward& R = ClashOpenCards[ClashOpenIdx];
 		const int32 Rar = ZCRarity(R.Id);
-		UWidget* Ray = CImg(ClashArt(TEXT("rays")), C - 380.f, 140.f, 760.f, 760.f, 0.f, false, ZCLighten(ZCRarityColor(Rar), 0.3f));
+		UWidget* Ray = CImg(ClashArt(TEXT("rays")), C - 380.f, 140.f + OY, 760.f, 760.f, 0.f, false, ZCLighten(ZCRarityColor(Rar), 0.3f));
 		if (Ray) { Ray->SetRenderTransformPivot(FVector2D(0.5f, 0.5f)); ClashRaysW = Ray; }
-		CCard(R.Id, C - 140.f, 190.f, 280.f, 350.f, false, FString::Printf(TEXT("x%d"), R.Amount));
-		CText(ZCCardName(R.Id), C - 500.f, 552.f, 1000.f, 70.f, 54.f, FLinearColor::White);
-		CText(UZoogiFrontProfileSubsystem::RarityName(Rar), C - 400.f, 620.f, 800.f, 44.f, 32.f, ZCRarityLabel(Rar), 1, 4.f);
+		CCard(R.Id, C - 140.f, 190.f + OY, 280.f, 350.f, false, FString::Printf(TEXT("x%d"), R.Amount));
+		CText(ZCCardName(R.Id), C - 500.f, 552.f + OY, 1000.f, 70.f, 54.f, FLinearColor::White);
+		CText(UZoogiFrontProfileSubsystem::RarityName(Rar), C - 400.f, 620.f + OY, 800.f, 44.f, 32.f, ZCRarityLabel(Rar), 1, 4.f);
 		const int32 Have = FP ? FP->Copies(R.Id) : R.Amount;
 		int32 Into = 0, Need = 1, I0 = 0, N0 = 1;
 		const int32 Lv = UZoogiFrontProfileSubsystem::CardLevel(Have, Into, Need);
 		const int32 Lv0 = UZoogiFrontProfileSubsystem::CardLevel(FMath::Max(1, Have - R.Amount), I0, N0);
-		CText(FString::Printf(TEXT("Level %d"), Lv), C - 440.f, 680.f, 160.f, 56.f, 30.f, ZCGold, 2, 4.f);
-		CBar(C - 260.f, 684.f, 520.f, 50.f, float(Into) / FMath::Max(1, Need), ZCGreen, FString::Printf(TEXT("%d/%d"), Into, Need), 24.f);
+		CText(FString::Printf(TEXT("Level %d"), Lv), C - 440.f, 680.f + OY, 160.f, 56.f, 30.f, ZCGold, 2, 4.f);
+		CBar(C - 260.f, 684.f + OY, 520.f, 50.f, float(Into) / FMath::Max(1, Need), ZCGreen, FString::Printf(TEXT("%d/%d"), Into, Need), 24.f);
 		if (Lv > Lv0)
 		{
-			CImg(ClashArt(TEXT("chevron")), C + 276.f, 674.f, 64.f, 64.f);
-			CText(TEXT("LEVEL UP!"), C + 344.f, 680.f, 220.f, 56.f, 28.f, ZCGreen, 0, 4.f);
+			CImg(ClashArt(TEXT("chevron")), C + 276.f, 674.f + OY, 64.f, 64.f);
+			CText(TEXT("LEVEL UP!"), C - 200.f, 744.f + OY, 400.f, 50.f, 30.f, ZCGreen, 1, 4.f);
 		}
-		ChestBadge(80.f, 760.f, 170.f, N - 1 - ClashOpenIdx + (ClashOpenGold > 0 ? 1 : 0));
+		ChestBadge(80.f, 800.f + OY, 170.f, N - 1 - ClashOpenIdx + (ClashOpenGold > 0 ? 1 : 0));
 	}
 	else
 	{
 		// gold "Rewards" ribbon over the grid; a tap goes back
-		CImg(ClashArt(TEXT("ribbon_section")), C - 330.f, 170.f, 660.f, 110.f);
-		CText(TEXT("Rewards"), C - 250.f, 174.f, 500.f, 84.f, 46.f, FLinearColor::White);
-		const int32 Cells = N + (ClashOpenGold > 0 ? 1 : 0), Cols = FMath::Min(6, FMath::Max(1, Cells));
+		CImg(ClashArt(TEXT("ribbon_section")), C - 330.f, 170.f + OY, 660.f, 110.f);
+		CText(TEXT("Rewards"), C - 250.f, 174.f + OY, 500.f, 84.f, 46.f, FLinearColor::White);
+		const int32 Cells = N + (ClashOpenGold > 0 ? 1 : 0), Cols = FMath::Min(5, FMath::Max(1, Cells));
 		const float CW = 170.f, CH = 212.f, G = 22.f;
 		for (int32 i = 0; i < Cells; ++i)
 		{
 			const int32 RowN = FMath::Min(Cols, Cells - (i / Cols) * Cols);
-			const float X = C - (RowN * (CW + G) - G) * 0.5f + (i % Cols) * (CW + G), Y = 320.f + (i / Cols) * (CH + 30.f);
+			const float X = C - (RowN * (CW + G) - G) * 0.5f + (i % Cols) * (CW + G), Y = 320.f + OY + (i / Cols) * (CH + 30.f);
 			if (i < N) CCard(ClashOpenCards[i].Id, X, Y, CW, CH, false, FString::Printf(TEXT("x%d"), ClashOpenCards[i].Amount));
 			else
 			{
@@ -244,29 +246,31 @@ void UZoogiMenuRoot::BuildClashChestOpen()
 				CText(FString::Printf(TEXT("+%s"), *ZCNum(ClashOpenGold)), X, Y + CH - 62.f, CW, 50.f, 30.f, ZCGold);
 			}
 		}
-		if (Cells == 0) CText(TEXT("No unlocked cards to give."), C - 400.f, 420.f, 800.f, 50.f, 28.f, ZCSoft, 1, 3.f);
+		if (Cells == 0) CText(TEXT("No unlocked cards to give."), C - 400.f, 420.f + OY, 800.f, 50.f, 28.f, ZCSoft, 1, 3.f);
 	}
-	CText(TEXT("Tap to continue"), C - 400.f, 960.f, 800.f, 56.f, 34.f, FLinearColor::White, 1, 4.f);
+	CText(TEXT("Tap to continue"), C - 400.f, FMath::Max(960.f + OY, ClashNavY() - 40.f), 800.f, 56.f, 34.f, FLinearColor::White, 1, 4.f);
 }
 
 FVector2D UZoogiMenuRoot::ClashPopupSize(EZoogiClashPopup P) const
 {
+	// M4 portrait: everything fits the 1080 column (BuildClashPopup also clamps to DesignW - 48)
+	const float Full = DesignW - 48.f, Tall = ClashNavY() - 150.f;
 	switch (P)
 	{
 	case EZoogiClashPopup::Deal: return FVector2D(900.f, 800.f);
 	case EZoogiClashPopup::Chest: return FVector2D(900.f, 780.f);
 	case EZoogiClashPopup::Gold: return FVector2D(820.f, 660.f);
-	case EZoogiClashPopup::Rewards: return FVector2D(1100.f, 840.f);
+	case EZoogiClashPopup::Rewards: return FVector2D(Full, 900.f);
 	case EZoogiClashPopup::Card: return FVector2D(1000.f, 720.f);
 	case EZoogiClashPopup::MatchResult: return FVector2D(900.f, 800.f);
 	case EZoogiClashPopup::ChestSlot: return FVector2D(880.f, 720.f);
 	case EZoogiClashPopup::Arenas:
 	case EZoogiClashPopup::TrophyRoad:
-	case EZoogiClashPopup::BattlePass: return FVector2D(FMath::Min(1560.f, DesignW - 120.f), 950.f);
+	case EZoogiClashPopup::BattlePass: return FVector2D(Full, Tall);
 	case EZoogiClashPopup::PremiumUnlock: return FVector2D(860.f, 620.f);
-	case EZoogiClashPopup::Profile:
-	case EZoogiClashPopup::Settings: return FVector2D(FMath::Min(1500.f, DesignW - 120.f), 930.f);
-	case EZoogiClashPopup::BattleLog: return FVector2D(FMath::Min(1400.f, DesignW - 120.f), 900.f);
+	case EZoogiClashPopup::Profile: return FVector2D(Full, 1360.f);
+	case EZoogiClashPopup::Settings: return FVector2D(Full, 1380.f);
+	case EZoogiClashPopup::BattleLog: return FVector2D(Full, Tall);
 	case EZoogiClashPopup::ChangeNickname: return FVector2D(880.f, 520.f);
 	case EZoogiClashPopup::GemPack: return FVector2D(820.f, 640.f);
 	default: return FVector2D(980.f, 640.f);
@@ -280,7 +284,7 @@ void UZoogiMenuRoot::BuildClashChestSlots(float Y)
 	const float C = DesignW * 0.5f;
 	for (int32 i = 0; i < 3; ++i)
 	{
-		const float SW = 176.f, SH = 108.f, SX = C - (SW * 1.5f + 20.f) + i * (SW + 20.f);
+		const float SW = 316.f, SH = 140.f, SX = C - (SW * 1.5f + 24.f) + i * (SW + 24.f); // M4 portrait: 3 wide slots
 		const FZoogiFrontChestSlot ChestS = FP && FP->Data().Chests.IsValidIndex(i) ? FP->Data().Chests[i] : FZoogiFrontChestSlot();
 		const bool bHas = !ChestS.Type.IsNone();
 		const bool bReady = bHas && FP->IsReady(i);
@@ -289,22 +293,22 @@ void UZoogiMenuRoot::BuildClashChestSlots(float Y)
 		{
 			// empty slot (#1F3A6B, grey chest silhouette, "Win a battle"): no response, like the demo
 			CPlate(SX, Y, SW, SH, ZCSlot, 16.f, 4.f, false);
-			CImg(ClashArt(TEXT("chest")), SX + SW * 0.5f - 34.f, Y + 6.f, 68.f, 68.f, 0.f, false, FLinearColor(0.32f, 0.38f, 0.5f, 0.55f));
-			CText(TEXT("Win a battle"), SX + 6.f, Y + SH - 38.f, SW - 12.f, 32.f, 19.f, ZCMuted, 1, 3.f);
+			CImg(ClashArt(TEXT("chest")), SX + SW * 0.5f - 46.f, Y + 6.f, 92.f, 92.f, 0.f, false, FLinearColor(0.32f, 0.38f, 0.5f, 0.55f));
+			CText(TEXT("Win a battle"), SX + 6.f, Y + SH - 40.f, SW - 12.f, 34.f, 22.f, ZCMuted, 1, 3.f);
 			continue;
 		}
 		UCanvasPanel* Grp = CGroupBegin();
 		CPlate(0.f, 0.f, SW, SH, bReady ? ZCHex(TEXT("2E9A3C")) : ZCSlot, 16.f, 4.f, true);
 		{
-			CImg(ClashArt(TEXT("chest_") + ChestS.Type.ToString()), SW * 0.5f - 36.f, 2.f, 72.f, 72.f);
-			if (bReady) CText(TEXT("OPEN!"), 4.f, SH - 38.f, SW - 8.f, 34.f, 24.f, ZCYellow);
+			CImg(ClashArt(TEXT("chest_") + ChestS.Type.ToString()), SW * 0.5f - 48.f, 2.f, 96.f, 96.f);
+			if (bReady) CText(TEXT("OPEN!"), 4.f, SH - 40.f, SW - 8.f, 36.f, 28.f, ZCYellow);
 			else if (bUnlocking)
 			{
 				const int32 Idx = i;
 				TWeakObjectPtr<const UZoogiFrontProfileSubsystem> WFP(FP);
-				CLive([WFP, Idx]() { const UZoogiFrontProfileSubsystem* F = WFP.Get(); return F ? ZCDur(F->SecondsLeft(Idx)) : FString(); }, 4.f, SH - 36.f, SW - 8.f, 32.f, 22.f, ZCGold);
+				CLive([WFP, Idx]() { const UZoogiFrontProfileSubsystem* F = WFP.Get(); return F ? ZCDur(F->SecondsLeft(Idx)) : FString(); }, 4.f, SH - 40.f, SW - 8.f, 36.f, 26.f, ZCGold);
 			}
-			else CText(TEXT("TAP TO UNLOCK"), 4.f, SH - 34.f, SW - 8.f, 30.f, 16.f, FLinearColor::White, 1, 3.f);
+			else CText(TEXT("TAP TO UNLOCK"), 4.f, SH - 38.f, SW - 8.f, 32.f, 21.f, FLinearColor::White, 1, 3.f);
 		}
 		CGroupEnd();
 		CAt(CButton(Grp, [this, i]() { ClashTapChestSlot(i); }), SX, Y, SW, SH);
@@ -319,7 +323,7 @@ void UZoogiMenuRoot::BuildClashShopTab()
 	if (!FP) return;
 	FP->EnsureDeals();
 	const FZoogiFrontProfileData& D = FP->Data();
-	const float W = DesignW, C = W * 0.5f, TopY = 104.f, ViewH = 944.f - TopY;
+	const float W = DesignW, C = W * 0.5f, TopY = 110.f, ViewH = ClashNavY() - TopY;
 	if (UScrollBox* Old = ClashScrollW.Get()) if (ClashScrollKey == 0 && ClashPendingScroll < 0.f) ClashScrollOffset = Old->GetScrollOffset();
 	ClashScrollKey = 0;
 
@@ -397,7 +401,7 @@ void UZoogiMenuRoot::BuildClashShopTab()
 	CText(TEXT("Random cards and gold"), C - 400.f, Y + 100.f, 800.f, 40.f, 26.f, FLinearColor::White, 1, 3.f);
 	{
 		const TArray<FZoogiFrontChestDef>& Defs = UZoogiFrontProfileSubsystem::ChestDefs();
-		const float TW = 340.f, TH = 440.f, Gap = 34.f, X0 = C - (TW * Defs.Num() + Gap * (Defs.Num() - 1)) * 0.5f, Y0 = Y + 170.f;
+		const float TW = 310.f, TH = 440.f, Gap = 24.f, X0 = C - (TW * Defs.Num() + Gap * (Defs.Num() - 1)) * 0.5f, Y0 = Y + 170.f;
 		for (int32 i = 0; i < Defs.Num(); ++i)
 		{
 			const FZoogiFrontChestDef& Def = Defs[i];
@@ -429,7 +433,7 @@ void UZoogiMenuRoot::BuildClashShopTab()
 	CSection(TEXT("GOLD"), Y);
 	{
 		const TArray<UZoogiFrontProfileSubsystem::FGoldPack>& Packs = UZoogiFrontProfileSubsystem::GoldPacks();
-		const float TW = 340.f, TH = 380.f, Gap = 34.f, X0 = C - (TW * Packs.Num() + Gap * (Packs.Num() - 1)) * 0.5f, Y0 = Y + 140.f;
+		const float TW = 310.f, TH = 380.f, Gap = 24.f, X0 = C - (TW * Packs.Num() + Gap * (Packs.Num() - 1)) * 0.5f, Y0 = Y + 140.f;
 		for (int32 i = 0; i < Packs.Num(); ++i)
 		{
 			const bool bCan = FP->Gems() >= Packs[i].Gems;
@@ -453,7 +457,7 @@ void UZoogiMenuRoot::BuildClashShopTab()
 	CSection(TEXT("GEMS"), Y);
 	{
 		const TArray<UZoogiFrontProfileSubsystem::FGemPack>& Packs = UZoogiFrontProfileSubsystem::GemPacks();
-		const float TW = 340.f, TH = 360.f, Gap = 34.f, X0 = C - (TW * 3.f + Gap * 2.f) * 0.5f, Y0 = Y + 140.f;
+		const float TW = 310.f, TH = 360.f, Gap = 24.f, X0 = C - (TW * 3.f + Gap * 2.f) * 0.5f, Y0 = Y + 140.f;
 		for (int32 i = 0; i < Packs.Num(); ++i)
 		{
 			UCanvasPanel* T = CGroupBegin();
@@ -471,8 +475,8 @@ void UZoogiMenuRoot::BuildClashShopTab()
 			if (*Packs[i].Tag) Tag(TX + TW + 10.f, TY - 16.f, Packs[i].Tag, i == 5 ? ZCHex(TEXT("2E9A3C")) : ZCXRed);
 		}
 		const float GY = Y0 + FMath::DivideAndRoundUp(Packs.Num(), 3) * (TH + Gap);
-		CText(TEXT("Gem packs are real-money purchases: they need the store backend. Nothing is charged or granted here."), C - 640.f, GY, 1280.f, 40.f, 20.f, ZCSoft, 1, 3.f);
-		Y = GY + 80.f;
+		CText(TEXT("Gem packs are real-money purchases: they need the store backend. Nothing is charged or granted here."), C - 480.f, GY, 960.f, 64.f, 20.f, ZCSoft, 1, 3.f, true);
+		Y = GY + 100.f;
 	}
 	CGroupEnd();
 
@@ -500,7 +504,7 @@ void UZoogiMenuRoot::BuildClashCardsTab()
 	const TCHAR* Subs[] = { TEXT("DECKS"), TEXT("COLLECTION"), TEXT("EMOTES") };
 	for (int32 k = 0; k < 3; ++k)
 	{
-		const float BW = 290.f, BH = 78.f, BX = C - (BW * 1.5f + 20.f) + k * (BW + 20.f);
+		const float BW = 316.f, BH = 80.f, BX = C - (BW * 1.5f + 24.f) + k * (BW + 24.f);
 		CChunky(Subs[k], ClashCardsSub == k ? ZCYellow : ZCBlueDeep, [this, k]()
 		{
 			if (ClashCardsSub != k) { ClashCardsSub = k; ClashScrollOffset = 0.f; ClashPendingScroll = -1.f; ClashScrollKey = -1; UE_LOG(LogZoogi, Log, TEXT("CLASH cards sub %d"), k); }
@@ -517,7 +521,8 @@ void UZoogiMenuRoot::BuildClashCardsTab()
 		const int32 Active = FP->Data().ActiveDeck;
 		const int32 View = ClashDeckView < 0 ? Active : FMath::Clamp(ClashDeckView, 0, 2);
 		const TArray<FName> Deck = FP->Deck(View);
-		const float LX = 48.f, LY = 210.f, LW = FMath::Min(820.f, W * 0.46f), LH = 720.f;
+		// M4 portrait: deck panel across the column, owned cards to add below it
+		const float LX = 24.f, LY = 214.f, LW = W - 48.f, LH = 940.f;
 		CGoldPanel(LX, LY, LW, LH, ZCPanel, 26.f);
 		for (int32 d = 0; d < 3; ++d)
 			CChunky(FString::Printf(TEXT("DECK %d"), d + 1), d == View ? ZCYellow : ZCBlueDeep, [this, d]() { ClashDeckView = d; bDirty = true; }, LX + 24.f + d * 162.f, LY + 22.f, 150.f, 72.f, 26.f);
@@ -525,7 +530,7 @@ void UZoogiMenuRoot::BuildClashCardsTab()
 		else CChunky(TEXT("USE THIS DECK"), ZCGreen, [this, View]() { if (UZoogiFrontProfileSubsystem* F = UZoogiFrontProfileSubsystem::Get(this)) { F->SetActiveDeck(View); UE_LOG(LogZoogi, Log, TEXT("CLASH active deck %d"), View + 1); } bDirty = true; },
 			LX + LW - 24.f - 250.f, LY + 22.f, 250.f, 72.f, 24.f);
 		CText(FString::Printf(TEXT("%d/%d CARDS"), Deck.Num(), UZoogiFrontProfileSubsystem::DeckSize), LX + 24.f, LY + 104.f, 300.f, 36.f, 24.f, Deck.Num() == UZoogiFrontProfileSubsystem::DeckSize ? ZCGold : FLinearColor::White, 0, 3.f);
-		CText(Deck.Num() < UZoogiFrontProfileSubsystem::DeckSize ? TEXT("Add cards from the right (short decks are topped up)") : TEXT("Tap a card to take it out (max 2 copies)"),
+		CText(Deck.Num() < UZoogiFrontProfileSubsystem::DeckSize ? TEXT("Add cards from below (short decks are topped up)") : TEXT("Tap a card to take it out (max 2 copies)"),
 			LX + 300.f, LY + 104.f, LW - 324.f, 36.f, 17.f, ZCSoft, 2, 2.f);
 		const float Gap = 14.f, SW = (LW - 48.f - Gap * 4.f) / 5.f, SH = FMath::Min(SW * 1.25f, (LH - 160.f - Gap * 2.f - 20.f) / 3.f), GX = LX + 24.f, GY = LY + 150.f;
 		const float CW = FMath::Min(SW, SH / 1.25f);
@@ -555,10 +560,17 @@ void UZoogiMenuRoot::BuildClashCardsTab()
 			}
 		}
 		// owned cards to add
-		const float RX = LX + LW + 32.f, RW = W - 48.f - RX, RY = 214.f;
+		const float RX = LX, RW = LW, RY = LY + LH + 18.f;
 		CText(TEXT("TAP A CARD TO ADD IT"), RX, RY, RW, 40.f, 28.f, FLinearColor::White);
-		const float CG = 16.f, CardW = 150.f, CardH = 188.f;
-		const int32 Cols = FMath::Max(1, FMath::FloorToInt((RW + CG) / (CardW + CG)));
+		// cards shrink (more columns) when the owned list would run under the nav
+		const float CG = 16.f, Avail = ClashNavY() - (RY + 60.f) - 56.f;
+		float CardW = 154.f, CardH = 192.f;
+		int32 Cols = FMath::Max(1, FMath::FloorToInt((RW + CG) / (CardW + CG)));
+		while (CardW > 96.f && FMath::DivideAndRoundUp(FMath::Max(1, Owned.Num()), Cols) * (CardH + CG + 4.f) > Avail)
+		{
+			CardW -= 8.f; CardH = CardW * 1.25f;
+			Cols = FMath::Max(1, FMath::FloorToInt((RW + CG) / (CardW + CG)));
+		}
 		const float RX0 = RX + (RW - (Cols * (CardW + CG) - CG)) * 0.5f;
 		for (int32 i = 0; i < Owned.Num(); ++i)
 		{
@@ -591,7 +603,7 @@ void UZoogiMenuRoot::BuildClashCardsTab()
 	if (ClashCardsSub == 1)
 	{
 		// ---- Collection: owned grid (level + copies bar), then LOCKED CARDS; tap = detail popover
-		const float TopY = 210.f, ViewH = 944.f - TopY;
+		const float TopY = 214.f, ViewH = ClashNavY() - TopY;
 		if (UScrollBox* Old = ClashScrollW.Get()) if (ClashScrollKey == 1 && ClashPendingScroll < 0.f) ClashScrollOffset = Old->GetScrollOffset();
 		ClashScrollKey = 1;
 		UCanvasPanel* G = CGroupBegin();
