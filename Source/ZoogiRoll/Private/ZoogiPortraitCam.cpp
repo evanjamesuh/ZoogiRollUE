@@ -7,16 +7,16 @@
 namespace
 {
 	TAutoConsoleVariable<int32> CVarPortrait(TEXT("zoogi.Cam.Portrait"), 1, TEXT("Portrait camera framing on narrow (aspect < 1) screens: capped vertical FOV, width-keeping boom, HUD-safe band."));
-	TAutoConsoleVariable<float> CVarSafeTop(TEXT("zoogi.Cam.SafeTop"), 0.12f, TEXT("Portrait: top screen fraction kept clear of the play focus (HUD)."));
+	TAutoConsoleVariable<float> CVarSafeTop(TEXT("zoogi.Cam.SafeTop"), 0.05f, TEXT("Portrait: top screen fraction kept clear of the play focus (portrait = HUD-hidden play: show-HUD / turn-score pill / ZOOM controls; 0.12 with a full HUD)."));
 	TAutoConsoleVariable<float> CVarSafeTopMin(TEXT("zoogi.Cam.SafeTopMin"), 0.05f, TEXT("Portrait: the top band never shrinks below this (HUD-hidden controls live in the top ~5%)."));
 	int32 GModeOverride = -1;
 	TAutoConsoleVariable<int32> CVarAim(TEXT("zoogi.Cam.PortraitAim"), 1, TEXT("Portrait aim / rest framing from behind the shooter looking up the arena (0 = width-keeping pull-back only)."));
-	TAutoConsoleVariable<float> CVarAimPitch(TEXT("zoogi.Cam.PortraitAimPitch"), 45.f, TEXT("Portrait aim / rest framing: camera pitch (deg)."));
+	TAutoConsoleVariable<float> CVarAimPitch(TEXT("zoogi.Cam.PortraitAimPitch"), 48.f, TEXT("Portrait aim / rest framing: camera pitch (deg)."));
 	TAutoConsoleVariable<float> CVarAimAhead(TEXT("zoogi.Cam.PortraitAimAhead"), 0.5f, TEXT("Portrait aim framing: look point from the shooter toward the aim point / arena centre (fraction)."));
 	TAutoConsoleVariable<float> CVarRestAhead(TEXT("zoogi.Cam.PortraitRestAhead"), 0.4f, TEXT("Portrait Draw / Awaken framing: look point from the shooter toward the arena centre (fraction)."));
 	TAutoConsoleVariable<float> CVarAimWidth(TEXT("zoogi.Cam.PortraitAimWidth"), 1.4f, TEXT("Portrait aim framing: ground width at the look point, times the play radius."));
 	TAutoConsoleVariable<float> CVarShooterMargin(TEXT("zoogi.Cam.PortraitShooterMargin"), 0.06f, TEXT("Portrait aim framing: the shooter stays this far (normalised) inside the safe band."));
-	TAutoConsoleVariable<float> CVarSafeBottom(TEXT("zoogi.Cam.SafeBottom"), 0.22f, TEXT("Portrait: bottom screen fraction kept clear of the play focus (card hand)."));
+	TAutoConsoleVariable<float> CVarSafeBottom(TEXT("zoogi.Cam.SafeBottom"), 0.10f, TEXT("Portrait: bottom screen fraction kept clear of the play focus (HUD-hidden play: thumb / drag-aim zone; 0.22 with the card hand up)."));
 	TAutoConsoleVariable<float> CVarVFovMax(TEXT("zoogi.Cam.PortraitVFovMax"), 78.f, TEXT("Portrait: vertical FOV cap (deg)."));
 	TAutoConsoleVariable<float> CVarBoomMax(TEXT("zoogi.Cam.PortraitBoomMax"), 2.6f, TEXT("Portrait: cap on the width-keeping boom pull-back."));
 	TAutoConsoleVariable<float> CVarCourtMargin(TEXT("zoogi.Cam.CourtMargin"), 0.94f, TEXT("Portrait: whole-court views keep the court inside this fraction of the half-width."));

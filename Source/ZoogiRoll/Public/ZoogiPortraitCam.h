@@ -1,7 +1,7 @@
 // Portrait (vertical phone, 9:16 .. 9:20) camera framing helpers (Oct 17). The match camera's FOVs were tuned as horizontal
 // FOVs on a 16:9 screen; on a narrow screen the engine keeps the horizontal FOV (AspectRatio_MaintainXFOV), so the vertical
 // FOV balloons (80 deg h -> ~118 deg v at 9:18). Here: cap the vertical FOV, pull the boom back so the same width still fits
-// at the pivot, keep the play focus inside the HUD-safe middle band (top ~12% HUD, bottom ~22% card hand), and fit whole-court
+// at the pivot, keep the play focus inside the safe middle band (portrait is HUD-hidden play: top 5% controls, bottom 10% thumb zone; cvars), and fit whole-court
 // views (court / Frozen Ring 2) inside that band. Everything is a no-op on landscape screens.
 #pragma once
 
@@ -13,9 +13,9 @@ namespace ZoogiPortrait
 {
 	/** zoogi.Cam.Portrait (1): portrait adaptation on narrow screens. */
 	ZOOGIROLL_API bool Enabled();
-	/** zoogi.Cam.SafeTop (0.12): screen fraction at the top kept clear of the play focus (portrait HUD). */
+	/** zoogi.Cam.SafeTop (0.05, HUD-hidden play; 0.12 with a full HUD): top screen fraction kept clear of the play focus. */
 	ZOOGIROLL_API float SafeTop();
-	/** zoogi.Cam.SafeBottom (0.22): screen fraction at the bottom kept clear (card hand). */
+	/** zoogi.Cam.SafeBottom (0.10, HUD-hidden thumb zone; 0.22 with the card hand up): bottom screen fraction kept clear. */
 	ZOOGIROLL_API float SafeBottom();
 	/** zoogi.Cam.PortraitVFovMax (78): vertical FOV cap on portrait screens. */
 	ZOOGIROLL_API float VFovMax();
@@ -53,7 +53,7 @@ namespace ZoogiPortrait
 	ZOOGIROLL_API float FitPointsDist(TArrayView<const FVector> Pts, const FVector& Pivot, float Yaw, float Pitch, float HFov, float Aspect, float Top, float Bottom, float YMargin, float MinDist, float MaxDist);
 
 	/** Portrait aim / rest framing (Evan's tablet build): from behind the shooter on its pad, looking up the arena along the
-	 *  screen's long axis. zoogi.Cam.PortraitAim (1) on/off, .PortraitAimPitch (45), .PortraitAimAhead (0.5: look point from the
+	 *  screen's long axis. zoogi.Cam.PortraitAim (1) on/off, .PortraitAimPitch (48), .PortraitAimAhead (0.5: look point from the
 	 *  shooter toward the aim point / arena centre), .PortraitRestAhead (0.4, Draw / Awaken), .PortraitAimWidth (1.4: ground width
 	 *  at the look point, x the play radius), .PortraitShooterMargin (0.06: shooter this far inside the band's bottom edge). */
 	ZOOGIROLL_API bool AimFraming();

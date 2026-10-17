@@ -654,8 +654,8 @@ bool AZoogiPlayerController::ZoomStageLive(const AZoogiGameMode* G)
 	return G && G->IsHumanAiming() && ((G->Stage == EZoogiStage::Battle && G->IsAimStep()) || (G->Stage == EZoogiStage::Awaken && !G->bAwakenDone));
 }
 
-// Default zoom anchor height (screen fraction from the top): landscape 0.45; portrait the HUD-safe band's centre (0.45 at the
-// default 12% / 22% band), so key / button zoom closes in on the play focus, not on the card hand or the HUD.
+// Default zoom anchor height (screen fraction from the top): landscape 0.45; portrait the safe band's centre (0.475 at the
+// default 5% / 10% band), so key / button zoom closes in on the play focus, not under the top controls or the thumb zone.
 static float ZoomAnchorY(const APlayerController* PC)
 {
 	const float A = ZoogiPortrait::ViewAspect(PC);
