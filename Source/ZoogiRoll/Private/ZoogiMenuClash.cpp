@@ -734,8 +734,7 @@ void UZoogiMenuRoot::BuildClashBattleTab()
 		I->SetBrush(ZCImgBrush(ClashArt(TEXT("trophy")), 92.f, 92.f, 0.f, false));
 		if (UHorizontalBoxSlot* S = H->AddChildToHorizontalBox(I)) { S->SetVerticalAlignment(VAlign_Center); S->SetPadding(FMargin(0.f, 0.f, 14.f, 0.f)); }
 		UVerticalBox* V = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass());
-		V->AddChildToVerticalBox(CTxt(TEXT("TROPHY"), 32.f, FLinearColor::White, 4.f));
-		V->AddChildToVerticalBox(CTxt(TEXT("ROAD"), 32.f, FLinearColor::White, 4.f));
+		V->AddChildToVerticalBox(CTxt(TEXT("TROPHY ROAD"), 34.f, FLinearColor::White, 4.f));
 		const int32 A = UZoogiFrontProfileSubsystem::ArenaForTrophies(D.Trophies);
 		V->AddChildToVerticalBox(CTxt(FString::Printf(TEXT("Next: Arena %d at %d"), A + 2, UZoogiFrontProfileSubsystem::ArenaTrophies(A + 1)), 18.f, ZCSoft, 3.f));
 		if (UHorizontalBoxSlot* S = H->AddChildToHorizontalBox(V)) S->SetVerticalAlignment(VAlign_Center);
