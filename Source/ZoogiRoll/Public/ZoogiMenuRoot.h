@@ -24,6 +24,9 @@ struct FZoogiMenuAnimBtn { TWeakObjectPtr<UButton> B; TWeakObjectPtr<class UWidg
 
 enum class EZoogiMenuAnchor : uint8 { Left, Center, Right };
 
+/** clash-menu: popups of the Clash-style front end (ZoogiMenuClash.cpp). */
+enum class EZoogiClashPopup : uint8 { None, Profile, Settings, TrophyRoad, Info };
+
 UENUM()
 enum class EZoogiScreen : uint8
 {
@@ -164,4 +167,45 @@ private:
 	int32 TourStep = -1;
 	float TourClock = 0.f;
 	bool bTourSetupDone = false;
+
+	// ---- clash-menu (Oct 17, milestone 1): Clash-style front end. HOME = Battle tab of a 5-tab shell with the persistent
+	// top bar + bottom nav (ZoogiMenuClash.cpp). Default on; -ZoogiClassicMenu brings the previous HOME back.
+	bool ClashOn() const;
+	bool ClashHome() const { return ClashOn() && Top() == EZoogiScreen::Home && !bAnimeView; }
+	void SetClashTab(int32 T);
+	void OpenClashPopup(EZoogiClashPopup P, const FString& Title = FString(), const FString& Body = FString());
+	void BuildClashBackdrop();
+	void BuildClash();
+	void BuildClashTopBar();
+	void BuildClashBattleTab();
+	void BuildClashEmptyTab(const FString& Title, const FString& Sub, bool bDeckButton);
+	void BuildClashNav();
+	void BuildClashPopup();
+	void TickClash(float Dt);
+	void TickClashTour(float Dt);
+	// clash layout helpers: raw DesignW x 1080 canvas units
+	UWidget* CAt(UWidget* W, float X, float Y, float Wd, float Ht);
+	class UTextBlock* CTxt(const FString& S, float Size, const FLinearColor& C, float Outline = 4.f);
+	UWidget* CText(const FString& S, float X, float Y, float Wd, float Ht, float Size, const FLinearColor& C, int32 Justify = 1, float Outline = 4.f, bool bWrap = false);
+	UWidget* CImg(UTexture2D* Tex, float X, float Y, float Wd, float Ht, float Radius = 0.f, bool bCrop = false, const FLinearColor& Tint = FLinearColor::White);
+	class UBorder* CBox(const FLinearColor& Fill, const FLinearColor& Edge, float EdgeW, float R);
+	UWidget* CPlate(float X, float Y, float Wd, float Ht, const FLinearColor& Fill, float R, float EdgeW, bool bGloss);
+	UWidget* CGoldPanel(float X, float Y, float Wd, float Ht, const FLinearColor& Inner, float R = 22.f);
+	UButton* CButton(UWidget* Content, TFunction<void()> Fn, bool bPrimary = false);
+	UCanvasPanel* CGroupBegin();
+	void CGroupEnd();
+	UWidget* CChunkyW(UWidget* Inner, const FLinearColor& Face, TFunction<void()> Fn, float X, float Y, float Wd, float Ht, bool bPrimary = false, float R = -1.f);
+	UWidget* CChunky(const FString& Label, const FLinearColor& Face, TFunction<void()> Fn, float X, float Y, float Wd, float Ht, float FontSize, UTexture2D* Icon = nullptr, bool bPrimary = false);
+	UWidget* CBar(float X, float Y, float Wd, float Ht, float Frac, const FLinearColor& Fill, const FString& Text, float FontSize);
+	UWidget* CDot(float X, float Y, float S, const FString& Txt = FString());
+	/** Procedurally rasterized clash-menu art (icons, ribbon, backdrop), cached in ArtCache under "clash:<key>". */
+	UTexture2D* ClashArt(const FString& Key);
+	int32 ClashTab = 2;           // 0 Shop, 1 Cards, 2 Battle (default), 3 Clan, 4 Leaderboard
+	int32 ClashBuiltTab = -1;
+	EZoogiClashPopup ClashPopup = EZoogiClashPopup::None;
+	float ClashPopupT0 = 0.f;
+	FString ClashInfoTitle, ClashInfoBody;
+	TWeakObjectPtr<UWidget> ClashPopupW, ClashPopupScrim;
+	TArray<UCanvasPanel*> ClashCanvasStack;
+	FString ClashTourDir; int32 ClashTourStep = -1; float ClashTourClock = 0.f; bool bClashTourSetup = false;
 };

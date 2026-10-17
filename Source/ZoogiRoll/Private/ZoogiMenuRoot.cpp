@@ -178,6 +178,7 @@ void UZoogiMenuRoot::MarkDirty()
 	Stack.Reset();
 	Stack.Add(EZoogiScreen::Home);
 	bModal = false;
+	ClashTab = 2; ClashPopup = EZoogiClashPopup::None; // clash-menu: back on the Battle tab after a match
 	bDirty = true;
 }
 
@@ -205,6 +206,8 @@ void UZoogiMenuRoot::PopToHome()
 void UZoogiMenuRoot::HandleBack()
 {
 	if (bModal) { bModal = false; bDirty = true; return; }
+	if (ClashHome() && ClashPopup != EZoogiClashPopup::None) { ClashPopup = EZoogiClashPopup::None; bDirty = true; return; } // clash-menu
+	if (ClashHome() && ClashTab != 2) { SetClashTab(2); return; }
 	if (!DeckPreview.IsNone()) { DeckPreview = NAME_None; bDirty = true; return; }
 	if (bAnimeView)
 	{
@@ -244,6 +247,7 @@ void UZoogiMenuRoot::Refresh(float DeltaSeconds)
 		Rebuild();
 	}
 	TickAnims(DeltaSeconds);
+	if (ClashOn()) TickClash(DeltaSeconds);
 }
 
 // ---------------------------------------------------------------------------------------------------------- art
@@ -544,8 +548,9 @@ void UZoogiMenuRoot::Rebuild()
 	}
 	// Evan 9:28/9:37 AM CT: HOME uses the same opaque Meadow art backdrop as PLAY (covers the live menu-map preview).
 	const bool bLiveMap = false;
-	UObject* BgRes = (EnsureBackdrop() && BackdropTexture) ? (UObject*)BackdropTexture.Get() : bLiveMap ? nullptr : (UObject*)Art(Bg);
-	if (BgRes)
+	UObject* BgRes = ClashHome() ? nullptr : (EnsureBackdrop() && BackdropTexture) ? (UObject*)BackdropTexture.Get() : bLiveMap ? nullptr : (UObject*)Art(Bg);
+	if (ClashHome()) BuildClashBackdrop(); // clash-menu: own sky-blue backdrop, no navy wash
+	else if (BgRes)
 	{
 		UScaleBox* Fill = WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass());
 		Fill->SetStretch(EStretch::ScaleToFill);
@@ -560,7 +565,7 @@ void UZoogiMenuRoot::Rebuild()
 		if (UOverlaySlot* S = Root->AddChildToOverlay(Fill)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); }
 	}
 	UBorder* Wash = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
-	Wash->SetBrushColor(FLinearColor(0.02f, 0.08f, 0.35f, bLiveMap ? 0.25f : 0.55f));
+	Wash->SetBrushColor(FLinearColor(0.02f, 0.08f, 0.35f, ClashHome() ? 0.f : bLiveMap ? 0.25f : 0.55f));
 	Wash->SetVisibility(ESlateVisibility::HitTestInvisible);
 	if (UOverlaySlot* S = Root->AddChildToOverlay(Wash)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); }
 
@@ -580,7 +585,7 @@ void UZoogiMenuRoot::Rebuild()
 	if (bAnimeView) { BuildAnimeView(); return; }
 	switch (Top())
 	{
-	case EZoogiScreen::Home: BuildHome(); break;
+	case EZoogiScreen::Home: if (ClashOn()) BuildClash(); else BuildHome(); break;
 	case EZoogiScreen::Play: BuildPlay(); break;
 	case EZoogiScreen::ZoogiSelect: BuildZoogiSelect(); break;
 	case EZoogiScreen::Powers: BuildPowers(); break;
