@@ -302,6 +302,15 @@ void UZoogiFramedHUDWidget::RouteTray(AZoogiGameMode* G, float s)
 		return;
 	}
 	const ZoogiFramed::FLayout& L = ZoogiFramed::Current();
+	if (L.bPortrait && !AW->ShowsAwaken() && !AW->ShowsCards())
+	{
+		// portrait play (HUD hidden): the aim / artifact info panel would float over the full-screen arena - keep it out of
+		// the way (collapsed to a point at the bottom centre, so it can't catch drags either); the top strip carries the prompt
+		AW->SetRenderTransformPivot(FVector2D(0.5f, 1.f));
+		AW->SetRenderTransform(FWidgetTransform(FVector2D::ZeroVector, FVector2D(0.001f, 0.001f), FVector2D::ZeroVector, 0.f));
+		bTrayScaled = true;
+		return;
+	}
 	const float Avail = (L.Viewport.Y - L.Safe.Bottom - L.Tray.Min.Y - 6.f * L.U) * s; // v2: no prompt bar in the tray
 	float Need = 1.f;
 	if (AW->ShowsAwaken()) Need = FMath::Max(Need, 466.f);
