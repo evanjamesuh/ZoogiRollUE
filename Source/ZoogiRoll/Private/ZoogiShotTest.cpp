@@ -216,6 +216,10 @@ void AZoogiShotTestDriver::BuildCases()
 	Add(ZoogiShotTest::ECaseKind::Portrait, TEXT("Portrait_Framing_Court_Ring2_SafeBand"), EZoogiShotType::Custom, EZoogiShotOutput::MainView);
 	Add(ZoogiShotTest::ECaseKind::AimView, TEXT("AimView_BehindZoogi_FollowsAim"), EZoogiShotType::Custom, EZoogiShotOutput::MainView);
 	Add(ZoogiShotTest::ECaseKind::LevelEnd, TEXT("LevelEnd"), EZoogiShotType::TopDownImpact, EZoogiShotOutput::MainView);
+	// -ZoogiShotTestOnly=<substring>: a quick run of the matching cases (LevelEnd kept so the run ends normally)
+	FString Only;
+	if (FParse::Value(FCommandLine::Get(), TEXT("ZoogiShotTestOnly="), Only) && !Only.IsEmpty())
+		Cases.RemoveAll([&Only](const ZoogiShotTest::FCase& C) { return C.Kind != ZoogiShotTest::ECaseKind::LevelEnd && !C.Name.Contains(Only); });
 }
 
 // ------------------------------------------------------------------ overlay (debug only, not ZoogiHUD)
@@ -1059,13 +1063,14 @@ void AZoogiShotTestDriver::StartAimView()
 	AZoogiBall* S = G ? G->GetActiveBall() : nullptr;
 	bAimView = true; bAimViewDone = !(PC && S); bAimViewSeen = true;
 	AimIdx = -1; AimT = 0.f; AimHoldT = 0.f; AimSamples = AimBadYaw = AimBadY = AimBadX = AimBadArrow = 0;
-	AimMaxYawErr = AimMaxYErr = AimMaxXErr = 0.f; AimEngineY = -1.f; AimReturnT = -1.f;
+	AimMaxYawErr = AimMaxYErr = AimMaxXErr = AimMaxHErr = 0.f; AimEngineY = AimHorizonGot = -1.f; AimReturnT = -1.f;
 	CaseMid = 1e6f;
 	if (bAimViewDone) return;
 	AimYaw0 = S->AimYaw; bAimFreeAim0 = G->bFreeAim; AimFreePoint0 = G->FreeAimPoint;
 	PC->bAimViewForce = true;
 	UE_LOG(LogZoogi, Log, TEXT("ZOOGI SHOTTEST   aim view: P%d aim yaw %.1f, pitch %.0f boom %.0f screen y %.2f yaw follow %.2f s, view aspect %.3f"),
 		S->PlayerIndex + 1, AimYaw0, ZoogiAimView::Pitch(), ZoogiAimView::Boom(), ZoogiAimView::ScreenY(), ZoogiAimView::YawTime(), ZoogiFramed::ViewAspect(PC));
+	UE_LOG(LogZoogi, Log, TEXT("ZOOGI SHOTTEST   aim view: pitch cvar %.1f (0 = auto, horizon at %.2f of the view from the top)"), ZoogiAimView::Pitch(), ZoogiAimView::HorizonY());
 }
 
 void AZoogiShotTestDriver::TickAimView(float Dt)
@@ -1095,6 +1100,10 @@ void AZoogiShotTestDriver::TickAimView(float Dt)
 				FVector2D PS, PT;
 				const bool bS = ZoogiAimView::Project(CL, CR, HF, A, SL, PS);
 				const bool bT = ZoogiAimView::Project(CL, CR, HF, A, SL + Dir * 300.f, PT);
+				FVector2D PH; // the horizon straight ahead (a point far out at the camera's height)
+				const bool bH = ZoogiAimView::Project(CL, CR, HF, A, FVector(CL.X, CL.Y, CL.Z) + FRotator(0.f, CR.Yaw, 0.f).Vector() * 1.0e6f, PH);
+				AimHorizonGot = bH ? (1.f - PH.Y) * 0.5f : -1.f;
+				if (ZoogiAimView::Pitch() <= 0.f) AimMaxHErr = FMath::Max(AimMaxHErr, bH ? FMath::Abs(AimHorizonGot - ZoogiAimView::HorizonY()) : 1.f);
 				const float YawErr = FMath::Abs(FRotator::NormalizeAxis(CR.Yaw - S->AimYaw));
 				const float YTop = (1.f - PS.Y) * 0.5f;
 				const float YErr = FMath::Abs(YTop - ZoogiAimView::ScreenY());
@@ -1106,8 +1115,8 @@ void AZoogiShotTestDriver::TickAimView(float Dt)
 				AimPitchGot = -CR.Pitch; AimBoomGot = FVector::Dist(CL, SL);
 				FVector2D Scr; int32 VX = 0, VY = 0; PC->GetViewportSize(VX, VY);
 				if (AimIdx == -1 && VY > 0 && PC->ProjectWorldLocationToScreen(SL, Scr)) AimEngineY = Scr.Y / VY;
-				UE_LOG(LogZoogi, Log, TEXT("ZOOGI SHOTTEST   aim view yaw #%d: aim %.1f cam %.1f (err %.2f) | Zoogi at x %.3f y %.3f of the view (want 0.5 / %.2f) | arrow tip x %.3f y %.3f | pitch %.1f boom %.0f fov %.1f"),
-					AimIdx + 1, S->AimYaw, CR.Yaw, YawErr, 0.5f + PS.X * 0.5f, YTop, ZoogiAimView::ScreenY(), 0.5f + PT.X * 0.5f, (1.f - PT.Y) * 0.5f, AimPitchGot, AimBoomGot, HF);
+				UE_LOG(LogZoogi, Log, TEXT("ZOOGI SHOTTEST   aim view yaw #%d: aim %.1f cam %.1f (err %.2f) | Zoogi at x %.3f y %.3f of the view (want 0.5 / %.2f) | arrow tip x %.3f y %.3f | pitch %.1f boom %.0f fov %.1f | horizon at %.3f from the top"),
+					AimIdx + 1, S->AimYaw, CR.Yaw, YawErr, 0.5f + PS.X * 0.5f, YTop, ZoogiAimView::ScreenY(), 0.5f + PT.X * 0.5f, (1.f - PT.Y) * 0.5f, AimPitchGot, AimBoomGot, HF, AimHorizonGot);
 				if (AimIdx == -1) Shot(Cases[CaseIdx].Name + TEXT("_aim"));
 				if (AimIdx == 3) Shot(Cases[CaseIdx].Name + TEXT("_aim_turned"));
 			}
@@ -1567,10 +1576,10 @@ void AZoogiShotTestDriver::Verify()
 		// The live aim view: behind the Zoogi along the arrow at every aim yaw (camera yaw within 3 deg once settled), the Zoogi
 		// at AimScreenY centred, the arrow straight up the screen, then back to the exact pre-case view.
 		const int32 Want = UE_ARRAY_COUNT(GAimYaws) + 1;
-		const bool bOK = bAimViewDone && bAimViewSeen && AimSamples == Want && AimBadYaw == 0 && AimBadY == 0 && AimBadX == 0 && AimBadArrow == 0 && AimReturnT >= 0.f && AimReturnT <= 9.f;
+		const bool bOK = bAimViewDone && bAimViewSeen && AimSamples == Want && AimBadYaw == 0 && AimBadY == 0 && AimBadX == 0 && AimBadArrow == 0 && AimMaxHErr <= 0.04f && AimReturnT >= 0.f && AimReturnT <= 9.f;
 		bPass &= bOK;
-		Extra.Add(FString::Printf(TEXT("aim view: active throughout %d | %d/%d aim yaws sampled | camera yaw off the aim yaw: max %.2f deg (need <= 3), %d bad | Zoogi height off %.2f: max %.3f (need <= 0.03), %d bad | off centre max %.3f (need <= 0.02), %d bad | arrow not straight up: %d | pitch %.1f boom %.0f | engine projection y %.3f | back at the pre-case view after %.2f s"),
-			bAimViewSeen, AimSamples, Want, AimMaxYawErr, AimBadYaw, ZoogiAimView::ScreenY(), AimMaxYErr, AimBadY, AimMaxXErr, AimBadX, AimBadArrow, AimPitchGot, AimBoomGot, AimEngineY, AimReturnT));
+		Extra.Add(FString::Printf(TEXT("aim view: active throughout %d | %d/%d aim yaws sampled | camera yaw off the aim yaw: max %.2f deg (need <= 3), %d bad | Zoogi height off %.2f: max %.3f (need <= 0.03), %d bad | off centre max %.3f (need <= 0.02), %d bad | arrow not straight up: %d | pitch %.1f boom %.0f | horizon at %.3f (want %.2f, max off %.3f, need <= 0.04) | engine projection y %.3f | back at the pre-case view after %.2f s"),
+			bAimViewSeen, AimSamples, Want, AimMaxYawErr, AimBadYaw, ZoogiAimView::ScreenY(), AimMaxYErr, AimBadY, AimMaxXErr, AimBadX, AimBadArrow, AimPitchGot, AimBoomGot, AimHorizonGot, ZoogiAimView::HorizonY(), AimMaxHErr, AimEngineY, AimReturnT));
 	}
 	if (FinishLog.Num()) Extra.Add(TEXT("ends ") + FString::Join(FinishLog, TEXT(",")));
 	if (AZoogiGameMode* G = GM()) Extra.Add(FString::Printf(TEXT("stage %d phase %d"), (int32)G->Stage, (int32)G->Phase));

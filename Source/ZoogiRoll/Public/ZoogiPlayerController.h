@@ -148,6 +148,12 @@ public:
 	/** Aim view live this frame (behind the acting Zoogi along its aim arrow; AimViewYaw = the aim heading it follows). */
 	bool bAimViewActive = false;
 	float AimViewYaw = 0.f;
+	/** Aim view: the camera is still turning toward the committed aim yaw (Gameplay & UI: screen-to-floor picks taken while
+	 *  this is true move with the camera; rotate the arrow from screen deltas instead). */
+	bool IsAimViewOrbiting() const { return bAimViewActive && (FMath::Abs(FRotator::NormalizeAxis(AimViewYaw - Yaw)) > 0.05f || FMath::Abs(YawVel) > 0.5f); }
+	/** Aim view: the camera's current (smoothed) yaw; it follows the active ball's AimYaw and nothing else. */
+	float GetAimViewCameraYaw() const { return Yaw; }
+	float AimViewLogT = 0.f; float AimViewPitchUsed = 0.f, AimViewElevUsed = 0.f;
 	/** ShotTest hook: run the aim view outside the aim step (Awaken test stage); the rest of the game is untouched. */
 	bool bAimViewForce = false;
 protected:
