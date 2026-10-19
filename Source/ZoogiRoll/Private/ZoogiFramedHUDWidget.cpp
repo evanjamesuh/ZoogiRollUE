@@ -34,6 +34,7 @@
 #include "ZoogiArtifacts.h"
 #include "ZoogiCardHandWidget.h"
 #include "ZoogiArtifactComponent.h"
+#include "ZoogiHudFeed.h"
 #include "UnrealEngine.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
@@ -333,6 +334,7 @@ void UZoogiFramedHUDWidget::NativeTick(const FGeometry& Geo, float Dt)
 	const float s = L.Viewport.X > 0.f ? Geo.GetLocalSize().X / L.Viewport.X : 1.f;
 	LocalScale = s;
 	RouteTray(G, s);
+	ZoogiHudFeed::Update(GetOwningPlayer(), bActive && !bPaused, Dt); // hud-feed: PIP panel glue (Game Camera hook / dev stub)
 	if (!bActive)
 	{
 		if (bPaused) SetPaused(false);
@@ -773,6 +775,7 @@ int32 UZoogiFramedHUDWidget::PaintBack(const FGeometry& Geo, FSlateWindowElement
 		}
 		(void)HL;
 	}
+	ZoogiHudFeed::Paint(Geo, Out, Ly + 6, L, s, Time); // hud-feed: PIP live camera panel in the square slot right of the deck (landscape only)
 	return Ly + 10;
 }
 

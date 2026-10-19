@@ -10,6 +10,7 @@
 class UWorld;
 class APlayerController;
 class AZoogiGameMode;
+class UTextureRenderTarget2D;
 
 /** Oct 17 battle view mode hook (for Game Camera): (bHudHidden, bPortrait). Fired after the orientation actually switched
  *  (viewport aspect matches the requested mode, or a 1.5 s timeout when the platform / fullscreen window can't turn), and
@@ -118,4 +119,19 @@ namespace ZoogiFramed
 	ZOOGIROLL_API void TickShots(UWorld* World);
 	/** Projection / input-mapping self-check, logged as "FRAMED aimcheck" (framed runs only). */
 	ZOOGIROLL_API void TickAimCheck(UWorld* World);
+
+	// ---- Oct 17 hud-feed (Evan): picture-in-picture live camera panel in the empty square stone slot right of the DECK
+	// (bottom-left of the hud-v3 overlay). Landscape HUD only: never drawn in portrait / HUD-hidden play. Game Camera owns the
+	// feed camera and its render target; the HUD only draws the texture handed in here (null = idle panel). The glue in
+	// ZoogiHudFeed.cpp feeds it from AZoogiPlayerController::GetGameplayPipTexture() (looked up by name, no compile dependency).
+	/** HUD-side setter: the live feed (null = idle panel). Weakly held; the owner keeps it alive. */
+	ZOOGIROLL_API void SetHudFeedTexture(UTextureRenderTarget2D* Texture);
+	ZOOGIROLL_API UTextureRenderTarget2D* GetHudFeedTexture();
+	/** bHudFeedActive: the panel shows the texture only while active (inactive = idle panel even with a texture). */
+	ZOOGIROLL_API void SetHudFeedActive(bool bActive);
+	ZOOGIROLL_API bool IsHudFeedActive();
+	/** The panel slot in hud-v3 target px (1376x768 design): a 162x162 square centred on the stone slab right of the deck. */
+	constexpr float HudFeedSlotX0 = 180.f, HudFeedSlotY0 = 590.f, HudFeedSlotSize = 162.f;
+	/** Slot rect in viewport px for layout L (scales with L.T like the overlay). False = no panel (invalid, portrait / HUD hidden). */
+	ZOOGIROLL_API bool HudFeedSlot(const FLayout& L, FBox2D& OutRect);
 }
