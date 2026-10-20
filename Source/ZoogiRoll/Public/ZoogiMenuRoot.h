@@ -199,6 +199,7 @@ private:
 	class UBorder* CBox(const FLinearColor& Fill, const FLinearColor& Edge, float EdgeW, float R);
 	UWidget* CPlate(float X, float Y, float Wd, float Ht, const FLinearColor& Fill, float R, float EdgeW, bool bGloss);
 	UWidget* CGoldPanel(float X, float Y, float Wd, float Ht, const FLinearColor& Inner, float R = 22.f);
+	UWidget* CStoneLayer(float Wd, float Ht, float R, float Strength = 1.f); // fantasy reskin: carved-stone grain over a fill
 	UButton* CButton(UWidget* Content, TFunction<void()> Fn, bool bPrimary = false);
 	UCanvasPanel* CGroupBegin();
 	void CGroupEnd();

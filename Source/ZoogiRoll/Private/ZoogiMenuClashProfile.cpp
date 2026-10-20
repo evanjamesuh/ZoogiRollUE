@@ -52,24 +52,8 @@ namespace
 // ------------------------------------------------------------------------------------------------ shared helpers
 UWidget* UZoogiMenuRoot::CPopupBody(float X, float Y, float Wd, float Ht, float R)
 {
-	// DETAILED PASS 2 popup body: border #1B4FA8 (dark outline), light-blue fill #4A9CF0 -> #2D74D6, soft top sheen
-	UOverlay* O = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass());
-	auto Layer = [&](UWidget* W, const FMargin& Pad, EVerticalAlignment V = VAlign_Fill)
-	{
-		if (UOverlaySlot* S = O->AddChildToOverlay(W)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(V); S->SetPadding(Pad); }
-	};
-	Layer(CBox(ZCPopEdge, ZCDark, 5.f, R), FMargin(0.f));
-	Layer(CBox(ZCPopTop, FLinearColor::Transparent, 0.f, FMath::Max(4.f, R - 9.f)), FMargin(10.f));
-	UImage* Grad = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
-	Grad->SetBrush(ZCImgBrush(ClashArt(TEXT("vgrad")), Wd, Ht, FMath::Max(4.f, R - 9.f), false));
-	Grad->SetColorAndOpacity(ZCPopBot);
-	Layer(Grad, FMargin(10.f));
-	USizeBox* GB = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
-	GB->SetHeightOverride(FMath::Clamp(Ht * 0.12f, 10.f, 60.f));
-	GB->AddChild(CBox(FLinearColor(1.f, 1.f, 1.f, 0.12f), FLinearColor::Transparent, 0.f, FMath::Max(4.f, R - 12.f)));
-	Layer(GB, FMargin(16.f, 14.f, 16.f, 0.f), VAlign_Top);
-	O->SetVisibility(ESlateVisibility::HitTestInvisible);
-	return CAt(O, X, Y, Wd, Ht);
+	// fantasy reskin: popups share the gold-rimmed carved-stone frame of the panels (was light blue #4A9CF0 -> #2D74D6)
+	return CGoldPanel(X, Y, Wd, Ht, ZCPopBot, R);
 }
 
 UWidget* UZoogiMenuRoot::CTextIntl(const FString& S, float X, float Y, float Wd, float Ht, float Size, const FLinearColor& C)
@@ -198,7 +182,7 @@ void UZoogiMenuRoot::BuildClashReplay()
 {
 	const FZoogiReplay* R = ClashReplay.Get();
 	const float W = DesignW, C = W * 0.5f;
-	CAt(CBox(ZCHex(TEXT("08163A")).CopyWithNewOpacity(0.97f), FLinearColor::Transparent, 0.f, 0.f), 0.f, -400.f, W, DesignH + 800.f);
+	CAt(CBox(ZCHex(TEXT("0B0C0F")).CopyWithNewOpacity(0.97f), FLinearColor::Transparent, 0.f, 0.f), 0.f, -400.f, W, DesignH + 800.f);
 	if (UButton* Block = CButton(CBox(FLinearColor::Transparent, FLinearColor::Transparent, 0.f, 0.f), []() {})) { Block->SetStyle(ZCClearStyle()); CAt(Block, 0.f, -400.f, W, DesignH + 800.f); } // eats taps behind
 	ClashReplayZW.Reset(); ClashReplayLW.Reset(); ClashReplayOW.Reset();
 	CChunky(TEXT("EXIT"), ZCXRed, [this]() { ClashReplay.Reset(); OpenClashPopup(EZoogiClashPopup::BattleLog); }, 30.f, 40.f, 200.f, 92.f, 36.f);
@@ -370,7 +354,7 @@ bool UZoogiMenuRoot::BuildClashProfilePopup(EZoogiClashPopup P, float PW, float 
 		{
 			const FZoogiFrontBattle& B = Log[i];
 			const float Y = i * (RowH + 12.f);
-			const FLinearColor RC = B.Outcome == 0 ? ZCHex(TEXT("2E9A3C")) : B.Outcome == 2 ? ZCHex(TEXT("6A7898")) : ZCHex(TEXT("C2362F"));
+			const FLinearColor RC = B.Outcome == 0 ? ZCHex(TEXT("2E9A3C")) : B.Outcome == 2 ? ZCHex(TEXT("6E6A62")) : ZCHex(TEXT("C2362F"));
 			CPlate(0.f, Y, ListW, RowH, ZCNavyDeep.CopyWithNewOpacity(0.85f), 18.f, 4.f, false);
 			CPlate(12.f, Y + 12.f, 150.f, RowH - 24.f, RC, 14.f, 4.f, true);
 			CText(B.Outcome == 0 ? TEXT("WIN") : B.Outcome == 1 ? TEXT("LOSS") : B.Outcome == 2 ? TEXT("DRAW") : TEXT("LEFT"), 12.f, Y + 12.f, 150.f, RowH - 24.f, 32.f, FLinearColor::White);
@@ -410,7 +394,7 @@ bool UZoogiMenuRoot::BuildClashProfilePopup(EZoogiClashPopup P, float PW, float 
 		Section(TEXT("PROFILE"), LX, 126.f, LW);
 		CAt(CBox(FLinearColor::White, ZCDark, 4.f, 14.f), LX, 176.f, LW - 230.f, 76.f);
 		CText(D.GuestName, LX + 20.f, 176.f, LW - 270.f, 46.f, 28.f, ZCNavyDeep, 0, 0.f);
-		CText(TEXT("#") + D.Tag, LX + 20.f, 218.f, LW - 270.f, 30.f, 19.f, ZCHex(TEXT("5B6B8C")), 0, 0.f);
+		CText(TEXT("#") + D.Tag, LX + 20.f, 218.f, LW - 270.f, 30.f, 19.f, ZCHex(TEXT("8A8478")), 0, 0.f);
 		CChunky(TEXT("Change"), ZCBlue, [this]() { ClashNickDraft.Reset(); ClashNickErr.Reset(); OpenClashPopup(EZoogiClashPopup::ChangeNickname); }, LX + LW - 214.f, 172.f, 214.f, 84.f, 28.f, ClashArt(TEXT("pencil")));
 		// ---- Sound: Master (gold), Sound Effects (blue), Music (green); drag the white knob
 		Section(TEXT("SOUND"), LX, 280.f, LW);

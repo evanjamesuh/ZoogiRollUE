@@ -114,7 +114,7 @@ bool UZoogiMenuRoot::BuildClashHomePopup(EZoogiClashPopup P, float PW, float PH)
 		for (int32 r = 0; r + 1 < Rows.Num(); ++r)
 		{
 			const bool bProg = Best >= Rows[r + 1].Trophies;
-			CAt(CBox(bProg ? ZCYellow : ZCHex(TEXT("5C76A8")), ZCDark, 3.f, 6.f), TX - 9.f, Centers[r], 18.f, Centers[r + 1] - Centers[r]);
+			CAt(CBox(bProg ? ZCYellow : ZCHex(TEXT("4A4D55")), ZCDark, 3.f, 6.f), TX - 9.f, Centers[r], 18.f, Centers[r + 1] - Centers[r]);
 		}
 		for (int32 r = 0; r < Rows.Num(); ++r)
 		{
@@ -126,7 +126,7 @@ bool UZoogiMenuRoot::BuildClashHomePopup(EZoogiClashPopup P, float PW, float PH)
 			{
 				// arena gate
 				const float GY = CY - GateH * 0.5f;
-				CGoldPanel(CardX, GY, CardW, GateH, bReached ? ZCRibBlue : ZCHex(TEXT("3B5A92")), 22.f);
+				CGoldPanel(CardX, GY, CardW, GateH, bReached ? ZCRibBlue : ZCHex(TEXT("3A3D45")), 22.f);
 				UTexture2D* Map = Art(FString(ZCArenaSlug(R.Arena)) + TEXT("_map"));
 				CImg(Map, CardX + 16.f, GY + 16.f, 210.f, GateH - 32.f, 10.f, true, bReached ? FLinearColor::White : FLinearColor(0.4f, 0.42f, 0.5f, 1.f));
 				CText(FString::Printf(TEXT("ARENA %d  -  %s"), R.Arena + 1, *ZoogiUtil::ArenaName((EZoogiArena)R.Arena).ToUpper()), CardX + 246.f, GY + 22.f, CardW - 270.f, 50.f, 28.f, FLinearColor::White, 0);
@@ -176,7 +176,7 @@ bool UZoogiMenuRoot::BuildClashHomePopup(EZoogiClashPopup P, float PW, float PH)
 		for (int32 t = 0; t <= MaxT; t += 100) { const bool bArena = t % 300 == 0; Marks.Add(t); Centers.Add(Y + (bArena ? ArenaH : SmallH) * 0.5f); Y += (bArena ? ArenaH : SmallH) + 14.f; }
 		const float ContentH = Y + 20.f;
 		for (int32 r = 0; r + 1 < Marks.Num(); ++r)
-			CAt(CBox(D.Trophies >= Marks[r + 1] ? ZCYellow : ZCHex(TEXT("5C76A8")), ZCDark, 3.f, 6.f), TX - 9.f, Centers[r], 18.f, Centers[r + 1] - Centers[r]);
+			CAt(CBox(D.Trophies >= Marks[r + 1] ? ZCYellow : ZCHex(TEXT("4A4D55")), ZCDark, 3.f, 6.f), TX - 9.f, Centers[r], 18.f, Centers[r + 1] - Centers[r]);
 		for (int32 r = 0; r < Marks.Num(); ++r)
 		{
 			const int32 T = Marks[r];
@@ -191,7 +191,7 @@ bool UZoogiMenuRoot::BuildClashHomePopup(EZoogiClashPopup P, float PW, float PH)
 				const int32 A = T / 300;
 				const float TY = CY - ArenaH * 0.5f;
 				UCanvasPanel* Tile = CGroupBegin();
-				CGoldPanel(0.f, 0.f, TileW, ArenaH, bOpen ? ZCRibBlue : ZCHex(TEXT("3B5A92")), 24.f);
+				CGoldPanel(0.f, 0.f, TileW, ArenaH, bOpen ? ZCRibBlue : ZCHex(TEXT("3A3D45")), 24.f);
 				if (bSel) CAt(CBox(FLinearColor::Transparent, ZCYellow, 6.f, 24.f), -4.f, -4.f, TileW + 8.f, ArenaH + 8.f);
 				CImg(Art(FString(ZCArenaSlug(A)) + TEXT("_map")), 18.f, 18.f, MapW, ArenaH - 36.f, 14.f, true, bOpen ? FLinearColor::White : FLinearColor(0.38f, 0.4f, 0.48f, 1.f));
 				if (!bOpen) CImg(ClashArt(TEXT("lock")), 18.f + MapW * 0.5f - 50.f, ArenaH * 0.5f - 50.f, 100.f, 100.f);
@@ -213,7 +213,7 @@ bool UZoogiMenuRoot::BuildClashHomePopup(EZoogiClashPopup P, float PW, float PH)
 				// locked marker tile between gates: tapping only selects it
 				const float TY = CY - SmallH * 0.5f;
 				UCanvasPanel* Tile = CGroupBegin();
-				CPlate(0.f, 0.f, TileW, SmallH, bOpen ? ZCRoadCard : ZCHex(TEXT("2B5BA6")), 18.f, 4.f, true);
+				CPlate(0.f, 0.f, TileW, SmallH, bOpen ? ZCRoadCard : ZCHex(TEXT("3A3D45")), 18.f, 4.f, true);
 				if (bSel) CAt(CBox(FLinearColor::Transparent, ZCYellow, 5.f, 18.f), -4.f, -4.f, TileW + 8.f, SmallH + 8.f);
 				CImg(ClashArt(TEXT("lock")), 24.f, SmallH * 0.5f - 32.f, 64.f, 64.f, 0.f, false, FLinearColor(0.72f, 0.75f, 0.82f, 1.f));
 				CText(FString::Printf(TEXT("%d TROPHIES"), T), 110.f, 0.f, TileW - 140.f, SmallH, 28.f, bOpen ? FLinearColor::White : ZCSoft, 0, 3.f);
@@ -272,7 +272,7 @@ bool UZoogiMenuRoot::BuildClashHomePopup(EZoogiClashPopup P, float PW, float PH)
 		for (int32 t = 1; t <= UZoogiFrontProfileSubsystem::PassTiers; ++t)
 		{
 			const float Y = 10.f + (t - 1) * (RowH + Gap), CY = Y + RowH * 0.5f;
-			if (t > 1) CAt(CBox(Level >= t ? ZCYellow : ZCHex(TEXT("5C76A8")), ZCDark, 3.f, 6.f), Mid - 9.f, CY - RowH - Gap, 18.f, RowH + Gap);
+			if (t > 1) CAt(CBox(Level >= t ? ZCYellow : ZCHex(TEXT("4A4D55")), ZCDark, 3.f, 6.f), Mid - 9.f, CY - RowH - Gap, 18.f, RowH + Gap);
 			for (int32 Side = 0; Side < 2; ++Side)
 			{
 				const bool bPrem = Side == 1;

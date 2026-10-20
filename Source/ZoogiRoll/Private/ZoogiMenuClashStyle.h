@@ -15,45 +15,45 @@
 namespace
 {
 	FLinearColor ZCHex(const TCHAR* H) { return FLinearColor::FromSRGBColor(FColor::FromHex(H)); }
-	// palette (Zoogi Roll's take on the chunky card-battler look)
-	const FLinearColor ZCDark = ZCHex(TEXT("14122B"));      // every outline
-	const FLinearColor ZCGold = ZCHex(TEXT("FFC531"));
-	const FLinearColor ZCGoldDeep = ZCHex(TEXT("B97A0E"));
+	// palette: fantasy reskin (carved stone panels, metallic gold rims, sapphire / arcane gem accents, parchment text)
+	const FLinearColor ZCDark = ZCHex(TEXT("0E0C0A"));      // every outline (fantasy reskin: warm near-black)
+	const FLinearColor ZCGold = ZCHex(TEXT("F2C14E"));       // metallic gold
+	const FLinearColor ZCGoldDeep = ZCHex(TEXT("8A5F1C"));
 	const FLinearColor ZCYellow = ZCHex(TEXT("FFD84A"));    // BATTLE gradient top (DETAILED PASS 1)
 	const FLinearColor ZCYellowBot = ZCHex(TEXT("F2A500")); // BATTLE gradient bottom
-	const FLinearColor ZCBlue = ZCHex(TEXT("3D8BF0"));
-	const FLinearColor ZCBlueDeep = ZCHex(TEXT("2559C4"));
-	const FLinearColor ZCNavy = ZCHex(TEXT("173A86"));
-	const FLinearColor ZCNavyDeep = ZCHex(TEXT("0F2A66"));
-	const FLinearColor ZCPanel = ZCHex(TEXT("2F6BD0"));
-	const FLinearColor ZCViolet = ZCHex(TEXT("6C3BD1"));
+	const FLinearColor ZCBlue = ZCHex(TEXT("2F7BF0"));       // sapphire buttons
+	const FLinearColor ZCBlueDeep = ZCHex(TEXT("1C4FC0"));
+	const FLinearColor ZCNavy = ZCHex(TEXT("34363D"));       // carved stone
+	const FLinearColor ZCNavyDeep = ZCHex(TEXT("1E2025"));   // deep stone
+	const FLinearColor ZCPanel = ZCHex(TEXT("3A3D45"));      // stone panel
+	const FLinearColor ZCViolet = ZCHex(TEXT("5B33B8"));     // arcane
 	const FLinearColor ZCGreen = ZCHex(TEXT("6BD84A"));     // green buttons #6BD84A -> #2F9E2A (DETAILED PASS 2)
 	const FLinearColor ZCRed = ZCHex(TEXT("E53935"));        // close button
-	const FLinearColor ZCSoft = ZCHex(TEXT("CFE3FF"));
-	const FLinearColor ZCMuted = ZCHex(TEXT("9DB4DA"));
+	const FLinearColor ZCSoft = ZCHex(TEXT("ECE3CC"));       // parchment
+	const FLinearColor ZCMuted = ZCHex(TEXT("ABA394"));
 	const FLinearColor ZCCyan = ZCHex(TEXT("53D8FF"));
 	// DETAILED PASS 1 style values
-	const FLinearColor ZCSlot = ZCHex(TEXT("1F3A6B"));       // chest slots
-	const FLinearColor ZCRoadCard = ZCHex(TEXT("2F7FE0"));   // Trophy Road cards
+	const FLinearColor ZCSlot = ZCHex(TEXT("2A2C32"));       // chest slots
+	const FLinearColor ZCRoadCard = ZCHex(TEXT("45484F"));   // Trophy Road cards
 	const FLinearColor ZCRibGold = ZCHex(TEXT("F5B942")), ZCRibGoldEdge = ZCHex(TEXT("5A3510")); // Trophy Road ribbon
 	const FLinearColor ZCRibPurple = ZCHex(TEXT("7B3FD0"));  // Battle Pass ribbon
-	const FLinearColor ZCRibBlue = ZCHex(TEXT("3B82D6"));    // Arenas ribbon
+	const FLinearColor ZCRibBlue = ZCHex(TEXT("2D5BC0"));    // Arenas ribbon
 	// DETAILED PASS 2 style values
 	const FLinearColor ZCGreenBot = ZCHex(TEXT("2F9E2A"));
 	const FLinearColor ZCGoldBtn = ZCHex(TEXT("FFD54A")), ZCGoldBtnBot = ZCHex(TEXT("F5A300")), ZCGoldBtnLip = ZCHex(TEXT("B86E00"));
-	const FLinearColor ZCPill = ZCHex(TEXT("0B2A5C"));       // top-bar currency pills (translucent)
+	const FLinearColor ZCPill = ZCHex(TEXT("15161A"));       // top-bar currency pills (translucent)
 	const FLinearColor ZCPlus = ZCHex(TEXT("4CD964"));       // green '+' squares
 	const FLinearColor ZCCoinC = ZCHex(TEXT("FFA726")), ZCGemC = ZCHex(TEXT("3FD6FF"));
-	const FLinearColor ZCPopTop = ZCHex(TEXT("4A9CF0")), ZCPopBot = ZCHex(TEXT("2D74D6")), ZCPopEdge = ZCHex(TEXT("1B4FA8")); // popup body
+	const FLinearColor ZCPopTop = ZCHex(TEXT("3C3F47")), ZCPopBot = ZCHex(TEXT("23252B")), ZCPopEdge = ZCHex(TEXT("8A6A2E")); // popup body
 	const FLinearColor ZCXRed = ZCHex(TEXT("E53E3E"));       // close X
 	const FLinearColor ZCSecTop = ZCHex(TEXT("FFC93C")), ZCSecBot = ZCHex(TEXT("E8960F")), ZCSecFold = ZCHex(TEXT("7A4300")); // section ribbons
 	const FLinearColor ZCPriceRed = ZCHex(TEXT("FF4D4D"));   // unaffordable price text
-	const FLinearColor ZCBoughtBg = ZCHex(TEXT("1F2D4D")), ZCBoughtCheck = ZCHex(TEXT("5BE35B")); // Purchased pill
+	const FLinearColor ZCBoughtBg = ZCHex(TEXT("24262C")), ZCBoughtCheck = ZCHex(TEXT("5BE35B")); // Purchased pill
 	const FLinearColor ZCEpicChest = ZCHex(TEXT("7B3FBF"));
 	const FLinearColor ZCOpenTop = ZCHex(TEXT("A24BF0")), ZCOpenBot = ZCHex(TEXT("7D2BD0")); // chest-opening ribbon
 	const FLinearColor ZCLinkBlue = ZCHex(TEXT("3EA0F0")), ZCLogoutRed = ZCHex(TEXT("E5483F"));
 	const FLinearColor ZCOlive = ZCHex(TEXT("B8A533"));      // replay: selected speed
-	const FLinearColor ZCNavyBtn = ZCHex(TEXT("1D3F7E"));
+	const FLinearColor ZCNavyBtn = ZCHex(TEXT("2B2E36"));
 	const FLinearColor ZCMaster = ZCHex(TEXT("FFC531")), ZCSfxBlue = ZCHex(TEXT("3D8BF0")), ZCMusicGreen = ZCHex(TEXT("4CD964"));
 
 	FLinearColor ZCLighten(const FLinearColor& C, float T) { return FMath::Lerp(C, FLinearColor::White, T).CopyWithNewOpacity(C.A); }
@@ -66,7 +66,9 @@ namespace
 		return N[FMath::Clamp(T, 0, 4)];
 	}
 
-	// ---- chunky font: the engine's own Roboto Black (Engine/Content/Slate/Fonts), thick dark outline
+	// ---- display font, thick dark outline. Fantasy reskin: Cinzel Black (SIL OFL, Content/Data/Fonts) for the carved-inscription
+	// look; falls back to the engine's own Roboto Black (Engine/Content/Slate/Fonts) when the file is missing
+	bool GZCCinzel = false;
 	TSharedPtr<const FCompositeFont> ZCComposite()
 	{
 		static TSharedPtr<const FCompositeFont> F;
@@ -74,7 +76,10 @@ namespace
 		if (!bTried)
 		{
 			bTried = true;
-			const FString P = FPaths::EngineContentDir() / TEXT("Slate/Fonts/Roboto-Black.ttf");
+			const FString Cinzel = FPaths::ProjectContentDir() / TEXT("Data/Fonts/Cinzel-Black.ttf");
+			const FString Roboto = FPaths::EngineContentDir() / TEXT("Slate/Fonts/Roboto-Black.ttf");
+			GZCCinzel = FPaths::FileExists(Cinzel);
+			const FString P = GZCCinzel ? Cinzel : Roboto;
 			if (FPaths::FileExists(P)) F = MakeShared<FStandaloneCompositeFont>(FName(TEXT("Black")), P, EFontHinting::Default, EFontLoadingPolicy::LazyLoad);
 		}
 		return F;
@@ -82,6 +87,7 @@ namespace
 	FSlateFontInfo ZCFont(float Size, float Outline)
 	{
 		TSharedPtr<const FCompositeFont> C = ZCComposite();
+		if (GZCCinzel) Size *= 0.86f; // Cinzel caps run wider than Roboto Black; keep labels inside their existing boxes
 		FSlateFontInfo F = C.IsValid() ? FSlateFontInfo(C, Size, FName(TEXT("Black"))) : FCoreStyle::GetDefaultFontStyle("Bold", Size);
 		F.OutlineSettings.OutlineSize = FMath::RoundToInt(Outline);
 		F.OutlineSettings.OutlineColor = ZCDark;

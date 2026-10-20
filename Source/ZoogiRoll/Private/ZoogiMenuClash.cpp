@@ -135,15 +135,35 @@ UBorder* UZoogiMenuRoot::CBox(const FLinearColor& Fill, const FLinearColor& Edge
 	return B;
 }
 
+UWidget* UZoogiMenuRoot::CStoneLayer(float Wd, float Ht, float R, float Strength)
+{
+	// fantasy reskin: carved-stone grain (light/dark alpha over whatever fill sits below), sampled 1:1 so it never stretches
+	UImage* I = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
+	FSlateBrush B = ZCImgBrush(ClashArt(TEXT("stone")), Wd, Ht, FMath::Max(0.f, R), false);
+	B.SetUVRegion(FBox2f(FVector2f(0.f, 0.f), FVector2f(FMath::Clamp(Wd / 1024.f, 0.05f, 1.f), FMath::Clamp(Ht / 1024.f, 0.05f, 1.f))));
+	I->SetBrush(B);
+	I->SetColorAndOpacity(FLinearColor(1.f, 1.f, 1.f, Strength));
+	I->SetVisibility(ESlateVisibility::HitTestInvisible);
+	return I;
+}
+
 UWidget* UZoogiMenuRoot::CPlate(float X, float Y, float Wd, float Ht, const FLinearColor& Fill, float R, float EdgeW, bool bGloss)
 {
+	// fantasy reskin: fill + stone grain + thin gold inlay inside the dark outline
 	UOverlay* O = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass());
-	if (UOverlaySlot* S = O->AddChildToOverlay(CBox(Fill, ZCDark, EdgeW, R))) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); }
+	auto Layer = [&](UWidget* W, float Pad)
+	{
+		if (UOverlaySlot* S = O->AddChildToOverlay(W)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); S->SetPadding(FMargin(Pad)); }
+	};
+	Layer(CBox(Fill, ZCDark, EdgeW, R), 0.f);
+	const bool bBig = Wd >= 48.f && Ht >= 40.f;
+	if (bBig && Fill.A > 0.5f) Layer(CStoneLayer(Wd - EdgeW * 2.f, Ht - EdgeW * 2.f, FMath::Max(2.f, R - EdgeW), 0.85f), EdgeW);
+	if (bBig) Layer(CBox(FLinearColor::Transparent, ZCGold.CopyWithNewOpacity(0.38f), 1.5f, FMath::Max(2.f, R - EdgeW - 1.f)), EdgeW + 1.f);
 	if (bGloss)
 	{
 		USizeBox* GB = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
 		GB->SetHeightOverride(FMath::Max(4.f, Ht * 0.4f));
-		GB->AddChild(CBox(FLinearColor(1.f, 1.f, 1.f, 0.16f), FLinearColor::Transparent, 0.f, FMath::Max(2.f, R - EdgeW)));
+		GB->AddChild(CBox(FLinearColor(1.f, 1.f, 1.f, 0.11f), FLinearColor::Transparent, 0.f, FMath::Max(2.f, R - EdgeW)));
 		if (UOverlaySlot* S = O->AddChildToOverlay(GB)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Top); S->SetPadding(FMargin(EdgeW + 4.f, EdgeW + 2.f, EdgeW + 4.f, 0.f)); }
 	}
 	O->SetVisibility(ESlateVisibility::HitTestInvisible);
@@ -152,18 +172,36 @@ UWidget* UZoogiMenuRoot::CPlate(float X, float Y, float Wd, float Ht, const FLin
 
 UWidget* UZoogiMenuRoot::CGoldPanel(float X, float Y, float Wd, float Ht, const FLinearColor& Inner, float R)
 {
-	// dark outline -> gold rim -> deep-gold inner line -> saturated inner fill with a top sheen
+	// fantasy reskin: dark outline -> metallic gold rim (bright top, deep bottom, bevel line) -> carved recess -> inner fill
+	// with stone grain, a gold inlay and a faint sheen; a gold-and-sapphire crest sits on the top rim of large panels
 	UOverlay* O = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass());
 	auto Layer = [&](UWidget* W, float Pad)
 	{
 		if (UOverlaySlot* S = O->AddChildToOverlay(W)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); S->SetPadding(FMargin(Pad)); }
 	};
-	Layer(CBox(ZCGold, ZCDark, 5.f, R), 0.f);
-	Layer(CBox(Inner, ZCGoldDeep, 3.f, FMath::Max(4.f, R - 9.f)), 9.f);
+	Layer(CBox(ZCHex(TEXT("FFE9A8")), ZCDark, 4.f, R), 0.f);
+	{
+		UImage* Grad = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
+		Grad->SetBrush(ZCImgBrush(ClashArt(TEXT("vgrad")), Wd, Ht, FMath::Max(3.f, R - 4.f), false));
+		Grad->SetColorAndOpacity(ZCGoldDeep);
+		Grad->SetVisibility(ESlateVisibility::HitTestInvisible);
+		Layer(Grad, 4.f);
+	}
+	Layer(CBox(FLinearColor::Transparent, ZCHex(TEXT("FFF4CF")).CopyWithNewOpacity(0.55f), 1.5f, FMath::Max(3.f, R - 5.f)), 5.f);
+	Layer(CBox(Inner, ZCDark, 3.f, FMath::Max(4.f, R - 9.f)), 9.f);
+	Layer(CStoneLayer(Wd - 24.f, Ht - 24.f, FMath::Max(3.f, R - 12.f)), 12.f);
+	Layer(CBox(FLinearColor::Transparent, ZCGold.CopyWithNewOpacity(0.3f), 1.5f, FMath::Max(3.f, R - 13.f)), 13.f);
 	USizeBox* GB = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
 	GB->SetHeightOverride(FMath::Clamp(Ht * 0.22f, 10.f, 70.f));
-	GB->AddChild(CBox(FLinearColor(1.f, 1.f, 1.f, 0.13f), FLinearColor::Transparent, 0.f, FMath::Max(4.f, R - 12.f)));
+	GB->AddChild(CBox(FLinearColor(1.f, 1.f, 1.f, 0.04f), FLinearColor::Transparent, 0.f, FMath::Max(4.f, R - 12.f)));
 	if (UOverlaySlot* S = O->AddChildToOverlay(GB)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Top); S->SetPadding(FMargin(15.f, 13.f, 15.f, 0.f)); }
+	if (Wd >= 280.f && Ht >= 120.f)
+	{
+		UImage* Crest = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
+		Crest->SetBrush(ZCImgBrush(ClashArt(TEXT("crest")), 84.f, 34.f, 0.f, false));
+		Crest->SetVisibility(ESlateVisibility::HitTestInvisible);
+		if (UOverlaySlot* S = O->AddChildToOverlay(Crest)) { S->SetHorizontalAlignment(HAlign_Center); S->SetVerticalAlignment(VAlign_Top); }
+	}
 	O->SetVisibility(ESlateVisibility::HitTestInvisible);
 	return CAt(O, X, Y, Wd, Ht);
 }
@@ -199,26 +237,37 @@ void UZoogiMenuRoot::CGroupEnd()
 
 UWidget* UZoogiMenuRoot::CChunkyVisual(UWidget* Inner, const FLinearColor& Face, float X, float Y, float Wd, float Ht, float R)
 {
-	// chunky 3D plate: dark outline, darker lip along the bottom, bright face, white gloss on the upper face
+	// chunky 3D plate in a metallic gold bezel (fantasy reskin): dark outline, gold rim (bright top -> deep bottom), darker
+	// lip along the bottom, bright face, white gloss on the upper face
 	const float Lip = FMath::Clamp(Ht * 0.11f, 5.f, 13.f);
 	if (R < 0.f) R = FMath::Min(22.f, Ht * 0.3f);
+	const float Rim = Ht >= 70.f ? 5.f : 3.f;
 	UOverlay* O = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass());
-	if (UOverlaySlot* S = O->AddChildToOverlay(CBox(ZCLip(Face), ZCDark, 5.f, R))) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); }
-	if (UOverlaySlot* S = O->AddChildToOverlay(CBox(Face, FLinearColor::Transparent, 0.f, FMath::Max(3.f, R - 4.f)))) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); S->SetPadding(FMargin(5.f, 5.f, 5.f, 5.f + Lip)); }
+	if (UOverlaySlot* S = O->AddChildToOverlay(CBox(ZCHex(TEXT("FFE9A8")), ZCDark, 4.f, R))) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); }
+	{
+		UImage* RimGrad = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
+		RimGrad->SetBrush(ZCImgBrush(ClashArt(TEXT("vgrad")), Wd, Ht, FMath::Max(3.f, R - 4.f), false));
+		RimGrad->SetColorAndOpacity(ZCGoldDeep);
+		if (UOverlaySlot* S = O->AddChildToOverlay(RimGrad)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); S->SetPadding(FMargin(4.f)); }
+	}
+	const float In = 4.f + Rim; // face inset inside the bezel
+	R = FMath::Max(4.f, R - Rim);
+	if (UOverlaySlot* S = O->AddChildToOverlay(CBox(ZCLip(Face), ZCDark, 2.f, R))) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); S->SetPadding(FMargin(In)); }
+	if (UOverlaySlot* S = O->AddChildToOverlay(CBox(Face, FLinearColor::Transparent, 0.f, FMath::Max(3.f, R - 2.f)))) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); S->SetPadding(FMargin(In + 2.f, In + 2.f, In + 2.f, In + 2.f + Lip)); }
 	{
 		// vertical face gradient (BATTLE: #FFD84A -> #F2A500; other faces: face -> 18% darker)
 		UImage* Grad = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
 		FSlateBrush GBr = ZCImgBrush(ClashArt(TEXT("vgrad")), Wd, Ht, FMath::Max(3.f, R - 4.f), false);
 		Grad->SetBrush(GBr);
 		Grad->SetColorAndOpacity(ZCGradBottom(Face)); // BATTLE / gold / green per spec, other faces 18% darker
-		if (UOverlaySlot* S = O->AddChildToOverlay(Grad)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); S->SetPadding(FMargin(5.f, 5.f, 5.f, 5.f + Lip)); }
+		if (UOverlaySlot* S = O->AddChildToOverlay(Grad)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); S->SetPadding(FMargin(In + 2.f, In + 2.f, In + 2.f, In + 2.f + Lip)); }
 	}
 	USizeBox* GB = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass());
-	GB->SetHeightOverride(FMath::Max(4.f, (Ht - Lip - 10.f) * 0.42f));
-	GB->AddChild(CBox(FLinearColor(1.f, 1.f, 1.f, 0.30f), FLinearColor::Transparent, 0.f, FMath::Max(3.f, R - 8.f)));
-	if (UOverlaySlot* S = O->AddChildToOverlay(GB)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Top); S->SetPadding(FMargin(11.f, 8.f, 11.f, 0.f)); }
+	GB->SetHeightOverride(FMath::Max(4.f, (Ht - Lip - In * 2.f) * 0.42f));
+	GB->AddChild(CBox(FLinearColor(1.f, 1.f, 1.f, 0.08f + 0.24f * FMath::Clamp(Face.GetLuminance() * 2.5f, 0.f, 1.f)), FLinearColor::Transparent, 0.f, FMath::Max(3.f, R - 6.f)));
+	if (UOverlaySlot* S = O->AddChildToOverlay(GB)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Top); S->SetPadding(FMargin(In + 8.f, In + 4.f, In + 8.f, 0.f)); }
 	if (Inner)
-		if (UOverlaySlot* S = O->AddChildToOverlay(Inner)) { S->SetHorizontalAlignment(HAlign_Center); S->SetVerticalAlignment(VAlign_Center); S->SetPadding(FMargin(6.f, 4.f, 6.f, 4.f + Lip)); }
+		if (UOverlaySlot* S = O->AddChildToOverlay(Inner)) { S->SetHorizontalAlignment(HAlign_Center); S->SetVerticalAlignment(VAlign_Center); S->SetPadding(FMargin(In + 2.f, In, In + 2.f, In + Lip)); }
 	O->SetVisibility(ESlateVisibility::HitTestInvisible);
 	return CAt(O, X, Y, Wd, Ht);
 }
@@ -252,7 +301,7 @@ UWidget* UZoogiMenuRoot::CBar(float X, float Y, float Wd, float Ht, float Frac, 
 {
 	UOverlay* O = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass());
 	const float R = Ht * 0.5f;
-	if (UOverlaySlot* S = O->AddChildToOverlay(CBox(ZCNavyDeep, ZCDark, 4.f, R))) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); }
+	if (UOverlaySlot* S = O->AddChildToOverlay(CBox(ZCHex(TEXT("0B0C0F")), ZCGoldDeep, 4.f, R))) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); } // fantasy reskin: gold-rimmed groove
 	Frac = FMath::Clamp(Frac, 0.f, 1.f);
 	if (Frac > 0.001f)
 	{
@@ -347,8 +396,10 @@ UTexture2D* UZoogiMenuRoot::ClashArt(const FString& Key)
 	}
 	else if (Key == TEXT("level"))
 	{
-		S.Add(ZCPoly({ { 50, 4 }, { 90, 27 }, { 90, 73 }, { 50, 96 }, { 10, 73 }, { 10, 27 } }, ZCHex(TEXT("6FD3FF")), ZCHex(TEXT("1F62D8")), 5.f));
-		S.Add(ZCPoly({ { 50, 16 }, { 79, 33 }, { 79, 67 }, { 50, 84 }, { 21, 67 }, { 21, 33 } }, ZCHex(TEXT("3C8EF0")), ZCHex(TEXT("1A4CB8")), 2.5f, false));
+		// fantasy reskin: faceted sapphire set in a gold hex bezel
+		S.Add(ZCPoly({ { 50, 4 }, { 90, 27 }, { 90, 73 }, { 50, 96 }, { 10, 73 }, { 10, 27 } }, GoldA, GoldB, 5.f));
+		S.Add(ZCPoly({ { 50, 16 }, { 79, 33 }, { 79, 67 }, { 50, 84 }, { 21, 67 }, { 21, 33 } }, ZCHex(TEXT("7FC8FF")), ZCHex(TEXT("1640B0")), 2.5f));
+		S.Add(ZCPoly({ { 50, 16 }, { 79, 33 }, { 50, 50 }, { 21, 33 } }, FLinearColor(1.f, 1.f, 1.f, 0.28f), FLinearColor(1.f, 1.f, 1.f, 0.05f), 0.f, false));
 	}
 	else if (Key == TEXT("crown"))
 	{
@@ -363,7 +414,7 @@ UTexture2D* UZoogiMenuRoot::ClashArt(const FString& Key)
 	{
 		// ribbon (default blue), ribbon_gold (Trophy Road, dark-brown edges), ribbon_purple (Battle Pass), ribbon_blue (Arenas)
 		W = 768; H = 128; UW = 640.f; UH = 106.7f;
-		FLinearColor Base = ZCHex(TEXT("4A90EE")), Edge = ZCDark;
+		FLinearColor Base = ZCHex(TEXT("2D4FB8")), Edge = ZCGoldDeep; // fantasy reskin: sapphire banner with gold edges
 		if (Key == TEXT("ribbon_gold")) { Base = ZCRibGold; Edge = ZCRibGoldEdge; }
 		else if (Key == TEXT("ribbon_purple")) Base = ZCRibPurple;
 		else if (Key == TEXT("ribbon_blue")) Base = ZCRibBlue;
@@ -381,6 +432,68 @@ UTexture2D* UZoogiMenuRoot::ClashArt(const FString& Key)
 	else if (Key == TEXT("star"))
 	{
 		S.Add(ZCPoly({ { 50, 4 }, { 62, 34 }, { 95, 36 }, { 70, 57 }, { 79, 90 }, { 50, 72 }, { 21, 90 }, { 30, 57 }, { 5, 36 }, { 38, 34 } }, GoldA, GoldB, 5.f));
+	}
+	else if (Key == TEXT("crest"))
+	{
+		// fantasy reskin: gold winged crest with a sapphire diamond, sits on the top rim of gold panels
+		W = 168; H = 68; UW = 100.f; UH = 40.5f;
+		S.Add(ZCPoly({ { 6, 22 }, { 30, 12 }, { 42, 20 }, { 50, 4 }, { 58, 20 }, { 70, 12 }, { 94, 22 }, { 70, 30 }, { 58, 26 }, { 50, 38 }, { 42, 26 }, { 30, 30 } }, GoldA, GoldB, 2.5f));
+		S.Add(ZCPoly({ { 50, 10 }, { 58, 21 }, { 50, 33 }, { 42, 21 } }, ZCHex(TEXT("BFEAFF")), ZCHex(TEXT("1F5BD6")), 2.f));
+	}
+	else if (Key == TEXT("stone"))
+	{
+		// fantasy reskin: carved-stone grain as an overlay (white / black at low alpha), cracked into large worn blocks
+		ZoogiUIFx::FPixels P; P.W = P.H = 1024; P.Px.SetNumUninitialized(P.W * P.H);
+		auto Hash = [](int32 X, int32 Y) { uint32 Hs = (uint32)X * 374761393u + (uint32)Y * 668265263u; Hs = (Hs ^ (Hs >> 13)) * 1274126177u; return ((Hs ^ (Hs >> 16)) & 0xFFFF) / 65535.f; };
+		auto Noise = [&Hash](float X, float Y)
+		{
+			const int32 IX = FMath::FloorToInt(X), IY = FMath::FloorToInt(Y);
+			const float FX = X - IX, FY = Y - IY, SX = FX * FX * (3.f - 2.f * FX), SY = FY * FY * (3.f - 2.f * FY);
+			const float A = FMath::Lerp(Hash(IX, IY), Hash(IX + 1, IY), SX), B = FMath::Lerp(Hash(IX, IY + 1), Hash(IX + 1, IY + 1), SX);
+			return FMath::Lerp(A, B, SY) * 2.f - 1.f;
+		};
+		const float Cell = 260.f;
+		const FLinearColor Lite(1.f, 0.96f, 0.88f, 1.f);
+		for (int32 y = 0; y < P.H; ++y)
+			for (int32 x = 0; x < P.W; ++x)
+			{
+				const float N = Noise(x / 90.f, y / 90.f) * 0.5f + Noise(x / 26.f, y / 26.f) * 0.32f + Noise(x / 6.f, y / 6.f) * 0.18f;
+				// worn block seams: gap between the two nearest jittered cell centres (domain-warped so edges wander)
+				const float WX = x + Noise(x / 40.f + 7.f, y / 40.f) * 14.f, WY = y + Noise(x / 40.f, y / 40.f + 3.f) * 14.f;
+				const int32 CX = FMath::FloorToInt(WX / Cell), CY = FMath::FloorToInt(WY / Cell);
+				float D1 = 1e9f, D2 = 1e9f;
+				for (int32 j = -1; j <= 1; ++j)
+					for (int32 i = -1; i <= 1; ++i)
+					{
+						const float PX = (CX + i + 0.15f + Hash(CX + i, CY + j) * 0.7f) * Cell, PY = (CY + j + 0.15f + Hash(CY + j + 91, CX + i) * 0.7f) * Cell;
+						const float D = FMath::Sqrt(FMath::Square(WX - PX) + FMath::Square(WY - PY));
+						if (D < D1) { D2 = D1; D1 = D; } else if (D < D2) D2 = D;
+					}
+				const float Seam = (D2 - D1) * 0.5f;
+				FLinearColor C = N >= 0.f ? Lite.CopyWithNewOpacity(N * 0.13f) : FLinearColor(0.f, 0.f, 0.f, -N * 0.26f);
+				if (Seam < 1.6f) C = FLinearColor(0.f, 0.f, 0.f, 0.3f);
+				else if (Seam < 4.f) C = Lite.CopyWithNewOpacity(0.07f);
+				P.Px[y * P.W + x] = C.ToFColor(true);
+			}
+		UTexture2D* T = ZoogiUIFx::ToTexture(P);
+		ArtCache.Add(CacheKey, T);
+		return T;
+	}
+	else if (Key == TEXT("vignette"))
+	{
+		// fantasy reskin: darkens the arena art behind the menus (edges + a top band) so the stone panels read
+		ZoogiUIFx::FPixels P; P.W = 256; P.H = 512; P.Px.SetNumUninitialized(P.W * P.H);
+		for (int32 y = 0; y < P.H; ++y)
+			for (int32 x = 0; x < P.W; ++x)
+			{
+				const float U = (x + 0.5f) / P.W - 0.5f, V = (y + 0.5f) / P.H - 0.5f;
+				const float Rad = FMath::Sqrt(U * U * 1.6f + V * V);
+				const float A = FMath::Clamp(0.38f + Rad * 0.7f + FMath::Clamp(0.12f - (V + 0.5f), 0.f, 1.f) * 2.f, 0.f, 0.9f);
+				P.Px[y * P.W + x] = FLinearColor(0.012f, 0.01f, 0.02f, A).ToFColor(true);
+			}
+		UTexture2D* T = ZoogiUIFx::ToTexture(P);
+		ArtCache.Add(CacheKey, T);
+		return T;
 	}
 	else if (Key == TEXT("vgrad"))
 	{
@@ -619,7 +732,7 @@ UTexture2D* UZoogiMenuRoot::ClashArt(const FString& Key)
 				const float Line = FMath::Min(FMath::Min(U, 1.f - U), FMath::Min(V, 1.f - V));
 				C = FMath::Lerp(C, LineC, FMath::Clamp((0.04f - Line) * 40.f, 0.f, 0.85f));
 				const float Vig = FMath::Clamp(FVector2f((x - P.W * 0.5f) / P.W, (y - P.H * 0.62f) / P.H).Size() * 1.1f, 0.f, 1.f);
-				C = FMath::Lerp(C, ZCHex(TEXT("123A86")), Vig * Vig * 0.45f + FMath::Clamp(0.22f - T, 0.f, 0.22f) * 1.6f);
+				C = FMath::Lerp(C, ZCHex(TEXT("0B0C0F")), Vig * Vig * 0.45f + FMath::Clamp(0.22f - T, 0.f, 0.22f) * 1.6f);
 				P.Px[y * P.W + x] = C.ToFColor(true);
 			}
 		UTexture2D* T = ZoogiUIFx::ToTexture(P);
@@ -634,6 +747,30 @@ UTexture2D* UZoogiMenuRoot::ClashArt(const FString& Key)
 // ------------------------------------------------------------------------------------------------ build
 void UZoogiMenuRoot::BuildClashBackdrop()
 {
+	// fantasy reskin: the selected arena's painted backdrop under a dark vignette; the procedural lattice is the fallback
+	UTexture2D* ArenaBg = nullptr;
+	{
+		const AZoogiGameMode* G = GM();
+		const FString Slug = ZCArenaSlug(G ? (int32)G->MenuArena : 0);
+		ArenaBg = Art(Slug == TEXT("frozen") ? TEXT("frozen_background") : Slug == TEXT("volcanic") ? TEXT("lava_background")
+			: Slug == TEXT("cosmic") ? TEXT("cosmos_background") : TEXT("meadows_background"));
+	}
+	if (ArenaBg)
+	{
+		for (UTexture2D* Tex : { ArenaBg, ClashArt(TEXT("vignette")) })
+		{
+			if (!Tex) continue;
+			UScaleBox* Fill = WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass());
+			Fill->SetStretch(Tex == ArenaBg ? EStretch::ScaleToFill : EStretch::Fill);
+			UImage* I = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
+			FSlateBrush B; B.SetResourceObject(Tex); B.ImageSize = FVector2D(Tex->GetSizeX(), Tex->GetSizeY());
+			I->SetBrush(B);
+			Fill->AddChild(I);
+			Fill->SetVisibility(ESlateVisibility::HitTestInvisible);
+			if (UOverlaySlot* S = Root->AddChildToOverlay(Fill)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); }
+		}
+		return;
+	}
 	if (UTexture2D* Bg = ClashArt(ClashTab == ZCShop ? TEXT("bg_shop") : TEXT("bg")))
 	{
 		UScaleBox* Fill = WidgetTree->ConstructWidget<UScaleBox>(UScaleBox::StaticClass());
@@ -684,7 +821,7 @@ void UZoogiMenuRoot::BuildClash()
 	if (!ClashToastMsg.IsEmpty() && Time - ClashToastT < 2.f)
 	{
 		const float TW = FMath::Min(DesignW - 80.f, 120.f + ClashToastMsg.Len() * 17.f), TY = ClashNavY() - 150.f;
-		UWidget* Pl = CPlate(DesignW * 0.5f - TW * 0.5f, TY, TW, 90.f, ZCHex(TEXT("0B1E44")).CopyWithNewOpacity(0.94f), 45.f, 4.f, false);
+		UWidget* Pl = CPlate(DesignW * 0.5f - TW * 0.5f, TY, TW, 90.f, ZCHex(TEXT("16171B")).CopyWithNewOpacity(0.94f), 45.f, 4.f, false);
 		UWidget* Tx = CText(ClashToastMsg, DesignW * 0.5f - TW * 0.5f, TY, TW, 90.f, 30.f, FLinearColor::White, 1, 3.f);
 		if (Pl) Pl->SetVisibility(ESlateVisibility::HitTestInvisible);
 		if (Tx) Tx->SetVisibility(ESlateVisibility::HitTestInvisible);
@@ -814,7 +951,7 @@ void UZoogiMenuRoot::BuildClashBattleTab()
 		V->AddChildToVerticalBox(CTxt(TEXT("TAP TO VIEW"), 20.f, ZCGold, 3.f));
 		if (UHorizontalBoxSlot* S = H->AddChildToHorizontalBox(V)) S->SetVerticalAlignment(VAlign_Center);
 		H->SetVisibility(ESlateVisibility::HitTestInvisible);
-		CChunkyW(H, ZCBlue, [this]() { OpenClashPopup(EZoogiClashPopup::TrophyRoad); }, X, Y, CW, CardH);
+		CChunkyW(H, ZCBlueDeep, [this]() { OpenClashPopup(EZoogiClashPopup::TrophyRoad); }, X, Y, CW, CardH);
 		if (FP && FP->RoadClaimableCount() > 0) CDot(X + CW - 30.f, Y - 14.f, 46.f, TEXT("!"));
 	}
 
@@ -878,7 +1015,9 @@ void UZoogiMenuRoot::BuildClashNav()
 	const float W = DesignW, TW = W / 5.f, Y = ClashNavY(), H = 150.f;
 	// M4 portrait: nav strip spans the 1080 column only (pillar-boxed on a landscape window), bleeds past the bottom safe edge
 	CAt(CBox(ZCNavyDeep, ZCDark, 0.f, 0.f), 0.f, Y, W, H + 300.f);
-	CAt(CBox(ZCGoldDeep, ZCDark, 0.f, 0.f), 0.f, Y, W, 5.f);
+	CAt(CStoneLayer(W, H + 300.f, 0.f), 0.f, Y, W, H + 300.f); // fantasy reskin: carved stone strip under a gold trim
+	CAt(CBox(ZCGold, ZCDark, 0.f, 0.f), 0.f, Y, W, 6.f);
+	CAt(CBox(ZCGoldDeep, ZCDark, 0.f, 0.f), 0.f, Y + 6.f, W, 3.f);
 	const TCHAR* Icons[] = { TEXT("shop"), TEXT("cards"), TEXT("swords"), TEXT("clan"), TEXT("podium") };
 	const UZoogiFrontProfileSubsystem* FP = UZoogiFrontProfileSubsystem::Get(this);
 	for (int32 t = 0; t < 5; ++t)
@@ -888,13 +1027,13 @@ void UZoogiMenuRoot::BuildClashNav()
 		UCanvasPanel* Grp = CGroupBegin();
 		if (bSel)
 		{
-			CPlate(6.f, 0.f, TW - 12.f, H + 24.f, ZCBlue, 22.f, 5.f, true);
+			CChunkyVisual(nullptr, ZCBlue, 6.f, 0.f, TW - 12.f, H + 24.f, 22.f); // fantasy reskin: sapphire tab in a gold bezel
 			CImg(ClashArt(Icons[t]), TW * 0.5f - 56.f, 2.f, 112.f, 112.f);
 			CText(ZCTabName(t), 0.f, 108.f, TW, 40.f, 26.f, FLinearColor::White);
 		}
 		else
 		{
-			if (t > 0) CAt(CBox(ZCNavy, ZCDark, 0.f, 0.f), 0.f, 30.f, 3.f, H - 50.f);
+			if (t > 0) CAt(CBox(ZCGoldDeep.CopyWithNewOpacity(0.6f), ZCDark, 0.f, 0.f), 0.f, 30.f, 2.f, H - 50.f);
 			CImg(ClashArt(Icons[t]), TW * 0.5f - 46.f, 28.f, 92.f, 92.f, 0.f, false, FLinearColor(0.82f, 0.86f, 1.f, 1.f));
 		}
 		if (t == ZCCards && FP && (FP->Data().bCardsNew || FP->UpgradableCount() > 0)) CDot(TW * 0.5f + 26.f, bSel ? 0.f : 18.f, 38.f, TEXT("!"));
@@ -921,7 +1060,7 @@ void UZoogiMenuRoot::BuildClashPopup()
 	// scrim: tap outside closes
 	{
 		UButton* Scrim = WidgetTree->ConstructWidget<UZoogiButton>(UZoogiButton::StaticClass());
-		FSlateBrush Dim; Dim.TintColor = FSlateColor(FLinearColor(0.f, 0.01f, 0.06f, 0.62f));
+		FSlateBrush Dim; Dim.TintColor = FSlateColor(FLinearColor(0.012f, 0.009f, 0.006f, 0.66f));
 		FButtonStyle St; St.SetNormal(Dim); St.SetHovered(Dim); St.SetPressed(Dim);
 		Scrim->SetStyle(St);
 		BindClick(Scrim, [this]() { if (ClashBuyT0 < 0.f) { ClashPopup = EZoogiClashPopup::None; bDirty = true; } });
@@ -939,7 +1078,11 @@ void UZoogiMenuRoot::BuildClashPopup()
 	if (bBig)
 	{
 		// sky-blue illustrated banner (castle + grass) with a coloured title ribbon
-		CImg(ClashArt(TEXT("banner")), 14.f, 14.f, PW - 28.f, 168.f, 18.f, true);
+		// fantasy reskin: the selected arena's painted art as the header (the procedural castle banner is the fallback)
+		const FString Slug = ZCArenaSlug(GM() ? (int32)GM()->MenuArena : 0);
+		UTexture2D* Head = Art(Slug == TEXT("frozen") ? TEXT("frozen_background") : Slug == TEXT("volcanic") ? TEXT("lava_background")
+			: Slug == TEXT("cosmic") ? TEXT("cosmos_background") : TEXT("meadows_background"));
+		CImg(Head ? Head : ClashArt(TEXT("banner")), 14.f, 14.f, PW - 28.f, 168.f, 18.f, true);
 		const TCHAR* Rib = ClashPopup == EZoogiClashPopup::TrophyRoad ? TEXT("ribbon_gold") : ClashPopup == EZoogiClashPopup::Arenas ? TEXT("ribbon_blue") : TEXT("ribbon_purple");
 		CImg(ClashArt(Rib), PW * 0.5f - 330.f, 96.f, 660.f, 110.f);
 	}
@@ -951,7 +1094,7 @@ void UZoogiMenuRoot::BuildClashPopup()
 	else if (ClashPopup == EZoogiClashPopup::TrophyRoad) Title = TEXT("TROPHY ROAD");
 	if (bBig) CText(Title, PW * 0.5f - 240.f, 98.f, 480.f, 80.f, 46.f, FLinearColor::White);
 	else CText(Title, 40.f, 22.f, PW - 80.f, 92.f, Title.Len() > 22 ? 36.f : 48.f, FLinearColor::White, 1, 5.f); // white, navy outline
-	CAt(CBox(FLinearColor::White, ZCDark, 3.f, 28.f), PW - 104.f, -26.f, 120.f, 116.f); // close: red #E53E3E, white rim, darker bevel
+	CAt(CBox(ZCGold, ZCDark, 3.f, 28.f), PW - 104.f, -26.f, 120.f, 116.f); // close: red #E53E3E in a gold rim (fantasy reskin)
 	CChunky(TEXT("X"), ZCXRed, [this]()
 	{
 		if (ClashBuyT0 >= 0.f) return;

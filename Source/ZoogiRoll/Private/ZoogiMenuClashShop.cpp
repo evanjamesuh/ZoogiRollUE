@@ -56,7 +56,7 @@ UWidget* UZoogiMenuRoot::CCard(FName Id, float X, float Y, float Wd, float Ht, b
 	// card frame in its rarity colour, Zoogi Roll card art, energy cost bubble, name strip, optional badge / level pill
 	const FZoogiCardDef* Def = UZoogiFrontProfileSubsystem::FindCard(Id);
 	const int32 Rar = Def ? UZoogiFrontProfileSubsystem::RarityOf(*Def) : 0;
-	const FLinearColor Frame = bLocked ? ZCHex(TEXT("5B6787")) : ZCRarityColor(Rar); // Common steel / Rare #F5A623 / Epic violet
+	const FLinearColor Frame = bLocked ? ZCHex(TEXT("5A5D66")) : ZCRarityColor(Rar); // Common steel / Rare #F5A623 / Epic violet
 	UCanvasPanel* G = CGroupBegin();
 	const float R = FMath::Clamp(Wd * 0.09f, 8.f, 18.f);
 	CAt(CBox(Frame, ZCDark, 4.f, R), 0.f, 0.f, Wd, Ht);
@@ -174,7 +174,7 @@ void UZoogiMenuRoot::BuildClashChestOpen()
 	const int32 N = ClashOpenCards.Num();
 	// M4 portrait: the 1080-tall sequence is centred in the column (OY), ribbon + Skip stay at the top
 	const float OY = FMath::Max(0.f, (DesignH - 1080.f) * 0.5f), TopY = 60.f;
-	CAt(CBox(ZCHex(TEXT("0B1E4A")).CopyWithNewOpacity(0.96f), FLinearColor::Transparent, 0.f, 0.f), 0.f, -400.f, W, DesignH + 800.f);
+	CAt(CBox(ZCHex(TEXT("0D0E11")).CopyWithNewOpacity(0.96f), FLinearColor::Transparent, 0.f, 0.f), 0.f, -400.f, W, DesignH + 800.f);
 	auto Advance = [this]()
 	{
 		if (ClashOpenIdx < ClashOpenCards.Num()) { ++ClashOpenIdx; UE_LOG(LogZoogi, Log, TEXT("CLASH chest open step %d/%d"), ClashOpenIdx, ClashOpenCards.Num()); bDirty = true; return; }
@@ -413,12 +413,12 @@ void UZoogiMenuRoot::BuildClashShopTab()
 			const int32 Left = FP->ChestStockLeft(Def.Id);
 			const bool bCan = FP->Gems() >= Def.GemCost;
 			UCanvasPanel* T = CGroupBegin();
-			CGoldPanel(0.f, 0.f, TW, TH, i == 2 ? ZCEpicChest : i == 1 ? ZCBlueDeep : ZCHex(TEXT("2F6BD0")), 24.f);
+			CGoldPanel(0.f, 0.f, TW, TH, i == 2 ? ZCEpicChest : i == 1 ? ZCBlueDeep : ZCHex(TEXT("3A3D45")), 24.f);
 			CImg(ClashArt(TEXT("rays")), TW * 0.5f - 150.f, -10.f, 300.f, 300.f, 0.f, false, FLinearColor(1.f, 1.f, 1.f, 0.6f));
 			CImg(ClashArt(TEXT("chest_") + Def.Id.ToString()), TW * 0.5f - 95.f, 40.f, 190.f, 190.f, 0.f, false, Left == 0 ? FLinearColor(0.45f, 0.45f, 0.5f, 1.f) : FLinearColor::White);
 			CText(FString(Def.Name), 0.f, 236.f, TW, 44.f, 30.f, FLinearColor::White);
 			CText(FString::Printf(TEXT("%d cards  -  %d-%d gold"), Def.Cards, Def.GoldMin, Def.GoldMax), 10.f, 284.f, TW - 20.f, 30.f, 18.f, ZCSoft, 1, 3.f);
-			if (Left == 0) CChunkyVisual(CTxt(TEXT("Sold out"), 28.f, ZCMuted, 3.f), ZCHex(TEXT("4A5675")), 34.f, TH - 96.f, TW - 68.f, 74.f);
+			if (Left == 0) CChunkyVisual(CTxt(TEXT("Sold out"), 28.f, ZCMuted, 3.f), ZCHex(TEXT("4A4D55")), 34.f, TH - 96.f, TW - 68.f, 74.f);
 			else CChunkyVisual(PriceH(Art(TEXT("icon_gem")), ZCNum(Def.GemCost), 30.f, bCan ? FLinearColor::White : ZCPriceRed), ZCGreen, 34.f, TH - 96.f, TW - 68.f, 74.f);
 			CGroupEnd();
 			const FName Id = Def.Id;
@@ -466,7 +466,7 @@ void UZoogiMenuRoot::BuildClashShopTab()
 		for (int32 i = 0; i < Packs.Num(); ++i)
 		{
 			UCanvasPanel* T = CGroupBegin();
-			CPlate(0.f, 0.f, TW, TH, ZCHex(TEXT("2F4FA8")), 22.f, 5.f, true);
+			CPlate(0.f, 0.f, TW, TH, ZCHex(TEXT("34363D")), 22.f, 5.f, true);
 			CText(Packs[i].Name, 0.f, 22.f, TW, 40.f, 26.f, FLinearColor::White);
 			const int32 NG = FMath::Min(5, 1 + i);
 			for (int32 g = 0; g < NG; ++g)
@@ -741,7 +741,7 @@ bool UZoogiMenuRoot::BuildClashShopPopup(EZoogiClashPopup P, float PW, float PH)
 		{
 			const bool bBusy = FP->AnyUnlocking();
 			CText(bBusy ? TEXT("Another chest is unlocking. One at a time!") : *FString::Printf(TEXT("Unlocks in %s once started."), *ZCDur(FP->ChestSeconds(Type))), 0.f, 448.f, PW, 36.f, 22.f, bBusy ? ZCYellow : ZCSoft, 1, 3.f);
-			CChunky(TEXT("START UNLOCK"), bBusy ? ZCHex(TEXT("4A5675")) : ZCGreen, [this, SlotIdx]()
+			CChunky(TEXT("START UNLOCK"), bBusy ? ZCHex(TEXT("4A4D55")) : ZCGreen, [this, SlotIdx]()
 			{
 				FString Why;
 				UZoogiFrontProfileSubsystem* F = UZoogiFrontProfileSubsystem::Get(this);

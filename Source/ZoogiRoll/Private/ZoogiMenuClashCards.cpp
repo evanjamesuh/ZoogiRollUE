@@ -89,7 +89,7 @@ void UZoogiMenuRoot::ClashToast(const FString& Msg)
 UWidget* UZoogiMenuRoot::CField(const FString& Text, const FString& Hint, float X, float Y, float Wd, float Ht, TWeakObjectPtr<UEditableTextBox>* Out, bool bMulti)
 {
 	// dark navy input field (~#1B2A4A), white text (DETAILED PASS 3 style)
-	const FSlateBrush Field = ZoogiUIStyle::RoundBrush(ZCHex(TEXT("1B2A4A")), ZCDark, 4.f, 14.f);
+	const FSlateBrush Field = ZoogiUIStyle::RoundBrush(ZCHex(TEXT("24262C")), ZCDark, 4.f, 14.f);
 	if (bMulti)
 	{
 		UMultiLineEditableTextBox* E = WidgetTree->ConstructWidget<UMultiLineEditableTextBox>(UMultiLineEditableTextBox::StaticClass());
@@ -196,7 +196,7 @@ void UZoogiMenuRoot::BuildClashCardsTab()
 		}
 		else
 		{
-			CAt(CBox(ZCHex(TEXT("1B2A4A")), ZCDark, 4.f, 14.f), LX + 24.f, NY, NW, 76.f);
+			CAt(CBox(ZCHex(TEXT("24262C")), ZCDark, 4.f, 14.f), LX + 24.f, NY, NW, 76.f);
 			CText(FP->DeckName(View), LX + 44.f, NY, NW - 40.f, 76.f, 30.f, FLinearColor::White, 0, 3.f);
 			UImage* Pen = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
 			Pen->SetBrush(ZCImgBrush(ClashArt(TEXT("pencil")), 46.f, 46.f, 0.f, false));
@@ -474,7 +474,7 @@ void UZoogiMenuRoot::BuildClashLevelUp()
 	const UZoogiFrontProfileSubsystem* FP = UZoogiFrontProfileSubsystem::Get(this);
 	const FZoogiCardDef* Df = UZoogiFrontProfileSubsystem::FindCard(ClashLvId);
 	const float W = DesignW, C = W * 0.5f, OY = FMath::Max(0.f, (DesignH - 1600.f) * 0.5f);
-	CAt(CBox(ZCHex(TEXT("08163A")).CopyWithNewOpacity(0.9f), FLinearColor::Transparent, 0.f, 0.f), 0.f, -400.f, W, DesignH + 800.f);
+	CAt(CBox(ZCHex(TEXT("0B0C0F")).CopyWithNewOpacity(0.9f), FLinearColor::Transparent, 0.f, 0.f), 0.f, -400.f, W, DesignH + 800.f);
 	auto Done = [this]()
 	{
 		const EZoogiClashPopup Back = ClashDetailsBack;

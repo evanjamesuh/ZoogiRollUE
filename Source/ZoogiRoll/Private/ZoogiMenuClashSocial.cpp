@@ -39,7 +39,7 @@ namespace
 
 UWidget* UZoogiMenuRoot::CBadge(int32 Badge, float X, float Y, float S)
 {
-	static const TCHAR* Fill[] = { TEXT("2F6BD0"), TEXT("B8322B"), TEXT("5B2FA6"), TEXT("D2621E"), TEXT("2E8A3A"), TEXT("5E6878") };
+	static const TCHAR* Fill[] = { TEXT("3A3D45"), TEXT("B8322B"), TEXT("5B2FA6"), TEXT("D2621E"), TEXT("2E8A3A"), TEXT("5E6878") };
 	const int32 B = FMath::Clamp(Badge, 0, 5);
 	UCanvasPanel* G = CGroupBegin();
 	CImg(ClashArt(TEXT("shield")), 0.f, 0.f, S, S, 0.f, false, ZCLighten(ZCHex(Fill[B]), 0.25f));
@@ -95,7 +95,7 @@ void UZoogiMenuRoot::BuildClashLeaderboardTab()
 	CText(TEXT("LEADERBOARD"), C - 260.f, 108.f, 520.f, 84.f, 46.f, FLinearColor::White);
 	const TCHAR* Subs[] = { TEXT("PLAYERS"), TEXT("CLANS") };
 	for (int32 k = 0; k < 2; ++k)
-		CChunky(Subs[k], ClashLbSub == k ? ZCHex(TEXT("3FA2FF")) : ZCHex(TEXT("3A4A66")), [this, k]() { ClashLbSub = k; ClashLbPage = 0; bDirty = true; }, C - 420.f + k * 430.f, 236.f, 410.f, 80.f, 30.f);
+		CChunky(Subs[k], ClashLbSub == k ? ZCHex(TEXT("3FA2FF")) : ZCHex(TEXT("3A3D45")), [this, k]() { ClashLbSub = k; ClashLbPage = 0; bDirty = true; }, C - 420.f + k * 430.f, 236.f, 410.f, 80.f, 30.f);
 	CPlate(24.f, 336.f, W - 48.f, 70.f, ZCNavyDeep.CopyWithNewOpacity(0.85f), 18.f, 4.f, false);
 	CText(TEXT("OFFLINE: global ranks need the online backend. Showing this device only."), 44.f, 336.f, W - 88.f, 70.f, 21.f, ZCYellow, 1, 3.f, true);
 	const float ListY = 426.f, RowH = 116.f, PinY = NavY - 120.f - RowH - 20.f;
@@ -176,7 +176,7 @@ void UZoogiMenuRoot::BuildClashMatchmaking()
 	AZoogiGameMode* G = GM();
 	const int32 ArenaIdx = G ? (int32)G->MenuArena : 0;
 	const float W = DesignW, C = W * 0.5f, H = DesignH, OY = FMath::Max(0.f, (H - 1920.f) * 0.5f);
-	CAt(CBox(ZCHex(TEXT("0A1C46")).CopyWithNewOpacity(0.97f), FLinearColor::Transparent, 0.f, 0.f), 0.f, -400.f, W, H + 800.f);
+	CAt(CBox(ZCHex(TEXT("0D0E11")).CopyWithNewOpacity(0.97f), FLinearColor::Transparent, 0.f, 0.f), 0.f, -400.f, W, H + 800.f);
 	if (UButton* Block = CButton(CBox(FLinearColor::Transparent, FLinearColor::Transparent, 0.f, 0.f), []() {})) { Block->SetStyle(ZCClearStyle()); CAt(Block, 0.f, -400.f, W, H + 800.f); }
 	if (ClashMMPhase >= 2)
 	{
@@ -188,7 +188,7 @@ void UZoogiMenuRoot::BuildClashMatchmaking()
 		CText(TEXT("Loading.."), 90.f, LY, 500.f, 70.f, 46.f, FLinearColor::White, 0, 5.f);
 		TWeakObjectPtr<UZoogiMenuRoot> WL(this);
 		CLive([WL]() { const UZoogiMenuRoot* M = WL.Get(); return M ? FString::Printf(TEXT("%d%%"), M->ClashMMLoadPct()) : FString(); }, W - 390.f, LY, 300.f, 70.f, 46.f, FLinearColor::White, 2, 5.f);
-		CAt(CBox(ZCHex(TEXT("0B1E44")).CopyWithNewOpacity(0.85f), ZCDark, 4.f, 14.f), 90.f, LY + 84.f, W - 180.f, 60.f);
+		CAt(CBox(ZCHex(TEXT("16171B")).CopyWithNewOpacity(0.85f), ZCDark, 4.f, 14.f), 90.f, LY + 84.f, W - 180.f, 60.f);
 		UWidget* Bar = CAt(CBox(ZCYellow, FLinearColor::Transparent, 0.f, 10.f), 96.f, LY + 90.f, (W - 192.f) * ClashMMLoadPct() / 100.f, 48.f);
 		ClashMMBar = Bar;
 		return;
@@ -222,7 +222,7 @@ void UZoogiMenuRoot::BuildClashMatchmaking()
 		CText(TEXT("0"), 40.f + BW - 160.f, OY + 470.f, 140.f, BH, 40.f, ZCGold, 0);
 	}
 	CText(TEXT("VS"), C - 150.f, OY + 690.f, 300.f, 150.f, 110.f, ZCYellow, 1, 7.f);
-	CPlate(40.f, OY + 870.f, BW, BH, ZCHex(TEXT("2F6BD0")), 24.f, 5.f, true);
+	CPlate(40.f, OY + 870.f, BW, BH, ZCHex(TEXT("3A3D45")), 24.f, 5.f, true);
 	CImg(ClashArt(TEXT("level")), 70.f, OY + 870.f + BH * 0.5f - 50.f, 100.f, 100.f);
 	CText(FString::FromInt(D.Level), 70.f, OY + 870.f + BH * 0.5f - 50.f, 100.f, 96.f, 40.f, FLinearColor::White);
 	CText(D.GuestName, 196.f, OY + 892.f, BW - 420.f, 64.f, 40.f, FLinearColor::White, 0);
