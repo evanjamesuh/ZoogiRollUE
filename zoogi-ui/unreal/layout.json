@@ -1,0 +1,1575 @@
+{
+ "canvas": {
+  "width": 941,
+  "height": 1672,
+  "scaleRule": "ScaleToFit (contain), DPI curve: shortest side"
+ },
+ "screens": {
+  "deck": {
+   "widget": "WBP_DeckBuilder",
+   "background": "assets/bg/deck.jpg",
+   "elements": [
+    {
+     "name": "card.storm",
+     "type": "Button",
+     "x": 45,
+     "y": 417,
+     "w": 160,
+     "h": 147,
+     "text": "STORM 2"
+    },
+    {
+     "name": "card.bank-strike",
+     "type": "Button",
+     "x": 219,
+     "y": 417,
+     "w": 160,
+     "h": 147,
+     "text": "BANK STRIKE 3"
+    },
+    {
+     "name": "card.guard",
+     "type": "Button",
+     "x": 392,
+     "y": 417,
+     "w": 160,
+     "h": 147,
+     "text": "GUARD 2"
+    },
+    {
+     "name": "card.orb-relay",
+     "type": "Button",
+     "x": 566,
+     "y": 417,
+     "w": 160,
+     "h": 147,
+     "text": "ORB RELAY 3"
+    },
+    {
+     "name": "card.heavy-roll",
+     "type": "Button",
+     "x": 742,
+     "y": 417,
+     "w": 160,
+     "h": 147,
+     "text": "HEAVY ROLL 4"
+    },
+    {
+     "name": "card.ember",
+     "type": "Button",
+     "x": 45,
+     "y": 573,
+     "w": 160,
+     "h": 147,
+     "text": "EMBER 3"
+    },
+    {
+     "name": "card.titan",
+     "type": "Button",
+     "x": 219,
+     "y": 573,
+     "w": 160,
+     "h": 147,
+     "text": "TITAN 5"
+    },
+    {
+     "name": "card.frost",
+     "type": "Button",
+     "x": 392,
+     "y": 573,
+     "w": 160,
+     "h": 147,
+     "text": "FROST 3"
+    },
+    {
+     "name": "card.precision",
+     "type": "Button",
+     "x": 566,
+     "y": 573,
+     "w": 160,
+     "h": 147,
+     "text": "PRECISION 3"
+    },
+    {
+     "name": "card.momentum-steal",
+     "type": "Button",
+     "x": 742,
+     "y": 573,
+     "w": 160,
+     "h": 147,
+     "text": "MOMENTUM STEAL 4"
+    },
+    {
+     "name": "card.crystal-collapse",
+     "type": "Button",
+     "x": 45,
+     "y": 729,
+     "w": 160,
+     "h": 147,
+     "text": "CRYSTAL COLLAPSE 5"
+    },
+    {
+     "name": "card.orb-magnet",
+     "type": "Button",
+     "x": 219,
+     "y": 729,
+     "w": 160,
+     "h": 147,
+     "text": "ORB MAGNET 4"
+    },
+    {
+     "name": "card.double-impact",
+     "type": "Button",
+     "x": 392,
+     "y": 729,
+     "w": 160,
+     "h": 147,
+     "text": "DOUBLE IMPACT 4"
+    },
+    {
+     "name": "card.anchor-guard",
+     "type": "Button",
+     "x": 566,
+     "y": 729,
+     "w": 160,
+     "h": 147,
+     "text": "ANCHOR GUARD 3"
+    },
+    {
+     "name": "card.recovery-roll",
+     "type": "Button",
+     "x": 742,
+     "y": 729,
+     "w": 160,
+     "h": 147,
+     "text": "RECOVERY ROLL 2"
+    },
+    {
+     "name": "Deck.PrevDeck",
+     "type": "Button",
+     "x": 100,
+     "y": 350,
+     "w": 40,
+     "h": 50,
+     "text": ""
+    },
+    {
+     "name": "Deck.Rename",
+     "type": "Button",
+     "x": 457,
+     "y": 356,
+     "w": 28,
+     "h": 32,
+     "text": ""
+    },
+    {
+     "name": "Deck.NextDeck",
+     "type": "Button",
+     "x": 802,
+     "y": 350,
+     "w": 40,
+     "h": 50,
+     "text": ""
+    },
+    {
+     "name": "Deck.Filter.all",
+     "type": "Button",
+     "x": 20,
+     "y": 754,
+     "w": 227,
+     "h": 61,
+     "text": "ALL"
+    },
+    {
+     "name": "Deck.Filter.infusion",
+     "type": "Button",
+     "x": 252,
+     "y": 754,
+     "w": 218,
+     "h": 61,
+     "text": "INFUSION"
+    },
+    {
+     "name": "Deck.Filter.technique",
+     "type": "Button",
+     "x": 477,
+     "y": 754,
+     "w": 220,
+     "h": 61,
+     "text": "TECHNIQUE"
+    },
+    {
+     "name": "Deck.Filter.defense",
+     "type": "Button",
+     "x": 703,
+     "y": 754,
+     "w": 219,
+     "h": 61,
+     "text": "DEFENSE"
+    },
+    {
+     "name": "Deck.Filter.utility",
+     "type": "Button",
+     "x": 20,
+     "y": 820,
+     "w": 227,
+     "h": 58,
+     "text": "UTILITY"
+    },
+    {
+     "name": "Deck.Filter.terrain",
+     "type": "Button",
+     "x": 252,
+     "y": 820,
+     "w": 218,
+     "h": 58,
+     "text": "TERRAIN"
+    },
+    {
+     "name": "Deck.Filter.control",
+     "type": "Button",
+     "x": 477,
+     "y": 820,
+     "w": 220,
+     "h": 58,
+     "text": "CONTROL"
+    },
+    {
+     "name": "Deck.Filter.impact",
+     "type": "Button",
+     "x": 703,
+     "y": 820,
+     "w": 219,
+     "h": 58,
+     "text": "IMPACT"
+    },
+    {
+     "name": "card.storm",
+     "type": "Button",
+     "x": 40,
+     "y": 892,
+     "w": 157,
+     "h": 120,
+     "text": "STORM 2"
+    },
+    {
+     "name": "card.bank-strike",
+     "type": "Button",
+     "x": 218,
+     "y": 892,
+     "w": 157,
+     "h": 120,
+     "text": "BANK STRIKE 3"
+    },
+    {
+     "name": "card.guard",
+     "type": "Button",
+     "x": 392,
+     "y": 892,
+     "w": 157,
+     "h": 120,
+     "text": "GUARD 2"
+    },
+    {
+     "name": "card.orb-relay",
+     "type": "Button",
+     "x": 566,
+     "y": 892,
+     "w": 157,
+     "h": 120,
+     "text": "ORB RELAY 3"
+    },
+    {
+     "name": "card.heavy-roll",
+     "type": "Button",
+     "x": 746,
+     "y": 892,
+     "w": 157,
+     "h": 120,
+     "text": "HEAVY ROLL 4"
+    },
+    {
+     "name": "card.ember",
+     "type": "Button",
+     "x": 40,
+     "y": 1017,
+     "w": 157,
+     "h": 120,
+     "text": "EMBER 3"
+    },
+    {
+     "name": "card.titan",
+     "type": "Button",
+     "x": 218,
+     "y": 1017,
+     "w": 157,
+     "h": 120,
+     "text": "TITAN 5"
+    },
+    {
+     "name": "card.frost",
+     "type": "Button",
+     "x": 392,
+     "y": 1017,
+     "w": 157,
+     "h": 120,
+     "text": "FROST 3"
+    },
+    {
+     "name": "card.precision",
+     "type": "Button",
+     "x": 566,
+     "y": 1017,
+     "w": 157,
+     "h": 120,
+     "text": "PRECISION 3"
+    },
+    {
+     "name": "card.momentum-steal",
+     "type": "Button",
+     "x": 746,
+     "y": 1017,
+     "w": 157,
+     "h": 120,
+     "text": "MOMENTUM STEAL 4"
+    },
+    {
+     "name": "card.crystal-collapse",
+     "type": "Button",
+     "x": 40,
+     "y": 1147,
+     "w": 157,
+     "h": 120,
+     "text": "CRYSTAL COLLAPSE 5"
+    },
+    {
+     "name": "card.orb-magnet",
+     "type": "Button",
+     "x": 218,
+     "y": 1147,
+     "w": 157,
+     "h": 120,
+     "text": "ORB MAGNET 4"
+    },
+    {
+     "name": "card.double-impact",
+     "type": "Button",
+     "x": 392,
+     "y": 1147,
+     "w": 157,
+     "h": 120,
+     "text": "DOUBLE IMPACT 4"
+    },
+    {
+     "name": "card.anchor-guard",
+     "type": "Button",
+     "x": 566,
+     "y": 1147,
+     "w": 157,
+     "h": 120,
+     "text": "ANCHOR GUARD 3"
+    },
+    {
+     "name": "card.recovery-roll",
+     "type": "Button",
+     "x": 746,
+     "y": 1147,
+     "w": 157,
+     "h": 120,
+     "text": "RECOVERY ROLL 2"
+    },
+    {
+     "name": "Deck.Detail",
+     "type": "Panel",
+     "x": 19,
+     "y": 1277,
+     "w": 903,
+     "h": 225,
+     "text": "STORM 2 STORM TECHNIQUE Unleash a swirli"
+    },
+    {
+     "name": "dCard",
+     "type": "Panel",
+     "x": 39,
+     "y": 1291,
+     "w": 211,
+     "h": 203,
+     "text": "STORM 2"
+    },
+    {
+     "name": "Deck.Save",
+     "type": "Button",
+     "x": 188,
+     "y": 1517,
+     "w": 568,
+     "h": 133,
+     "text": "SAVE DECK"
+    },
+    {
+     "name": "TopBar.Avatar",
+     "type": "Button",
+     "x": 18,
+     "y": 6,
+     "w": 140,
+     "h": 138,
+     "text": ""
+    },
+    {
+     "name": "TopBar.NamePlate",
+     "type": "Panel",
+     "x": 140,
+     "y": 18,
+     "w": 266,
+     "h": 100,
+     "text": "Player123 Lv. 28"
+    },
+    {
+     "name": "TopBar.Gems",
+     "type": "Panel",
+     "x": 418,
+     "y": 34,
+     "w": 190,
+     "h": 55,
+     "text": "1,240"
+    },
+    {
+     "name": "TopBar.GemsPlus",
+     "type": "Button",
+     "x": 566,
+     "y": 44,
+     "w": 36,
+     "h": 36,
+     "text": ""
+    },
+    {
+     "name": "TopBar.Coins",
+     "type": "Panel",
+     "x": 614,
+     "y": 34,
+     "w": 196,
+     "h": 55,
+     "text": "56,320"
+    },
+    {
+     "name": "TopBar.CoinsPlus",
+     "type": "Button",
+     "x": 774,
+     "y": 44,
+     "w": 36,
+     "h": 36,
+     "text": ""
+    },
+    {
+     "name": "TopBar.Actions",
+     "type": "Panel",
+     "x": 826,
+     "y": 26,
+     "w": 140,
+     "h": 70,
+     "text": ""
+    },
+    {
+     "name": "TopBar.Bell",
+     "type": "Button",
+     "x": 839,
+     "y": 41,
+     "w": 40,
+     "h": 40,
+     "text": ""
+    },
+    {
+     "name": "TopBar.Settings",
+     "type": "Button",
+     "x": 895,
+     "y": 41,
+     "w": 40,
+     "h": 40,
+     "text": ""
+    }
+   ]
+  },
+  "arena": {
+   "widget": "WBP_ArenaSelect",
+   "background": "assets/bg/arena.jpg",
+   "elements": [
+    {
+     "name": "Arena.Featured",
+     "type": "Panel",
+     "x": 21,
+     "y": 401,
+     "w": 902,
+     "h": 417,
+     "text": "FEATURED ARENA SKYFALL ISLES Majestic fl"
+    },
+    {
+     "name": "Arena.Card.skyfall",
+     "type": "Button",
+     "x": 23,
+     "y": 829,
+     "w": 297,
+     "h": 224,
+     "text": "SKYFALL ISLES"
+    },
+    {
+     "name": "Arena.Card.frozen",
+     "type": "Button",
+     "x": 331,
+     "y": 829,
+     "w": 287,
+     "h": 224,
+     "text": "FROZEN RING"
+    },
+    {
+     "name": "Arena.Card.volcanic",
+     "type": "Button",
+     "x": 628,
+     "y": 829,
+     "w": 291,
+     "h": 224,
+     "text": "VOLCANIC PIT"
+    },
+    {
+     "name": "Arena.Card.pharaoh",
+     "type": "Button",
+     "x": 23,
+     "y": 1064,
+     "w": 297,
+     "h": 223,
+     "text": "PHARAOH'S TOMB"
+    },
+    {
+     "name": "Arena.Card.night",
+     "type": "Button",
+     "x": 331,
+     "y": 1064,
+     "w": 287,
+     "h": 223,
+     "text": "NIGHT CIRCUIT"
+    },
+    {
+     "name": "Arena.Card.meadow",
+     "type": "Button",
+     "x": 628,
+     "y": 1064,
+     "w": 291,
+     "h": 223,
+     "text": "MEADOW SANCTUM"
+    },
+    {
+     "name": "Arena.Card.cosmic",
+     "type": "Button",
+     "x": 85,
+     "y": 1290,
+     "w": 375,
+     "h": 215,
+     "text": "COSMIC PLATFORM"
+    },
+    {
+     "name": "Arena.Card.training",
+     "type": "Button",
+     "x": 476,
+     "y": 1290,
+     "w": 375,
+     "h": 215,
+     "text": "TRAINING ARENA"
+    },
+    {
+     "name": "Arena.Back",
+     "type": "Button",
+     "x": 25,
+     "y": 1542,
+     "w": 98,
+     "h": 92,
+     "text": ""
+    },
+    {
+     "name": "Arena.Select",
+     "type": "Button",
+     "x": 171,
+     "y": 1507,
+     "w": 599,
+     "h": 140,
+     "text": "SELECT ARENA"
+    },
+    {
+     "name": "TopBar.Avatar",
+     "type": "Button",
+     "x": 18,
+     "y": 6,
+     "w": 140,
+     "h": 138,
+     "text": ""
+    },
+    {
+     "name": "TopBar.NamePlate",
+     "type": "Panel",
+     "x": 140,
+     "y": 18,
+     "w": 266,
+     "h": 100,
+     "text": "Player123 Lv. 28"
+    },
+    {
+     "name": "TopBar.Gems",
+     "type": "Panel",
+     "x": 418,
+     "y": 34,
+     "w": 190,
+     "h": 55,
+     "text": "1,240"
+    },
+    {
+     "name": "TopBar.GemsPlus",
+     "type": "Button",
+     "x": 566,
+     "y": 44,
+     "w": 36,
+     "h": 36,
+     "text": ""
+    },
+    {
+     "name": "TopBar.Coins",
+     "type": "Panel",
+     "x": 614,
+     "y": 34,
+     "w": 196,
+     "h": 55,
+     "text": "56,320"
+    },
+    {
+     "name": "TopBar.CoinsPlus",
+     "type": "Button",
+     "x": 774,
+     "y": 44,
+     "w": 36,
+     "h": 36,
+     "text": ""
+    },
+    {
+     "name": "TopBar.Actions",
+     "type": "Panel",
+     "x": 826,
+     "y": 26,
+     "w": 140,
+     "h": 70,
+     "text": ""
+    },
+    {
+     "name": "TopBar.Bell",
+     "type": "Button",
+     "x": 839,
+     "y": 41,
+     "w": 40,
+     "h": 40,
+     "text": ""
+    },
+    {
+     "name": "TopBar.Settings",
+     "type": "Button",
+     "x": 895,
+     "y": 41,
+     "w": 40,
+     "h": 40,
+     "text": ""
+    }
+   ]
+  },
+  "story": {
+   "widget": "WBP_StoryEpisodes",
+   "background": "assets/bg/story.jpg",
+   "elements": [
+    {
+     "name": "Story.Chapter",
+     "type": "Panel",
+     "x": 20,
+     "y": 400,
+     "w": 903,
+     "h": 298,
+     "text": "CHAPTER 1 SKYFALL ISLES A new horizon aw"
+    },
+    {
+     "name": "Story.Watch",
+     "type": "Button",
+     "x": 45,
+     "y": 605,
+     "w": 340,
+     "h": 72,
+     "text": "WATCH EPISODE 1"
+    },
+    {
+     "name": "Story.Episode.1",
+     "type": "Button",
+     "x": 28,
+     "y": 707,
+     "w": 180,
+     "h": 159,
+     "text": "EP 1 SKYFALL ISLES"
+    },
+    {
+     "name": "Story.Episode.2",
+     "type": "Button",
+     "x": 220,
+     "y": 707,
+     "w": 162,
+     "h": 159,
+     "text": "EP 2 VERDANT RUINS"
+    },
+    {
+     "name": "Story.Episode.3",
+     "type": "Button",
+     "x": 392,
+     "y": 707,
+     "w": 162,
+     "h": 159,
+     "text": "EP 3 EMBER PEAKS"
+    },
+    {
+     "name": "Story.Episode.4",
+     "type": "Button",
+     "x": 565,
+     "y": 707,
+     "w": 165,
+     "h": 159,
+     "text": "EP 4 CRYSTAL DEPTHS"
+    },
+    {
+     "name": "Story.Episode.5",
+     "type": "Button",
+     "x": 741,
+     "y": 707,
+     "w": 172,
+     "h": 159,
+     "text": "EP 5 NOVA SPIRE"
+    },
+    {
+     "name": "Story.Replays.SeeAll",
+     "type": "Button",
+     "x": 758,
+     "y": 938,
+     "w": 142,
+     "h": 35,
+     "text": "SEE ALL"
+    },
+    {
+     "name": "Story.Replay.r1",
+     "type": "Button",
+     "x": 80,
+     "y": 1162,
+     "w": 220,
+     "h": 43,
+     "text": "VIEW REPLAY"
+    },
+    {
+     "name": "Story.Replay.r2",
+     "type": "Button",
+     "x": 378,
+     "y": 1162,
+     "w": 220,
+     "h": 43,
+     "text": "VIEW REPLAY"
+    },
+    {
+     "name": "Story.Replay.r3",
+     "type": "Button",
+     "x": 676,
+     "y": 1162,
+     "w": 220,
+     "h": 43,
+     "text": "VIEW REPLAY"
+    },
+    {
+     "name": "Story.Highlights.SeeAll",
+     "type": "Button",
+     "x": 758,
+     "y": 1238,
+     "w": 142,
+     "h": 35,
+     "text": "SEE ALL"
+    },
+    {
+     "name": "Story.Highlight.h1",
+     "type": "Button",
+     "x": 30,
+     "y": 1282,
+     "w": 432,
+     "h": 145,
+     "text": "01:30 EPIC COMEBACK! Turn the tide in an"
+    },
+    {
+     "name": "Story.Highlight.h2",
+     "type": "Button",
+     "x": 472,
+     "y": 1282,
+     "w": 218,
+     "h": 145,
+     "text": "00:45 PERFECT ROLL Clean 4-hit combo!"
+    },
+    {
+     "name": "Story.Highlight.h3",
+     "type": "Button",
+     "x": 702,
+     "y": 1282,
+     "w": 208,
+     "h": 145,
+     "text": "00:52 CLUTCH WIN Last second victory!"
+    },
+    {
+     "name": "Story.Cinematics.SeeAll",
+     "type": "Button",
+     "x": 758,
+     "y": 1447,
+     "w": 142,
+     "h": 35,
+     "text": "SEE ALL"
+    },
+    {
+     "name": "Story.Cinematic.c1",
+     "type": "Button",
+     "x": 30,
+     "y": 1491,
+     "w": 432,
+     "h": 158,
+     "text": "02:36 THE AWAKENING A new journey begins"
+    },
+    {
+     "name": "Story.Cinematic.c2",
+     "type": "Button",
+     "x": 472,
+     "y": 1491,
+     "w": 438,
+     "h": 158,
+     "text": "01:48 THE FLOATING ISLES Discover the wo"
+    },
+    {
+     "name": "TopBar.Avatar",
+     "type": "Button",
+     "x": 18,
+     "y": 6,
+     "w": 140,
+     "h": 138,
+     "text": ""
+    },
+    {
+     "name": "TopBar.NamePlate",
+     "type": "Panel",
+     "x": 140,
+     "y": 18,
+     "w": 266,
+     "h": 100,
+     "text": "Player123 Lv. 28"
+    },
+    {
+     "name": "TopBar.Gems",
+     "type": "Panel",
+     "x": 418,
+     "y": 34,
+     "w": 190,
+     "h": 55,
+     "text": "1,240"
+    },
+    {
+     "name": "TopBar.GemsPlus",
+     "type": "Button",
+     "x": 566,
+     "y": 44,
+     "w": 36,
+     "h": 36,
+     "text": ""
+    },
+    {
+     "name": "TopBar.Coins",
+     "type": "Panel",
+     "x": 614,
+     "y": 34,
+     "w": 196,
+     "h": 55,
+     "text": "56,320"
+    },
+    {
+     "name": "TopBar.CoinsPlus",
+     "type": "Button",
+     "x": 774,
+     "y": 44,
+     "w": 36,
+     "h": 36,
+     "text": ""
+    },
+    {
+     "name": "TopBar.Actions",
+     "type": "Panel",
+     "x": 826,
+     "y": 26,
+     "w": 140,
+     "h": 70,
+     "text": ""
+    },
+    {
+     "name": "TopBar.Bell",
+     "type": "Button",
+     "x": 839,
+     "y": 41,
+     "w": 40,
+     "h": 40,
+     "text": ""
+    },
+    {
+     "name": "TopBar.Settings",
+     "type": "Button",
+     "x": 895,
+     "y": 41,
+     "w": 40,
+     "h": 40,
+     "text": ""
+    }
+   ]
+  },
+  "shop": {
+   "widget": "WBP_Shop",
+   "background": "assets/bg/shop.jpg",
+   "elements": [
+    {
+     "name": "Shop.Tab.featured",
+     "type": "Button",
+     "x": 23,
+     "y": 423,
+     "w": 181,
+     "h": 97,
+     "text": "FEATURED"
+    },
+    {
+     "name": "Shop.Tab.gems",
+     "type": "Button",
+     "x": 209,
+     "y": 423,
+     "w": 174,
+     "h": 97,
+     "text": "GEMS"
+    },
+    {
+     "name": "Shop.Tab.skins",
+     "type": "Button",
+     "x": 388,
+     "y": 423,
+     "w": 173,
+     "h": 97,
+     "text": "SKINS"
+    },
+    {
+     "name": "Shop.Tab.effects",
+     "type": "Button",
+     "x": 565,
+     "y": 423,
+     "w": 174,
+     "h": 97,
+     "text": "EFFECTS"
+    },
+    {
+     "name": "Shop.Tab.bundles",
+     "type": "Button",
+     "x": 743,
+     "y": 423,
+     "w": 177,
+     "h": 97,
+     "text": "BUNDLES"
+    },
+    {
+     "name": "Shop.Featured",
+     "type": "Panel",
+     "x": 20,
+     "y": 534,
+     "w": 906,
+     "h": 470,
+     "text": "FEATURED CELESTIAL SERA EPIC SKIN A radi"
+    },
+    {
+     "name": "Shop.Featured.Price",
+     "type": "Button",
+     "x": 418,
+     "y": 902,
+     "w": 225,
+     "h": 78,
+     "text": "1,200"
+    },
+    {
+     "name": "Shop.Featured.Buy",
+     "type": "Button",
+     "x": 633,
+     "y": 902,
+     "w": 283,
+     "h": 78,
+     "text": "BUY NOW"
+    },
+    {
+     "name": "Shop.Popular.SeeAll",
+     "type": "Button",
+     "x": 756,
+     "y": 1019,
+     "w": 161,
+     "h": 35,
+     "text": "SEE ALL"
+    },
+    {
+     "name": "Shop.Popular.gems_500",
+     "type": "Button",
+     "x": 33,
+     "y": 1252,
+     "w": 188,
+     "h": 45,
+     "text": "$4.99"
+    },
+    {
+     "name": "Shop.Popular.gems_2500",
+     "type": "Button",
+     "x": 252,
+     "y": 1252,
+     "w": 198,
+     "h": 45,
+     "text": "$19.99"
+    },
+    {
+     "name": "Shop.Popular.coins_10000",
+     "type": "Button",
+     "x": 482,
+     "y": 1252,
+     "w": 197,
+     "h": 45,
+     "text": "$4.99"
+    },
+    {
+     "name": "Shop.Popular.skin_forest_sprout",
+     "type": "Button",
+     "x": 711,
+     "y": 1252,
+     "w": 193,
+     "h": 45,
+     "text": "800"
+    },
+    {
+     "name": "Shop.Bundles.SeeAll",
+     "type": "Button",
+     "x": 756,
+     "y": 1323,
+     "w": 161,
+     "h": 35,
+     "text": "SEE ALL"
+    },
+    {
+     "name": "Shop.Bundle.bundle_arena_spirit",
+     "type": "Button",
+     "x": 267,
+     "y": 1515,
+     "w": 187,
+     "h": 70,
+     "text": "1,500"
+    },
+    {
+     "name": "Shop.Bundle.bundle_elemental",
+     "type": "Button",
+     "x": 719,
+     "y": 1518,
+     "w": 187,
+     "h": 70,
+     "text": "2,800"
+    },
+    {
+     "name": "TopBar.Avatar",
+     "type": "Button",
+     "x": 18,
+     "y": 6,
+     "w": 140,
+     "h": 138,
+     "text": ""
+    },
+    {
+     "name": "TopBar.NamePlate",
+     "type": "Panel",
+     "x": 140,
+     "y": 18,
+     "w": 266,
+     "h": 100,
+     "text": "Player123 Lv. 28"
+    },
+    {
+     "name": "TopBar.Gems",
+     "type": "Panel",
+     "x": 418,
+     "y": 34,
+     "w": 190,
+     "h": 55,
+     "text": "1,240"
+    },
+    {
+     "name": "TopBar.GemsPlus",
+     "type": "Button",
+     "x": 566,
+     "y": 44,
+     "w": 36,
+     "h": 36,
+     "text": ""
+    },
+    {
+     "name": "TopBar.Coins",
+     "type": "Panel",
+     "x": 614,
+     "y": 34,
+     "w": 196,
+     "h": 55,
+     "text": "56,320"
+    },
+    {
+     "name": "TopBar.CoinsPlus",
+     "type": "Button",
+     "x": 774,
+     "y": 44,
+     "w": 36,
+     "h": 36,
+     "text": ""
+    },
+    {
+     "name": "TopBar.Actions",
+     "type": "Panel",
+     "x": 826,
+     "y": 26,
+     "w": 140,
+     "h": 70,
+     "text": ""
+    },
+    {
+     "name": "TopBar.Bell",
+     "type": "Button",
+     "x": 839,
+     "y": 41,
+     "w": 40,
+     "h": 40,
+     "text": ""
+    },
+    {
+     "name": "TopBar.Settings",
+     "type": "Button",
+     "x": 895,
+     "y": 41,
+     "w": 40,
+     "h": 40,
+     "text": ""
+    }
+   ]
+  },
+  "settings": {
+   "widget": "WBP_Settings",
+   "background": "assets/bg/settings.jpg",
+   "elements": [
+    {
+     "name": "Settings.audio",
+     "type": "Panel",
+     "x": 24,
+     "y": 415,
+     "w": 891,
+     "h": 239,
+     "text": "AUDIO Music Volume 70% Sound Effects 80%"
+    },
+    {
+     "name": "slider.music",
+     "type": "Slider",
+     "x": 522,
+     "y": 471,
+     "w": 288,
+     "h": 34,
+     "text": ""
+    },
+    {
+     "name": "slider.sfx",
+     "type": "Slider",
+     "x": 522,
+     "y": 512,
+     "w": 288,
+     "h": 34,
+     "text": ""
+    },
+    {
+     "name": "slider.voice",
+     "type": "Slider",
+     "x": 522,
+     "y": 553,
+     "w": 288,
+     "h": 34,
+     "text": ""
+    },
+    {
+     "name": "toggle.vibration",
+     "type": "Button",
+     "x": 770,
+     "y": 597,
+     "w": 103,
+     "h": 36,
+     "text": "ON"
+    },
+    {
+     "name": "Settings.controls",
+     "type": "Panel",
+     "x": 24,
+     "y": 661,
+     "w": 891,
+     "h": 182,
+     "text": "CONTROLS Control Sensitivity 70% Invert "
+    },
+    {
+     "name": "slider.sensitivity",
+     "type": "Slider",
+     "x": 522,
+     "y": 712,
+     "w": 288,
+     "h": 34,
+     "text": ""
+    },
+    {
+     "name": "toggle.invertY",
+     "type": "Button",
+     "x": 770,
+     "y": 753,
+     "w": 103,
+     "h": 36,
+     "text": "OFF"
+    },
+    {
+     "name": "toggle.aimAssist",
+     "type": "Button",
+     "x": 770,
+     "y": 794,
+     "w": 103,
+     "h": 36,
+     "text": "ON"
+    },
+    {
+     "name": "Settings.graphics",
+     "type": "Panel",
+     "x": 24,
+     "y": 852,
+     "w": 891,
+     "h": 167,
+     "text": "GRAPHICS Graphics Quaility LOW MEDIUM HI"
+    },
+    {
+     "name": "seg.quality.low",
+     "type": "Button",
+     "x": 493,
+     "y": 904,
+     "w": 90,
+     "h": 37,
+     "text": "LOW"
+    },
+    {
+     "name": "seg.quality.medium",
+     "type": "Button",
+     "x": 595,
+     "y": 904,
+     "w": 90,
+     "h": 37,
+     "text": "MEDIUM"
+    },
+    {
+     "name": "seg.quality.high",
+     "type": "Button",
+     "x": 697,
+     "y": 904,
+     "w": 90,
+     "h": 37,
+     "text": "HIGH"
+    },
+    {
+     "name": "seg.quality.ultra",
+     "type": "Button",
+     "x": 799,
+     "y": 904,
+     "w": 90,
+     "h": 37,
+     "text": "ULTRA"
+    },
+    {
+     "name": "seg.fps.30",
+     "type": "Button",
+     "x": 495,
+     "y": 960,
+     "w": 123,
+     "h": 37,
+     "text": "30 FPS"
+    },
+    {
+     "name": "seg.fps.60",
+     "type": "Button",
+     "x": 628,
+     "y": 960,
+     "w": 123,
+     "h": 37,
+     "text": "60 FPS"
+    },
+    {
+     "name": "seg.fps.120",
+     "type": "Button",
+     "x": 764,
+     "y": 960,
+     "w": 123,
+     "h": 37,
+     "text": "120 FPS"
+    },
+    {
+     "name": "Settings.notifications",
+     "type": "Panel",
+     "x": 24,
+     "y": 1026,
+     "w": 891,
+     "h": 221,
+     "text": "NOTIFICATIONS Game Updates ON Events & R"
+    },
+    {
+     "name": "toggle.updates",
+     "type": "Button",
+     "x": 770,
+     "y": 1069,
+     "w": 103,
+     "h": 36,
+     "text": "ON"
+    },
+    {
+     "name": "toggle.events",
+     "type": "Button",
+     "x": 770,
+     "y": 1113,
+     "w": 103,
+     "h": 36,
+     "text": "ON"
+    },
+    {
+     "name": "toggle.friends",
+     "type": "Button",
+     "x": 770,
+     "y": 1157,
+     "w": 103,
+     "h": 36,
+     "text": "ON"
+    },
+    {
+     "name": "toggle.marketing",
+     "type": "Button",
+     "x": 770,
+     "y": 1198,
+     "w": 103,
+     "h": 36,
+     "text": "OFF"
+    },
+    {
+     "name": "Settings.language",
+     "type": "Panel",
+     "x": 24,
+     "y": 1253,
+     "w": 891,
+     "h": 87,
+     "text": "LANGUAGE English (US) English (US) Engli"
+    },
+    {
+     "name": "Settings.account",
+     "type": "Panel",
+     "x": 24,
+     "y": 1348,
+     "w": 891,
+     "h": 153,
+     "text": "ACCOUNT Link your account to keep your p"
+    },
+    {
+     "name": "Settings.Account.google",
+     "type": "Button",
+     "x": 601,
+     "y": 1368,
+     "w": 86,
+     "h": 109,
+     "text": "Google Play LINKED"
+    },
+    {
+     "name": "Settings.Account.apple",
+     "type": "Button",
+     "x": 705,
+     "y": 1368,
+     "w": 86,
+     "h": 109,
+     "text": "Apple ID LINK"
+    },
+    {
+     "name": "Settings.Account.facebook",
+     "type": "Button",
+     "x": 808,
+     "y": 1368,
+     "w": 86,
+     "h": 109,
+     "text": "Facebook LINK"
+    },
+    {
+     "name": "Settings.Save",
+     "type": "Button",
+     "x": 173,
+     "y": 1508,
+     "w": 595,
+     "h": 143,
+     "text": "SAVE SETTINGS"
+    },
+    {
+     "name": "TopBar.Avatar",
+     "type": "Button",
+     "x": 18,
+     "y": 6,
+     "w": 140,
+     "h": 138,
+     "text": ""
+    },
+    {
+     "name": "TopBar.NamePlate",
+     "type": "Panel",
+     "x": 140,
+     "y": 18,
+     "w": 266,
+     "h": 100,
+     "text": "Player123 Lv. 28"
+    },
+    {
+     "name": "TopBar.Gems",
+     "type": "Panel",
+     "x": 418,
+     "y": 34,
+     "w": 190,
+     "h": 55,
+     "text": "1,240"
+    },
+    {
+     "name": "TopBar.GemsPlus",
+     "type": "Button",
+     "x": 566,
+     "y": 44,
+     "w": 36,
+     "h": 36,
+     "text": ""
+    },
+    {
+     "name": "TopBar.Coins",
+     "type": "Panel",
+     "x": 614,
+     "y": 34,
+     "w": 196,
+     "h": 55,
+     "text": "56,320"
+    },
+    {
+     "name": "TopBar.CoinsPlus",
+     "type": "Button",
+     "x": 774,
+     "y": 44,
+     "w": 36,
+     "h": 36,
+     "text": ""
+    },
+    {
+     "name": "TopBar.Actions",
+     "type": "Panel",
+     "x": 826,
+     "y": 26,
+     "w": 140,
+     "h": 70,
+     "text": ""
+    },
+    {
+     "name": "TopBar.Bell",
+     "type": "Button",
+     "x": 839,
+     "y": 41,
+     "w": 40,
+     "h": 40,
+     "text": ""
+    },
+    {
+     "name": "TopBar.Settings",
+     "type": "Button",
+     "x": 895,
+     "y": 41,
+     "w": 40,
+     "h": 40,
+     "text": ""
+    }
+   ]
+  },
+  "battle": {
+   "widget": "WBP_BattleHUD",
+   "background": "assets/battle/arena.jpg",
+   "elements": [
+    {
+     "name": "Battle.Pause",
+     "type": "Button",
+     "x": 852,
+     "y": 230,
+     "w": 62,
+     "h": 62,
+     "text": ""
+    },
+    {
+     "name": "bcard.storm",
+     "type": "Button",
+     "x": 27,
+     "y": 1110,
+     "w": 173,
+     "h": 231,
+     "text": "2 STORM"
+    },
+    {
+     "name": "bcard.guard",
+     "type": "Button",
+     "x": 210,
+     "y": 1120,
+     "w": 166,
+     "h": 222,
+     "text": "1 GUARD"
+    },
+    {
+     "name": "bcard.orb-relay",
+     "type": "Button",
+     "x": 390,
+     "y": 1120,
+     "w": 166,
+     "h": 222,
+     "text": "3 ORB RELAY"
+    },
+    {
+     "name": "bcard.precision",
+     "type": "Button",
+     "x": 570,
+     "y": 1120,
+     "w": 166,
+     "h": 222,
+     "text": "2 PRECISION"
+    },
+    {
+     "name": "bcard.heavy-roll",
+     "type": "Button",
+     "x": 750,
+     "y": 1120,
+     "w": 166,
+     "h": 222,
+     "text": "4 HEAVY ROLL"
+    },
+    {
+     "name": "Battle.Activate",
+     "type": "Button",
+     "x": 443,
+     "y": 1455,
+     "w": 230,
+     "h": 78,
+     "text": "ACTIVATE"
+    },
+    {
+     "name": "Battle.Awaken",
+     "type": "Button",
+     "x": 718,
+     "y": 1375,
+     "w": 200,
+     "h": 200,
+     "text": "AWAKEN"
+    }
+   ]
+  }
+ }
+}
