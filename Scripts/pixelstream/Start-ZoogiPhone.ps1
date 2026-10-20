@@ -91,7 +91,9 @@ try {
     '--sfu_port', $SfuPort, '--max_players', '2', '--peer_options_file', "`"$Ice`"", '--log_folder', "`"$LogDir\wilbur`"", '--console_messages', 'basic')
   $procs.wilbur = (Start-Process node -ArgumentList $wilburArgs -WorkingDirectory "$Infra\SignallingWebServer" -WindowStyle Hidden -PassThru -RedirectStandardOutput "$LogDir\wilbur.out.log" -RedirectStandardError "$LogDir\wilbur.err.log").Id
   # ---- password gate (the only thing the tunnel can reach)
-  $procs.gate = (Start-Process node -ArgumentList @("`"$Here\gate.js`"", '--port', $GatePort, '--upstream', $PlayerPort, '--secrets', "`"$Secrets`"") + $(if ($RequirePassword) { @() } else { @('--no-password') }) -WindowStyle Hidden -PassThru -RedirectStandardOutput "$LogDir\gate.out.log" -RedirectStandardError "$LogDir\gate.err.log").Id
+  $gateArgs = @("`"$Here\gate.js`"", '--port', $GatePort, '--upstream', $PlayerPort, '--secrets', "`"$Secrets`"")
+  if (-not $RequirePassword) { $gateArgs += '--no-password' }
+  $procs.gate = (Start-Process node -ArgumentList $gateArgs -WindowStyle Hidden -PassThru -RedirectStandardOutput "$LogDir\gate.out.log" -RedirectStandardError "$LogDir\gate.err.log").Id
   SaveState
   Start-Sleep 3
   foreach ($k in 'wilbur', 'gate') { if (-not (Get-Process -Id $procs[$k] -ErrorAction SilentlyContinue)) { throw "$k failed to start - see $LogDir\$k.err.log" } }
