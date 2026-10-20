@@ -1,4 +1,5 @@
 #include "ZoogiPortraitCam.h"
+#include "ZoogiArenaHUDWidget.h"
 #include "ZoogiFramedLayout.h"
 #include "GameFramework/PlayerController.h"
 #include "HAL/IConsoleManager.h"
@@ -99,6 +100,8 @@ namespace ZoogiPortrait
 		// framed HUD: the arena window already excludes the HUD, but the top HUD-hidden controls band still applies
 		OutTop = bOff ? 0.f : (bFramed ? SafeTopMin() : SafeTop());
 		OutBottom = (bOff || bFramed) ? 0.f : (CardTrayUp(PC ? PC->GetWorld() : nullptr) ? FMath::Max(SafeBottom(), SafeBottomTray()) : SafeBottom());
+		float BT = 0.f, BB = 0.f; // Board Battle HUD: arena / round plates and the tray are always up
+		if (!bOff && !bFramed && PC && ZoogiArenaHUD::BoardBand(PC->GetWorld(), BT, BB)) { OutTop = FMath::Max(OutTop, BT); OutBottom = FMath::Max(OutBottom, BB); }
 	}
 
 	void AdaptFov(float LandscapeHFov, float Aspect, float& OutHFov, float& OutBoomMul)

@@ -27,6 +27,9 @@ namespace ZoogiArenaHUD
 	ZOOGIROLL_API bool IsEnabled();
 	/** Enabled and a match is on screen (not the main menu). */
 	ZOOGIROLL_API bool IsActive(const UWorld* World);
+	/** Board Battle (portrait): screen fractions its top plates / bottom tray cover, for the portrait camera band. False when off. */
+	ZOOGIROLL_API bool BoardBand(const UWorld* World, float& OutTop, float& OutBottom);
+	ZOOGIROLL_API void SetBoardBand(float Top, float Bottom);
 }
 
 UCLASS()
@@ -66,6 +69,18 @@ private:
 	void BuildDetail(float X, float Y, float Wd, float Ht);
 	void BuildPause();
 	void BuildResults();
+	// ---- Board Battle (portrait, Oct 20 Evan reference Content/Data/MenuArt/board_ref.png, 941 x 1672): the reference's own
+	// frames (top band with logo + DRAW..END stepper, the 4 player panels, arena / round plates, bottom tray) with every value
+	// live on top; the real 3D match shows between them
+	bool bBoard = false;
+	void BuildBoard();
+	void RefreshBoard(float Dt);
+	UImage* RefCrop(float X0, float Y0, float X1, float Y1, float X, float Y, float Wd, float Ht);
+	float BoardBotY = 0.f;        // design y of reference y 1255 (tray band top)
+	TWeakObjectPtr<UWidget> StepGlow[5];
+	TWeakObjectPtr<UTextBlock> StepTxt[5];
+	TWeakObjectPtr<UTextBlock> ArenaTxt, DeckTxt, DiscardTxt, EnergyTxt;
+	TWeakObjectPtr<UTextBlock> EpTxt[4];
 
 	// ---- refresh
 	void Refresh(float Dt);

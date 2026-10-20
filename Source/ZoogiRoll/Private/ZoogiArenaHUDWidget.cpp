@@ -5,6 +5,7 @@
 #include "ZoogiBall.h"
 #include "ZoogiCards.h"
 #include "ZoogiCardSubsystem.h"
+#include "ZoogiBattleStateMachine.h"
 #include "ZoogiGameMode.h"
 #include "ZoogiMenuRoot.h"   // UZoogiMenuRootClick (lambda click forwarder)
 #include "ZoogiMenuWidget.h" // UZoogiButton (never takes keyboard focus)
@@ -39,6 +40,14 @@ namespace ZoogiArenaHUD
 			return Style.Equals(TEXT("Arena"), ESearchCase::IgnoreCase) && !FParse::Param(FCommandLine::Get(), TEXT("ZoogiNoHUD"));
 		}();
 		return b;
+	}
+
+	static float GBandTop = 0.f, GBandBottom = 0.f; static double GBandStamp = -1.0;
+	void SetBoardBand(float Top, float Bottom) { GBandTop = Top; GBandBottom = Bottom; GBandStamp = FPlatformTime::Seconds(); }
+	bool BoardBand(const UWorld* World, float& OutTop, float& OutBottom)
+	{
+		if (!IsActive(World) || FPlatformTime::Seconds() - GBandStamp > 1.0) return false;
+		OutTop = GBandTop; OutBottom = GBandBottom; return true;
 	}
 
 	bool IsActive(const UWorld* World)
@@ -289,8 +298,9 @@ void UZoogiArenaHUDWidget::Build()
 	GaugeSegs.Reset(); Crystals.Reset(); AwakenPips.Reset(); Cards.Reset();
 	const AZoogiGameMode* G = GM();
 	if (!G) return;
-	BuildTopBar();
-	BuildTray();
+	for (TWeakObjectPtr<UWidget>& W : StepGlow) W = nullptr;
+	if (bBoard) BuildBoard();
+	else { BuildTopBar(); BuildTray(); }
 	bBuiltOver = G->Phase == EZoogiPhase::GameOver;
 	if (bBuiltOver) BuildResults();
 	if (bPaused) BuildPause();
@@ -573,7 +583,7 @@ void UZoogiArenaHUDWidget::BuildCard(int32 CardSlot, float X, float Y, float Wd,
 	const float In = 12.f, NameH = Ht * 0.19f;
 	if (UTexture2D* Art = CardArt(Inst.CardId)) Img(Art, X + In, Y + In, Wd - In * 2.f, Ht - In * 2.f - NameH, 8.f, true);
 	At(Box(ZCHex(TEXT("1D2026")), ZCHex(TEXT("3C404A")), 2.f, 6.f), X + 9.f, Y + Ht - NameH - 10.f, Wd - 18.f, NameH);
-	Text(D ? D->Name.ToUpper() : Inst.CardId.ToString().ToUpper(), X + 9.f, Y + Ht - NameH - 10.f, Wd - 18.f, NameH, FMath::Clamp(Wd * 0.105f, 13.f, 22.f), FLinearColor::White, 2.f);
+	Text(D ? D->Name.ToUpper() : Inst.CardId.ToString().ToUpper(), X + 9.f, Y + Ht - NameH - 10.f, Wd - 18.f, NameH, FMath::Clamp(Wd * 0.085f, 9.5f, 22.f), FLinearColor::White, 2.f);
 	const float CB = FMath::Clamp(Wd * 0.24f, 30.f, 46.f);
 	At(Box(AHSapphire, ZCHex(TEXT("D8E2F5")), 3.f, CB * 0.5f), X + 2.f, Y + 2.f, CB, CB);
 	Text(FString::FromInt(D ? D->Cost : 0), X + 2.f, Y + 2.f, CB, CB, CB * 0.58f, FLinearColor::White, 2.f);
@@ -707,12 +717,13 @@ void UZoogiArenaHUDWidget::NativeTick(const FGeometry& Geo, float Dt)
 	if (!Px.Equals(BuiltSize, 1.f) || bP != bPortrait || Sig != BuiltHand || bPaused != bBuiltPause || bOver != bBuiltOver)
 	{
 		bPortrait = bP;
-		S = bPortrait ? Px.X / 1080.f : Px.Y / 1080.f;
+		bBoard = bPortrait && FileTex(TEXT("Data/MenuArt"), TEXT("board_ref")) != nullptr;
+		S = bBoard ? Px.X / 941.f : bPortrait ? Px.X / 1080.f : Px.Y / 1080.f;
 		Design = Px / S;
 		BuiltSize = Px; BuiltHand = Sig;
 		Build();
 	}
-	Refresh(Dt);
+	if (bBoard) RefreshBoard(Dt); else Refresh(Dt);
 	TickTestDriver(Dt);
 }
 
@@ -918,4 +929,210 @@ void UZoogiArenaHUDWidget::Refresh(float Dt)
 		for (int32 k = 0; k < AwakenPips.Num(); ++k)
 			SetFill(AwakenPips[k], k < Charge ? ZCHex(TEXT("FFD970")) : ZCHex(TEXT("2B2D33")));
 	}
+}
+
+// ------------------------------------------------------------------------------------------------ Board Battle (portrait)
+UImage* UZoogiArenaHUDWidget::RefCrop(float X0, float Y0, float X1, float Y1, float X, float Y, float Wd, float Ht)
+{
+	UTexture2D* Ref = FileTex(TEXT("Data/MenuArt"), TEXT("board_ref"));
+	if (!Ref) return nullptr;
+	UImage* I = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
+	FSlateBrush B; B.SetResourceObject(Ref); B.ImageSize = FVector2D(Wd, Ht) * S;
+	B.SetUVRegion(FBox2f(FVector2f(X0 / 941.f, Y0 / 1672.f), FVector2f(X1 / 941.f, Y1 / 1672.f)));
+	I->SetBrush(B);
+	I->SetVisibility(ESlateVisibility::HitTestInvisible);
+	At(I, X, Y, Wd, Ht);
+	return I;
+}
+
+namespace
+{
+	const FLinearColor BRCover = ZCHex(TEXT("121726")), BRCoverDeep = ZCHex(TEXT("0D111C"));
+	const FLinearColor BRPlayer[4] = { ZCHex(TEXT("3A8BFF")), ZCHex(TEXT("F2C744")), ZCHex(TEXT("E5383B")), ZCHex(TEXT("59C94A")) };
+	const float BRPanel[4][2] = { { 22.f, 185.f }, { 650.f, 185.f }, { 22.f, 368.f }, { 650.f, 368.f } };
+	const float BRStep[5][4] = { { 100.f, 121.f, 232.f, 155.f }, { 245.f, 121.f, 372.f, 155.f }, { 388.f, 118.f, 552.f, 156.f }, { 565.f, 121.f, 695.f, 155.f }, { 712.f, 121.f, 842.f, 155.f } };
+}
+
+void UZoogiArenaHUDWidget::BuildBoard()
+{
+	const AZoogiGameMode* G = GM();
+	const float W = Design.X, H = Design.Y;
+	const float TrayRef = 1255.f;
+	BoardBotY = H - (1672.f - TrayRef);
+	auto BY = [this, TrayRef](float Ry) { return BoardBotY + (Ry - TrayRef); };
+
+	// ---- top band: logo + phase stepper (reference art), live stepper states
+	RefCrop(0.f, 0.f, 941.f, 172.f, 0.f, 0.f, W, 172.f);
+	const TCHAR* StepNames[5] = { TEXT("DRAW"), TEXT("AWAKEN"), TEXT("BATTLE"), TEXT("RESOLVE"), TEXT("END") };
+	for (int32 k = 0; k < 5; ++k)
+	{
+		const float* R = BRStep[k];
+		StepGlow[k] = At(Box(ZCHex(TEXT("1B2342")), ZCHex(TEXT("2B3866")), 1.5f, 6.f), R[0], R[1], R[2] - R[0], R[3] - R[1]);
+		StepTxt[k] = Text(StepNames[k], R[0], R[1], R[2] - R[0], R[3] - R[1], k == 2 ? 21.f : 17.f, ZCHex(TEXT("DCE6FF")), 2.f);
+	}
+	Hit(30.f, 12.f, 74.f, 62.f, [this]() { SetPaused(!bPaused); }); // gear -> pause / settings
+
+	// ---- arena + round plates
+	RefCrop(298.f, 176.f, 642.f, 262.f, 298.f, 176.f, 344.f, 86.f);
+	At(Box(BRCover, FLinearColor::Transparent, 0.f, 4.f), 352.f, 185.f, 236.f, 27.f);
+	ArenaTxt = Text(TEXT(""), 352.f, 183.f, 236.f, 30.f, 22.f, FLinearColor::White, 2.f);
+	At(Box(BRCover, FLinearColor::Transparent, 0.f, 4.f), 392.f, 226.f, 156.f, 26.f);
+	RoundTxt = Text(TEXT(""), 392.f, 224.f, 156.f, 30.f, 18.f, FLinearColor::White, 2.f);
+
+	// ---- player panels
+	for (int32 i = 0; i < 4; ++i)
+	{
+		const float OX = BRPanel[i][0], OY = BRPanel[i][1];
+		FUnitRefs& U = Units[i];
+		const AZoogiBall* B = G->Balls.IsValidIndex(i) ? G->Balls[i].Get() : nullptr;
+		U.Active = At(Box(FLinearColor::Transparent, ZCHex(TEXT("FFD35C")), 5.f, 18.f), OX - 6.f, OY - 6.f, 282.f, 182.f);
+		RefCrop(OX - 2.f, OY - 2.f, OX + 272.f, OY + 172.f, OX - 2.f, OY - 2.f, 274.f, 174.f);
+		if (!B) continue;
+		if (UTexture2D* P = FileTex(TEXT("Data/MenuArt"), PortraitKey(B->Def.Id))) Img(P, OX + 22.f, OY + 19.f, 88.f, 88.f, 44.f, true);
+		At(Box(BRCoverDeep, FLinearColor::Transparent, 0.f, 4.f), OX + 114.f, OY + 14.f, 156.f, 38.f);
+		Text(FString::Printf(TEXT("P%d %s"), i + 1, *B->Def.Name.ToUpper()), OX + 124.f, OY + 16.f, 146.f, 34.f, 22.f, FLinearColor::White, 2.f, 0);
+		At(Box(ZCHex(TEXT("262B4D")), ZCHex(TEXT("8E7CFF")), 2.f, 12.f), OX + 122.f, OY + 54.f, 58.f, 25.f);
+		Text(B->bCPU ? TEXT("CPU") : TEXT("YOU"), OX + 122.f, OY + 54.f, 58.f, 25.f, 15.f, ZCHex(TEXT("D8D2FF")), 1.f);
+		At(Box(BRCoverDeep, FLinearColor::Transparent, 0.f, 4.f), OX + 116.f, OY + 86.f, 108.f, 26.f);
+		for (int32 k = 0; k < AZoogiGameMode::AwakenChargeMax; ++k)
+			U.Pips.Add(At(Box(ZCHex(TEXT("232838")), ZCHex(TEXT("555B6E")), 1.5f, 9.f), OX + 122.f + k * 24.f, OY + 90.f, 18.f, 18.f));
+		At(Box(BRCoverDeep, FLinearColor::Transparent, 0.f, 6.f), OX + 210.f, OY + 46.f, 56.f, 64.f);
+		U.Score = Text(TEXT("0"), OX + 206.f, OY + 44.f, 62.f, 68.f, 44.f, FLinearColor::White, 3.f);
+		At(Box(BRCoverDeep, FLinearColor::Transparent, 0.f, 4.f), OX + 24.f, OY + 112.f, 150.f, 24.f);
+		EpTxt[i] = Text(TEXT("EPISODE 0/100"), OX + 26.f, OY + 112.f, 160.f, 24.f, 15.f, FLinearColor::White, 1.f, 0);
+		At(Box(ZCHex(TEXT("0A0D16")), ZCHex(TEXT("3B4256")), 2.f, 9.f), OX + 24.f, OY + 136.f, 222.f, 18.f);
+		U.BarW = 216.f;
+		U.Bar = At(Box(ZCHex(TEXT("2F7BF0")), FLinearColor::Transparent, 0.f, 7.f), OX + 27.f, OY + 139.f, 10.f, 12.f);
+	}
+
+	// ---- bottom tray (reference art pinned to the bottom edge)
+	RefCrop(0.f, TrayRef, 941.f, 1672.f, 0.f, BoardBotY, W, 1672.f - TrayRef);
+	const UZoogiCardSubsystem* CS = UZoogiCardSubsystem::Get(this);
+	const FZoogiCardPlayerState* PS = (CS && G->CardsOn()) ? CS->Rules().Player(LocalPlayer()) : nullptr;
+	// deck pile + discard + energy readouts
+	At(Box(ZCHex(TEXT("1A2133")), FLinearColor::Transparent, 0.f, 6.f), 74.f, BY(1420.f), 62.f, 44.f);
+	DeckTxt = Text(TEXT("0"), 70.f, BY(1418.f), 70.f, 48.f, 36.f, FLinearColor::White, 3.f);
+	At(Box(ZCHex(TEXT("141A2A")), FLinearColor::Transparent, 0.f, 6.f), 808.f, BY(1374.f), 98.f, 46.f);
+	DiscardTxt = Text(TEXT("0"), 808.f, BY(1372.f), 98.f, 50.f, 34.f, FLinearColor::White, 3.f);
+	At(Box(ZCHex(TEXT("141A2A")), FLinearColor::Transparent, 0.f, 6.f), 662.f, BY(1580.f), 82.f, 62.f);
+	EnergyTxt = Text(TEXT("0/5"), 660.f, BY(1578.f), 86.f, 42.f, 30.f, FLinearColor::White, 3.f);
+	Text(TEXT("ENERGY"), 660.f, BY(1618.f), 86.f, 22.f, 13.f, FLinearColor::White, 1.f);
+	// cards: the reference's five slots, compressed when the hand holds more
+	const int32 N = PS ? PS->Hand.Num() : 0;
+	At(Box(ZCHex(TEXT("10141F")).CopyWithNewOpacity(0.97f), FLinearColor::Transparent, 0.f, 8.f), 170.f, BY(1296.f), 600.f, 164.f);
+	if (N == 0) Text(G->CardsOn() ? TEXT("NO CARDS IN HAND") : TEXT("CARDS OFF"), 170.f, BY(1296.f), 600.f, 164.f, 22.f, ZCMuted, 2.f);
+	{
+		const float X0 = 174.f, X1 = 766.f, Gap = 6.f, CH = 156.f;
+		const float CW = FMath::Min(113.f, (X1 - X0 - Gap * (FMath::Max(N, 1) - 1)) / FMath::Max(N, 1));
+		const float Used = N * CW + (N - 1) * Gap, XS = X0 + (X1 - X0 - Used) * 0.5f;
+		for (int32 k = 0; k < N; ++k) BuildCard(k, XS + k * (CW + Gap), BY(1300.f), CW, CH);
+	}
+	// detail panel (selected card)
+	At(Box(ZCHex(TEXT("0F1420")), FLinearColor::Transparent, 0.f, 8.f), 170.f, BY(1496.f), 294.f, 128.f);
+	if (PS && PS->Hand.Num() > 0)
+	{
+		DetailSlot = FMath::Clamp(DetailSlot, 0, PS->Hand.Num() - 1);
+		const FZoogiCardInstance& Inst = PS->Hand[DetailSlot];
+		const FZoogiCardDef* D = CS->Def(Inst.CardId);
+		At(Box(ZCHex(TEXT("9AA0AC")), ZCDark, 2.f, 6.f), 174.f, BY(1502.f), 86.f, 102.f);
+		if (UTexture2D* Art = CardArt(Inst.CardId)) Img(Art, 177.f, BY(1505.f), 80.f, 96.f, 4.f, true);
+		Text(D ? D->Name.ToUpper() : Inst.CardId.ToString().ToUpper(), 272.f, BY(1496.f), 190.f, 30.f, 22.f, FLinearColor::White, 2.f, 0);
+		const FString Tag = D ? FString(ZoogiCards::TypeName(D->Type)).ToUpper() : FString();
+		At(Box(ZCHex(TEXT("2B2350")), ZCHex(TEXT("9D7CFF")), 1.5f, 11.f), 274.f, BY(1528.f), FMath::Max(80.f, 11.f * Tag.Len() + 22.f), 22.f);
+		Text(Tag, 274.f, BY(1528.f), FMath::Max(80.f, 11.f * Tag.Len() + 22.f), 22.f, 12.f, ZCHex(TEXT("ECE4FF")), 0.f);
+		if (UTextBlock* Desc = Text(D ? D->Rule : FString(), 272.f, BY(1553.f), 190.f, 68.f, 12.5f, ZCHex(TEXT("D9DCE3")), 0.f, 0)) Desc->SetAutoWrapText(true);
+	}
+	// ACTIVATE (reference button) + live cost
+	ActivateDim = At(Box(FLinearColor(0.02f, 0.02f, 0.04f, 0.55f), FLinearColor::Transparent, 0.f, 26.f), 468.f, BY(1526.f), 162.f, 56.f);
+	Hit(466.f, BY(1522.f), 166.f, 64.f, [this]() { PressActivate(); });
+	At(Box(ZCHex(TEXT("121726")), FLinearColor::Transparent, 0.f, 6.f), 540.f, BY(1588.f), 46.f, 28.f);
+	ActivateCost = Text(TEXT("0"), 536.f, BY(1586.f), 54.f, 32.f, 22.f, FLinearColor::White, 2.f);
+	// AWAKEN (reference orb) + live charge pips
+	AwakenGlow = At(Box(FLinearColor::Transparent, ZCHex(TEXT("FFC94D")), 7.f, 90.f), 754.f, BY(1458.f), 180.f, 180.f);
+	At(Box(ZCHex(TEXT("1E1407")), FLinearColor::Transparent, 0.f, 14.f), 776.f, BY(1614.f), 132.f, 30.f);
+	for (int32 k = 0; k < AZoogiGameMode::AwakenChargeMax; ++k)
+		AwakenPips.Add(At(Box(ZCHex(TEXT("2B2D33")), ZCHex(TEXT("4D4F55")), 1.5f, 11.f), 784.f + k * 30.f, BY(1618.f), 22.f, 22.f));
+	Hit(756.f, BY(1460.f), 174.f, 190.f, [this]() { PressAwaken(); });
+}
+
+void UZoogiArenaHUDWidget::RefreshBoard(float Dt)
+{
+	AZoogiGameMode* G = GM();
+	if (!G) return;
+	const int32 Me = LocalPlayer();
+	auto Show = [](TWeakObjectPtr<UWidget> W, bool b) { if (W.IsValid()) W->SetVisibility(b ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed); };
+	auto SetFill = [](TWeakObjectPtr<UWidget> W, const FLinearColor& C) { if (UBorder* B = Cast<UBorder>(W.Get())) B->SetBrushColor(C); };
+	// the portrait camera keeps the play focus between the arena / round plates and the tray
+	ZoogiArenaHUD::SetBoardBand(270.f / FMath::Max(1.f, Design.Y), (1672.f - 1255.f + 10.f) / FMath::Max(1.f, Design.Y));
+
+	// stepper
+	int32 Step = 0;
+	if (G->Phase == EZoogiPhase::Rolling) Step = 2;
+	else if (G->Phase == EZoogiPhase::Resolving) Step = 3;
+	else if (G->Phase == EZoogiPhase::Aiming) Step = G->Stage == EZoogiStage::Draw ? 0 : G->Stage == EZoogiStage::Awaken ? 1 : G->Stage == EZoogiStage::Battle ? 2 : G->Stage == EZoogiStage::Resolve ? 3 : 4;
+	else if (G->Phase == EZoogiPhase::GameOver) Step = 4;
+	for (int32 k = 0; k < 5; ++k)
+	{
+		const bool bOn = k == Step && G->Phase != EZoogiPhase::Forming;
+		if (UBorder* B = Cast<UBorder>(StepGlow[k].Get()))
+		{
+			B->SetBrush(ZoogiUIStyle::RoundBrush(bOn ? ZCHex(TEXT("1F5BE0")) : ZCHex(TEXT("1B2342")), bOn ? ZCHex(TEXT("9FD4FF")) : ZCHex(TEXT("2B3866")), (bOn ? 2.5f : 1.5f) * S, 6.f * S));
+			B->SetRenderOpacity(bOn ? 0.85f + 0.15f * FMath::Abs(FMath::Sin(Time * 3.f)) : 1.f);
+		}
+		if (StepTxt[k].IsValid()) StepTxt[k]->SetColorAndOpacity(FSlateColor(bOn ? FLinearColor::White : ZCHex(TEXT("AFC0E6"))));
+	}
+	// plates
+	if (ArenaTxt.IsValid()) ArenaTxt->SetText(FText::FromString(ZoogiUtil::ArenaName(G->MenuArena).ToUpper()));
+	if (RoundTxt.IsValid()) RoundTxt->SetText(FText::FromString(FString::Printf(TEXT("ROUND %d / %d"), FMath::Clamp(G->RoundNumber, 1, FMath::Max(1, G->MenuRounds)), G->MenuRounds)));
+	// players
+	const UZoogiBattleStateMachine* SM = UZoogiBattleStateMachine::Get(this);
+	for (int32 i = 0; i < 4; ++i)
+	{
+		FUnitRefs& U = Units[i];
+		const AZoogiBall* B = G->Balls.IsValidIndex(i) ? G->Balls[i].Get() : nullptr;
+		if (!B) { Show(U.Active, false); continue; }
+		const bool bAct = G->ActivePlayer == i && G->Phase != EZoogiPhase::GameOver;
+		Show(U.Active, bAct);
+		if (U.Active.IsValid()) U.Active->SetRenderOpacity(0.55f + 0.45f * FMath::Abs(FMath::Sin(Time * 3.f)));
+		if (U.Score.IsValid()) U.Score->SetText(FText::AsNumber(B->Score));
+		const float E = SM ? SM->GetEnergy(i) : 0.f;
+		if (EpTxt[i].IsValid()) EpTxt[i]->SetText(FText::FromString(FString::Printf(TEXT("EPISODE %d/100"), FMath::RoundToInt(E))));
+		if (U.Bar.IsValid())
+			if (UCanvasPanelSlot* Sl = Cast<UCanvasPanelSlot>(U.Bar->Slot)) Sl->SetSize(FVector2D(FMath::Max(10.f, U.BarW * FMath::Clamp(E / 100.f, 0.f, 1.f)), 12.f) * S);
+		const int32 Charge = G->AwakenCharge[i];
+		for (int32 k = 0; k < U.Pips.Num(); ++k) SetFill(U.Pips[k], k < Charge ? BRPlayer[i] : ZCHex(TEXT("232838")));
+	}
+	// tray readouts
+	const UZoogiCardSubsystem* CS = UZoogiCardSubsystem::Get(this);
+	const FZoogiCardPlayerState* PS = (CS && G->CardsOn()) ? CS->Rules().Player(Me) : nullptr;
+	if (DeckTxt.IsValid()) DeckTxt->SetText(FText::AsNumber(PS ? PS->DrawPile.Num() : 0));
+	if (DiscardTxt.IsValid()) DiscardTxt->SetText(FText::AsNumber(PS ? PS->Discard.Num() : 0));
+	if (EnergyTxt.IsValid()) EnergyTxt->SetText(FText::FromString(FString::Printf(TEXT("%d/5"), PS ? PS->Energy : 0)));
+	const bool bStandby = G->Stage == EZoogiStage::Awaken && G->IsHumanAiming() && !G->bAwakenDone;
+	int32 Cost = 0;
+	for (int32 k = 0; k < Cards.Num(); ++k)
+	{
+		bool bSel = false, bAfford = true;
+		if (PS && PS->Hand.IsValidIndex(k))
+		{
+			bSel = PS->Selected.Contains(PS->Hand[k].InstanceId);
+			const FZoogiCardDef* D = CS->Def(PS->Hand[k].CardId);
+			if (bSel && D) Cost += D->Cost;
+			bAfford = bSel || !D || D->Cost <= PS->Energy;
+		}
+		Show(Cards[k].Glow, bSel);
+		Show(Cards[k].Dim, !bAfford || !bStandby);
+		if (Cards[k].Root.IsValid()) Cards[k].Root->SetRenderTranslation(FVector2D(0.f, bSel ? -10.f * S : 0.f));
+	}
+	if (ActivateCost.IsValid()) ActivateCost->SetText(FText::AsNumber(Cost));
+	Show(ActivateDim, !bStandby);
+	const bool bReady = G->CardsAwakenReady(Me) && !G->bStandbyAwaken;
+	if (AwakenGlow.IsValid())
+	{
+		AwakenGlow->SetVisibility(bReady ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+		AwakenGlow->SetRenderOpacity(0.45f + 0.55f * FMath::Abs(FMath::Sin(Time * 2.6f)));
+	}
+	const int32 Charge = G->AwakenCharge[FMath::Clamp(Me, 0, 3)];
+	for (int32 k = 0; k < AwakenPips.Num(); ++k) SetFill(AwakenPips[k], k < Charge ? ZCHex(TEXT("FFD970")) : ZCHex(TEXT("2B2D33")));
+	(void)Dt;
 }
