@@ -7,6 +7,7 @@
 // The old Home is kept behind -ZoogiClassicMenu. Values come from UZoogiFrontProfileSubsystem (local save).
 #include "ZoogiMenuRoot.h"
 #include "ZoogiMenuClashStyle.h"
+#include "ZoogiWebUI.h"
 #include "ZoogiFrontProfile.h"
 #include "ZoogiGameMode.h"
 #include "ZoogiMenuWidget.h" // UZoogiButton (non-focusable button)
@@ -984,6 +985,11 @@ void UZoogiMenuRoot::BuildClashHomeV2()
 	// arena / bottom bar (pinned bottom); on 16:9 the three bands rebuild the reference 1:1.
 	UTexture2D* Ref = Art(TEXT("home_ref"));
 	if (!Ref) { BuildClashBattleTab(); return; }
+	{
+		// web-ui: the zoogi-ui Title screen greets every session once (tap -> this hub); capture tours skip it
+		static bool bTitled = false;
+		if (!bTitled) { bTitled = true; FString TourArg; if (!FParse::Value(FCommandLine::Get(), TEXT("ZoogiClashTour="), TourArg)) UZoogiWebUILayer::Open(GetWorld(), TEXT("title")); }
+	}
 	AZoogiGameMode* G = GM();
 	const UZoogiFrontProfileSubsystem* FP = UZoogiFrontProfileSubsystem::Get(this);
 	const FZoogiFrontProfileData Dflt;
@@ -1043,8 +1049,8 @@ void UZoogiMenuRoot::BuildClashHomeV2()
 		}
 		Tap(TX(10.f), TY(4.f), TX(320.f), TY(88.f), [this]() { OpenClashPopup(EZoogiClashPopup::Profile); });
 		for (float Px : { 345.f, 522.f, 700.f })
-			Tap(TX(Px), TY(18.f), TX(165.f), TY(60.f), [this]() { SetClashTab(ZCShop); ClashScrollOffset = 0.f; ClashPendingScroll = 0.f; bDirty = true; });
-		Tap(TX(855.f), TY(8.f), TX(80.f), TY(80.f), [this]() { OpenClashPopup(EZoogiClashPopup::Settings); });
+			Tap(TX(Px), TY(18.f), TX(165.f), TY(60.f), [this]() { if (!UZoogiWebUILayer::Open(GetWorld(), TEXT("shop"))) { SetClashTab(ZCShop); ClashScrollOffset = 0.f; ClashPendingScroll = 0.f; bDirty = true; } });
+		Tap(TX(855.f), TY(8.f), TX(80.f), TY(80.f), [this]() { if (!UZoogiWebUILayer::Open(GetWorld(), TEXT("settings"))) OpenClashPopup(EZoogiClashPopup::Settings); });
 	}
 
 	// ---- side buttons: EVENTS -> Battle Pass, QUESTS -> Trophy Road, RANKING -> Leaderboard, SHOP -> Shop
@@ -1053,7 +1059,7 @@ void UZoogiMenuRoot::BuildClashHomeV2()
 		Tap(SX, TY(196.f), SW, TY(98.f), [this]() { OpenClashPopup(EZoogiClashPopup::BattlePass, TEXT("BATTLE PASS")); });
 		Tap(SX, TY(302.f), SW, TY(98.f), [this]() { OpenClashPopup(EZoogiClashPopup::TrophyRoad, TEXT("TROPHY ROAD")); });
 		Tap(SX, TY(405.f), SW, TY(98.f), [this]() { SetClashTab(ZCLeader); });
-		Tap(SX, TY(508.f), SW, TY(100.f), [this]() { SetClashTab(ZCShop); });
+		Tap(SX, TY(508.f), SW, TY(100.f), [this]() { if (!UZoogiWebUILayer::Open(GetWorld(), TEXT("shop"))) SetClashTab(ZCShop); });
 		if (FP && FP->PassClaimableCount() > 0) CDot(W - 46.f, TY(194.f), 40.f, TEXT("!"));
 		if (FP && FP->RoadClaimableCount() > 0) CDot(W - 46.f, TY(300.f), 40.f, TEXT("!"));
 	}
@@ -1064,7 +1070,7 @@ void UZoogiMenuRoot::BuildClashHomeV2()
 		const float TileX[4] = { 20.f, 246.f, 476.f, 704.f };
 		TFunction<void()> Fns[4] = {
 			[this]() { UE_LOG(LogZoogi, Log, TEXT("HOME BATTLE 2v2")); ClashStartMatchmaking(); },
-			[this]() { Push(EZoogiScreen::Story); },
+			[this]() { if (!UZoogiWebUILayer::Open(GetWorld(), TEXT("story"))) Push(EZoogiScreen::Story); },
 			[this]() { ClashStartTraining(); },
 			[this]() { Push(EZoogiScreen::Play); } };
 		for (int32 i = 0; i < 4; ++i) Tap(TX(TileX[i]), BY(1088.f), TX(218.f), TX(180.f), Fns[i]);
@@ -1088,7 +1094,7 @@ void UZoogiMenuRoot::BuildClashHomeV2()
 		CAt(CBox(ZCHex(TEXT("15253A")).CopyWithNewOpacity(0.92f), FLinearColor::Transparent, 0.f, 10.f), TX(712.f), BY(1434.f), TX(158.f), TX(22.f));
 		for (int32 k = 0; k < NF; ++k)
 			CAt(CBox(k == ClashFeatured ? ZCGold : FLinearColor(1.f, 1.f, 1.f, 0.6f), ZCDark, 1.5f, TX(6.f)), TX(718.f) + k * TX(19.f), BY(1439.f), TX(12.f), TX(12.f));
-		Tap(TX(66.f), BY(1288.f), TX(808.f), TX(176.f), [this]() { ClashArenaSel = -1; OpenClashPopup(EZoogiClashPopup::Arenas, TEXT("ARENAS")); });
+		Tap(TX(66.f), BY(1288.f), TX(808.f), TX(176.f), [this]() { if (!UZoogiWebUILayer::Open(GetWorld(), TEXT("arena"))) { ClashArenaSel = -1; OpenClashPopup(EZoogiClashPopup::Arenas, TEXT("ARENAS")); } });
 		Tap(TX(16.f), BY(1288.f), TX(48.f), TX(176.f), [this]() { --ClashFeatured; bDirty = true; });
 		Tap(TX(876.f), BY(1288.f), TX(48.f), TX(176.f), [this]() { ++ClashFeatured; bDirty = true; });
 	}
@@ -1098,10 +1104,10 @@ void UZoogiMenuRoot::BuildClashHomeV2()
 		const float NavX[5] = { 16.f, 198.f, 382.f, 566.f, 750.f };
 		TFunction<void()> Fns[5] = {
 			[this]() { Push(EZoogiScreen::ZoogiSelect); },
-			[this]() { SetClashTab(ZCCards); },
-			[this]() { ClashArenaSel = -1; OpenClashPopup(EZoogiClashPopup::Arenas, TEXT("ARENAS")); },
-			[this]() { SetClashTab(ZCCards); },
-			[this]() { OpenClashPopup(EZoogiClashPopup::Settings); } };
+			[this]() { if (!UZoogiWebUILayer::Open(GetWorld(), TEXT("deck"))) SetClashTab(ZCCards); },
+			[this]() { if (!UZoogiWebUILayer::Open(GetWorld(), TEXT("arena"))) { ClashArenaSel = -1; OpenClashPopup(EZoogiClashPopup::Arenas, TEXT("ARENAS")); } },
+			[this]() { if (!UZoogiWebUILayer::Open(GetWorld(), TEXT("deck"))) SetClashTab(ZCCards); },
+			[this]() { if (!UZoogiWebUILayer::Open(GetWorld(), TEXT("settings"))) OpenClashPopup(EZoogiClashPopup::Settings); } };
 		for (int32 i = 0; i < 5; ++i) Tap(TX(NavX[i]), BY(1486.f), TX(176.f), TX(168.f), Fns[i]);
 		if (FP && (FP->Data().bCardsNew || FP->UpgradableCount() > 0)) CDot(TX(330.f), BY(1484.f), 40.f, TEXT("!"));
 	}

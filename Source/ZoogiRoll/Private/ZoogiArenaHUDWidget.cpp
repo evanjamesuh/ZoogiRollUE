@@ -221,6 +221,13 @@ UTexture2D* UZoogiArenaHUDWidget::FileTex(const FString& Dir, const FString& Nam
 	return T;
 }
 
+UTexture2D* UZoogiArenaHUDWidget::CardArt(FName CardId)
+{
+	// zoogi-ui card art (the approved style, Content/ZoogiUI/assets/cards/<id-with-hyphens>.jpg) first, older Data/CardArt as fallback
+	if (UTexture2D* T = FileTex(TEXT("ZoogiUI/assets/cards"), CardId.ToString().Replace(TEXT("_"), TEXT("-")))) return T;
+	return FileTex(TEXT("Data/CardArt"), CardId.ToString());
+}
+
 UTexture2D* UZoogiArenaHUDWidget::Tex(const FString& Key)
 {
 	if (TObjectPtr<UTexture2D>* Hit = TexCache.Find(Key)) return Hit->Get();
@@ -564,7 +571,7 @@ void UZoogiArenaHUDWidget::BuildCard(int32 CardSlot, float X, float Y, float Wd,
 	R.Glow = At(Box(FLinearColor::Transparent, ZCHex(TEXT("FFC94D")), 7.f, 18.f), X - 7.f, Y - 7.f, Wd + 14.f, Ht + 14.f);
 	R.Root = Stone(X, Y, Wd, Ht, 14.f, ZCHex(TEXT("0D0F14")), true);
 	const float In = 12.f, NameH = Ht * 0.19f;
-	if (UTexture2D* Art = FileTex(TEXT("Data/CardArt"), Inst.CardId.ToString())) Img(Art, X + In, Y + In, Wd - In * 2.f, Ht - In * 2.f - NameH, 8.f, true);
+	if (UTexture2D* Art = CardArt(Inst.CardId)) Img(Art, X + In, Y + In, Wd - In * 2.f, Ht - In * 2.f - NameH, 8.f, true);
 	At(Box(ZCHex(TEXT("1D2026")), ZCHex(TEXT("3C404A")), 2.f, 6.f), X + 9.f, Y + Ht - NameH - 10.f, Wd - 18.f, NameH);
 	Text(D ? D->Name.ToUpper() : Inst.CardId.ToString().ToUpper(), X + 9.f, Y + Ht - NameH - 10.f, Wd - 18.f, NameH, FMath::Clamp(Wd * 0.105f, 13.f, 22.f), FLinearColor::White, 2.f);
 	const float CB = FMath::Clamp(Wd * 0.24f, 30.f, 46.f);
@@ -591,7 +598,7 @@ void UZoogiArenaHUDWidget::BuildDetail(float X, float Y, float Wd, float Ht)
 	const FZoogiCardDef* D = CS->Def(Inst.CardId);
 	const float TW = 124.f, TH = 150.f, TX = X + 24.f, TY = Y + (Ht - TH) * 0.5f;
 	At(Box(ZCHex(TEXT("9AA0AC")), ZCDark, 2.f, 10.f), TX - 5.f, TY - 5.f, TW + 10.f, TH + 10.f);
-	if (UTexture2D* Art = FileTex(TEXT("Data/CardArt"), Inst.CardId.ToString())) Img(Art, TX, TY, TW, TH, 6.f, true);
+	if (UTexture2D* Art = CardArt(Inst.CardId)) Img(Art, TX, TY, TW, TH, 6.f, true);
 	const float LX = TX + TW + 20.f, LW = bPortrait ? (Wd - (LX - X) - 320.f) : (Wd - (LX - X) - 20.f);
 	Text(D ? D->Name.ToUpper() : Inst.CardId.ToString().ToUpper(), LX, Y + 22.f, LW + 120.f, 44.f, 30.f, FLinearColor::White, 3.f, 0);
 	const FString Tag = D ? FString(ZoogiCards::TypeName(D->Type)).ToUpper() : FString();

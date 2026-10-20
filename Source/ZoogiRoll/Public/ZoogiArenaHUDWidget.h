@@ -57,6 +57,7 @@ private:
 	UButton* Hit(float X, float Y, float Wd, float Ht, TFunction<void()> Fn);
 	UTexture2D* Tex(const FString& Key);
 	UTexture2D* FileTex(const FString& Dir, const FString& Name);
+	UTexture2D* CardArt(FName CardId);
 	void BuildTopBar();
 	void BuildUnit(int32 Player, float Cx, float Top);
 	void BuildEpisode(float X, float Y, float Wd);

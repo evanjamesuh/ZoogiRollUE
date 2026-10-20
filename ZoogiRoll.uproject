@@ -20,6 +20,7 @@
 		{ "Name": "InterchangeEditor", "Enabled": true },
 		{ "Name": "ModelingToolsEditorMode", "Enabled": false },
 		{ "Name": "PixelStreaming2", "Enabled": true },
+		{ "Name": "WebBrowserWidget", "Enabled": true },
 		{ "Name": "Aura", "Enabled": true, "SupportedTargetPlatforms": [ "Win64", "Mac" ] }
 	]
 }
