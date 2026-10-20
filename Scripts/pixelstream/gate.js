@@ -16,6 +16,7 @@ const SECRETS = arg('secrets');
 const S = JSON.parse(fs.readFileSync(SECRETS, 'utf8').replace(/^﻿/, '')); // { token, password, sessionKey }; PowerShell 5.1 writes a BOM
 if (!S.token || !S.password || !S.sessionKey) throw new Error('secrets file incomplete');
 const TOKEN_PATH = '/' + S.token;
+const NO_PASSWORD = process.argv.includes('--no-password'); // the link alone signs in (Start-ZoogiPhone default; -RequirePassword turns the page back on)
 const SESSION_DAYS = 30;
 const MOBILE_JS = fs.readFileSync(path.join(__dirname, 'zoogi-mobile.js'));
 
@@ -94,6 +95,12 @@ const server = http.createServer((req, res) => {
   if (url === '/healthz') return send(res, 200, 'text/plain', 'ok');
   if (url === TOKEN_PATH || url === TOKEN_PATH + '/') {
     if (authed(req)) return send(res, 302, 'text/plain', '', { Location: '/' });
+    if (NO_PASSWORD) {
+      // --no-password (Evan, Oct 20): the secret link itself signs the phone in - no password page
+      const exp = Date.now() + SESSION_DAYS * 86400e3;
+      log('gate: link login (no password) from', clientKey(req));
+      return send(res, 303, 'text/plain', '', { Location: '/', 'Set-Cookie': `zg_s=${exp}.${mac(exp)}; Path=/; Max-Age=${SESSION_DAYS * 86400}; HttpOnly; Secure; SameSite=Lax` });
+    }
     return send(res, 200, 'text/html', loginPage(''));
   }
   if (url === TOKEN_PATH + '/login' && req.method === 'POST') {

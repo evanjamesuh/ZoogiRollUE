@@ -11,6 +11,7 @@
 param(
   [ValidateSet('cloudflare', 'tailscale', 'none')][string]$Tunnel = 'cloudflare',
   [switch]$ShowWindow,
+  [switch]$RequirePassword,   # Oct 20: off by default - the secret link alone signs the phone in
   [int]$LockWaitMinutes = 240
 )
 $ErrorActionPreference = 'Stop'
@@ -90,7 +91,7 @@ try {
     '--sfu_port', $SfuPort, '--max_players', '2', '--peer_options_file', "`"$Ice`"", '--log_folder', "`"$LogDir\wilbur`"", '--console_messages', 'basic')
   $procs.wilbur = (Start-Process node -ArgumentList $wilburArgs -WorkingDirectory "$Infra\SignallingWebServer" -WindowStyle Hidden -PassThru -RedirectStandardOutput "$LogDir\wilbur.out.log" -RedirectStandardError "$LogDir\wilbur.err.log").Id
   # ---- password gate (the only thing the tunnel can reach)
-  $procs.gate = (Start-Process node -ArgumentList @("`"$Here\gate.js`"", '--port', $GatePort, '--upstream', $PlayerPort, '--secrets', "`"$Secrets`"") -WindowStyle Hidden -PassThru -RedirectStandardOutput "$LogDir\gate.out.log" -RedirectStandardError "$LogDir\gate.err.log").Id
+  $procs.gate = (Start-Process node -ArgumentList @("`"$Here\gate.js`"", '--port', $GatePort, '--upstream', $PlayerPort, '--secrets', "`"$Secrets`"") + $(if ($RequirePassword) { @() } else { @('--no-password') }) -WindowStyle Hidden -PassThru -RedirectStandardOutput "$LogDir\gate.out.log" -RedirectStandardError "$LogDir\gate.err.log").Id
   SaveState
   Start-Sleep 3
   foreach ($k in 'wilbur', 'gate') { if (-not (Get-Process -Id $procs[$k] -ErrorAction SilentlyContinue)) { throw "$k failed to start - see $LogDir\$k.err.log" } }
@@ -126,7 +127,8 @@ try {
   Write-Host ''
   Write-Host '  Zoogi Roll is ready for your phone.' -ForegroundColor Cyan
   Write-Host "  Phone link:  $link" -ForegroundColor Cyan
-  Write-Host ('  Password:    in ' + $Secrets + ' (the "password" line)') -ForegroundColor Cyan
+  if ($RequirePassword) { Write-Host ('  Password:    in ' + $Secrets + ' (the "password" line)') -ForegroundColor Cyan }
+  else { Write-Host '  No password: the link itself signs you in - share it only with people who should play.' -ForegroundColor Cyan }
   Write-Host "  (link also saved in $LinkFile)" -ForegroundColor DarkGray
   $qr = 'C:\dev\PixelStreaming\tools\node_modules\qrcode-terminal'
   if (Test-Path $qr) { & node -e "require(process.argv[1]).generate(process.argv[2],{small:true})" $qr $link }
