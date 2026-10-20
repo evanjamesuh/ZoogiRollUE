@@ -1,6 +1,7 @@
 // cardui: see ZoogiCardHandWidget.h
 #include "ZoogiCardHandWidget.h"
 #include "ZoogiCardWidget.h"
+#include "ZoogiArenaHUDWidget.h"
 #include "ZoogiCardTargetArrow.h"
 #include "ZoogiCardSubsystem.h"
 #include "ZoogiCards.h"
@@ -270,6 +271,7 @@ bool UZoogiCardHandWidget::OverTarget() const { return bTargetOnScreen && FVecto
 void UZoogiCardHandWidget::NativeTick(const FGeometry& Geo, float Dt)
 {
 	Super::NativeTick(Geo, Dt);
+	if (ZoogiArenaHUD::IsEnabled()) { if (GetVisibility() != ESlateVisibility::Collapsed) SetVisibility(ESlateVisibility::Collapsed); return; } // arena HUD owns the cards
 	CachedGeo = Geo;
 	ViewSize = Geo.GetLocalSize();
 	{

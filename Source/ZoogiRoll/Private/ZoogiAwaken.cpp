@@ -631,6 +631,13 @@ void AZoogiGameMode::CardsPlanCPUAwaken()
 	// GameRng so the cards-mode RNG stream (shots, cards) is not shifted by this decision.
 	AZoogiBall* B = GetActiveBall();
 	if (!B || bAwakenDone || !B->bCPU || bStandbyAwaken) return;
+	if (AwakenChargeOn())
+	{
+		// Awaken charge rule (Oct 20): the CPU awakens as soon as its card pips are full (its own affinity element)
+		if (CardsAwakenReady(B->PlayerIndex) && Stage == EZoogiStage::Awaken) CardsUseAwaken(TEXT("CPU"));
+		UE_LOG(LogZoogi, Log, TEXT("CPU P%d Standby Awakening: %s (charge %d/%d)"), B->PlayerIndex + 1, bStandbyAwaken ? TEXT("USED") : TEXT("no"), AwakenCharge[B->PlayerIndex], AwakenChargeMax);
+		return;
+	}
 	const uint32 H = FCrc::MemCrc32(&TurnCounter, sizeof(TurnCounter), (uint32)B->PlayerIndex * 2654435761u);
 	const float U1 = (H & 0xffff) / 65536.f, U2 = ((H >> 16) & 0xffff) / 65536.f;
 	const bool bRival = Cast<AZoogiBall>(CPULock.Get()) != nullptr;
@@ -697,6 +704,14 @@ void AZoogiGameMode::CardsAwakenView(int32 Mode)
 {
 	AZoogiBall* B = GetActiveBall();
 	if (!B || !CardsOn() || Stage != EZoogiStage::Awaken || bAwakenDone || !IsHumanAiming()) { UE_LOG(LogZoogi, Log, TEXT("CARDS awaken view %d ignored (not the human's Standby)"), Mode); return; }
+	if (AwakenChargeOn())
+	{
+		// Awaken charge rule: no tablets. The Awaken control spends a full charge instead (auto-open / close do nothing).
+		if (Mode == 0 && !CardsUseAwaken(TEXT("human")))
+			AddPopup(FString::Printf(TEXT("AWAKEN %d/%d  -  PLAY CARDS TO CHARGE"), AwakenCharge[B->PlayerIndex], AwakenChargeMax), B->BallLocation() + FVector(0, 0, 190.f), FLinearColor(0.75f, 0.7f, 0.9f));
+		bCardAwakenView = false;
+		return;
+	}
 	CardsBuildAwakenOffers(B->PlayerIndex);
 	const bool bWas = bCardAwakenView;
 	bCardAwakenView = Mode == 1 ? true : Mode == 2 ? false : !bCardAwakenView;

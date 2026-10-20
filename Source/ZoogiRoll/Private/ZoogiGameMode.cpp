@@ -124,7 +124,7 @@ void AZoogiGameMode::BeginPlay()
 	if (bAuto)
 	{
 		for (FZoogiPlayerSetup& P : MenuPlayers) P.bCPU = true;
-		if (FParse::Param(Cmd, TEXT("ZoogiHumanTest")) || FParse::Param(Cmd, TEXT("ZoogiUiTest")) || FParse::Param(Cmd, TEXT("ZoogiUIPolish")) || FParse::Param(Cmd, TEXT("ZoogiArrowTest"))) MenuPlayers[0].bCPU = false; // ui-polish capture: hold Awaken without UITEST scripts
+		if (FParse::Param(Cmd, TEXT("ZoogiHumanTest")) || FParse::Param(Cmd, TEXT("ZoogiUiTest")) || FParse::Param(Cmd, TEXT("ZoogiUIPolish")) || FParse::Param(Cmd, TEXT("ZoogiArrowTest")) || FParse::Param(Cmd, TEXT("ZoogiArenaHUDTest"))) MenuPlayers[0].bCPU = false; // ui-polish capture: hold Awaken without UITEST scripts
 		if (ComboDemo > 0) for (FZoogiPlayerSetup& P : MenuPlayers) P.bCPU = false; // the demo director plays every Zoogi through the human controls
 		if (!bMenuShot)
 		{
@@ -209,6 +209,7 @@ void AZoogiGameMode::MenuAction(FName Action, int32 Index)
 	else if (Action == "CardAwakenView") CardsAwakenView(Index);
 	else if (Action == "CardAwakenPick") CardsAwakenPick(Index);
 	else if (Action == "CardAwakenSkip") CardsAwakenSkip();
+	else if (Action == "AwakenUse") { if (IsHumanAiming()) CardsUseAwaken(TEXT("human")); }
 	else if (Action == "EpisodeSkip") { if (UZoogiEpisodeDirector* D = UZoogiEpisodeDirector::Get(this)) D->SkipCurrent(); }
 	else if (Action == "AimNudge") NudgeAim(Index);
 	else if (Action == "AimPower") AimPowerStep = FMath::Clamp(Index, 0, 3);
@@ -322,6 +323,7 @@ void AZoogiGameMode::SpawnOrbs()
 
 void AZoogiGameMode::StartMatch()
 {
+	for (int32& Pips : AwakenCharge) Pips = 0; // Awaken charge starts empty every match
 	if (bComboMode) { ComboStartMatch(); return; }
 	ZoogiUtil::SetComboColors(false);
 	ClearMatch();

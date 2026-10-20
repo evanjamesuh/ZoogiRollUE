@@ -23,6 +23,7 @@
 #include "Misc/App.h"
 #include "ZoogiUIStyle.h"
 #include "ZoogiFramedLayout.h"
+#include "ZoogiArenaHUDWidget.h"
 
 namespace ZoogiBattleHud
 {
@@ -169,7 +170,7 @@ void UZoogiBattleStateMachine::OnHUDPostRender(AHUD* HUD, UCanvas* Canvas)
 	}
 
 	// ---- Episode Energy panel (right side, under the target panel)
-	if (Players.Num() > 0 && !ZoogiFramed::IsActive(GetWorld())) // framed HUD: Episode Energy lives in the team columns
+	if (Players.Num() > 0 && !ZoogiFramed::IsActive(GetWorld()) && !ZoogiArenaHUD::IsActive(GetWorld())) // framed / arena HUD: Episode Energy lives in their own panels
 	{
 		const float PW = 400.f * U, RowH = 30.f * U;
 		const float X = W - 424.f * U, Y0 = 212.f * U;

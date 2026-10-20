@@ -442,39 +442,7 @@ UTexture2D* UZoogiMenuRoot::ClashArt(const FString& Key)
 	}
 	else if (Key == TEXT("stone"))
 	{
-		// fantasy reskin: carved-stone grain as an overlay (white / black at low alpha), cracked into large worn blocks
-		ZoogiUIFx::FPixels P; P.W = P.H = 1024; P.Px.SetNumUninitialized(P.W * P.H);
-		auto Hash = [](int32 X, int32 Y) { uint32 Hs = (uint32)X * 374761393u + (uint32)Y * 668265263u; Hs = (Hs ^ (Hs >> 13)) * 1274126177u; return ((Hs ^ (Hs >> 16)) & 0xFFFF) / 65535.f; };
-		auto Noise = [&Hash](float X, float Y)
-		{
-			const int32 IX = FMath::FloorToInt(X), IY = FMath::FloorToInt(Y);
-			const float FX = X - IX, FY = Y - IY, SX = FX * FX * (3.f - 2.f * FX), SY = FY * FY * (3.f - 2.f * FY);
-			const float A = FMath::Lerp(Hash(IX, IY), Hash(IX + 1, IY), SX), B = FMath::Lerp(Hash(IX, IY + 1), Hash(IX + 1, IY + 1), SX);
-			return FMath::Lerp(A, B, SY) * 2.f - 1.f;
-		};
-		const float Cell = 260.f;
-		const FLinearColor Lite(1.f, 0.96f, 0.88f, 1.f);
-		for (int32 y = 0; y < P.H; ++y)
-			for (int32 x = 0; x < P.W; ++x)
-			{
-				const float N = Noise(x / 90.f, y / 90.f) * 0.5f + Noise(x / 26.f, y / 26.f) * 0.32f + Noise(x / 6.f, y / 6.f) * 0.18f;
-				// worn block seams: gap between the two nearest jittered cell centres (domain-warped so edges wander)
-				const float WX = x + Noise(x / 40.f + 7.f, y / 40.f) * 14.f, WY = y + Noise(x / 40.f, y / 40.f + 3.f) * 14.f;
-				const int32 CX = FMath::FloorToInt(WX / Cell), CY = FMath::FloorToInt(WY / Cell);
-				float D1 = 1e9f, D2 = 1e9f;
-				for (int32 j = -1; j <= 1; ++j)
-					for (int32 i = -1; i <= 1; ++i)
-					{
-						const float PX = (CX + i + 0.15f + Hash(CX + i, CY + j) * 0.7f) * Cell, PY = (CY + j + 0.15f + Hash(CY + j + 91, CX + i) * 0.7f) * Cell;
-						const float D = FMath::Sqrt(FMath::Square(WX - PX) + FMath::Square(WY - PY));
-						if (D < D1) { D2 = D1; D1 = D; } else if (D < D2) D2 = D;
-					}
-				const float Seam = (D2 - D1) * 0.5f;
-				FLinearColor C = N >= 0.f ? Lite.CopyWithNewOpacity(N * 0.13f) : FLinearColor(0.f, 0.f, 0.f, -N * 0.26f);
-				if (Seam < 1.6f) C = FLinearColor(0.f, 0.f, 0.f, 0.3f);
-				else if (Seam < 4.f) C = Lite.CopyWithNewOpacity(0.07f);
-				P.Px[y * P.W + x] = C.ToFColor(true);
-			}
+		ZoogiUIFx::FPixels P = ZCStonePixels(); // shared with the arena HUD
 		UTexture2D* T = ZoogiUIFx::ToTexture(P);
 		ArtCache.Add(CacheKey, T);
 		return T;
@@ -497,8 +465,7 @@ UTexture2D* UZoogiMenuRoot::ClashArt(const FString& Key)
 	}
 	else if (Key == TEXT("vgrad"))
 	{
-		ZoogiUIFx::FPixels P; P.W = 4; P.H = 64; P.Px.SetNumUninitialized(P.W * P.H);
-		for (int32 y = 0; y < P.H; ++y) for (int32 x = 0; x < P.W; ++x) P.Px[y * P.W + x] = FLinearColor(1.f, 1.f, 1.f, FMath::Pow((float)y / (P.H - 1), 1.2f)).ToFColor(true);
+		ZoogiUIFx::FPixels P = ZCVGradPixels();
 		UTexture2D* T = ZoogiUIFx::ToTexture(P);
 		ArtCache.Add(CacheKey, T);
 		return T;
@@ -792,8 +759,8 @@ void UZoogiMenuRoot::BuildClash()
 	ClashBuiltTab = ClashTab;
 	// top bar + nav pop in only when the screen is entered, tab content pops on every tab switch
 	bAnimEnter = bAnimEnter && !bTabSwitch;
-	BuildClashTopBar();
-	BuildClashNav();
+	static const bool bHomeV1 = FParse::Param(FCommandLine::Get(), TEXT("ZoogiClashHomeV1"));
+	if (bHomeV1 || ClashTab != ZCBattle) { BuildClashTopBar(); BuildClashNav(); } // the reference home draws its own top bar and bottom bar
 	bAnimEnter = bEnter;
 	ClashLive.Reset();
 	ClashSpinW.Reset(); ClashRaysW.Reset();
@@ -808,7 +775,7 @@ void UZoogiMenuRoot::BuildClash()
 		}
 	switch (ClashTab)
 	{
-	case ZCBattle: BuildClashBattleTab(); break;
+	case ZCBattle: { static const bool bV1 = FParse::Param(FCommandLine::Get(), TEXT("ZoogiClashHomeV1")); if (bV1) BuildClashBattleTab(); else BuildClashHomeV2(); } break;
 	case ZCShop: BuildClashShopTab(); break;
 	case ZCCards: BuildClashCardsTab(); break;
 	case ZCClan: BuildClashClanTab(); break;
@@ -992,6 +959,152 @@ void UZoogiMenuRoot::BuildClashBattleTab()
 	}, C - 270.f, Y, 540.f, 150.f, 66.f, nullptr, true);
 	Y += 150.f + 30.f + Extra * 0.15f;
 	BuildClashChestSlots(Y);
+}
+
+void UZoogiMenuRoot::ClashStartTraining()
+{
+	// TRAINING: 1v1 practice against a CPU on the Training Arena (classic turns, cards on)
+	AZoogiGameMode* G = GM();
+	if (!G) return;
+	G->ComboSetMode(false);
+	G->MenuNumPlayers = 2;
+	if (G->MenuPlayers.IsValidIndex(1)) G->MenuPlayers[1].bCPU = true;
+	Fire("Arena", (int32)EZoogiArena::Training);
+	UE_LOG(LogZoogi, Log, TEXT("CLASH TRAINING -> 1v1 practice on the Training Arena"));
+	Fire("Start", 0);
+}
+
+void UZoogiMenuRoot::BuildClashHomeV2()
+{
+	// Oct 20 (Evan): the home screen IS the approved reference (Content/Data/MenuArt/home_ref.png, 941 x 1672): the art is
+	// drawn from the reference itself and every element on it is live - avatar / name / level / XP and the three currency
+	// readouts are painted over the art with the real profile values, every button is a real tap target, the featured arena
+	// carousel and the red notice dots update. The reference is split in three bands so any phone height works: the top bar
+	// (pinned top), the logo / arena / Zoogi hero art (fills the height, cover-cropped) and PLAY / mode tiles / featured
+	// arena / bottom bar (pinned bottom); on 16:9 the three bands rebuild the reference 1:1.
+	UTexture2D* Ref = Art(TEXT("home_ref"));
+	if (!Ref) { BuildClashBattleTab(); return; }
+	AZoogiGameMode* G = GM();
+	const UZoogiFrontProfileSubsystem* FP = UZoogiFrontProfileSubsystem::Get(this);
+	const FZoogiFrontProfileData Dflt;
+	const FZoogiFrontProfileData& D = FP ? FP->Data() : Dflt;
+	const float RW = 941.f, RH = 1672.f;               // reference px
+	const float W = DesignW, H = DesignH, K = W / RW;  // design px per reference px
+	const float TopRef = 95.f, BotRef = 860.f;         // band splits (reference y)
+	const float TopH = TopRef * K, BotH = (RH - BotRef) * K, BotY = H - BotH;
+	auto Crop = [this, Ref, RW, RH](float X0, float Y0, float X1, float Y1, float X, float Y, float Wd, float Ht)
+	{
+		UImage* I = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
+		FSlateBrush B; B.SetResourceObject(Ref); B.ImageSize = FVector2D(Wd, Ht);
+		B.SetUVRegion(FBox2f(FVector2f(X0 / RW, Y0 / RH), FVector2f(X1 / RW, Y1 / RH)));
+		I->SetBrush(B);
+		I->SetVisibility(ESlateVisibility::HitTestInvisible);
+		CAt(I, X, Y, Wd, Ht);
+	};
+	// reference px -> design px (top band / bottom band)
+	auto TX = [K](float Rx) { return Rx * K; };
+	auto TY = [K](float Ry) { return Ry * K; };
+	auto BY = [K, BotY, BotRef](float Ry) { return BotY + (Ry - BotRef) * K; };
+	auto Tap = [this](float X, float Y, float Wd, float Ht, TFunction<void()> Fn)
+	{
+		CAt(CButton(CBox(FLinearColor::Transparent, FLinearColor::Transparent, 0.f, 0.f), MoveTemp(Fn), false), X, Y, Wd, Ht);
+	};
+
+	// ---- hero band (logo, arena, Zoogis): cover-crop to the space between the top bar and the bottom band
+	{
+		const float MidH = FMath::Max(1.f, BotY - TopH), Scale = MidH / ((BotRef - TopRef) * K);
+		const float VisRef = RW / FMath::Max(1.f, Scale), X0 = (RW - VisRef) * 0.5f;
+		Crop(X0, TopRef, X0 + VisRef, BotRef, 0.f, TopH, W, MidH);
+		// side buttons keep their reference size at the right edge (a taller screen scales the hero and would push them off)
+		Crop(832.f, 192.f, 941.f, 612.f, W - 109.f * K, TY(192.f), 109.f * K, 420.f * K);
+	}
+	Crop(0.f, BotRef, RW, RH, 0.f, BotY, W, BotH);   // PLAY, tiles, featured arena, bottom bar
+	Crop(0.f, 0.f, RW, TopRef, 0.f, 0.f, W, TopH);   // top bar
+
+	// ---- top bar: live avatar, name, level + XP, currencies; avatar -> Profile, plus pills -> Shop, gear -> Settings
+	{
+		UTexture2D* Portrait = nullptr;
+		if (G && G->MenuPlayers.Num() > 0 && ZoogiUtil::Roster().Num() > 0) Portrait = Art(PortraitFor(ZoogiUtil::Roster()[G->MenuPlayers[0].ZoogiIndex % ZoogiUtil::Roster().Num()].Id));
+		if (Portrait) CImg(Portrait, TX(22.f), TY(13.f), TX(96.f), TX(96.f), TX(48.f), true);
+		CAt(CBox(ZCHex(TEXT("1D1F25")).CopyWithNewOpacity(0.97f), FLinearColor::Transparent, 0.f, 6.f), TX(142.f), TY(22.f), TX(178.f), TY(68.f));
+		CText(D.GuestName, TX(146.f), TY(22.f), TX(176.f), TY(30.f), 25.f, FLinearColor::White, 0, 3.f);
+		CText(FString::Printf(TEXT("Lv. %d"), D.Level), TX(146.f), TY(50.f), TX(80.f), TY(20.f), 17.f, ZCHex(TEXT("8FB6FF")), 0, 2.f);
+		const int32 Need = UZoogiFrontProfileSubsystem::XPForLevel(D.Level);
+		const float BarW = TX(154.f), Frac = Need > 0 ? FMath::Clamp((float)D.XP / Need, 0.f, 1.f) : 0.f;
+		CAt(CBox(ZCHex(TEXT("0B0C10")), ZCHex(TEXT("3A3D45")), 2.f, 7.f), TX(148.f), TY(72.f), BarW, TY(14.f));
+		if (Frac > 0.f) CAt(CBox(ZCHex(TEXT("2F7BF0")), FLinearColor::Transparent, 0.f, 6.f), TX(149.5f), TY(73.5f), FMath::Max(TX(10.f), (BarW - TX(3.f)) * Frac), TY(11.f));
+		// currencies: blue crystals = trophies, coins = gold, purple gems = gems
+		struct FCur { float X0, X1; int32 Value; };
+		const FCur Cur[3] = { { 400.f, 480.f, D.Trophies }, { 568.f, 658.f, D.Gold }, { 752.f, 812.f, FP ? FP->Gems() : 0 } };
+		for (const FCur& Cc : Cur)
+		{
+			CAt(CBox(ZCHex(TEXT("16171C")).CopyWithNewOpacity(0.98f), FLinearColor::Transparent, 0.f, 6.f), TX(Cc.X0), TY(30.f), TX(Cc.X1 - Cc.X0), TY(36.f));
+			CText(FText::AsNumber(Cc.Value).ToString(), TX(Cc.X0), TY(30.f), TX(Cc.X1 - Cc.X0), TY(36.f), 25.f, FLinearColor::White, 1, 2.f);
+		}
+		Tap(TX(10.f), TY(4.f), TX(320.f), TY(88.f), [this]() { OpenClashPopup(EZoogiClashPopup::Profile); });
+		for (float Px : { 345.f, 522.f, 700.f })
+			Tap(TX(Px), TY(18.f), TX(165.f), TY(60.f), [this]() { SetClashTab(ZCShop); ClashScrollOffset = 0.f; ClashPendingScroll = 0.f; bDirty = true; });
+		Tap(TX(855.f), TY(8.f), TX(80.f), TY(80.f), [this]() { OpenClashPopup(EZoogiClashPopup::Settings); });
+	}
+
+	// ---- side buttons: EVENTS -> Battle Pass, QUESTS -> Trophy Road, RANKING -> Leaderboard, SHOP -> Shop
+	{
+		const float SX = W - 109.f * K, SW = 109.f * K;
+		Tap(SX, TY(196.f), SW, TY(98.f), [this]() { OpenClashPopup(EZoogiClashPopup::BattlePass, TEXT("BATTLE PASS")); });
+		Tap(SX, TY(302.f), SW, TY(98.f), [this]() { OpenClashPopup(EZoogiClashPopup::TrophyRoad, TEXT("TROPHY ROAD")); });
+		Tap(SX, TY(405.f), SW, TY(98.f), [this]() { SetClashTab(ZCLeader); });
+		Tap(SX, TY(508.f), SW, TY(100.f), [this]() { SetClashTab(ZCShop); });
+		if (FP && FP->PassClaimableCount() > 0) CDot(W - 46.f, TY(194.f), 40.f, TEXT("!"));
+		if (FP && FP->RoadClaimableCount() > 0) CDot(W - 46.f, TY(300.f), 40.f, TEXT("!"));
+	}
+
+	// ---- PLAY + mode tiles
+	Tap(TX(200.f), BY(890.f), TX(540.f), TX(190.f), [this]() { UE_LOG(LogZoogi, Log, TEXT("HOME PLAY -> matchmaking -> 2v2")); ClashStartMatchmaking(); });
+	{
+		const float TileX[4] = { 20.f, 246.f, 476.f, 704.f };
+		TFunction<void()> Fns[4] = {
+			[this]() { UE_LOG(LogZoogi, Log, TEXT("HOME BATTLE 2v2")); ClashStartMatchmaking(); },
+			[this]() { Push(EZoogiScreen::Story); },
+			[this]() { ClashStartTraining(); },
+			[this]() { Push(EZoogiScreen::Play); } };
+		for (int32 i = 0; i < 4; ++i) Tap(TX(TileX[i]), BY(1088.f), TX(218.f), TX(180.f), Fns[i]);
+	}
+
+	// ---- featured arena carousel: Frozen Ring is the reference art; other arenas paint their map + name over it
+	{
+		static const int32 Feat[] = { 1, 0, 2, 3, 4, 5, 6, 7 }; // Frozen Ring first
+		const int32 NF = UE_ARRAY_COUNT(Feat);
+		ClashFeatured = (ClashFeatured % NF + NF) % NF;
+		const int32 A = Feat[ClashFeatured];
+		if (A != (int32)EZoogiArena::Frozen)
+		{
+			if (UTexture2D* Map = Art(FString(ZCArenaSlug(A)) + TEXT("_map")))
+				CImg(Map, TX(66.f), BY(1291.f), TX(808.f), TX(170.f), TX(8.f), true);
+			CAt(CBox(FLinearColor(0.02f, 0.03f, 0.06f, 0.7f), FLinearColor::Transparent, 0.f, 8.f), TX(66.f), BY(1392.f), TX(560.f), TX(66.f));
+			CText(ZoogiUtil::ArenaName((EZoogiArena)A).ToUpper(), TX(84.f), BY(1398.f), TX(540.f), TX(32.f), 30.f, FLinearColor::White, 0, 3.f);
+			CText(TEXT("FEATURED ARENA"), TX(84.f), BY(1432.f), TX(400.f), TX(20.f), 17.f, ZCSoft, 0, 2.f);
+		}
+		// live dots (one per arena) over the reference's five
+		CAt(CBox(ZCHex(TEXT("15253A")).CopyWithNewOpacity(0.92f), FLinearColor::Transparent, 0.f, 10.f), TX(712.f), BY(1434.f), TX(158.f), TX(22.f));
+		for (int32 k = 0; k < NF; ++k)
+			CAt(CBox(k == ClashFeatured ? ZCGold : FLinearColor(1.f, 1.f, 1.f, 0.6f), ZCDark, 1.5f, TX(6.f)), TX(718.f) + k * TX(19.f), BY(1439.f), TX(12.f), TX(12.f));
+		Tap(TX(66.f), BY(1288.f), TX(808.f), TX(176.f), [this]() { ClashArenaSel = -1; OpenClashPopup(EZoogiClashPopup::Arenas, TEXT("ARENAS")); });
+		Tap(TX(16.f), BY(1288.f), TX(48.f), TX(176.f), [this]() { --ClashFeatured; bDirty = true; });
+		Tap(TX(876.f), BY(1288.f), TX(48.f), TX(176.f), [this]() { ++ClashFeatured; bDirty = true; });
+	}
+
+	// ---- bottom bar: ZOOGIES, DECK BUILDER, ARENAS, COLLECTION, SETTINGS
+	{
+		const float NavX[5] = { 16.f, 198.f, 382.f, 566.f, 750.f };
+		TFunction<void()> Fns[5] = {
+			[this]() { Push(EZoogiScreen::ZoogiSelect); },
+			[this]() { SetClashTab(ZCCards); },
+			[this]() { ClashArenaSel = -1; OpenClashPopup(EZoogiClashPopup::Arenas, TEXT("ARENAS")); },
+			[this]() { SetClashTab(ZCCards); },
+			[this]() { OpenClashPopup(EZoogiClashPopup::Settings); } };
+		for (int32 i = 0; i < 5; ++i) Tap(TX(NavX[i]), BY(1486.f), TX(176.f), TX(168.f), Fns[i]);
+		if (FP && (FP->Data().bCardsNew || FP->UpgradableCount() > 0)) CDot(TX(330.f), BY(1484.f), 40.f, TEXT("!"));
+	}
 }
 
 void UZoogiMenuRoot::BuildClashEmptyTab(const FString& Title, const FString& Sub, bool bDeckButton)
@@ -1245,7 +1358,14 @@ void UZoogiMenuRoot::TickClash(float Dt)
 	{
 		ClashMMT0 = -1.f;
 		ClashPopup = EZoogiClashPopup::None;
-		UE_LOG(LogZoogi, Log, TEXT("CLASH matchmaking -> MenuAction Start (local match)"));
+		// Oct 20 (Evan): BATTLE plays the 2v2 card match - you (P1) + CPU ally vs 2 CPUs - starting on Frozen Ring
+		if (AZoogiGameMode* G = GM())
+		{
+			if (G->MenuArena != EZoogiArena::Frozen) Fire("Arena", (int32)EZoogiArena::Frozen);
+			G->ComboSetMode(true);
+			for (int32 i = 1; i < G->MenuPlayers.Num(); ++i) G->MenuPlayers[i].bCPU = true;
+		}
+		UE_LOG(LogZoogi, Log, TEXT("CLASH matchmaking -> MenuAction Start (local 2v2 match)"));
 		Fire("Start", 0);
 		return;
 	}
@@ -1454,7 +1574,8 @@ void UZoogiMenuRoot::TickClashTour(float Dt)
 		Steps.Add({ TEXT("matchmaking"), 1.f, 1.5f, [this, Res]()
 		{
 			AZoogiGameMode* G = GM();
-			if (G && G->MenuPlayers.IsValidIndex(0) && !G->MenuPlayers[0].bCPU) Fire("ToggleCPU", 0); // capture run: P1 plays itself
+			static const bool bHudPlays = FParse::Param(FCommandLine::Get(), TEXT("ZoogiArenaHUDTest")); // the arena HUD test driver plays P1 as a human
+			if (!bHudPlays && G && G->MenuPlayers.IsValidIndex(0) && !G->MenuPlayers[0].bCPU) Fire("ToggleCPU", 0); // capture run: P1 plays itself
 			UE_LOG(LogZoogi, Log, TEXT("CLASH TOUR: pressing BATTLE (matchmaking screen, then the real match)"));
 			UZoogiWinnerOverlay::TourPrefix = FPaths::Combine(ClashTourDir, FString::Printf(TEXT("clash_%s_%02d"), *Res, ClashTourStep + 1)); // overlay shots + its OK press
 			ClashStartMatchmaking();

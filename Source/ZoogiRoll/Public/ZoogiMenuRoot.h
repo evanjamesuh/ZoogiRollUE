@@ -186,6 +186,11 @@ private:
 	void BuildClash();
 	void BuildClashTopBar();
 	void BuildClashBattleTab();
+	/** Oct 20 (Evan): new home (Battle tab) - logo, side buttons, your team, PLAY, mode tiles, featured arena, chest slots.
+	 *  -ZoogiClashHomeV1 keeps the previous Battle tab. */
+	void BuildClashHomeV2();
+	void ClashStartTraining();
+	int32 ClashFeatured = 0;             // featured arena carousel index (0 = Frozen Ring)
 	void BuildClashEmptyTab(const FString& Title, const FString& Sub, bool bDeckButton);
 	void BuildClashNav();
 	void BuildClashPopup();

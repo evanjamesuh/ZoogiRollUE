@@ -177,6 +177,52 @@ namespace
 		return Out;
 	}
 
+	// fantasy reskin: shared procedural textures (menus + arena HUD)
+	ZoogiUIFx::FPixels ZCStonePixels()
+	{
+		// fantasy reskin: carved-stone grain as an overlay (white / black at low alpha), cracked into large worn blocks
+		ZoogiUIFx::FPixels P; P.W = P.H = 1024; P.Px.SetNumUninitialized(P.W * P.H);
+		auto Hash = [](int32 X, int32 Y) { uint32 Hs = (uint32)X * 374761393u + (uint32)Y * 668265263u; Hs = (Hs ^ (Hs >> 13)) * 1274126177u; return ((Hs ^ (Hs >> 16)) & 0xFFFF) / 65535.f; };
+		auto Noise = [&Hash](float X, float Y)
+		{
+			const int32 IX = FMath::FloorToInt(X), IY = FMath::FloorToInt(Y);
+			const float FX = X - IX, FY = Y - IY, SX = FX * FX * (3.f - 2.f * FX), SY = FY * FY * (3.f - 2.f * FY);
+			const float A = FMath::Lerp(Hash(IX, IY), Hash(IX + 1, IY), SX), B = FMath::Lerp(Hash(IX, IY + 1), Hash(IX + 1, IY + 1), SX);
+			return FMath::Lerp(A, B, SY) * 2.f - 1.f;
+		};
+		const float Cell = 260.f;
+		const FLinearColor Lite(1.f, 0.96f, 0.88f, 1.f);
+		for (int32 y = 0; y < P.H; ++y)
+			for (int32 x = 0; x < P.W; ++x)
+			{
+				const float N = Noise(x / 90.f, y / 90.f) * 0.5f + Noise(x / 26.f, y / 26.f) * 0.32f + Noise(x / 6.f, y / 6.f) * 0.18f;
+				// worn block seams: gap between the two nearest jittered cell centres (domain-warped so edges wander)
+				const float WX = x + Noise(x / 40.f + 7.f, y / 40.f) * 14.f, WY = y + Noise(x / 40.f, y / 40.f + 3.f) * 14.f;
+				const int32 CX = FMath::FloorToInt(WX / Cell), CY = FMath::FloorToInt(WY / Cell);
+				float D1 = 1e9f, D2 = 1e9f;
+				for (int32 j = -1; j <= 1; ++j)
+					for (int32 i = -1; i <= 1; ++i)
+					{
+						const float PX = (CX + i + 0.15f + Hash(CX + i, CY + j) * 0.7f) * Cell, PY = (CY + j + 0.15f + Hash(CY + j + 91, CX + i) * 0.7f) * Cell;
+						const float D = FMath::Sqrt(FMath::Square(WX - PX) + FMath::Square(WY - PY));
+						if (D < D1) { D2 = D1; D1 = D; } else if (D < D2) D2 = D;
+					}
+				const float Seam = (D2 - D1) * 0.5f;
+				FLinearColor C = N >= 0.f ? Lite.CopyWithNewOpacity(N * 0.13f) : FLinearColor(0.f, 0.f, 0.f, -N * 0.26f);
+				if (Seam < 1.6f) C = FLinearColor(0.f, 0.f, 0.f, 0.3f);
+				else if (Seam < 4.f) C = Lite.CopyWithNewOpacity(0.07f);
+				P.Px[y * P.W + x] = C.ToFColor(true);
+			}
+		return P;
+	}
+	ZoogiUIFx::FPixels ZCVGradPixels()
+	{
+		// white, alpha 0 at the top -> 1 at the bottom (tinted gradients over a fill)
+		ZoogiUIFx::FPixels P; P.W = 4; P.H = 64; P.Px.SetNumUninitialized(P.W * P.H);
+		for (int32 y = 0; y < P.H; ++y) for (int32 x = 0; x < P.W; ++x) P.Px[y * P.W + x] = FLinearColor(1.f, 1.f, 1.f, FMath::Pow((float)y / (P.H - 1), 1.2f)).ToFColor(true);
+		return P;
+	}
+
 	FSlateBrush ZCImgBrush(UTexture2D* Tex, float W, float H, float Radius, bool bCrop)
 	{
 		FSlateBrush B;

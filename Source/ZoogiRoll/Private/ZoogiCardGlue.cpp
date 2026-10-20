@@ -4,6 +4,12 @@
 #include "ZoogiBall.h"
 #include "ZoogiTypes.h"
 #include "ZoogiCardSubsystem.h"
+#include "ZoogiArtifacts.h"
+#include "ZoogiArtifactComponent.h"
+#include "ZoogiFX.h"
+#include "Misc/CommandLine.h"
+#include "Misc/ConfigCacheIni.h"
+#include "Misc/Parse.h"
 
 bool AZoogiGameMode::CardsOn() const
 {
@@ -60,7 +66,56 @@ bool AZoogiGameMode::CardsCommit()
 	{
 		AddPopup(Choice, B->BallLocation() + FVector(0, 0, 160.f), FLinearColor(0.6f, 1.f, 0.7f));
 		AddFeed(FString::Printf(TEXT("P%d %s  %s"), B->PlayerIndex + 1, *B->Def.Name, *Choice), FLinearColor(0.6f, 1.f, 0.7f));
+		if (const FZoogiCardPlayerState* S = C->Rules().Player(B->PlayerIndex)) CardsAddAwakenCharge(B->PlayerIndex, S->Committed.Num(), TEXT("human commit"));
 	}
+	return true;
+}
+
+// ---- Awaken charge (Evan, Oct 20)
+bool AZoogiGameMode::AwakenChargeOn() const
+{
+	static const bool bOn = [] {
+		bool b = true;
+		GConfig->GetBool(TEXT("ZoogiRoll.Awakening"), TEXT("bChargeFromCards"), b, GGameIni);
+		if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiAwakenTablets"))) b = false;
+		return b;
+	}();
+	return bOn && CardsOn();
+}
+
+void AZoogiGameMode::CardsAddAwakenCharge(int32 Player, int32 Pips, const TCHAR* Why)
+{
+	if (!AwakenChargeOn() || Player < 0 || Player > 3 || Pips <= 0) return;
+	const int32 Was = AwakenCharge[Player];
+	AwakenCharge[Player] = FMath::Min(AwakenChargeMax, Was + Pips);
+	UE_LOG(LogZoogi, Log, TEXT("AWAKEN charge P%d %d -> %d/%d (+%d, %s)"), Player + 1, Was, AwakenCharge[Player], AwakenChargeMax, Pips, Why);
+	if (Was < AwakenChargeMax && AwakenCharge[Player] >= AwakenChargeMax)
+		if (Balls.IsValidIndex(Player) && Balls[Player])
+			AddPopup(TEXT("AWAKEN READY"), Balls[Player]->BallLocation() + FVector(0, 0, 210.f), FLinearColor(1.f, 0.82f, 0.35f));
+}
+
+bool AZoogiGameMode::CardsAwakenReady(int32 Player) const
+{
+	return AwakenChargeOn() && Player >= 0 && Player < 4 && AwakenCharge[Player] >= AwakenChargeMax;
+}
+
+bool AZoogiGameMode::CardsUseAwaken(const TCHAR* Who)
+{
+	// Spends a full charge during the Standby: the Zoogi's own affinity element is infused for this turn's shot (same artifact
+	// effects as the classic INFUSE) and the Standby Awakening request turns ON. One use per turn.
+	AZoogiBall* B = GetActiveBall();
+	if (!B || !B->Artifact || !AwakenChargeOn() || Phase != EZoogiPhase::Aiming || Stage != EZoogiStage::Awaken || bStandbyAwaken) return false;
+	if (!CardsAwakenReady(B->PlayerIndex)) return false;
+	const EZoogiArtifact A = ZoogiArtifacts::Affinity(B->Def.Id);
+	AwakenCharge[B->PlayerIndex] = 0;
+	bStandbyAwaken = true;
+	B->Artifact->SetInfused(A);
+	const FLinearColor Col = ZoogiArtifacts::Color(A);
+	BigText = FString::Printf(TEXT("AWAKEN  %s"), *ZoogiArtifacts::Name(A).ToUpper()); BigColor = Col; BigAge = 0.f;
+	AddPopup(BigText, B->BallLocation() + FVector(0, 0, 190.f), Col);
+	AddFeed(FString::Printf(TEXT("P%d %s  awaken %s"), B->PlayerIndex + 1, *B->Def.Name, *ZoogiArtifacts::Name(A)), Col);
+	AZoogiFX::Spawn(GetWorld(), B->BallLocation(), Col, 260.f, 0.8f, false, 14.f, B);
+	UE_LOG(LogZoogi, Log, TEXT("AWAKEN used P%d (%s): %s infused, standby awakening ON, charge reset"), B->PlayerIndex + 1, Who, *ZoogiArtifacts::Name(A));
 	return true;
 }
 
@@ -74,6 +129,7 @@ void AZoogiGameMode::CardsPlanCPU()
 	const FZoogiCardPlayerState* S = B ? C->Rules().Player(B->PlayerIndex) : nullptr;
 	if (S && S->bCommitted)
 	{
+		CardsAddAwakenCharge(B->PlayerIndex, S->Committed.Num(), TEXT("CPU commit"));
 		ReplanCPUShot(); // Oct 14 playtest fix: re-aim with the committed cards (Storm / Heavy speed x, Crystal Collapse target)
 		bAwakenDone = true;
 		AwakenDoneAt = StageTime;

@@ -2,6 +2,7 @@
 #include "ZoogiViewportClient.h"
 #include "ZoogiFramedLayout.h"
 #include "ZoogiFramedHUDWidget.h"
+#include "ZoogiArenaHUDWidget.h"
 #include "ZoogiGameMode.h"
 #include "ZoogiRoll.h"
 #include "Engine/Engine.h"
@@ -17,6 +18,7 @@ void UZoogiViewportClient::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 	UWorld* W = GetWorld();
 	ZoogiFramed::TickShots(W);
+	UZoogiArenaHUDWidget::Ensure(W); // arena HUD layer (no-op unless HudStyle=Arena)
 	if (!ZoogiFramed::IsEnabled() || !W) return;
 	ZoogiFramed::TickPulse(DeltaTime);
 	AZoogiGameMode* G = W->GetAuthGameMode<AZoogiGameMode>();

@@ -8,6 +8,7 @@
 #include "ZoogiArena.h"
 #include "ZoogiArtifactComponent.h"
 #include "ZoogiGameMode.h"
+#include "Misc/ConfigCacheIni.h"
 #include "ZoogiRoll.h"
 #include "ZoogiBall.h"
 #include "ZoogiOrb.h"
@@ -215,8 +216,11 @@ void AZoogiGameMode::ComboStartMatch()
 		if (!B) continue;
 		B->InitZoogi(Roster[S.ZoogiIndex % Roster.Num()], i, S.bCPU, BallPM, Arena->GetRollingDecel());
 		B->TeamIndex = TeamOfIndex(i);
-		// A team with a human in it is played by that human (they pick either Zoogi each team turn).
-		if (B->bCPU && !MenuPlayers[i ^ 1].bCPU) { B->bCPU = false; UE_LOG(LogZoogi, Log, TEXT("COMBO: P%d is controlled by the human teammate P%d"), i + 1, (i ^ 1) + 1); }
+		// A team with a human in it is played by that human (they pick either Zoogi each team turn) - unless the CPU ally
+		// rule is on (Oct 20, Evan: "you + CPU ally vs 2 CPUs"; [ZoogiRoll.Combo] bHumanControlsTeam=False is the default).
+		static const bool bHumanTeam = [] { bool b = false; GConfig->GetBool(TEXT("ZoogiRoll.Combo"), TEXT("bHumanControlsTeam"), b, GGameIni); return b; }();
+		if (bHumanTeam && B->bCPU && !MenuPlayers[i ^ 1].bCPU) { B->bCPU = false; UE_LOG(LogZoogi, Log, TEXT("COMBO: P%d is controlled by the human teammate P%d"), i + 1, (i ^ 1) + 1); }
+		else if (B->bCPU && !MenuPlayers[i ^ 1].bCPU) UE_LOG(LogZoogi, Log, TEXT("COMBO: P%d is the CPU ally of human P%d"), i + 1, (i ^ 1) + 1);
 		B->RingMarks = 2;
 		B->bKnockedOut = false;
 		B->SpawnLocation = L;

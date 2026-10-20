@@ -28,6 +28,7 @@
 #include "Engine/World.h"
 #include "CanvasItem.h"
 #include "Engine/Texture2D.h"
+#include "ZoogiArenaHUDWidget.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Fonts/FontMeasure.h"
 #include "Rendering/SlateRenderer.h"
@@ -170,6 +171,19 @@ void AZoogiHUD::DrawHUD()
 	if (CanvasMenuMode < 0) CanvasMenuMode = FParse::Param(FCommandLine::Get(), TEXT("ZoogiCanvasMenu")) ? 1 : 0;
 	UpdateAwakenWidget(G, G->Phase == EZoogiPhase::Menu || G->Phase == EZoogiPhase::Forming);
 	if (G->Phase == EZoogiPhase::Aiming) DrawDragPower(G);
+	if (ZoogiArenaHUD::IsActive(GetWorld()))
+	{
+		// arena HUD (UZoogiArenaHUDWidget) owns every panel; the Canvas keeps only the in-world layers: shot preview, free-aim
+		// reticle, score popups / flyers and anime cut-ins (the arena HUD draws its own results panel)
+		UpdateAwakenWidget(G, true);
+		if (MenuWidget && MenuWidget->GetVisibility() != ESlateVisibility::Collapsed) { MenuWidget->SetVisibility(ESlateVisibility::Collapsed); MenuWidget->SetBackdropPlaying(false); }
+		if (G->Phase == EZoogiPhase::Forming) return;
+		if (G->Phase == EZoogiPhase::Aiming && G->IsAimStep()) { if (G->bArtifactMode || G->Preview.bValid) DrawPreview(G); DrawFreeAimReticle(G); }
+		DrawPopups(G);
+		DrawFlyers(G);
+		DrawAnime(G);
+		return;
+	}
 	if (G->Phase == EZoogiPhase::Menu)
 	{
 		if (CanvasMenuMode == 0 && PlayerOwner)

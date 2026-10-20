@@ -1,5 +1,6 @@
 // framed: see ZoogiFramedLayout.h
 #include "ZoogiFramedLayout.h"
+#include "ZoogiArenaHUDWidget.h"
 #include "ZoogiGameMode.h"
 #include "ZoogiBall.h"
 #include "ZoogiOrb.h"
@@ -25,6 +26,7 @@ namespace ZoogiFramed
 	{
 		static const bool b = []()
 		{
+			if (ZoogiArenaHUD::IsEnabled()) return false; // arena HUD (Oct 20): full-screen arena, no frame
 			bool bIni = false;
 			if (GConfig) GConfig->GetBool(TEXT("ZoogiRoll.UI"), TEXT("bFramedHUD"), bIni, GGameIni);
 			if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiNoFramedHUD"))) return false;

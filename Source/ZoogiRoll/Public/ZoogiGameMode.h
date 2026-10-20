@@ -343,6 +343,15 @@ public:
 	int32 CardAwakenOfferTurn = -1;     // turn the offers were built for
 	uint8 CardAwakenOffers[3] = { 0, 0, 0 }; // EZoogiArtifact
 	void CardsBuildAwakenOffers(int32 Player);
+	// ---- Awaken charge (Evan, Oct 20): every committed card ability adds 1 pip; at AwakenChargeMax the AWAKEN button lights
+	// and infuses the Zoogi's own affinity element for this turn (replaces the 3 tablets). [ZoogiRoll.Awakening]
+	// bChargeFromCards=True (default) / -ZoogiAwakenTablets restores Choose-your-Awaken.
+	static constexpr int32 AwakenChargeMax = 4;
+	int32 AwakenCharge[4] = { 0, 0, 0, 0 };
+	bool AwakenChargeOn() const;
+	void CardsAddAwakenCharge(int32 Player, int32 Pips, const TCHAR* Why);
+	bool CardsAwakenReady(int32 Player) const;
+	bool CardsUseAwaken(const TCHAR* Who);
 	void CardsAwakenView(int32 Mode);   // 0 toggle, 1 open (auto, with the CHOOSE YOUR AWAKEN call), 2 close
 	bool CardsAwakenPick(int32 Offer);
 	void CardsAwakenSkip();
