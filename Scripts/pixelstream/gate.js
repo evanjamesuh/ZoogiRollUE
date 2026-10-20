@@ -13,7 +13,7 @@ function arg(name, def) { const i = process.argv.indexOf('--' + name); return i 
 const PORT = parseInt(arg('port', '8090'), 10);
 const UPSTREAM = parseInt(arg('upstream', '8089'), 10);
 const SECRETS = arg('secrets');
-const S = JSON.parse(fs.readFileSync(SECRETS, 'utf8')); // { token, password, sessionKey }
+const S = JSON.parse(fs.readFileSync(SECRETS, 'utf8').replace(/^﻿/, '')); // { token, password, sessionKey }; PowerShell 5.1 writes a BOM
 if (!S.token || !S.password || !S.sessionKey) throw new Error('secrets file incomplete');
 const TOKEN_PATH = '/' + S.token;
 const SESSION_DAYS = 30;

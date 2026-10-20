@@ -113,7 +113,7 @@ try {
     $procs.watchdog = (Start-Process powershell -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$Here\tunnel-watchdog.ps1`"", '-Cloudflared', "`"$Cloudflared`"", '-Port', $GatePort, '-OutFile', "`"$LinkFile.base`"", '-LogDir', "`"$LogDir`"") -WindowStyle Hidden -PassThru).Id
     SaveState
     Say 'Starting the Cloudflare tunnel...'
-    for ($i = 0; $i -lt 60 -and -not (Test-Path "$LinkFile.base"); $i++) { Start-Sleep 1 }
+    for ($i = 0; $i -lt 150 -and -not (Test-Path "$LinkFile.base"); $i++) { Start-Sleep 1 } # the watchdog waits up to ~60 s for the edge before publishing
     if (-not (Test-Path "$LinkFile.base")) { throw "Tunnel did not come up - see $LogDir\cloudflared.log" }
     $base = (Get-Content "$LinkFile.base" -Raw).Trim()
   } elseif ($Tunnel -eq 'tailscale') {
