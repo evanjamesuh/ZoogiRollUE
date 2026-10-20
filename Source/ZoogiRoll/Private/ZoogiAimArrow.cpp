@@ -52,6 +52,7 @@ namespace ZoogiAimArrow
 			GConfig->GetFloat(S, TEXT("GrabHeadPx"), GTune.GrabHeadPx, GGameIni);
 			GConfig->GetBool(S, TEXT("bGrabOnZoogi"), GTune.bGrabOnZoogi, GGameIni);
 			GConfig->GetFloat(S, TEXT("RotateStartPx"), GTune.RotateStartPx, GGameIni);
+			GConfig->GetFloat(S, TEXT("RotateDegPerPx"), GTune.RotateDegPerPx, GGameIni);
 			GConfig->GetFloat(S, TEXT("DefaultAimDistCm"), GTune.DefaultAimDistCm, GGameIni);
 			GConfig->GetBool(S, TEXT("bFaceArrow"), GTune.bFaceArrow, GGameIni);
 			GConfig->GetFloat(S, TEXT("FaceRate"), GTune.FaceRate, GGameIni);
@@ -101,7 +102,7 @@ namespace ZoogiAimArrow
 		V.bEnabled = Tune().bEnabled;
 		if (!G) return V;
 		const AZoogiBall* B = G->GetActiveBall();
-		V.bHumanAimStep = G->IsHumanAiming() && G->IsAimStep();
+		V.bHumanAimStep = G->Phase == EZoogiPhase::Aiming && G->IsHumanAiming() && G->IsAimStep(); // hidden the moment the shot launches (Rolling), and on CPU turns
 		V.bBallInPlay = B && !B->bOut && !B->bKnockedOut;
 		V.bZoomMode = PC && PC->IsZoomMode();
 		V.bPinpointArmed = B && G->bPowerArmed && B->Def.PowerKind == EZoogiPower::LockOn;
@@ -189,32 +190,26 @@ namespace ZoogiAimArrow
 		return FMath::Min(BackPx / (MaxDragDistancePx * UPx), 1.f) * MaxDragForce;
 	}
 
-	void FGesture::Begin(float CurYaw, const FVector2D& FingerDir, const FVector2D& PressScreen, float Dist)
+	void FGesture::Begin(float CurYaw, const FVector2D& PressScreen, float Dist)
 	{
 		bActive = true; bRotating = false;
 		Yaw0 = Yaw = CurYaw;
-		Dir0 = FingerDir.IsNearlyZero() ? FVector2D(FMath::Cos(FMath::DegreesToRadians(CurYaw)), FMath::Sin(FMath::DegreesToRadians(CurYaw))) : FingerDir.GetSafeNormal();
 		Press = PressScreen;
 		AimDist = Dist;
 	}
 
-	bool FGesture::Move(const FVector2D& FingerDir, const FVector2D& Screen, float StartPx)
+	bool FGesture::Move(const FVector2D& Screen, float StartPx, float DegPerPx)
 	{
 		if (!bActive) return false;
 		if (!bRotating && FVector2D::Distance(Screen, Press) > StartPx) bRotating = true;
-		if (bRotating && !FingerDir.IsNearlyZero())
-		{
-			const FVector2D Dn = FingerDir.GetSafeNormal();
-			const float Delta = FMath::RadiansToDegrees(FMath::Atan2(FVector2D::CrossProduct(Dir0, Dn), FVector2D::DotProduct(Dir0, Dn)));
-			Yaw = (float)FRotator::NormalizeAxis(Yaw0 + Delta);
-		}
+		if (bRotating) Yaw = (float)FRotator::NormalizeAxis(Yaw0 + (Screen.X - Press.X) * DegPerPx);
 		return bRotating;
 	}
 
 	bool FGesture::End()
 	{
 		const bool bTap = bActive && !bRotating;
-		bActive = bRotating = false;
+		Cancel();
 		return bTap;
 	}
 

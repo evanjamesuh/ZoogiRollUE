@@ -37,6 +37,9 @@ namespace ZoogiAimArrow
 		float GrabHeadPx = 70.f;     // margin round the arrowhead (players grab near the head)
 		bool bGrabOnZoogi = false;   // a press on the shooter's own ball also grabs (off: the ball keeps the old press)
 		float RotateStartPx = 6.f;   // finger travel before the grab rotates (below = a tap: the old tap-to-aim on release)
+		float RotateDegPerPx = 0.25f; // rotation per px of HORIZONTAL finger travel (1080 px short side): right = clockwise seen from
+		                              // above. Screen-space on purpose: the camera orbits with the aim, so a world point under the
+		                              // finger would feed back (Oct 17 fix: overshoot / drift after release)
 		float DefaultAimDistCm = 800.f; // free-aim distance the arrow uses when nothing was aimed yet
 		// the Zoogi turns in place to face the arrow (visual mesh yaw only, physics untouched)
 		bool bFaceArrow = true;
@@ -74,19 +77,19 @@ namespace ZoogiAimArrow
 	/** Unchanged slingshot pull (the exact formula the controller always used): back px along -Fwd over the full-pull px. */
 	ZOOGIROLL_API float SlingshotPull(float BackPx, float UPx, float MaxDragDistancePx, float MaxDragForce);
 
-	/** Grab-and-rotate gesture: relative, so grabbing off-centre never makes the arrow jump. Directions are world floor
-	 *  directions from the ball centre to the finger's floor point. */
+	/** Grab-and-rotate gesture: yaw = yaw at the grab + horizontal finger travel since the press x DegPerPx. Purely
+	 *  screen-space (no world projection), so camera motion during or after the drag can never change the aim. */
 	struct ZOOGIROLL_API FGesture
 	{
 		bool bActive = false, bRotating = false;
 		float Yaw0 = 0.f, Yaw = 0.f, AimDist = 800.f;
-		FVector2D Dir0 = FVector2D(1.f, 0.f), Press = FVector2D::ZeroVector;
-		void Begin(float CurYaw, const FVector2D& FingerDir, const FVector2D& PressScreen, float Dist);
-		/** Updates Yaw; true once rotating (moved past StartPx). */
-		bool Move(const FVector2D& FingerDir, const FVector2D& Screen, float StartPx);
-		/** Ends the gesture; true = it was a tap (never rotated). */
+		FVector2D Press = FVector2D::ZeroVector;
+		void Begin(float CurYaw, const FVector2D& PressScreen, float Dist);
+		/** Updates Yaw from the finger's screen position (DegPerPx in degrees per actual px); true once rotating (moved past StartPx). */
+		bool Move(const FVector2D& Screen, float StartPx, float DegPerPx);
+		/** Ends the gesture and clears all state; true = it was a tap (never rotated). */
 		bool End();
-		void Cancel() { bActive = bRotating = false; }
+		void Cancel() { bActive = bRotating = false; Press = FVector2D::ZeroVector; }
 	};
 
 	/** Draws the arrow for the human shooter (no-op when hidden). Called from AZoogiHUD::DrawHUD before any early-out so it
