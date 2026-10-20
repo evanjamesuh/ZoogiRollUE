@@ -105,6 +105,10 @@ try {
     '-PixelStreamingWebRTCMaxBitrate=12000000', '-PixelStreamingWebRTCStartBitrate=4000000', '-PixelStreamingWebRTCFps=60',
     '-ini:Engine:[Audio]:UnfocusedVolumeMultiplier=1.0', '-ini:Engine:[/Script/Engine.Engine]:bSmoothFrameRate=False', '-log=ZoogiPhone.log')
   if (-not $ShowWindow) { $gameArgs += '-RenderOffScreen' }
+  # a leftover phone game from an earlier session would connect as a second streamer ("multiple streamers available")
+  Get-CimInstance Win32_Process -Filter "Name='ZoogiRoll.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith('C:\dev\ZoogiPhone\Game', [StringComparison]::OrdinalIgnoreCase) } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue; Say "Stopped a leftover phone game ($($_.ProcessId))" Yellow }
   $procs.game = (Start-Process $GameExe -ArgumentList $gameArgs -PassThru).Id
   SaveState
   Say "Game started (pid $($procs.game)), streaming to the signalling server" Green
