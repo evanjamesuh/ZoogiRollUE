@@ -334,6 +334,11 @@ public:
 	void CardsToggle(int32 HandSlot);
 	void CardsClear();
 	bool CardsCommit();
+	/** Oct 20 (Evan): cards are optional before aiming - the human aims right away; cards can still be picked and ACTIVATEd
+	 *  during the aim step, and an unactivated turn launches with no card (the selection, if any, is committed at launch). */
+	bool CardsOptionalAim() const;
+	bool CardsWindowOpen() const; // human may still pick / ACTIVATE cards this turn
+	void CardsCommitAtLaunch();
 	void CardsToggleAwaken();
 	// ---- Choose-your-Awaken (Evan playtest, Oct 15): after the draw the tray shows 3 Awaken stone tablets; the pick
 	// infuses that element for this turn and requests Episode Awakening; SKIP = no Awaken. Offers = 3 of the 5 classic

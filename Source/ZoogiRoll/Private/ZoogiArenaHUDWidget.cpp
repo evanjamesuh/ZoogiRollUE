@@ -649,7 +649,7 @@ void UZoogiArenaHUDWidget::PressCard(int32 CardSlot)
 	BuiltHand.Reset(); // detail panel follows the tap
 	AZoogiGameMode* G = GM();
 	if (!G) return;
-	if (G->Stage == EZoogiStage::Awaken && G->IsHumanAiming() && !G->bAwakenDone) G->MenuAction(TEXT("CardToggle"), CardSlot);
+	if (G->CardsWindowOpen()) G->MenuAction(TEXT("CardToggle"), CardSlot);
 	UE_LOG(LogZoogi, Log, TEXT("ARENA HUD card %d tapped"), CardSlot);
 }
 
@@ -697,7 +697,7 @@ bool UZoogiArenaHUDWidget::TrayWanted() const
 	if (!G || G->Phase != EZoogiPhase::Aiming) return false;
 	const AZoogiBall* B = G->GetActiveBall();
 	if (!B || B->bCPU || B->PlayerIndex != LocalPlayer()) return false;
-	return G->Stage == EZoogiStage::Draw || (G->Stage == EZoogiStage::Awaken && !G->bAwakenDone);
+	return G->Stage == EZoogiStage::Draw || G->CardsWindowOpen();
 }
 
 void UZoogiArenaHUDWidget::NativeTick(const FGeometry& Geo, float Dt)
@@ -771,6 +771,27 @@ void UZoogiArenaHUDWidget::TickTestDriver(float Dt)
 	}
 	if (G->Stage == EZoogiStage::Battle && G->BattleStep == EZoogiBattleStep::Aim)
 	{
+		// cards optional before aiming: odd turns pick a card + ACTIVATE while aiming, even turns fire with no card
+		static int32 LastTurn = -1, MyTurns = 0; // alternates per human turn
+		if (G->TurnCounter != LastTurn) { LastTurn = G->TurnCounter; ++MyTurns; }
+		const bool bPlayCard = MyTurns % 2 == 1;
+		if (bPlayCard && G->CardsWindowOpen() && TestT > 0.3f && Once(32))
+		{
+			const UZoogiCardSubsystem* CS = UZoogiCardSubsystem::Get(this);
+			const FZoogiCardPlayerState* PS = CS ? CS->Rules().Player(B->PlayerIndex) : nullptr;
+			for (int32 k = 0; PS && k < PS->Hand.Num(); ++k)
+				if (const FZoogiCardDef* D = CS->Def(PS->Hand[k].CardId)) if (D->Cost <= PS->Energy) { PressCard(k); break; }
+		}
+		if (bPlayCard && TestT > 0.6f && Once(64)) { TestShot(TEXT("aim_card_selected")); }
+		if (bPlayCard && TestT > 0.7f && Once(128)) PressActivate();
+		if (!bPlayCard && (MyTurns % 4) == 0 && G->CardsWindowOpen() && TestT > 0.3f && Once(512))
+		{
+			const UZoogiCardSubsystem* CS = UZoogiCardSubsystem::Get(this);
+			const FZoogiCardPlayerState* PS = CS ? CS->Rules().Player(B->PlayerIndex) : nullptr;
+			for (int32 k = 0; PS && k < PS->Hand.Num(); ++k)
+				if (const FZoogiCardDef* D = CS->Def(PS->Hand[k].CardId)) if (D->Cost <= PS->Energy) { PressCard(k); break; } // tapped, never ACTIVATEd
+		}
+		if (!bPlayCard && TestT > 0.6f && Once(256)) TestShot(TEXT("aim_no_card"));
 		if (TestT > 0.8f && Once(1)) G->MenuAction(TEXT("AimNext"), 0);
 		if (TestT > 1.4f && Once(2)) TestShot(TEXT("aim"));
 		if (TestT > 1.8f && Once(4)) G->MenuAction(TEXT("AimConfirm"), 0);
@@ -901,7 +922,7 @@ void UZoogiArenaHUDWidget::Refresh(float Dt)
 		if (BannerRoot.IsValid()) BannerRoot->SetRenderTranslation(FVector2D(0.f, (1.f - TrayT) * BannerShift * S));
 		const UZoogiCardSubsystem* CS = UZoogiCardSubsystem::Get(this);
 		const FZoogiCardPlayerState* PS = (CS && G->CardsOn()) ? CS->Rules().Player(Me) : nullptr;
-		const bool bStandby = G->Stage == EZoogiStage::Awaken && G->IsHumanAiming() && !G->bAwakenDone;
+		const bool bStandby = G->CardsWindowOpen();
 		int32 Cost = 0;
 		for (int32 k = 0; k < Cards.Num(); ++k)
 		{
@@ -1108,7 +1129,7 @@ void UZoogiArenaHUDWidget::RefreshBoard(float Dt)
 	if (DeckTxt.IsValid()) DeckTxt->SetText(FText::AsNumber(PS ? PS->DrawPile.Num() : 0));
 	if (DiscardTxt.IsValid()) DiscardTxt->SetText(FText::AsNumber(PS ? PS->Discard.Num() : 0));
 	if (EnergyTxt.IsValid()) EnergyTxt->SetText(FText::FromString(FString::Printf(TEXT("%d/5"), PS ? PS->Energy : 0)));
-	const bool bStandby = G->Stage == EZoogiStage::Awaken && G->IsHumanAiming() && !G->bAwakenDone;
+	const bool bStandby = G->CardsWindowOpen();
 	int32 Cost = 0;
 	for (int32 k = 0; k < Cards.Num(); ++k)
 	{

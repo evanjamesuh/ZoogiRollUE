@@ -33,7 +33,7 @@ void AZoogiGameMode::CardsBeginStandby()
 void AZoogiGameMode::CardsToggle(int32 Slot)
 {
 	UZoogiCardSubsystem* C = UZoogiCardSubsystem::Get(this);
-	if (!C || !CardsOn() || Stage != EZoogiStage::Awaken || bAwakenDone || !IsHumanAiming()) return;
+	if (!C || !CardsWindowOpen()) return;
 	const EZoogiCardResult R = C->ToggleSlot(this, Slot);
 	if (R != EZoogiCardResult::Ok && R != EZoogiCardResult::NotSelected)
 		if (AZoogiBall* B = GetActiveBall()) AddPopup(FString(ZoogiCardResultName(R)).Replace(TEXT("_"), TEXT(" ")).ToUpper(), B->BallLocation() + FVector(0, 0, 200.f), FLinearColor(1.f, 0.45f, 0.35f));
@@ -49,14 +49,16 @@ void AZoogiGameMode::CardsToggleAwaken()
 
 void AZoogiGameMode::CardsClear()
 {
-	if (UZoogiCardSubsystem* C = UZoogiCardSubsystem::Get(this)) if (CardsOn() && Stage == EZoogiStage::Awaken && !bAwakenDone) C->ClearSelection(this);
+	if (UZoogiCardSubsystem* C = UZoogiCardSubsystem::Get(this)) if (CardsWindowOpen()) C->ClearSelection(this);
 }
 
 bool AZoogiGameMode::CardsCommit()
 {
 	bCardAwakenView = false; // committing always shows the cards again
 	UZoogiCardSubsystem* C = UZoogiCardSubsystem::Get(this);
-	if (!C || !CardsOn() || Phase != EZoogiPhase::Aiming || Stage != EZoogiStage::Awaken || bAwakenDone) return false;
+	if (!C || !CardsOn() || Phase != EZoogiPhase::Aiming || bAwakenDone) return false;
+	// Standby, or (cards optional) any Battle step before the roll: aiming, or the launch itself (CardsCommitAtLaunch)
+	if (!(Stage == EZoogiStage::Awaken || (CardsOptionalAim() && Stage == EZoogiStage::Battle && BattleStep != EZoogiBattleStep::Rolling))) return false;
 	FString Choice;
 	if (C->Commit(this, Choice) != EZoogiCardResult::Ok) return false;
 	bAwakenDone = true;
@@ -69,6 +71,33 @@ bool AZoogiGameMode::CardsCommit()
 		if (const FZoogiCardPlayerState* S = C->Rules().Player(B->PlayerIndex)) CardsAddAwakenCharge(B->PlayerIndex, S->Committed.Num(), TEXT("human commit"));
 	}
 	return true;
+}
+
+// ---- cards optional before aiming (Evan, Oct 20)
+bool AZoogiGameMode::CardsOptionalAim() const
+{
+	static const bool bOn = [] {
+		bool b = true;
+		GConfig->GetBool(TEXT("ZoogiRoll.Cards"), TEXT("bOptionalBeforeAim"), b, GGameIni);
+		if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiCardsBeforeAim"))) b = false;
+		return b;
+	}();
+	return bOn && CardsOn();
+}
+
+bool AZoogiGameMode::CardsWindowOpen() const
+{
+	if (!CardsOn() || bAwakenDone || !IsHumanAiming()) return false;
+	return Stage == EZoogiStage::Awaken || (CardsOptionalAim() && IsAimStep());
+}
+
+void AZoogiGameMode::CardsCommitAtLaunch()
+{
+	// the human launched without ACTIVATE: commit whatever is selected (nothing = pass, no energy spent) so the turn ends cleanly
+	const AZoogiBall* B = GetActiveBall();
+	if (!CardsOptionalAim() || bAwakenDone || !B || B->bCPU) return;
+	const bool bOk = CardsCommit();
+	UE_LOG(LogZoogi, Log, TEXT("CARDS optional: P%d launched without ACTIVATE -> selection committed at launch (%s)"), B->PlayerIndex + 1, bOk ? *AwakenChoiceText : TEXT("rejected"));
 }
 
 // ---- Awaken charge (Evan, Oct 20)
@@ -104,7 +133,8 @@ bool AZoogiGameMode::CardsUseAwaken(const TCHAR* Who)
 	// Spends a full charge during the Standby: the Zoogi's own affinity element is infused for this turn's shot (same artifact
 	// effects as the classic INFUSE) and the Standby Awakening request turns ON. One use per turn.
 	AZoogiBall* B = GetActiveBall();
-	if (!B || !B->Artifact || !AwakenChargeOn() || Phase != EZoogiPhase::Aiming || Stage != EZoogiStage::Awaken || bStandbyAwaken) return false;
+	if (!B || !B->Artifact || !AwakenChargeOn() || Phase != EZoogiPhase::Aiming || bStandbyAwaken) return false;
+	if (!(Stage == EZoogiStage::Awaken || IsAimStep())) return false;
 	if (!CardsAwakenReady(B->PlayerIndex)) return false;
 	const EZoogiArtifact A = ZoogiArtifacts::Affinity(B->Def.Id);
 	AwakenCharge[B->PlayerIndex] = 0;

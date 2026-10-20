@@ -854,6 +854,7 @@ bool AZoogiGameMode::ReleaseAim()
 	}
 	if (Ball) ApplyStatusOnShot(Ball, V);
 	if (bComboMode && Ball) ComboModifyShot(Ball, V);
+	CardsCommitAtLaunch(); // cards optional before aiming: an unactivated selection goes with this shot
 	UZoogiCardSubsystem* CardFx = CardsOn() ? UZoogiCardSubsystem::Get(this) : nullptr; // v3 Phase 3: card shot modifiers (cards on only)
 	if (CardFx && Ball) CardFx->FxModifyShot(this, Ball, V);
 	if (CardFx && Ball && Ball->bCPU) CPUSafetyClamp(Ball, V); // Oct 14 playtest fix: no CPU self ring-out (cards mode)

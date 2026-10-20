@@ -126,6 +126,7 @@ void AZoogiGameMode::SetBattleStep(EZoogiBattleStep S)
 	BattleStep = S;
 	StepTime = 0.f;
 	UE_LOG(LogZoogi, Log, TEXT("Battle step: %s (P%d)"), StepName(S), ActivePlayer + 1);
+	if (S == EZoogiBattleStep::PowerUp) CardsCommitAtLaunch(); // cards optional before aiming: an unactivated selection goes with this shot
 	if (S == EZoogiBattleStep::PowerUp)
 	{
 		// Anime held-pose beat: a breath-in swell that cuts to ~0.1 s of silence right before the launch whoosh.
@@ -584,6 +585,7 @@ void AZoogiGameMode::TickStages(float Dt)
 		{
 			// v3 STANDBY: human commits with COMMIT / Enter, CPU through the same rules; then the normal Aim / Force / Confirm
 			if (!bAwakenDone && bCPU && StageTime >= AwakenCPU) CardsPlanCPU();
+			if (!bAwakenDone && !bCPU && CardsOptionalAim() && StageTime >= 0.3f) { SetStage(EZoogiStage::Battle); break; } // aim right away; cards stay open
 			if (bAwakenDone && !bAnimeBusy && StageTime - AwakenDoneAt >= AwakenBeat) SetStage(EZoogiStage::Battle);
 			break;
 		}
