@@ -60,6 +60,7 @@ private:
 	void Js(const FString& Script);
 	void PushState();
 	void StartMatchOn(const FString& WebArena);
+	void MakeBrowser(const FString& InScreen);
 	class AZoogiGameMode* GM() const;
 
 	UPROPERTY() TObjectPtr<UZoogiWebBrowser> Browser;
@@ -68,9 +69,11 @@ private:
 	TWeakObjectPtr<UWidget> HomeBtn;
 	bool bReady = false;          // page sent UIReady
 	bool bShown = false;
+	bool bKillBrowser = false;    // Android: release the hidden browser on the next tick
 	FString PendingScreen;
 	TArray<FString> PendingJs;
 	FString Screen;
+	FString PageUrl;
 	float TestT = 0.f; int32 TestStep = 0; // -ZoogiWebUITest capture driver
 	void TickTest(float Dt);
 };

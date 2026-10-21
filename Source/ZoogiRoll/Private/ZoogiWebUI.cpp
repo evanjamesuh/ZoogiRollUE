@@ -144,9 +144,8 @@ TSharedRef<SWidget> UZoogiWebUILayer::RebuildWidget()
 		WidgetTree->RootWidget = Root;
 		Bridge = NewObject<UZoogiWebUIBridge>(this);
 		Bridge->Owner = this;
-		Browser = WidgetTree->ConstructWidget<UZoogiWebBrowser>(UZoogiWebBrowser::StaticClass());
-		Browser->BridgeObject = Bridge;
-		if (UCanvasPanelSlot* S = Root->AddChildToCanvas(Browser)) { S->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f)); S->SetOffsets(FMargin(0.f)); }
+		PageUrl = WebUIUrl();
+		MakeBrowser(TEXT("title")); // the Slate browser is created in Super::RebuildWidget below and opens the page
 		// HOME: back to the native hub (the web screens have no hub of their own); bottom-left corner, over the art's
 		// crystal decoration, clear of every web control
 		UZoogiButton* B = WidgetTree->ConstructWidget<UZoogiButton>(UZoogiButton::StaticClass());
@@ -167,12 +166,20 @@ TSharedRef<SWidget> UZoogiWebUILayer::RebuildWidget()
 		B->OnClicked.AddDynamic(C, &UZoogiMenuRootClick::Click);
 		if (UCanvasPanelSlot* S = Root->AddChildToCanvas(B)) { S->SetAnchors(FAnchors(0.f, 1.f)); S->SetAlignment(FVector2D(0.f, 1.f)); S->SetPosition(FVector2D(10.f, -10.f)); S->SetSize(FVector2D(132.f, 64.f)); }
 		HomeBtn = B;
-		const FString Url = WebUIUrl();
-		Browser->SetStartURL(Url + TEXT("#title")); // the Slate browser is created in Super::RebuildWidget below and opens this
-		UE_LOG(LogZoogi, Log, TEXT("WEBUI layer up: %s"), *Url);
+		UE_LOG(LogZoogi, Log, TEXT("WEBUI layer up: %s"), *PageUrl);
 	}
 	SetVisibility(ESlateVisibility::SelfHitTestInvisible);
 	return Super::RebuildWidget();
+}
+
+void UZoogiWebUILayer::MakeBrowser(const FString& InScreen)
+{
+	UCanvasPanel* Root = WidgetTree ? Cast<UCanvasPanel>(WidgetTree->RootWidget) : nullptr;
+	if (!Root || Browser) return;
+	Browser = WidgetTree->ConstructWidget<UZoogiWebBrowser>(UZoogiWebBrowser::StaticClass());
+	Browser->BridgeObject = Bridge;
+	Browser->SetStartURL(PageUrl + TEXT("#") + InScreen);
+	if (UCanvasPanelSlot* S = Cast<UCanvasPanelSlot>(Root->InsertChildAt(0, Browser))) { S->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f)); S->SetOffsets(FMargin(0.f)); } // under HOME
 }
 
 void UZoogiWebUILayer::Js(const FString& Script)
@@ -185,10 +192,15 @@ void UZoogiWebUILayer::ShowScreen(const FString& InScreen)
 {
 	Screen = InScreen;
 	bShown = true;
+	bKillBrowser = false;
+	if (!Browser) MakeBrowser(InScreen); // Android: Hide() destroyed it
 	if (Browser) Browser->SetVisibility(ESlateVisibility::Visible);
 	if (HomeBtn.IsValid()) HomeBtn->SetVisibility(InScreen == TEXT("title") ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
 	PushState();
 	Js(FString::Printf(TEXT("ZoogiUI.show(%s)"), *JsStr(InScreen)));
+#if PLATFORM_ANDROID
+	Js(FString::Printf(TEXT("(function(){var h=document.getElementById('zrHome');if(h)h.style.display='%s'})()"), InScreen == TEXT("title") ? TEXT("none") : TEXT("block")));
+#endif
 	UE_LOG(LogZoogi, Log, TEXT("WEBUI show %s (ready %d)"), *InScreen, bReady ? 1 : 0);
 }
 
@@ -197,6 +209,12 @@ void UZoogiWebUILayer::Hide()
 	// only the children hide: a collapsed UserWidget stops ticking (the test driver and late pushes live in NativeTick)
 	bShown = false;
 	if (Browser) Browser->SetVisibility(ESlateVisibility::Collapsed);
+#if PLATFORM_ANDROID
+	// Android: the WebView is a native view the engine skips touches over (GameActivity ExtraIgnoreClickViews) even while
+	// hidden, so a collapsed full-screen browser ate every tap in the game. NativeTick destroys it (not here: Hide can run
+	// inside the page's own bridge call); ShowScreen remakes it.
+	bKillBrowser = true;
+#endif
 	if (HomeBtn.IsValid()) HomeBtn->SetVisibility(ESlateVisibility::Collapsed);
 	UE_LOG(LogZoogi, Log, TEXT("WEBUI hidden (native hub)"));
 }
@@ -250,11 +268,17 @@ void UZoogiWebUILayer::OnUIEvent(const FString& Name, const FString& Json)
 	if (Name == TEXT("UIReady"))
 	{
 		bReady = true;
+#if PLATFORM_ANDROID
+		// the WebView draws over every game widget on Android (the native HOME button is hidden under it): HOME in the page
+		if (Browser) Browser->ExecuteJavascript(TEXT("(function(){if(document.getElementById('zrHome'))return;var b=document.createElement('button');b.id='zrHome';b.textContent='HOME';")
+			TEXT("b.style.cssText='position:fixed;left:10px;bottom:10px;z-index:99999;width:132px;height:64px;border-radius:32px;border:3px solid #E8B64A;background:rgba(29,36,66,.92);color:#FFE08A;font:700 22px serif;letter-spacing:2px';")
+			TEXT("b.onclick=function(){window.ue.interface.broadcast('HomeTapped','{}')};document.body.appendChild(b);})()"));
+#endif
 		TArray<FString> Q = MoveTemp(PendingJs);
-		for (const FString& S : Q) Browser->ExecuteJavascript(S);
+		if (Browser) for (const FString& S : Q) Browser->ExecuteJavascript(S);
 		if (!bShown) Hide();
 	}
-	else if (Name == TEXT("TitleTapped")) Hide(); // title -> the native home hub
+	else if (Name == TEXT("TitleTapped") || Name == TEXT("HomeTapped")) Hide(); // title / in-page HOME (Android) -> the native home hub
 	else if (Name == TEXT("LoadingComplete")) StartMatchOn(O->GetStringField(TEXT("arena")));
 	else if (Name == TEXT("DeckSaved") && FP)
 	{
@@ -300,6 +324,17 @@ void UZoogiWebUILayer::OnUIEvent(const FString& Name, const FString& Json)
 void UZoogiWebUILayer::NativeTick(const FGeometry& Geo, float Dt)
 {
 	Super::NativeTick(Geo, Dt);
+	if (bKillBrowser && Browser && !bShown)
+	{
+		Browser->RemoveFromParent();
+		Browser->ReleaseSlateResources(true);
+		Browser = nullptr;
+		bReady = false;
+		PendingJs.Empty();
+		UE_LOG(LogZoogi, Log, TEXT("WEBUI browser released (touch goes to the game)"));
+	}
+	bKillBrowser = false;
+	if (!Browser) return;
 	TickTest(Dt);
 }
 
