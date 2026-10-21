@@ -199,7 +199,7 @@ public:
 
 	// ---- decks (Deck 1-5; the active one is mirrored into the progression saved deck the matches use)
 	static constexpr int32 NumDecks = 5;
-	static constexpr int32 DeckSize = 8;       // DETAILED PASS 3: 8 slots (4x2); the match tops a short saved deck up to 15
+	static constexpr int32 DeckSize = 5;       // Oct 20 (Evan): 5 cards per deck (was 8); the match hand is the whole deck
 	static constexpr int32 MaxCopiesInDeck = 1;
 	FString DeckName(int32 I) const;
 	void SetDeckName(int32 I, const FString& Name);

@@ -157,7 +157,7 @@
       { name: "My Deck 2", cards: ["guard", "frost", "anchor-guard", "precision", "orb-relay", "recovery-roll"] },
       { name: "My Deck 3", cards: [] },
     ]),
-    deckIdx: 0, deckMax: 15, filter: "all", selCard: "storm", selFrom: "coll",
+    deckIdx: 0, deckMax: 5, filter: "all", selCard: "storm", selFrom: "coll",
     arena: "skyfall", loadArena: "frozen", loadNext: "board", loadLoop: true,
     episode: "ep1", unlocked: 1,
     shopTab: "featured", shopThumb: 0, owned: new Set(store.get("owned", [])),
@@ -1178,4 +1178,12 @@
   show(SCREENS.includes(start) ? start : (location.hash ? "deck" : "title"), { push: false, silent: true });
   (document.fonts ? document.fonts.ready : Promise.resolve()).then(() => { positionPen(); renderDetail(); });
   Bridge.emit("UIReady", { screens: SCREENS });
+  // Android / iOS inject window.ue only after the page finishes loading: say UIReady again once it shows up
+  if (!window.ue) {
+    let tries = 0;
+    const wait = setInterval(() => {
+      if (window.ue && window.ue.interface) { clearInterval(wait); Bridge.emit("UIReady", { screens: SCREENS }); }
+      else if (++tries > 100) clearInterval(wait);
+    }, 100);
+  }
 })();

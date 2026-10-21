@@ -17,8 +17,11 @@
 #include "Components/TextBlock.h"
 #include "Dom/JsonObject.h"
 #include "Engine/World.h"
+#include "HAL/FileManager.h"
+#include "HAL/PlatformFileManager.h"
 #include "Misc/CommandLine.h"
 #include "Misc/ConfigCacheIni.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Parse.h"
 #include "Misc/Paths.h"
 #include "Serialization/JsonReader.h"
@@ -46,6 +49,31 @@ namespace
 	FString JsStr(const FString& S) { return TEXT("'") + S.ReplaceCharWithEscapedChar().Replace(TEXT("'"), TEXT("\\'")) + TEXT("'"); }
 
 	TWeakObjectPtr<UZoogiWebUILayer> GLayer;
+
+	// the page's file:// URL. Android: the page sits inside the APK where the WebView can't read it, so ZoogiUI is
+	// copied out to the app's storage first (each launch: ~14 MB, keeps it in step with the build)
+	FString WebUIUrl()
+	{
+#if PLATFORM_ANDROID
+		const FString Src = FPaths::ProjectContentDir() / TEXT("ZoogiUI");
+		const FString Dst = FPaths::ProjectPersistentDownloadDir() / TEXT("ZoogiUI");
+		TArray<FString> Files;
+		IFileManager::Get().FindFilesRecursive(Files, *Src, TEXT("*"), true, false);
+		int32 N = 0;
+		for (const FString& F : Files)
+		{
+			FString Rel = F;
+			FPaths::MakePathRelativeTo(Rel, *(Src + TEXT("/")));
+			TArray<uint8> Bytes;
+			if (FFileHelper::LoadFileToArray(Bytes, *F) && FFileHelper::SaveArrayToFile(Bytes, *(Dst / Rel))) ++N;
+		}
+		const FString Abs = FPlatformFileManager::Get().GetPlatformFile().ConvertToAbsolutePathForExternalAppForWrite(*(Dst / TEXT("index.html")));
+		UE_LOG(LogZoogi, Log, TEXT("WEBUI copied %d / %d files to %s"), N, Files.Num(), *Abs);
+		return TEXT("file://") + Abs;
+#else
+		return TEXT("file:///") + FPaths::ConvertRelativePathToFull(FPaths::ProjectContentDir() / TEXT("ZoogiUI/index.html"));
+#endif
+	}
 }
 
 // ------------------------------------------------------------------------------------------------ bridge + browser
@@ -74,7 +102,7 @@ bool UZoogiWebUILayer::IsEnabled()
 		bool bIni = true;
 		if (GConfig) GConfig->GetBool(TEXT("ZoogiRoll.UI"), TEXT("bWebScreens"), bIni, GGameIni);
 		if (FParse::Param(FCommandLine::Get(), TEXT("ZoogiNoWebUI"))) bIni = false;
-		const FString Index = FPaths::ConvertRelativePathToFull(FPaths::ProjectContentDir() / TEXT("ZoogiUI/index.html"));
+		const FString Index = FPaths::ProjectContentDir() / TEXT("ZoogiUI/index.html");
 		if (bIni && !FPaths::FileExists(Index)) { UE_LOG(LogZoogi, Warning, TEXT("WEBUI missing %s - native menus only"), *Index); bIni = false; }
 		return bIni;
 	}();
@@ -139,7 +167,7 @@ TSharedRef<SWidget> UZoogiWebUILayer::RebuildWidget()
 		B->OnClicked.AddDynamic(C, &UZoogiMenuRootClick::Click);
 		if (UCanvasPanelSlot* S = Root->AddChildToCanvas(B)) { S->SetAnchors(FAnchors(0.f, 1.f)); S->SetAlignment(FVector2D(0.f, 1.f)); S->SetPosition(FVector2D(10.f, -10.f)); S->SetSize(FVector2D(132.f, 64.f)); }
 		HomeBtn = B;
-		const FString Url = TEXT("file:///") + FPaths::ConvertRelativePathToFull(FPaths::ProjectContentDir() / TEXT("ZoogiUI/index.html"));
+		const FString Url = WebUIUrl();
 		Browser->SetStartURL(Url + TEXT("#title")); // the Slate browser is created in Super::RebuildWidget below and opens this
 		UE_LOG(LogZoogi, Log, TEXT("WEBUI layer up: %s"), *Url);
 	}
@@ -189,7 +217,7 @@ void UZoogiWebUILayer::PushState()
 		if (i) Decks += TEXT(",");
 		Decks += FString::Printf(TEXT("{name:%s,cards:["), *JsStr(FP->DeckName(i)));
 		const TArray<FName>& Cards = FP->Deck(i);
-		for (int32 k = 0; k < Cards.Num(); ++k) Decks += (k ? TEXT(",") : TEXT("")) + JsStr(WebCardId(Cards[k]));
+		for (int32 k = 0; k < Cards.Num() && k < UZoogiFrontProfileSubsystem::DeckSize; ++k) Decks += (k ? TEXT(",") : TEXT("")) + JsStr(WebCardId(Cards[k]));
 		Decks += TEXT("]}");
 	}
 	Decks += TEXT("]");

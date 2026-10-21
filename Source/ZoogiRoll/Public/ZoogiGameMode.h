@@ -339,6 +339,8 @@ public:
 	bool CardsOptionalAim() const;
 	bool CardsWindowOpen() const; // human may still pick / ACTIVATE cards this turn
 	void CardsCommitAtLaunch();
+	/** Oct 20 (Evan): tap a card = play it now (select + commit that one card); more taps play more cards while energy lasts. */
+	bool CardsTapPlay(int32 HandSlot);
 	void CardsToggleAwaken();
 	// ---- Choose-your-Awaken (Evan playtest, Oct 15): after the draw the tray shows 3 Awaken stone tablets; the pick
 	// infuses that element for this turn and requests Episode Awakening; SKIP = no Awaken. Offers = 3 of the 5 classic

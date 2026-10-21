@@ -242,6 +242,8 @@ public:
 	EZoogiCardResult Commit(int32 P, const FZoogiCardContext& Ctx, TArray<FZoogiCardCommitted>* Out = nullptr);
 	/** Ends P's turn: hand + committed -> discard, Standby closed. Safe to call twice. */
 	void EndTurn(int32 P);
+	/** Oct 20 (Evan) tap-to-play: after a one-card commit, the same Standby may commit again (energy permitting). */
+	void AllowAnotherCommit(int32 P) { if (Players.IsValidIndex(P) && Players[P].bStandbyOpen) Players[P].bCommitted = false; }
 
 	/** Pure check (no state change): would selecting this instance now be legal? */
 	EZoogiCardResult CanSelect(int32 P, int32 InstanceId, const FZoogiCardContext& Ctx) const;

@@ -83,9 +83,19 @@ void UZoogiCardSubsystem::EnsureMatch(AZoogiGameMode* G)
 	TArray<FName> Fallback = ZoogiCards::BuiltInDeck();
 	// Oct 14: human players use the saved deck (menu Deck screen) when it is legal; CPUs keep the default deck.
 	TArray<FName> HumanDeck = Deck;
+	// Oct 20 (Evan): decks are DeckSize (5) distinct cards; longer decks (older saves, the 15-card CPU starter) keep their
+	// first DeckSize distinct cards
+	auto Trim = [this](TArray<FName>& D)
+	{
+		TArray<FName> Out;
+		for (const FName& Id : D) { if (Out.Num() >= Tune.DeckSize) break; if (Out.FindByKey(Id) == nullptr || Tune.MaxCopies > 1) Out.Add(Id); }
+		D = MoveTemp(Out);
+	};
+	Trim(Deck); Trim(Fallback); HumanDeck = Deck;
 	if (const ZoogiCards::FSavedDeckQuery& SQ = ZoogiCards::GetSavedDeckQuery())
 	{
-		const TArray<FName> Saved = SQ();
+		TArray<FName> Saved = SQ();
+		Trim(Saved);
 		FString DeckErr;
 		TArray<FName> Use = Saved;
 		DeckNotice.Reset();

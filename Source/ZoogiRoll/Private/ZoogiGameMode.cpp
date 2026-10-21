@@ -205,6 +205,7 @@ void AZoogiGameMode::MenuAction(FName Action, int32 Index)
 	else if (Action == "CardToggle") CardsToggle(Index);
 	else if (Action == "CardClear") CardsClear();
 	else if (Action == "CardCommit") CardsCommit();
+	else if (Action == "CardPlay") CardsTapPlay(Index);
 	else if (Action == "CardAwaken") CardsToggleAwaken();
 	else if (Action == "CardAwakenView") CardsAwakenView(Index);
 	else if (Action == "CardAwakenPick") CardsAwakenPick(Index);

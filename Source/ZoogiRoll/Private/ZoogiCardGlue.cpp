@@ -60,6 +60,9 @@ bool AZoogiGameMode::CardsCommit()
 	// Standby, or (cards optional) any Battle step before the roll: aiming, or the launch itself (CardsCommitAtLaunch)
 	if (!(Stage == EZoogiStage::Awaken || (CardsOptionalAim() && Stage == EZoogiStage::Battle && BattleStep != EZoogiBattleStep::Rolling))) return false;
 	FString Choice;
+	const AZoogiBall* Act = GetActiveBall();
+	const FZoogiCardPlayerState* Pre = Act ? C->Rules().Player(Act->PlayerIndex) : nullptr;
+	const int32 Before = Pre ? Pre->Committed.Num() : 0; // tap-played cards were already charged
 	if (C->Commit(this, Choice) != EZoogiCardResult::Ok) return false;
 	bAwakenDone = true;
 	AwakenDoneAt = StageTime;
@@ -68,7 +71,7 @@ bool AZoogiGameMode::CardsCommit()
 	{
 		AddPopup(Choice, B->BallLocation() + FVector(0, 0, 160.f), FLinearColor(0.6f, 1.f, 0.7f));
 		AddFeed(FString::Printf(TEXT("P%d %s  %s"), B->PlayerIndex + 1, *B->Def.Name, *Choice), FLinearColor(0.6f, 1.f, 0.7f));
-		if (const FZoogiCardPlayerState* S = C->Rules().Player(B->PlayerIndex)) CardsAddAwakenCharge(B->PlayerIndex, S->Committed.Num(), TEXT("human commit"));
+		if (const FZoogiCardPlayerState* S = C->Rules().Player(B->PlayerIndex)) CardsAddAwakenCharge(B->PlayerIndex, S->Committed.Num() - Before, TEXT("human commit"));
 	}
 	return true;
 }
@@ -96,8 +99,34 @@ void AZoogiGameMode::CardsCommitAtLaunch()
 	// the human launched without ACTIVATE: commit whatever is selected (nothing = pass, no energy spent) so the turn ends cleanly
 	const AZoogiBall* B = GetActiveBall();
 	if (!CardsOptionalAim() || bAwakenDone || !B || B->bCPU) return;
+	if (const UZoogiCardSubsystem* C = UZoogiCardSubsystem::Get(this))
+		if (const FZoogiCardPlayerState* S = C->Rules().Player(B->PlayerIndex))
+			if (S->Selected.Num() == 0) { bAwakenDone = true; AwakenDoneAt = StageTime; return; } // tap-to-play: nothing pending
 	const bool bOk = CardsCommit();
 	UE_LOG(LogZoogi, Log, TEXT("CARDS optional: P%d launched without ACTIVATE -> selection committed at launch (%s)"), B->PlayerIndex + 1, bOk ? *AwakenChoiceText : TEXT("rejected"));
+}
+
+bool AZoogiGameMode::CardsTapPlay(int32 Slot)
+{
+	UZoogiCardSubsystem* C = UZoogiCardSubsystem::Get(this);
+	AZoogiBall* B = GetActiveBall();
+	if (!C || !B || !CardsWindowOpen()) return false;
+	C->ClearSelection(this);
+	const EZoogiCardResult R = C->ToggleSlot(this, Slot);
+	if (R != EZoogiCardResult::Ok)
+	{
+		AddPopup(FString(ZoogiCardResultName(R)).Replace(TEXT("_"), TEXT(" ")).ToUpper(), B->BallLocation() + FVector(0, 0, 200.f), FLinearColor(1.f, 0.45f, 0.35f));
+		return false;
+	}
+	FString Choice;
+	if (C->Commit(this, Choice) != EZoogiCardResult::Ok) { C->ClearSelection(this); return false; }
+	C->AllowAnotherCommit(this); // the hand stays playable this turn
+	AwakenChoiceText = Choice;
+	AddPopup(Choice.Replace(TEXT("CARDS "), TEXT("")).TrimStart(), B->BallLocation() + FVector(0, 0, 160.f), FLinearColor(0.6f, 1.f, 0.7f));
+	AddFeed(FString::Printf(TEXT("P%d %s  %s"), B->PlayerIndex + 1, *B->Def.Name, *Choice), FLinearColor(0.6f, 1.f, 0.7f));
+	CardsAddAwakenCharge(B->PlayerIndex, 1, TEXT("tap play"));
+	UE_LOG(LogZoogi, Log, TEXT("CARDS tap-play P%d slot %d: %s"), B->PlayerIndex + 1, Slot, *Choice);
+	return true;
 }
 
 // ---- Awaken charge (Evan, Oct 20)

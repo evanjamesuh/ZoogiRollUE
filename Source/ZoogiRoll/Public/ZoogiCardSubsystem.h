@@ -39,6 +39,7 @@ public:
 	EZoogiCardResult ToggleSlot(AZoogiGameMode* G, int32 HandSlot);
 	void ClearSelection(AZoogiGameMode* G);
 	EZoogiCardResult Commit(AZoogiGameMode* G, FString& OutChoiceText);
+	void AllowAnotherCommit(AZoogiGameMode* G) { RulesV.AllowAnotherCommit(ActivePlayer(G)); }
 	void PlanCPU(AZoogiGameMode* G);
 	FZoogiCardContext BuildContext(AZoogiGameMode* G) const;
 
