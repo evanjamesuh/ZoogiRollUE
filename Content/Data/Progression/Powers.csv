@@ -1,0 +1,9 @@
+# Power unlocks (Evan Q12): mastery level OR gems (alternatives); unlocks persist. tier: starter = the initially locked powers,
+# free = owned from the start, advanced = future powers (validated: mastery 6-7 and 400-600 gems). card_id links the card (element source).
+power_id,name,element,tier,default_unlocked,mastery_level,gem_cost,card_id
+shock_1_storm,Storm,Shock,free,true,0,0,storm
+frost_2_frost,Frost,Frost,free,true,0,0,frost
+void_1_precision,Precision,Void,starter,false,2,300,precision
+fire_2_ember,Ember,Fire,starter,false,3,400,ember
+void_2_crystal_collapse,Crystal Collapse,Void,starter,false,4,500,crystal_collapse
+void_2_titan_meteor,Titan Meteor,Void,advanced,false,6,550,titan

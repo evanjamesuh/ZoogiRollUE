@@ -1,0 +1,197 @@
+#include "ZoogiPortraitCam.h"
+#include "ZoogiArenaHUDWidget.h"
+#include "ZoogiFramedLayout.h"
+#include "GameFramework/PlayerController.h"
+#include "HAL/IConsoleManager.h"
+#include "Engine/World.h"
+#include "Engine/LocalPlayer.h"
+#include "ZoogiGameMode.h"
+#include "ZoogiBall.h"
+
+namespace
+{
+	TAutoConsoleVariable<int32> CVarPortrait(TEXT("zoogi.Cam.Portrait"), 1, TEXT("Portrait camera framing on narrow (aspect < 1) screens: capped vertical FOV, width-keeping boom, HUD-safe band."));
+	TAutoConsoleVariable<float> CVarSafeTop(TEXT("zoogi.Cam.SafeTop"), 0.05f, TEXT("Portrait: top screen fraction kept clear of the play focus (HUD-hidden play: show-HUD / turn-score pill / ZOOM end at 92/1920 = 4.8%)."));
+	TAutoConsoleVariable<float> CVarSafeTopMin(TEXT("zoogi.Cam.SafeTopMin"), 0.05f, TEXT("Portrait: the top band never shrinks below this (HUD-hidden controls live in the top ~5%)."));
+	int32 GModeOverride = -1;
+	int32 GAxis = AspectRatio_MaintainXFOV; // the local player's aspect-ratio axis constraint (refreshed by ViewAspect)
+	TAutoConsoleVariable<float> CVarSafeBottomTray(TEXT("zoogi.Cam.SafeBottomTray"), 0.285f, TEXT("Portrait: bottom band while the human's Standby / Awaken card tray is up (Gameplay & UI: (190*1.45+272)/1920 = 28.5%)."));
+	TAutoConsoleVariable<int32> CVarAim(TEXT("zoogi.Cam.PortraitAim"), 1, TEXT("Portrait aim / rest framing from behind the shooter looking up the arena (0 = width-keeping pull-back only)."));
+	TAutoConsoleVariable<float> CVarAimPitch(TEXT("zoogi.Cam.PortraitRestPitch"), 48.f, TEXT("Portrait Draw / Awaken / PowerUp framing: boom pitch (deg)."));
+	TAutoConsoleVariable<float> CVarChasePitch(TEXT("zoogi.Cam.PortraitAimPitch"), 27.f, TEXT("Portrait aim chase view (Evan's tablet build): camera look pitch below horizontal (deg)."));
+	TAutoConsoleVariable<float> CVarChaseBoom(TEXT("zoogi.Cam.PortraitAimBoom"), 800.f, TEXT("Portrait aim chase view: camera distance from the shooter (cm, x the arena camera scale)."));
+	TAutoConsoleVariable<float> CVarChaseY(TEXT("zoogi.Cam.PortraitAimScreenY"), 0.66f, TEXT("Portrait aim chase view: shooter's screen height from the top (fraction)."));
+	TAutoConsoleVariable<float> CVarAimAhead(TEXT("zoogi.Cam.PortraitAimAhead"), 0.5f, TEXT("Portrait aim framing: look point from the shooter toward the aim point / arena centre (fraction)."));
+	TAutoConsoleVariable<float> CVarRestAhead(TEXT("zoogi.Cam.PortraitRestAhead"), 0.4f, TEXT("Portrait Draw / Awaken framing: look point from the shooter toward the arena centre (fraction)."));
+	TAutoConsoleVariable<float> CVarAimWidth(TEXT("zoogi.Cam.PortraitAimWidth"), 1.4f, TEXT("Portrait aim framing: ground width at the look point, times the play radius."));
+	TAutoConsoleVariable<float> CVarProbeH(TEXT("zoogi.Cam.PortraitProbeHeight"), 700.f, TEXT("Portrait aim / rest: the boom's collision probe starts this high over the look point."));
+	TAutoConsoleVariable<float> CVarShooterMargin(TEXT("zoogi.Cam.PortraitShooterMargin"), 0.06f, TEXT("Portrait aim framing: the shooter stays this far (normalised) inside the safe band."));
+	TAutoConsoleVariable<float> CVarSafeBottom(TEXT("zoogi.Cam.SafeBottom"), 0.06f, TEXT("Portrait: bottom screen fraction kept clear of the play focus when no card tray is up (small margin)."));
+	TAutoConsoleVariable<float> CVarVFovMax(TEXT("zoogi.Cam.PortraitVFovMax"), 78.f, TEXT("Portrait: vertical FOV cap (deg)."));
+	TAutoConsoleVariable<float> CVarBoomMax(TEXT("zoogi.Cam.PortraitBoomMax"), 2.6f, TEXT("Portrait: cap on the width-keeping boom pull-back."));
+	TAutoConsoleVariable<float> CVarCourtMargin(TEXT("zoogi.Cam.CourtMargin"), 0.94f, TEXT("Portrait: whole-court views keep the court inside this fraction of the half-width."));
+}
+
+namespace ZoogiPortrait
+{
+	bool AimFraming() { return CVarAim.GetValueOnGameThread() != 0; }
+	float AimPitch() { return FMath::Clamp(CVarAimPitch.GetValueOnGameThread(), 20.f, 75.f); }
+	float ChasePitch() { return FMath::Clamp(CVarChasePitch.GetValueOnGameThread(), 5.f, 70.f); }
+	float ChaseBoom() { return FMath::Clamp(CVarChaseBoom.GetValueOnGameThread(), 200.f, 6000.f); }
+	float ChaseScreenY() { return FMath::Clamp(CVarChaseY.GetValueOnGameThread(), 0.5f, 0.9f); }
+	float AimAhead() { return FMath::Clamp(CVarAimAhead.GetValueOnGameThread(), 0.f, 1.f); }
+	float RestAhead() { return FMath::Clamp(CVarRestAhead.GetValueOnGameThread(), 0.f, 1.f); }
+	float AimWidth() { return FMath::Clamp(CVarAimWidth.GetValueOnGameThread(), 0.f, 3.f); }
+	float AimProbeHeight() { return FMath::Clamp(CVarProbeH.GetValueOnGameThread(), 150.f, 3000.f); }
+	float ShooterMargin() { return FMath::Clamp(CVarShooterMargin.GetValueOnGameThread(), 0.f, 0.3f); }
+	bool Enabled() { return CVarPortrait.GetValueOnGameThread() != 0; }
+	float SafeTopMin() { return FMath::Clamp(CVarSafeTopMin.GetValueOnGameThread(), 0.f, 0.4f); }
+	float SafeTop() { return FMath::Clamp(CVarSafeTop.GetValueOnGameThread(), SafeTopMin(), 0.4f); }
+	float SafeBottom() { return FMath::Clamp(CVarSafeBottom.GetValueOnGameThread(), 0.f, 0.45f); }
+	float VFovMax() { return FMath::Clamp(CVarVFovMax.GetValueOnGameThread(), 40.f, 120.f); }
+	float BoomMax() { return FMath::Clamp(CVarBoomMax.GetValueOnGameThread(), 1.f, 4.f); }
+	float CourtMargin() { return FMath::Clamp(CVarCourtMargin.GetValueOnGameThread(), 0.5f, 1.f); }
+
+	void SetModeOverride(int32 Mode) { GModeOverride = FMath::Clamp(Mode, -1, 1); }
+	int32 GetModeOverride() { return GModeOverride; }
+	bool IsPortrait(float Aspect)
+	{
+		if (Aspect <= 0.f || GModeOverride == 0) return false;
+		return GModeOverride == 1 || (Enabled() && Aspect < 1.f);
+	}
+
+	float ViewAspect(const APlayerController* PC)
+	{
+		if (const ULocalPlayer* LP = PC ? PC->GetLocalPlayer() : nullptr) GAxis = LP->AspectRatioAxisConstraint;
+		return ZoogiFramed::ViewAspect(PC);
+	}
+
+	static bool VerticalAxis(float Aspect)
+	{
+		return GAxis == AspectRatio_MaintainYFOV || (GAxis == AspectRatio_MajorAxisFOV && Aspect < 1.f);
+	}
+
+	void TanHalf(float Fov, float Aspect, float& OutTanH, float& OutTanV)
+	{
+		const float T = FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(Fov, 1.f, 170.f) * 0.5f));
+		const float A = FMath::Max(Aspect, 0.01f);
+		if (VerticalAxis(A)) { OutTanV = T; OutTanH = T * A; } else { OutTanH = T; OutTanV = T / A; }
+	}
+
+	float FovForTanH(float TanH, float Aspect)
+	{
+		const float A = FMath::Max(Aspect, 0.01f);
+		return 2.f * FMath::RadiansToDegrees(FMath::Atan(VerticalAxis(A) ? TanH / A : TanH));
+	}
+
+	float SafeBottomTray() { return FMath::Clamp(CVarSafeBottomTray.GetValueOnGameThread(), 0.f, 0.45f); }
+
+	bool CardTrayUp(const UWorld* W)
+	{
+		const AZoogiGameMode* G = W ? W->GetAuthGameMode<AZoogiGameMode>() : nullptr;
+		const AZoogiBall* B = G ? G->GetActiveBall() : nullptr;
+		return G && B && !B->bCPU && G->Stage == EZoogiStage::Awaken;
+	}
+
+	void Band(const APlayerController* PC, float Aspect, float& OutTop, float& OutBottom)
+	{
+		const bool bOff = !IsPortrait(Aspect);
+		const bool bFramed = PC && ZoogiFramed::IsActive(PC->GetWorld());
+		// framed HUD: the arena window already excludes the HUD, but the top HUD-hidden controls band still applies
+		OutTop = bOff ? 0.f : (bFramed ? SafeTopMin() : SafeTop());
+		OutBottom = (bOff || bFramed) ? 0.f : (CardTrayUp(PC ? PC->GetWorld() : nullptr) ? FMath::Max(SafeBottom(), SafeBottomTray()) : SafeBottom());
+		float BT = 0.f, BB = 0.f; // Board Battle HUD: arena / round plates and the tray are always up
+		if (!bOff && !bFramed && PC && ZoogiArenaHUD::BoardBand(PC->GetWorld(), BT, BB)) { OutTop = FMath::Max(OutTop, BT); OutBottom = FMath::Max(OutBottom, BB); }
+	}
+
+	void AdaptFov(float LandscapeHFov, float Aspect, float& OutHFov, float& OutBoomMul)
+	{
+		OutHFov = LandscapeHFov; OutBoomMul = 1.f;
+		if (!IsPortrait(Aspect)) return;
+		// LandscapeHFov is a horizontal FOV tuned on 16:9; the result is in the engine's own FOV terms for this view (horizontal
+		// for MaintainXFOV, vertical for MaintainYFOV / MajorAxisFOV on a portrait screen)
+		const float TanH = FMath::Tan(FMath::DegreesToRadians(FMath::Clamp(LandscapeHFov, 5.f, 170.f) * 0.5f));
+		const float TanVCap = FMath::Tan(FMath::DegreesToRadians(VFovMax() * 0.5f));
+		const float TanHUse = FMath::Min(TanH, TanVCap * Aspect);
+		OutHFov = FovForTanH(TanHUse, Aspect);
+		OutBoomMul = FMath::Min(TanH / TanHUse, BoomMax());
+	}
+
+	float BandPitch(float HFov, float Aspect, float Top, float Bottom)
+	{
+		// band in normalised y: top edge 1 - 2*Top, bottom edge -1 + 2*Bottom; centre = Bottom - Top
+		const float C = Bottom - Top;
+		if (FMath::IsNearlyZero(C) || Aspect <= 0.f) return 0.f;
+		float TanH, TanV; TanHalf(HFov, Aspect, TanH, TanV);
+		return FMath::RadiansToDegrees(FMath::Atan(C * TanV)); // look point this far above the optical axis -> pitch down
+	}
+
+	bool Project(const FVector& CamLoc, const FRotator& Rot, float HFov, float Aspect, const FVector& P, FVector2D& Out)
+	{
+		const FVector L = Rot.UnrotateVector(P - CamLoc);
+		if (L.X < 1.f) { Out = FVector2D(10.f, 10.f); return false; }
+		float TanH, TanV; TanHalf(HFov, Aspect, TanH, TanV);
+		Out = FVector2D((L.Y / L.X) / TanH, (L.Z / L.X) / TanV);
+		return true;
+	}
+
+	FVector Boom(const FVector& Pivot, float Yaw, float Pitch, float Dist)
+	{
+		const float Pr = FMath::DegreesToRadians(Pitch);
+		return Pivot - FRotator(0.f, Yaw, 0.f).Vector() * Dist * FMath::Cos(Pr) + FVector(0.f, 0.f, Dist * FMath::Sin(Pr));
+	}
+
+	FRotator BandRotation(const FVector& Loc, const FVector& Look, float HFov, float Aspect, float Top, float Bottom)
+	{
+		FRotator R = (Look - Loc).Rotation();
+		R.Pitch -= BandPitch(HFov, Aspect, Top, Bottom);
+		return R;
+	}
+
+	float FitPointsDist(TArrayView<const FVector> Pts, const FVector& Pivot, float Yaw, float Pitch, float HFov, float Aspect, float Top, float Bottom, float YMargin, float MinDist, float MaxDist)
+	{
+		const float XM = CourtMargin();
+		const float Y1 = 1.f - 2.f * Top - YMargin, Y0 = -1.f + 2.f * Bottom + YMargin;
+		auto Fits = [&](float D)
+		{
+			const FVector Loc = Boom(Pivot, Yaw, Pitch, D);
+			const FRotator Rot = BandRotation(Loc, Pivot, HFov, Aspect, Top, Bottom);
+			for (const FVector& P : Pts)
+			{
+				FVector2D S;
+				if (!Project(Loc, Rot, HFov, Aspect, P, S)) return false;
+				if (FMath::Abs(S.X) > XM || S.Y > Y1 || S.Y < Y0) return false;
+			}
+			return true;
+		};
+		if (Fits(MinDist)) return MinDist;
+		if (!Fits(MaxDist)) return MaxDist;
+		float Lo = MinDist, Hi = MaxDist;
+		for (int32 i = 0; i < 24; ++i) { const float M = 0.5f * (Lo + Hi); if (Fits(M)) Hi = M; else Lo = M; }
+		return Hi;
+	}
+
+	float FitCircleDist(const FVector& C, float R, float Yaw, float Pitch, float HFov, float Aspect, float Top, float Bottom, float MinDist, float MaxDist)
+	{
+		const float XM = CourtMargin();
+		const float Y1 = 1.f - 2.f * Top, Y0 = -1.f + 2.f * Bottom;
+		auto Fits = [&](float D)
+		{
+			const FVector Loc = Boom(C, Yaw, Pitch, D);
+			const FRotator Rot = BandRotation(Loc, C, HFov, Aspect, Top, Bottom);
+			for (int32 k = 0; k < 48; ++k)
+			{
+				const float A = FMath::DegreesToRadians(7.5f * k);
+				FVector2D S;
+				if (!Project(Loc, Rot, HFov, Aspect, C + FVector(FMath::Cos(A) * R, FMath::Sin(A) * R, 0.f), S)) return false;
+				if (FMath::Abs(S.X) > XM || S.Y > Y1 || S.Y < Y0) return false;
+			}
+			return true;
+		};
+		if (Fits(MinDist)) return MinDist;
+		if (!Fits(MaxDist)) return MaxDist;
+		float Lo = MinDist, Hi = MaxDist;
+		for (int32 i = 0; i < 24; ++i) { const float M = 0.5f * (Lo + Hi); if (Fits(M)) Hi = M; else Lo = M; }
+		return Hi;
+	}
+}

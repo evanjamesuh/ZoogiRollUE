@@ -1,0 +1,19 @@
+# Repeatable match rewards (count toward daily_match_gem_cap). Base values vs Normal CPU; per_match_cap = max counted instances.
+# xp_to: Focus = the Focus Element at the moment the event happens (Evan Q8); Event = the event's element (Neutral -> Focus).
+# Awakening is NOT here on purpose (Evan Q7: achievements only, no gems/XP).
+source,tag,gems,xp,per_match_cap,xp_to
+completion,,4,12,1,Focus
+win,,5,8,1,Focus
+draw,,2,4,1,Focus
+ko,,1,6,4,Event
+ring_out,,1,3,3,Event
+trick,Trick.BankStrike,1,5,2,Focus
+trick,Trick.MomentumSteal,1,5,2,Focus
+trick,Trick.DoubleImpact,2,6,2,Focus
+trick,Trick.OrbMagnet,1,3,2,Event
+trick,Trick.FrostLane,1,5,2,Event
+trick,Trick.CrystalCollapse,1,5,2,Event
+trick,Trick.Other,1,3,2,Event
+power_used,,1,4,3,Event
+orb_collected,,1,1,4,Focus
+episode,,2,0,2,Focus

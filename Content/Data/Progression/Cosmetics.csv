@@ -1,0 +1,13 @@
+# Arena cosmetics (Evan Q14). Noncompetitive, visual only; slot = one equipped item per slot. source: achievement id, affinity:<level>, gems:<price>, default.
+# displayed = wired to a visible display today (1) or data + equip state only (0, needs art).
+id,name,slot,source,displayed
+border_default,Plain Border,animated_border,default,1
+border_awaken,Awakened Border,animated_border,A_AWAKEN_25,1
+border_gold,Gold Pulse Border,animated_border,gems:400,1
+floor_meadow_bloom,Meadow Bloom Floor,floor_theme,gems:600,0
+lighting_elemental,Elemental Lighting,elemental_lighting,A_MASTERY_ALL5,0
+entry_awaken_flash,Awaken Flash Entry,entry_effect,A_AWAKEN_1,0
+victory_legend,Legend Celebration,victory_celebration,A_AFFINITY_MAX,0
+impact_starburst,Starburst Impact,impact_fx,gems:300,0
+trail_spark,Spark Trail,rolling_trail,A_TRICKS_25,0
+decor_banner,Arena Banner,decoration,gems:250,0

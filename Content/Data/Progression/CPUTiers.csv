@@ -1,0 +1,10 @@
+# CPU tiers (Evan Q3): differ ONLY in decision-making. No stat, energy, card or resource changes anywhere in this table.
+# candidates = how many top-ranked shots are considered; pick_spread = cost window for variety; lookahead = 1 evaluates the
+# position left after the shot (self-exposure); combo_plan = plans card combos / power use across the turn; energy_reserve =
+# Card Energy kept back for next turn when no strong play; aim_noise = multiplier on the existing control-based aim error (skill).
+# gem_mult / xp_mult = player reward multipliers for beating that tier.
+tier,candidates,pick_spread,lookahead,combo_plan,energy_reserve,aim_noise,gem_mult,xp_mult
+Easy,5,900,0,0,0,1.8,0.5,0.5
+Normal,3,350,0,0,0,1.0,1.0,1.0
+Hard,2,150,1,1,1,0.7,1.3,1.3
+Expert,1,0,1,1,2,0.45,1.6,1.5

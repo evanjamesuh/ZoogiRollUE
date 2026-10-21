@@ -1,0 +1,175 @@
+// framed: the UMG layer of the framed match layout (-ZoogiFramedHUD). Paints the deep-blue backdrop in the margins,
+// the decorated arena frame + map title (light pulse on major events), the top header (round, orbs, active player,
+// DRAW/AWAKEN/BATTLE/RESOLVE/END stepper, status), the two team columns (UZoogiTeamColumnWidget) and the bottom tray
+// + prompt bar; routes the existing Awaken / aim UMG panels and the card hand into the tray; nav buttons (camera,
+// pause/menu with resume, settings, restart, main menu, exit). Never draws over the arena rect except the pause overlay.
+// Everything calls the same AZoogiGameMode::MenuAction paths as the old HUD buttons: no rule changes.
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Blueprint/UserWidget.h"
+#include "Components/SlateWrapperTypes.h"
+#include "ZoogiFramedHUDWidget.generated.h"
+
+class UCanvasPanel;
+class UButton;
+class UTextBlock;
+class UBorder;
+class UZoogiTeamColumnWidget;
+class AZoogiGameMode;
+
+/** Oct 17 battle view mode (Blueprint twin of ZoogiFramed::OnBattleViewModeChanged). */
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FZoogiOnBattleViewModeChanged, bool, bHudHidden, bool, bPortrait);
+
+/** Backdrop / frame / header / tray painter: a child placed first so buttons and columns draw above it. */
+UCLASS()
+class ZOOGIROLL_API UZoogiFramedPainter : public UUserWidget
+{
+	GENERATED_BODY()
+public:
+	TWeakObjectPtr<class UZoogiFramedHUDWidget> Owner;
+	bool bRotateLayer = false; // Oct 17: the top instance paints only the rotate-phone prompt (above every button)
+protected:
+	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& Geo, const FSlateRect& Cull, FSlateWindowElementList& Out, int32 Layer, const FWidgetStyle& Style, bool bParentEnabled) const override;
+};
+
+UCLASS()
+class ZOOGIROLL_API UZoogiFramedHUDWidget : public UUserWidget
+{
+	GENERATED_BODY()
+public:
+	int32 PaintBack(const FGeometry& Geo, FSlateWindowElementList& Out, int32 Layer) const;
+	/** Oct 17: rotate-phone prompt while the HUD toggle switches orientation (landscape + HUD <-> portrait, HUD hidden). */
+	int32 PaintRotate(const FGeometry& Geo, FSlateWindowElementList& Out, int32 Layer) const;
+	/** The acting player's prompt / action-status text (shown in the active Zoogi's team-column action box). */
+	static FString PromptText(const AZoogiGameMode* G);
+	/** Short label for the action box header (AWAKEN / STANDBY / BATTLE: AIM / ROLLING ...). */
+	static FString ActionLabel(const AZoogiGameMode* G);
+	/** Fired after the HUD toggle's orientation switch actually happened (and once for the initial mode). Same timing as the
+	 *  native ZoogiFramed::OnBattleViewModeChanged(). */
+	UPROPERTY(BlueprintAssignable, Category = "Zoogi|View")
+	FZoogiOnBattleViewModeChanged OnBattleViewModeChanged;
+	UFUNCTION(BlueprintPure, Category = "Zoogi|View") bool IsBattleHudHidden() const;
+	UFUNCTION(BlueprintPure, Category = "Zoogi|View") bool IsBattlePortrait() const;
+protected:
+	virtual TSharedRef<SWidget> RebuildWidget() override;
+	virtual void NativeTick(const FGeometry& Geo, float Dt) override;
+	UFUNCTION() void OnCam();
+	UFUNCTION() void OnZoom();
+	UFUNCTION() void OnPause();
+	UFUNCTION() void OnResume();
+	UFUNCTION() void OnRestart();
+	UFUNCTION() void OnSettings();
+	UFUNCTION() void OnMainMenu();
+	UFUNCTION() void OnExit();
+	UFUNCTION() void OnVolDown();
+	UFUNCTION() void OnVolUp();
+	UFUNCTION() FEventReply OnTrayHitDown(FGeometry MyGeometry, const FPointerEvent& MouseEvent);
+	UFUNCTION() void OnTrayBtnPressed();
+	UFUNCTION() void OnStone0();
+	UFUNCTION() void OnStone1();
+	UFUNCTION() void OnStone2();
+	UFUNCTION() void OnStone3();
+	UFUNCTION() void OnInfuse();
+	UFUNCTION() void OnGuard();
+	UFUNCTION() void OnSave();
+	UFUNCTION() void OnOrb();
+	UFUNCTION() void OnCardConfirm();
+	UFUNCTION() void OnCardClear();
+	UFUNCTION() void OnHudToggle();
+
+private:
+	AZoogiGameMode* GM() const;
+	UButton* MakeButton(const FString& Label, const FLinearColor& Accent, bool bFilled, UTextBlock*& OutText, int32 FontSize = 16, bool bPressFires = false);
+	void PlaceW(UWidget* W, const FVector2D& Pos, const FVector2D& Size, bool bShow);
+	void SetPaused(bool bPause);
+	void RouteTray(AZoogiGameMode* G, float s);
+	FString HintText(const AZoogiGameMode* G) const;
+	// Oct 17 (Evan): HUD shown = landscape, HUD hidden = portrait play (minimal edge controls). The toggle shows the rotate
+	// prompt, switches the layout at mid-prompt and asks the platform for the matching orientation (PC: swaps the window).
+	void ApplyOrientation(bool bHidden);
+	void TickHudToggleTest(AZoogiGameMode* G, float Dt);
+	void PaintPortraitStrip(const FGeometry& Geo, FSlateWindowElementList& Out, int32 Ly) const;
+	bool PortraitTrayShown() const;
+	void CallPortraitCameraMode(bool bPortrait); // Game Camera's AZoogiPlayerController::SetPortraitCameraMode(bool), by name
+	void TickViewModeEvent(float Dt);
+	bool bModeEventPending = true; // the initial mode fires on the first active frame
+	float ModeEventT = 0.f;
+	UPROPERTY() TObjectPtr<UButton> HudBtn;
+	UPROPERTY() TObjectPtr<UTextBlock> HudText;
+	UPROPERTY() TObjectPtr<UZoogiFramedPainter> RotPainter;
+	float RotateT = -1.f;     // < 0: no prompt; else seconds since the toggle
+	bool bRotateTo = false;   // target: true = hidden (portrait)
+	bool bRotateApplied = false;
+	int32 RotateReason = 0;   // 0 = HUD toggle, 1 = entering battle, 2 = leaving battle (prompt only: menus are portrait)
+	bool bWasActive = false;  // match-screen edge detection for the entering / leaving battle prompt
+	void StartBattleEdgePrompt(bool bEntering, const FVector2D& ViewSize);
+	mutable FSlateBrush PhoneBrush, PhoneScreenBrush;
+	int32 ToggleTestStep = 0;
+	float ToggleTestT = 0.f;
+	// hud-v3: Awaken stones in the tray (artifact mode; replaces the old central picker popup while framed)
+	struct FTrayAwaken
+	{
+		TArray<TPair<int32, uint8>> Stones; // pick key (0 = drawn, 1.. = hand slot), EZoogiArtifact
+		TArray<FBox2D> StoneRects, BtnRects;
+		int32 Pick = 0;
+		bool bHuman = false;
+		float InfoX0 = 0.f, InfoX1 = 0.f, InfoY = 0.f;
+		bool bInfo = false; // room for the picked stone's INFUSE / GUARD text
+		bool bCards = false; // cards mode: Choose-your-Awaken (3 tablets + SKIP, header CHOOSE YOUR AWAKEN)
+		FVector2D Header = FVector2D::ZeroVector;
+	};
+	bool TrayAwakenLayout(FTrayAwaken& Out) const;
+	void TickTrayAwaken();
+	void PaintTrayAwaken(const FGeometry& Geo, FSlateWindowElementList& Out, int32 Ly, float t) const;
+	void FireAwaken(FName Action, int32 Index);
+public:
+	static const TCHAR* TabletFor(uint8 Artifact);
+private:
+	UPROPERTY() TObjectPtr<class UBorder> TrayHit; // Awaken tray background: swallows presses between the stones / buttons
+	UPROPERTY() TArray<TObjectPtr<UButton>> StoneBtns;
+	UPROPERTY() TArray<TObjectPtr<UButton>> ActBtns;
+	UPROPERTY() TObjectPtr<UTextBlock> MenuText;
+	TArray<int32> StoneKeys;
+	UPROPERTY() TObjectPtr<UButton> CardConfirmHit; // cards: press-firing hit areas over the hand widget's CONFIRM / CLEAR plates
+	UPROPERTY() TObjectPtr<UButton> CardClearHit;
+	TWeakObjectPtr<class UZoogiCardHandWidget> CardHand;
+	UPROPERTY() TObjectPtr<UButton> OrbBtn; // cards: the energy orb is the Awaken control (toggles cards / tablets)
+	bool bTrayCards = false;
+	bool OrbLive() const;
+	int32 TrayPick = 0;
+	float StonePop = 0.f;
+
+	UPROPERTY() TObjectPtr<UCanvasPanel> Root;
+	UPROPERTY() TObjectPtr<UZoogiFramedPainter> Painter;
+	UPROPERTY() TObjectPtr<UBorder> PausePanel;
+	UPROPERTY() TObjectPtr<UTextBlock> PauseTitle;
+	UPROPERTY() TObjectPtr<UZoogiTeamColumnWidget> ColL;
+	UPROPERTY() TObjectPtr<UZoogiTeamColumnWidget> ColR;
+	UPROPERTY() TObjectPtr<UButton> CamBtn;
+	UPROPERTY() TObjectPtr<UButton> ZoomBtn;      // Oct 14 aim ZOOM mode toggle (arena window, bottom-left; touch-sized)
+	UPROPERTY() TObjectPtr<UTextBlock> ZoomText;
+	bool bZoomShownOn = false, bZoomLabelInit = false; // what the ZOOM button currently shows (mirrors the controller each tick)
+	UPROPERTY() TObjectPtr<UTextBlock> CamText;
+	UPROPERTY() TObjectPtr<UButton> MenuBtn;
+	UPROPERTY() TObjectPtr<UBorder> PauseShade;
+	UPROPERTY() TArray<TObjectPtr<UButton>> PauseBtns; // resume, settings, restart, main menu, exit
+	UPROPERTY() TObjectPtr<UButton> VolDown;
+	UPROPERTY() TObjectPtr<UButton> VolUp;
+	UPROPERTY() TObjectPtr<UTextBlock> VolText;
+	UPROPERTY() TObjectPtr<UButton> SetCamBtn;
+	UPROPERTY() TObjectPtr<UTextBlock> SetCamText;
+
+	bool bPaused = false;
+	bool bSettings = false;
+	bool bActive = false;
+	bool bTrayScaled = false;
+	float Time = 0.f;
+	float LocalScale = 1.f;   // local units per viewport pixel
+	// feedback animations
+	int32 LastStage = -1, LastActive = -1, LastPhase = -1;
+	float StageAnim = 1.f, TurnAnim = 1.f, EndAnim = 0.f;
+	float LastBigAge = 99.f;
+	FString LastPrompt;
+	float PromptAnim = 1.f;
+};

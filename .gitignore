@@ -1,0 +1,30 @@
+# Unreal Engine
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+Build/
+.vs/
+.vscode/
+.idea/
+*.sln
+*.suo
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.opendb
+*.xcodeproj
+*.xcworkspace
+Plugins/*/Binaries/
+Plugins/*/Intermediate/
+# Packaged builds
+Packaged/
+Windows/
+# Local tools output
+Logs/
+*.log
+SourceArt/
+
+# Third-party source pack (free Iceland_Environment mountains, copied from the launcher vault cache, 1.2 GB).
+# Only the derived meshes in Content/Env/Arenas/FrozenMountains are tracked/cooked.
+Content/Iceland_Environment/

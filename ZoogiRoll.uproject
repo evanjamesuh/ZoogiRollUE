@@ -1,0 +1,26 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "5.6",
+	"Category": "",
+	"Description": "Zoogi Roll - marble battler (Unreal Engine 5.6 rebuild)",
+	"Modules": [
+		{
+			"Name": "ZoogiRoll",
+			"Type": "Runtime",
+			"LoadingPhase": "Default",
+			"AdditionalDependencies": [ "Engine" ]
+		}
+	],
+	"Plugins": [
+		{ "Name": "PythonScriptPlugin", "Enabled": true },
+		{ "Name": "Niagara", "Enabled": true },
+		{ "Name": "ProceduralMeshComponent", "Enabled": true },
+		{ "Name": "EditorScriptingUtilities", "Enabled": true },
+		{ "Name": "Interchange", "Enabled": true },
+		{ "Name": "InterchangeEditor", "Enabled": true },
+		{ "Name": "ModelingToolsEditorMode", "Enabled": false },
+		{ "Name": "PixelStreaming2", "Enabled": true },
+		{ "Name": "WebBrowserWidget", "Enabled": true },
+		{ "Name": "Aura", "Enabled": true, "SupportedTargetPlatforms": [ "Win64", "Mac" ] }
+	]
+}
