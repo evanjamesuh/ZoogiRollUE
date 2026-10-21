@@ -18,7 +18,8 @@ while ($true) {
 }
 try {
   # a running copy of this app locks its exe and the copy step silently keeps the old one
-  Get-CimInstance Win32_Process -Filter "Name='ZoogiRoll.exe'" | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($Out, [StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
+  # (the launcher, ZoogiRoll-Win64-Shipping.exe and its EpicWebHelper.exe all live under $Out)
+  Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($Out, [StringComparison]::OrdinalIgnoreCase) } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
   & "$UE\Engine\Build\BatchFiles\RunUAT.bat" BuildCookRun "-project=$Root\ZoogiRoll.uproject" -noP4 -platform=Win64 "-clientconfig=$Config" -build -cook -stage -pak -archive "-archivedirectory=$Out" -prereqs -utf8output -unattended -ubtargs=-NoHotReloadFromIDE *> $log
   $code = $LASTEXITCODE
   "PACKAGE_EXIT=$code" | Out-File -Append $log
