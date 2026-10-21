@@ -16,10 +16,10 @@
 		{ "Name": "Niagara", "Enabled": true },
 		{ "Name": "ProceduralMeshComponent", "Enabled": true },
 		{ "Name": "EditorScriptingUtilities", "Enabled": true },
-		{ "Name": "Interchange", "Enabled": true },
-		{ "Name": "InterchangeEditor", "Enabled": true },
+		{ "Name": "Interchange", "Enabled": true, "SupportedTargetPlatforms": [ "Win64", "Linux", "Mac" ] },
+		{ "Name": "InterchangeEditor", "Enabled": true, "SupportedTargetPlatforms": [ "Win64", "Linux", "Mac" ] },
 		{ "Name": "ModelingToolsEditorMode", "Enabled": false },
-		{ "Name": "PixelStreaming2", "Enabled": true },
+		{ "Name": "PixelStreaming2", "Enabled": true, "SupportedTargetPlatforms": [ "Win64", "Linux", "Mac" ] },
 		{ "Name": "WebBrowserWidget", "Enabled": true },
 		{ "Name": "Aura", "Enabled": true, "SupportedTargetPlatforms": [ "Win64", "Mac" ] }
 	]

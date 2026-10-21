@@ -428,8 +428,8 @@ void AZoogiRock::BuildRunes()
 		for (int32 i = 0; i <= Seg; ++i)
 		{
 			const FVector D = (L[FMath::Min(i + 1, Seg)] - L[FMath::Max(i - 1, 0)]).GetSafeNormal();
-			const FVector Side = FVector::CrossProduct(Ns[i], D).GetSafeNormal() * W * 0.5f;
-			Rr.Add(L[i] - Side); L[i] += Side;
+			const FVector Half = FVector::CrossProduct(Ns[i], D).GetSafeNormal() * W * 0.5f;
+			Rr.Add(L[i] - Half); L[i] += Half;
 		}
 		for (int32 i = 0; i < Seg; ++i)
 		{

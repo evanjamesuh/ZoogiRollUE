@@ -31,7 +31,7 @@ void AZoogiAerialProp::Build(EZoogiPropKind InKind, int32 Id, const FVector& Loc
 	Forward = InForward.GetSafeNormal();
 	Size = InSize;
 	SetActorLocation(Location);
-	auto AddSolid = [this](const FVector& Rel, float R, FName Tag)
+	auto AddSolid = [this](const FVector& Rel, float R, FName CompTag)
 	{
 		USphereComponent* S = NewObject<USphereComponent>(this);
 		S->SetupAttachment(RootComponent);
@@ -40,7 +40,7 @@ void AZoogiAerialProp::Build(EZoogiPropKind InKind, int32 Id, const FVector& Loc
 		S->SetCollisionProfileName(TEXT("BlockAll"));
 		S->SetNotifyRigidBodyCollision(true);
 		S->SetGenerateOverlapEvents(false);
-		S->ComponentTags.Add(Tag);
+		S->ComponentTags.Add(CompTag);
 		S->RegisterComponent();
 		S->OnComponentHit.AddDynamic(this, &AZoogiAerialProp::OnSolidHit);
 		Solids.Add(S);

@@ -10,7 +10,7 @@ $Tag = 'android packaging'
 $log = "$Root\Saved\Logs\android-package.log"
 if (-not (Test-Path "$UE\Engine\Build\Android\Java")) { 'MISSING: Android target support. Epic Games Launcher > Library > UE 5.6 > Options > Target Platforms > Android.'; exit 3 }
 $env:ANDROID_HOME = "$env:LOCALAPPDATA\Android\Sdk"; $env:ANDROID_SDK_ROOT = $env:ANDROID_HOME
-$env:NDKROOT = "$env:ANDROID_HOME\ndk\25.1.8937393"; $env:NDK_ROOT = $env:NDKROOT
+$env:NDKROOT = "$env:ANDROID_HOME\ndk\27.2.12479018"; $env:NDK_ROOT = $env:NDKROOT
 $env:JAVA_HOME = 'C:\Program Files\Microsoft\jdk-17.0.20.101-hotspot'; $env:Path = "$env:JAVA_HOME\bin;$env:ANDROID_HOME\platform-tools;$env:Path"
 New-Item -ItemType Directory -Force "$Root\Saved\Logs", $Out | Out-Null
 $deadline = (Get-Date).AddMinutes($LockWaitMinutes)
