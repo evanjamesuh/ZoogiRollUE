@@ -105,6 +105,12 @@ private:
 	void BuildPowers();
 	void BuildSettings();
 	void BuildCollection();
+	// Oct 21 (Evan): PLAY setup / COLLECTION are the approved references (MenuArt/{play,collection}_ref_{p,l}.png, portrait
+	// and landscape) with live state painted over them and real tap targets; false = reference missing, old layout
+	FString RefScreenKey() const;
+	bool BuildPlayRef();
+	bool BuildCollectionRef();
+	UWidget* RefText(const FString& S, float X, float Y, float Wd, float Ht, float Size, const FLinearColor& C, int32 Justify, bool bWrap = false); // the references' bold sans
 	void BuildStory();
 	void BuildEvents();
 	void BuildShop();

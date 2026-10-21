@@ -11,6 +11,7 @@
 #include "ZoogiStore.h"
 #include "ZoogiCards.h"
 #include "ZoogiFrozenLayout.h"
+#include "ZoogiWebUI.h"
 #include "Misc/FileHelper.h"
 #include "ZoogiRoll.h"
 #include "Blueprint/WidgetTree.h"
@@ -546,6 +547,15 @@ void UZoogiMenuRoot::Rebuild()
 		DesignW = 1080.f;
 		DesignH = Aspect >= 16.f / 9.f ? FMath::Clamp(1080.f * Aspect, 1920.f, 2400.f) : 1920.f;
 	}
+	// reference screens: the canvas takes the reference's own aspect (1080 wide portrait, 1920 wide landscape) and the
+	// reference also fills the backdrop, so a different screen aspect only shows more of its edge art
+	const FString RefKey = RefScreenKey();
+	UTexture2D* RefTex = RefKey.IsEmpty() ? nullptr : Art(RefKey);
+	if (RefTex)
+	{
+		DesignW = BuiltViewport.Y > BuiltViewport.X ? 1080.f : 1920.f;
+		DesignH = DesignW * RefTex->GetSizeY() / FMath::Max(1, RefTex->GetSizeX());
+	}
 
 	// Full-bleed backdrop: game art per screen (or the optional menu video), with a navy wash.
 	FString Bg = TEXT("meadows_background"); // Evan 9:37: Meadow arena art (1456x816 PNG) replaces Frozen on Home/Play/etc.
@@ -557,7 +567,7 @@ void UZoogiMenuRoot::Rebuild()
 	}
 	// Evan 9:28/9:37 AM CT: HOME uses the same opaque Meadow art backdrop as PLAY (covers the live menu-map preview).
 	const bool bLiveMap = false;
-	UObject* BgRes = ClashHome() ? nullptr : (EnsureBackdrop() && BackdropTexture) ? (UObject*)BackdropTexture.Get() : bLiveMap ? nullptr : (UObject*)Art(Bg);
+	UObject* BgRes = ClashHome() ? nullptr : RefTex ? (UObject*)RefTex : (EnsureBackdrop() && BackdropTexture) ? (UObject*)BackdropTexture.Get() : bLiveMap ? nullptr : (UObject*)Art(Bg);
 	if (ClashHome()) BuildClashBackdrop(); // clash-menu: own sky-blue backdrop, no navy wash
 	else if (BgRes)
 	{
@@ -574,7 +584,7 @@ void UZoogiMenuRoot::Rebuild()
 		if (UOverlaySlot* S = Root->AddChildToOverlay(Fill)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); }
 	}
 	UBorder* Wash = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
-	Wash->SetBrushColor(FLinearColor(0.02f, 0.08f, 0.35f, ClashHome() ? 0.f : bLiveMap ? 0.25f : 0.55f));
+	Wash->SetBrushColor(FLinearColor(0.02f, 0.08f, 0.35f, ClashHome() ? 0.f : RefTex ? 0.35f : bLiveMap ? 0.25f : 0.55f)); // reference screens: dim margins only
 	Wash->SetVisibility(ESlateVisibility::HitTestInvisible);
 	if (UOverlaySlot* S = Root->AddChildToOverlay(Wash)) { S->SetHorizontalAlignment(HAlign_Fill); S->SetVerticalAlignment(VAlign_Fill); }
 
@@ -738,6 +748,7 @@ void UZoogiMenuRoot::BuildPlay()
 {
 	AZoogiGameMode* G = GM();
 	if (!G) return;
+	if (BuildPlayRef()) return;
 	BuildTopBar(TEXT("PLAY"));
 	Panel(106.f, 86.f, 240.f, 296.f, ZMPNavy);
 	Label(TEXT("1 - MODE"), 118.f, 94.f, 200.f, 14.f, 22, ZMTLabel);
@@ -1058,6 +1069,7 @@ void UZoogiMenuRoot::BuildSettings()
 // ---- COLLECTION
 void UZoogiMenuRoot::BuildCollection()
 {
+	if (BuildCollectionRef()) return;
 	BuildTopBar(TEXT("COLLECTION"));
 	TArray<FString> T = { TEXT("ZOOGIPEDIA"), TEXT("MY STUFF"), TEXT("SKINS"), TEXT("GALLERY") };
 	Tabs(T, CollectionTab, 106.f, 82.f, 120.f, 8.f);
@@ -1085,6 +1097,257 @@ void UZoogiMenuRoot::BuildCollection()
 	ImgTile(Art(E.Art), FString(), nullptr, 798.f, 98.f, 110.f, 100.f, false, false, FLinearColor::White);
 	Btn(TEXT("DECK"), ZMCViolet, [this]() { Push(EZoogiScreen::Deck); }, 610.f, 388.f, 104.f, 52.f, 30);
 	Btn(TEXT("CUSTOMIZE"), ZMCGold, [this]() { ShowComingSoon(TEXT("The skin / trail editor isn't in the Unreal build yet.")); }, 726.f, 340.f, 194.f, 100.f, 50);
+}
+
+// ---- reference screens (PLAY setup, COLLECTION): reference art + live overlays, laid out in reference pixels
+namespace
+{
+	struct ZMRect { float X0, Y0, X1, Y1; float W() const { return X1 - X0; } float H() const { return Y1 - Y0; } };
+
+	struct ZMPlayRef
+	{
+		ZMRect Back, Gear, Gem, Mode[5], Arena[8], Minus, Num, Plus, Cpu, Card[4], Tag[4], Powers, Start;
+	};
+	ZMPlayRef ZMPlayLayout(bool bPortrait)
+	{
+		ZMPlayRef L;
+		if (bPortrait) // play_ref_p.png 941 x 1672
+		{
+			L.Back = { 45, 30, 170, 115 }; L.Gear = { 810, 30, 910, 115 }; L.Gem = { 708, 56, 785, 96 };
+			const float MY[5][2] = { { 205, 280 }, { 290, 360 }, { 372, 442 }, { 452, 525 }, { 535, 607 } };
+			for (int32 m = 0; m < 5; ++m) L.Mode[m] = { 180, MY[m][0], 760, MY[m][1] };
+			const float AX[4][2] = { { 165, 305 }, { 318, 465 }, { 478, 620 }, { 633, 775 } }, AY[2][2] = { { 702, 836 }, { 851, 996 } };
+			for (int32 a = 0; a < 8; ++a) L.Arena[a] = { AX[a % 4][0], AY[a / 4][0], AX[a % 4][1], AY[a / 4][1] };
+			L.Minus = { 182, 1071, 272, 1151 }; L.Num = { 285, 1080, 370, 1144 }; L.Plus = { 382, 1071, 470, 1151 }; L.Cpu = { 497, 1071, 765, 1151 };
+			const float CX[2][2] = { { 180, 463 }, { 478, 763 } }, CY[2][3] = { { 1234, 1326, 1376 }, { 1383, 1461, 1505 } };
+			for (int32 i = 0; i < 4; ++i) { L.Card[i] = { CX[i % 2][0], CY[i / 2][0], CX[i % 2][1], CY[i / 2][1] }; L.Tag[i] = { CX[i % 2][0], CY[i / 2][1], CX[i % 2][1], CY[i / 2][2] }; }
+			L.Powers = { 190, 1566, 405, 1636 }; L.Start = { 440, 1551, 790, 1655 };
+		}
+		else // play_ref_l.png 1672 x 941
+		{
+			L.Back = { 40, 25, 170, 110 }; L.Gear = { 1500, 25, 1630, 110 }; L.Gem = { 1330, 52, 1440, 98 };
+			const float MY[5][2] = { { 248, 340 }, { 357, 450 }, { 465, 553 }, { 568, 665 }, { 680, 770 } };
+			for (int32 m = 0; m < 5; ++m) L.Mode[m] = { 38, MY[m][0], 478, MY[m][1] };
+			const float AX[4][2] = { { 543, 680 }, { 688, 832 }, { 842, 980 }, { 993, 1130 } }, AY[2][2] = { { 243, 388 }, { 405, 552 } };
+			for (int32 a = 0; a < 8; ++a) L.Arena[a] = { AX[a % 4][0], AY[a / 4][0], AX[a % 4][1], AY[a / 4][1] };
+			L.Minus = { 555, 658, 648, 755 }; L.Num = { 652, 668, 745, 748 }; L.Plus = { 750, 658, 840, 755 }; L.Cpu = { 862, 658, 1115, 755 };
+			const float CX[2][2] = { { 1205, 1413 }, { 1432, 1640 } }, CY[2][3] = { { 245, 360, 415 }, { 440, 555, 610 } };
+			for (int32 i = 0; i < 4; ++i) { L.Card[i] = { CX[i % 2][0], CY[i / 2][0], CX[i % 2][1], CY[i / 2][1] }; L.Tag[i] = { CX[i % 2][0], CY[i / 2][1], CX[i % 2][1], CY[i / 2][2] }; }
+			L.Powers = { 1040, 780, 1295, 860 }; L.Start = { 1320, 740, 1650, 880 };
+		}
+		return L;
+	}
+
+	struct ZMCollRef
+	{
+		ZMRect Back, Gear, Gem, Tab[4], Tile[18], Hero, Prev, Next, Name, Type, Ability, StatLabel[4], StatBar[4], Deck, Customize;
+		bool bArrows = false;
+		FLinearColor NameBg;
+	};
+	ZMCollRef ZMCollLayout(bool bPortrait)
+	{
+		ZMCollRef L;
+		if (bPortrait) // collection_ref_p.png 950 x 1655: 5 x 4 grid, hero + arrows under it
+		{
+			L.Back = { 25, 115, 170, 200 }; L.Gear = { 845, 115, 935, 200 }; L.Gem = { 714, 132, 788, 188 };
+			const float TX[4][2] = { { 45, 252 }, { 270, 475 }, { 492, 697 }, { 713, 918 } };
+			for (int32 t = 0; t < 4; ++t) L.Tab[t] = { TX[t][0], 265, TX[t][1], 338 };
+			const float GX[5][2] = { { 62, 215 }, { 233, 386 }, { 403, 556 }, { 572, 725 }, { 741, 893 } }, GY[4][2] = { { 388, 542 }, { 561, 720 }, { 740, 900 }, { 920, 1078 } };
+			for (int32 i = 0; i < 18; ++i) L.Tile[i] = { GX[i % 5][0], GY[i / 5][0], GX[i % 5][1], GY[i / 5][1] };
+			L.Hero = { 140, 1150, 450, 1460 }; L.Prev = { 45, 1250, 125, 1340 }; L.Next = { 465, 1250, 545, 1340 }; L.bArrows = true;
+			L.Name = { 600, 1138, 878, 1190 }; L.Type = { 575, 1198, 900, 1226 }; L.Ability = { 575, 1232, 900, 1328 };
+			for (int32 s = 0; s < 4; ++s) { const float Y = 1362.f + s * 32.f; L.StatLabel[s] = { 573, Y - 15, 677, Y + 15 }; L.StatBar[s] = { 682, Y - 11, 890, Y + 11 }; }
+			L.Deck = { 42, 1535, 340, 1630 }; L.Customize = { 547, 1520, 908, 1630 };
+			L.NameBg = ZMHex(TEXT("161616"));
+		}
+		else // collection_ref_l.png 1672 x 941: 6 x 3 grid, hero at the panel's right
+		{
+			L.Back = { 25, 25, 180, 135 }; L.Gear = { 1510, 25, 1645, 135 }; L.Gem = { 1360, 55, 1470, 110 };
+			const float TX[4][2] = { { 75, 345 }, { 352, 605 }, { 620, 870 }, { 885, 1140 } };
+			for (int32 t = 0; t < 4; ++t) L.Tab[t] = { TX[t][0], 180, TX[t][1], 250 };
+			const float GX[6][2] = { { 65, 218 }, { 238, 390 }, { 410, 563 }, { 582, 735 }, { 755, 907 }, { 928, 1082 } }, GY[3][2] = { { 288, 440 }, { 460, 612 }, { 632, 785 } };
+			for (int32 i = 0; i < 18; ++i) L.Tile[i] = { GX[i % 6][0], GY[i / 6][0], GX[i % 6][1], GY[i / 6][1] };
+			L.Hero = { 1352, 380, 1622, 650 }; // covers the reference's VEX render
+			L.Name = { 1150, 300, 1345, 368 }; L.Type = { 1150, 372, 1345, 402 }; L.Ability = { 1145, 418, 1342, 585 };
+			for (int32 s = 0; s < 4; ++s) { const float Y = 607.f + s * 40.f; L.StatLabel[s] = { 1140, Y - 19, 1237, Y + 19 }; L.StatBar[s] = { 1240, Y - 12, 1392, Y + 12 }; }
+			L.Deck = { 85, 815, 540, 905 }; L.Customize = { 1150, 795, 1630, 905 };
+			L.NameBg = ZMHex(TEXT("0B1626"));
+		}
+		return L;
+	}
+}
+
+UWidget* UZoogiMenuRoot::RefText(const FString& S, float X, float Y, float Wd, float Ht, float Size, const FLinearColor& C, int32 Justify, bool bWrap)
+{
+	UTextBlock* T = Txt(S, FMath::Max(8, FMath::RoundToInt(Size)), C, FMath::Max(1.f, Size * 0.06f), bWrap);
+	T->SetJustification(Justify == 1 ? ETextJustify::Center : Justify == 2 ? ETextJustify::Right : ETextJustify::Left);
+	T->SetVisibility(ESlateVisibility::HitTestInvisible);
+	UBorder* B = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass());
+	B->SetBrushColor(FLinearColor::Transparent);
+	B->SetPadding(FMargin(0.f));
+	B->SetHorizontalAlignment(Justify == 1 ? HAlign_Center : Justify == 2 ? HAlign_Right : HAlign_Left);
+	B->SetVerticalAlignment(VAlign_Center);
+	B->SetContent(T);
+	B->SetVisibility(ESlateVisibility::HitTestInvisible);
+	return CAt(B, X, Y, Wd, Ht);
+}
+
+FString UZoogiMenuRoot::RefScreenKey() const
+{
+	if (bAnimeView) return FString();
+	const bool bPortrait = BuiltViewport.Y > BuiltViewport.X;
+	if (Top() == EZoogiScreen::Play) return bPortrait ? TEXT("play_ref_p") : TEXT("play_ref_l");
+	if (Top() == EZoogiScreen::Collection) return bPortrait ? TEXT("collection_ref_p") : TEXT("collection_ref_l");
+	return FString();
+}
+
+bool UZoogiMenuRoot::BuildPlayRef()
+{
+	AZoogiGameMode* G = GM();
+	UTexture2D* Ref = Art(RefScreenKey());
+	if (!G || !Ref) return false;
+	const float K = DesignW / Ref->GetSizeX(); // reference px -> design px (the canvas has the reference's aspect)
+	const ZMPlayRef L = ZMPlayLayout(BuiltViewport.Y > BuiltViewport.X);
+	CImg(Ref, 0.f, 0.f, DesignW, DesignH, 0.f, false); // the screen itself (the backdrop only fills the margins)
+	auto Box = [this, K](const ZMRect& R, const FLinearColor& Fill, const FLinearColor& Edge, float EdgeW, float Rad) { CAt(CBox(Fill, Edge, EdgeW * K, Rad * K), R.X0 * K, R.Y0 * K, R.W() * K, R.H() * K); };
+	auto Text = [this, K](const FString& S, const ZMRect& R, float Size, const FLinearColor& C) { RefText(S, R.X0 * K, R.Y0 * K, R.W() * K, R.H() * K, Size * K, C, 1); };
+	auto Tap = [this, K](const ZMRect& R, TFunction<void()> Fn) { CAt(CButton(CBox(FLinearColor::Transparent, FLinearColor::Transparent, 0.f, 0.f), MoveTemp(Fn), false), R.X0 * K, R.Y0 * K, R.W() * K, R.H() * K); };
+	const FLinearColor Gold = ZMHex(TEXT("FFD45A"));
+
+	// top bar
+	Tap(L.Back, [this]() { HandleBack(); });
+	Tap(L.Gear, [this]() { Push(EZoogiScreen::Settings); });
+	const UZoogiPowerUnlockSubsystem* U = UZoogiPowerUnlockSubsystem::Get(this);
+	if (const int32 Gems = U ? U->GetGems() : 0) { Box(L.Gem, ZMHex(TEXT("0A1422")), FLinearColor::Transparent, 0.f, 8.f); Text(FString::FromInt(Gems), L.Gem, 34.f, FLinearColor::White); }
+
+	// 1 - mode: gold frame on the current one; PRACTICE / ONLINE are coming soon
+	const int32 Cur = CurrentPlayMode();
+	for (int32 m = 0; m < 5; ++m)
+	{
+		if (m == Cur) Box(L.Mode[m], FLinearColor::Transparent, Gold, 5.f, 14.f);
+		Tap(L.Mode[m], [this, m]() { if (m == 2 || m == 4) ShowComingSoon(m == 2 ? TEXT("PRACTICE mode") : TEXT("ONLINE play")); else ApplyPlayMode(m); });
+	}
+	// 2 - arena: the picked one framed, the others dimmed (the reference glows Frozen Ring)
+	for (int32 a = 0; a < 8 && a < (int32)EZoogiArena::MAX; ++a)
+	{
+		if (G->MenuArena == (EZoogiArena)a) Box(L.Arena[a], FLinearColor::Transparent, Gold, 5.f, 12.f);
+		else Box(L.Arena[a], FLinearColor(0.f, 0.f, 0.03f, 0.42f), FLinearColor::Transparent, 0.f, 12.f);
+		Tap(L.Arena[a], [this, a]() { Fire("Arena", a); });
+	}
+	// rounds & rules
+	Box(L.Num, ZMHex(TEXT("001021")), FLinearColor::Transparent, 0.f, 6.f);
+	Text(FString::FromInt(G->MenuRounds), L.Num, 58.f, FLinearColor::White);
+	Tap(L.Minus, [this, G]() { Fire("Rounds", G->MenuRounds - 1); });
+	Tap(L.Plus, [this, G]() { Fire("Rounds", G->MenuRounds + 1); });
+	Tap(L.Cpu, [this]() { ShowComingSoon(TEXT("CPU difficulty: the CPU has one level today (NORMAL).")); });
+
+	// 3 - zoogis: the reference shows Blue HUMAN, Tavi CPU, Vex OFF, Moss OFF; any slot that differs is repainted
+	const TArray<FZoogiDef>& Roster = ZoogiUtil::Roster();
+	static const TCHAR* RefZoogi[4] = { TEXT("blue"), TEXT("tavi"), TEXT("vex"), TEXT("moss") };
+	for (int32 i = 0; i < 4 && i < G->MenuPlayers.Num() && Roster.Num() > 0; ++i)
+	{
+		const bool bOn = i < G->MenuNumPlayers;
+		const bool bCPU = G->MenuPlayers[i].bCPU;
+		const FZoogiDef& D = Roster[G->MenuPlayers[i].ZoogiIndex % Roster.Num()];
+		const bool bRefState = (i == 0 && bOn && !bCPU) || (i == 1 && bOn && bCPU) || (i >= 2 && !bOn);
+		if (PortraitFor(D.Id) != RefZoogi[i] || !bRefState)
+		{
+			const ZMRect& C = L.Card[i];
+			Box(C, bOn ? ZMLighten(ZoogiUtil::PlayerColor(i), 0.55f) : ZMHex(TEXT("3A3F55")), FLinearColor::Transparent, 0.f, 6.f);
+			const float S = C.H() * 0.96f;
+			CImg(Art(PortraitFor(D.Id)), (C.X0 + (C.W() - S * 1.09f) * 0.5f) * K, (C.Y0 + C.H() * 0.02f) * K, S * 1.09f * K, S * K, 6.f * K, true, bOn ? FLinearColor::White : FLinearColor(0.45f, 0.45f, 0.5f, 1.f));
+			Box(L.Tag[i], !bOn ? ZMHex(TEXT("1A2238")) : bCPU ? ZMHex(TEXT("1F48B8")) : ZMHex(TEXT("1E8A50")), Gold, 3.f, 8.f);
+			Text(FString::Printf(TEXT("P%d - %s"), i + 1, !bOn ? TEXT("OFF") : bCPU ? TEXT("CPU") : TEXT("HUMAN")), L.Tag[i], 28.f, FLinearColor::White);
+		}
+		Tap(L.Card[i], [this, i, bOn]() { if (bOn) { SelectSlot = i; PendingZoogi = -1; Push(EZoogiScreen::ZoogiSelect); } else CycleSlot(i); });
+		Tap(L.Tag[i], [this, i]() { CycleSlot(i); });
+	}
+	Tap(L.Powers, [this]() { Push(EZoogiScreen::Powers); });
+	Tap(L.Start, [this]() { UE_LOG(LogZoogi, Log, TEXT("MENU START pressed (PLAY setup)")); Fire("Start", 0); });
+	return true;
+}
+
+bool UZoogiMenuRoot::BuildCollectionRef()
+{
+	UTexture2D* Ref = Art(RefScreenKey());
+	if (!Ref) return false;
+	const float RW = Ref->GetSizeX(), RH = Ref->GetSizeY(), K = DesignW / RW;
+	const ZMCollRef L = ZMCollLayout(BuiltViewport.Y > BuiltViewport.X);
+	CImg(Ref, 0.f, 0.f, DesignW, DesignH, 0.f, false); // the screen itself (the backdrop only fills the margins)
+	auto Box = [this, K](const ZMRect& R, const FLinearColor& Fill, const FLinearColor& Edge, float EdgeW, float Rad) { CAt(CBox(Fill, Edge, EdgeW * K, Rad * K), R.X0 * K, R.Y0 * K, R.W() * K, R.H() * K); };
+	auto Text = [this, K](const FString& S, const ZMRect& R, float Size, const FLinearColor& C, int32 Justify, bool bWrap = false) { RefText(S, R.X0 * K, R.Y0 * K, R.W() * K, R.H() * K, Size * K, C, Justify, bWrap); };
+	auto Title = [this, K](const FString& S, const ZMRect& R, float Size, const FLinearColor& C, int32 Justify) { CText(S, R.X0 * K, R.Y0 * K, R.W() * K, R.H() * K, Size * K, C, Justify, 3.f * K); }; // serif, like VEX
+	auto Tap = [this, K](const ZMRect& R, TFunction<void()> Fn) { CAt(CButton(CBox(FLinearColor::Transparent, FLinearColor::Transparent, 0.f, 0.f), MoveTemp(Fn), false), R.X0 * K, R.Y0 * K, R.W() * K, R.H() * K); };
+	auto Crop = [this, Ref, RW, RH, K](const ZMRect& Src, const ZMRect& Dst)
+	{
+		UImage* I = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass());
+		FSlateBrush B; B.SetResourceObject(Ref); B.ImageSize = FVector2D(Dst.W() * K, Dst.H() * K);
+		B.SetUVRegion(FBox2f(FVector2f(Src.X0 / RW, Src.Y0 / RH), FVector2f(Src.X1 / RW, Src.Y1 / RH)));
+		I->SetBrush(B);
+		I->SetVisibility(ESlateVisibility::HitTestInvisible);
+		CAt(I, Dst.X0 * K, Dst.Y0 * K, Dst.W() * K, Dst.H() * K);
+	};
+	const FLinearColor Gold = ZMHex(TEXT("FFD45A"));
+	const int32 N = UE_ARRAY_COUNT(ZMGCollection);
+	CollectionSel = FMath::Clamp(CollectionSel, 0, N - 1);
+
+	Tap(L.Back, [this]() { HandleBack(); });
+	Tap(L.Gear, [this]() { Push(EZoogiScreen::Settings); });
+	const UZoogiPowerUnlockSubsystem* U = UZoogiPowerUnlockSubsystem::Get(this);
+	if (const int32 Gems = U ? U->GetGems() : 0) { Box(L.Gem, ZMHex(TEXT("0A1422")), FLinearColor::Transparent, 0.f, 8.f); Text(FString::FromInt(Gems), L.Gem, 34.f, FLinearColor::White, 1); }
+	// ZOOGIPEDIA is the live tab; the others are not built yet
+	for (int32 t = 1; t < 4; ++t)
+		Tap(L.Tab[t], [this, t]() { ShowComingSoon(t == 1 ? TEXT("MY STUFF (owned Zoogis and items)") : t == 2 ? TEXT("SKINS") : TEXT("GALLERY (community, online)")); });
+
+	// grid: the reference frames VEX (3); any other pick gets its own gold frame and the detail panel is repainted
+	for (int32 i = 0; i < N && i < 18; ++i)
+	{
+		if (i == CollectionSel && i != 3) Box(L.Tile[i], FLinearColor::Transparent, Gold, 6.f, 10.f);
+		Tap(L.Tile[i], [this, i]() { CollectionSel = i; bDirty = true; });
+	}
+	if (L.bArrows)
+	{
+		Tap(L.Prev, [this, N]() { CollectionSel = (CollectionSel + N - 1) % N; bDirty = true; });
+		Tap(L.Next, [this, N]() { CollectionSel = (CollectionSel + 1) % N; bDirty = true; });
+	}
+	if (CollectionSel != 3)
+	{
+		const ZMFArtEntry& E = ZMGCollection[CollectionSel];
+		const FZoogiDef* D = nullptr;
+		if (E.RosterId) for (const FZoogiDef& R : ZoogiUtil::Roster()) if (R.Id == FName(E.RosterId)) D = &R;
+		// hero: the picked Zoogi's own portrait, cut from its grid tile (above the name strip), in a gold frame
+		const ZMRect& T = L.Tile[CollectionSel];
+		const ZMRect Src = { T.X0 + 8.f, T.Y0 + 8.f, T.X1 - 8.f, T.Y0 + T.H() * 0.80f };
+		const float SrcAspect = Src.W() / FMath::Max(1.f, Src.H());
+		ZMRect Dst = L.Hero;
+		const float DW = FMath::Min(Dst.W(), Dst.H() * SrcAspect), DH = DW / SrcAspect;
+		Dst = { Dst.X0 + (Dst.W() - DW) * 0.5f, Dst.Y0 + (Dst.H() - DH) * 0.5f, Dst.X0 + (Dst.W() + DW) * 0.5f, Dst.Y0 + (Dst.H() + DH) * 0.5f };
+		Box({ Dst.X0 - 8.f, Dst.Y0 - 8.f, Dst.X1 + 8.f, Dst.Y1 + 8.f }, ZMHex(TEXT("0B1626")), Gold, 5.f, 16.f);
+		Crop(Src, Dst);
+		// name / type / ability / stats over the reference's VEX text
+		Box(L.Name, L.NameBg, FLinearColor::Transparent, 0.f, 6.f);
+		const FString Nm = E.Label;
+		Title(Nm, L.Name, Nm.Len() <= 4 ? 56.f : Nm.Len() <= 6 ? 44.f : Nm.Len() <= 8 ? 36.f : 30.f, Gold, L.bArrows ? 1 : 0);
+		Box(L.Type, ZMHex(TEXT("06142A")), FLinearColor::Transparent, 0.f, 4.f);
+		Text(D ? FString::Printf(TEXT("%s - owned"), *D->Type) : FString(TEXT("Classic look")), L.Type, 22.f, FLinearColor::White, L.bArrows ? 1 : 0);
+		Box(L.Ability, ZMHex(TEXT("0F1738")), FLinearColor::Transparent, 0.f, 6.f);
+		Text(D ? FString::Printf(TEXT("%s: %s"), *D->Ability, *D->AbilityDesc) : FString(TEXT("Lore, stats, powers and skins arrive with this Zoogi's update.")),
+			{ L.Ability.X0 + 10.f, L.Ability.Y0, L.Ability.X1 - 10.f, L.Ability.Y1 }, L.bArrows ? 21.f : 15.f, FLinearColor::White, 0, true);
+		const TCHAR* SN[4] = { TEXT("SPD"), TEXT("PWR"), TEXT("DEF"), TEXT("CTL") };
+		const int32 SV[4] = { D ? D->Speed : 0, D ? D->Power : 0, D ? D->Defense : 0, D ? D->Control : 0 };
+		const FLinearColor SC[4] = { ZMHex(TEXT("2E9BF0")), ZMHex(TEXT("E8281E")), ZMHex(TEXT("2FC23A")), ZMHex(TEXT("8A3CF0")) };
+		for (int32 s = 0; s < 4; ++s)
+		{
+			Box(L.StatLabel[s], ZMHex(TEXT("041530")), FLinearColor::Transparent, 0.f, 3.f);
+			Text(D ? FString::Printf(TEXT("%s  %d"), SN[s], SV[s]) : FString::Printf(TEXT("%s  -"), SN[s]), L.StatLabel[s], 21.f, FLinearColor::White, 0);
+			const ZMRect& B = L.StatBar[s];
+			Box(B, ZMHex(TEXT("001430")), ZMHex(TEXT("23345A")), 2.f, 4.f);
+			if (SV[s] > 0) Box({ B.X0 + 2.f, B.Y0 + 2.f, B.X0 + 2.f + (B.W() - 4.f) * FMath::Clamp(SV[s] / 100.f, 0.f, 1.f), B.Y1 - 2.f }, SC[s], FLinearColor::Transparent, 0.f, 3.f);
+		}
+	}
+	Tap(L.Deck, [this]() { if (!UZoogiWebUILayer::Open(GetWorld(), TEXT("deck"))) Push(EZoogiScreen::Deck); });
+	Tap(L.Customize, [this]() { ShowComingSoon(TEXT("The skin / trail editor isn't in the Unreal build yet.")); });
+	return true;
 }
 
 // ---- STORY
@@ -1541,7 +1804,7 @@ void UZoogiMenuRoot::TickTour(float Dt)
 		bDirty = true; break;
 	case 5: PopToHome(); SettingsTab = 0; Push(EZoogiScreen::Settings); break;
 	case 6: SettingsTab = 4; bDirty = true; break;
-	case 7: PopToHome(); Push(EZoogiScreen::Collection); break;
+	case 7: PopToHome(); FParse::Value(FCommandLine::Get(), TEXT("ZoogiTourCollectionSel="), CollectionSel); Push(EZoogiScreen::Collection); break; // default VEX (3)
 	case 8: PopToHome(); Push(EZoogiScreen::Story); break;
 	case 9: PopToHome(); Push(EZoogiScreen::Events); break;
 	case 10: PopToHome(); Push(EZoogiScreen::Shop); break;

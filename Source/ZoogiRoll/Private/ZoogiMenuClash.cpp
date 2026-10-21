@@ -1106,7 +1106,7 @@ void UZoogiMenuRoot::BuildClashHomeV2()
 			[this]() { Push(EZoogiScreen::ZoogiSelect); },
 			[this]() { if (!UZoogiWebUILayer::Open(GetWorld(), TEXT("deck"))) SetClashTab(ZCCards); },
 			[this]() { if (!UZoogiWebUILayer::Open(GetWorld(), TEXT("arena"))) { ClashArenaSel = -1; OpenClashPopup(EZoogiClashPopup::Arenas, TEXT("ARENAS")); } },
-			[this]() { if (!UZoogiWebUILayer::Open(GetWorld(), TEXT("deck"))) SetClashTab(ZCCards); },
+			[this]() { Push(EZoogiScreen::Collection); }, // the COLLECTION reference screen
 			[this]() { if (!UZoogiWebUILayer::Open(GetWorld(), TEXT("settings"))) OpenClashPopup(EZoogiClashPopup::Settings); } };
 		for (int32 i = 0; i < 5; ++i) Tap(TX(NavX[i]), BY(1486.f), TX(176.f), TX(168.f), Fns[i]);
 		if (FP && (FP->Data().bCardsNew || FP->UpgradableCount() > 0)) CDot(TX(330.f), BY(1484.f), 40.f, TEXT("!"));
