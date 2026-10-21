@@ -4,6 +4,7 @@ A 2v2 marble battler: you and a CPU ally against two CPU Zoogis, on round arenas
 This branch is a **code-only snapshot** of the Unreal project (C++ source, config, scripts, docs, UI art and the web UI).
 The 3D content (`Content/*.uasset`, levels, marketplace VFX and the card toolkit) is not included: some of it is paid
 marketplace content that can't be published. The game itself is built and played from the full project on Evan's PC.
+**Everything left out is described in [`CONTENT_INVENTORY.md`](CONTENT_INVENTORY.md)** (what each folder is and which code uses it) and listed file by file in [`CONTENT_FILES.tsv`](CONTENT_FILES.tsv).
 
 ## Where to look
 
