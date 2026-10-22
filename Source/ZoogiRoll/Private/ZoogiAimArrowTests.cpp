@@ -16,7 +16,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FZoogiAimArrowRotateTest, "ZoogiRoll.Aim.ArrowR
 bool FZoogiAimArrowRotateTest::RunTest(const FString& Parameters)
 {
 	using namespace ZoogiAimArrow;
-	FTune T; // code defaults (shaft 0.3D, head 0.7D, length 1.75D, glow off, faces arrow on)
+	FTune T; // code defaults (shaft 0.3D, head 0.7D, length 2.0D, glow off, faces arrow on)
 	TestFalse(TEXT("glow defaults OFF"), T.bGlow);
 	TestTrue(TEXT("Zoogi faces arrow defaults ON"), T.bFaceArrow);
 
@@ -31,7 +31,7 @@ bool FZoogiAimArrowRotateTest::RunTest(const FString& Parameters)
 	FVector W[7];
 	Outline(FVector(0, 0, R), R, 0.f, T, W);
 	TestEqual(TEXT("shaft starts at the ball's front base"), (float)W[0].X, R, 0.01f);
-	TestEqual(TEXT("total length 1.75 D from the base"), (float)(W[3].X - W[0].X), 1.75f * D, 0.01f);
+	TestEqual(TEXT("total length 2.0 D from the base"), (float)(W[3].X - W[0].X), 2.0f * D, 0.01f);
 	TestEqual(TEXT("shaft width 0.3 D"), (float)FVector::Dist(W[0], W[6]), 0.3f * D, 0.01f);
 	TestEqual(TEXT("arrowhead width 0.7 D"), (float)FVector::Dist(W[2], W[4]), 0.7f * D, 0.01f);
 	TestEqual(TEXT("flat on the floor (lift only)"), (float)W[3].Z, T.LiftCm, 0.01f);
