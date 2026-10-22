@@ -516,20 +516,19 @@ void UZoogiCardSubsystem::TestOnCommit(AZoogiGameMode* G, int32 P, int32 EBefore
 void UZoogiCardSubsystem::TestCrystal(AZoogiGameMode* G)
 {
 	bCrystalTested = true;
-	AZoogiArenaPiece* Breakable = nullptr; AZoogiArenaPiece* Pillar = nullptr;
+	AZoogiArenaPiece* Breakable = nullptr; AZoogiArenaPiece* Pillar = nullptr; AZoogiArenaPiece* Breakable2 = nullptr;
 	int32 NB = 0, NI = 0;
 	for (TActorIterator<AZoogiArenaPiece> It(GetWorld()); It; ++It)
 	{
 		if (It->IsIndestructible()) { ++NI; if (!Pillar) Pillar = *It; }
-		else if (IsCollapseEligible(*It) && It->GetPieceState() == EZoogiPieceState::Intact) { ++NB; if (!Breakable) Breakable = *It; }
+		else if (IsCollapseEligible(*It) && It->GetPieceState() == EZoogiPieceState::Intact) { ++NB; if (!Breakable) Breakable = *It; else if (!Breakable2) Breakable2 = *It; }
 	}
 	UE_LOG(LogZoogi, Log, TEXT("CARD_TEST crystal: breakable=%d indestructible=%d bDestruction=%d"), NB, NI, ZoogiUtil::DestructionEnabled() ? 1 : 0);
-	TestCheck(!ZoogiUtil::DestructionEnabled(), TEXT("global bDestruction stays False"));
+	TestCheck(ZoogiUtil::DestructionEnabled(), TEXT("global bDestruction is True (Oct 21, Evan)"));
 	TestCheck(Breakable != nullptr, TEXT("an eligible breakable piece exists"));
 	if (Breakable)
 	{
 		const FVector At = Breakable->GetActorLocation(), Dir = FVector(1, 0, 0);
-		TestCheck(!Breakable->ApplyDamage(5000.f, At, Dir, EZoogiArtifact::None) && Breakable->GetPieceState() == EZoogiPieceState::Intact, TEXT("ordinary damage still blocked by bDestruction=False"));
 		TestCheck(Breakable->ApplyCardCollapse(900001, At, Dir) && Breakable->GetPieceState() == EZoogiPieceState::Damaged, TEXT("collapse effect 1: Intact -> Damaged"));
 		TestCheck(!Breakable->ApplyCardCollapse(900001, At, Dir) && Breakable->GetPieceState() == EZoogiPieceState::Damaged, TEXT("same effect id applies once"));
 		TestCheck(Breakable->ApplyCardCollapse(900002, At, Dir) && Breakable->GetPieceState() == EZoogiPieceState::Cracked, TEXT("effect 2: -> Cracked"));
@@ -537,9 +536,17 @@ void UZoogiCardSubsystem::TestCrystal(AZoogiGameMode* G)
 		TestCheck(!Breakable->ApplyCardCollapse(900004, At, Dir), TEXT("broken piece cannot collapse again"));
 		TestCheck(!IsCollapseEligible(Breakable), TEXT("broken piece no longer a legal target"));
 	}
+	// Oct 21 (Evan): destruction on -> ordinary damage breaks a breakable piece (a second piece, so the collapse sequence above keeps its own).
+	if (Breakable2)
+	{
+		const EZoogiPieceState B0 = Breakable2->GetPieceState();
+		TestCheck(Breakable2->ApplyDamage(5000.f, Breakable2->GetActorLocation(), FVector(1, 0, 0), EZoogiArtifact::None) && Breakable2->GetPieceState() != B0, TEXT("ordinary damage breaks pieces with destruction on"));
+	}
+	else UE_LOG(LogZoogi, Log, TEXT("CARD_TEST crystal: only one breakable piece on this arena (ordinary-damage check skipped)"));
 	if (Pillar)
 	{
 		const EZoogiPieceState S0 = Pillar->GetPieceState();
+		TestCheck(!Pillar->ApplyDamage(5000.f, Pillar->GetActorLocation(), FVector(1, 0, 0), EZoogiArtifact::None) && Pillar->GetPieceState() == S0, TEXT("indestructible pillar ignores ordinary damage with destruction on"));
 		TestCheck(!Pillar->ApplyCardCollapse(900010, Pillar->GetActorLocation(), FVector(1, 0, 0)) && Pillar->GetPieceState() == S0, TEXT("indestructible pillar unchanged"));
 		TestCheck(!IsCollapseEligible(Pillar), TEXT("pillar not a legal target"));
 	}
