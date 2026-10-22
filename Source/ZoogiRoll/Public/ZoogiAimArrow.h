@@ -23,7 +23,7 @@ namespace ZoogiAimArrow
 		// sizes as multiples of the ball diameter (Evan's Imagine Cup reference, frame-checked Oct 17)
 		float ShaftWidthD = 0.30f;   // shaft thickness
 		float HeadWidthD = 0.70f;    // arrowhead base width
-		float LengthD = 1.75f;       // total length from the ball's front base to the tip (constant: never scales with power)
+		float LengthD = 2.0f;        // total length from the ball's front base to the tip (constant: never scales with power). Oct 21 (Evan): "a little longer", was 1.75
 		float HeadLengthD = 0.55f;   // arrowhead length (part of LengthD)
 		float LiftCm = 2.f;          // hover above the floor
 		// look: flat solid yellow, crisp slightly darker greenish stroke round the whole outline, no dots / dashes
