@@ -1,0 +1,142 @@
+# Anime Sequence Matrix (Milestone "Awaken")
+
+The machine-readable version is `ANIME-SEQUENCE-MATRIX.csv`. Import it as `DT_AnimeSequences` after mapping columns to `FZoogiAnimeRow` (see ASSIGNMENT-CURSOR.md section 7).
+
+## Id pattern and fallback
+
+`Anime_<Zoogi|Any>_<Artifact|Any>_<Event>_<NN>`
+
+- **Zoogi:** Wolfgang, Hotstreak, Lars, Pinpoint, Bolt, Wraps or Nightshade. The spec's "Flare" means Hotstreak, as Evan confirmed, so his example is `Anime_Hotstreak_Ember_Critical_01`.
+- **Artifact:** Ember, Storm, Frost, Titan or Void.
+- **Event:** Infuse, Guard, GuardBlock, PoweredHit, Critical, KO, Combo, Miss, Status_<X> or Ultimate.
+- **NN:** the variant number (01, 02 …). When there are several variants, the subsystem picks one at random, without repeating the previous pick.
+
+**Lookup order:**
+
+1. `Anime_<Zoogi>_<Artifact>_<Event>_NN`
+2. `Anime_Any_<Artifact>_<Event>_NN`
+3. `Anime_Any_Any_<Event>_NN`
+4. The built-in real-time Micro default (camera emphasis + the artifact's impact Niagara), or nothing.
+
+This covers **5 artifacts × 7 Zoogis = 35 combinations** with only **5 generic rows per event**. Per-Zoogi rows are authored only for **affinity pairs**, approved by Evan on Oct 4:
+
+| Zoogi | Affinity artifact |
+|---|---|
+| Hotstreak | Ember |
+| Bolt | Storm |
+| Lars | Storm |
+| Pinpoint | Frost |
+| Nightshade | Void |
+| Wraps | Titan |
+| Wolfgang | Frost (alternative: Void) |
+
+Everything else falls back.
+
+## Tiers
+
+| Tier | Length | Default format |
+|---|---|---|
+| Micro | 0.5-1.5 s | real-time |
+| Standard | 2-4 s | Level Sequence |
+| Special / Combo | 4-7 s | Hybrid |
+| Ultimate | 7-12 s | pre-rendered video |
+
+Details are in the format table in ASSIGNMENT-UNREAL.md.
+
+## Global rules
+
+- **Results first.** The game result is computed **before** an anime plays. Anime never changes gameplay state.
+- **Snapshot, pause, play, restore.** The world is snapshotted (transforms, velocities, sleep state, camera) and paused, the sequence plays, the snapshot is restored exactly, and play resumes.
+- **Continuity.** The live Zoogi actors, with their current overlay, aura and trail, are bound into Sequences. Videos are authored to match the artifact look.
+- **Skip and shorten.**
+  - Each id plays in full only up to its per-match quota, then at its Short length.
+  - A click skips after 0.3 s.
+  - CPU-vs-CPU turns are always Short.
+  - The Settings option Anime: Full / Short / Off applies.
+  - Normal (unpowered) hits never trigger anime.
+- **Queue.** At most one anime per beat. Priority order is Ultimate > Combo > KO > Critical > PoweredHit > GuardBlock > Status. Lower-priority events in the same beat collapse into the HUD feed.
+
+## Matrix
+
+| Event | Trigger conditions | Sequence id pattern | Example id | Tier | Length (s) | Short (s) | Format | Skip / shorten rule | Continuity notes | Fallback | Status |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| Infuse activation | Awaken: Infuse with Ember Stone (non-affinity Zoogi, or no per-Zoogi row) | Anime_Any_Ember_Infuse_NN | Anime_Any_Ember_Infuse_01 | Micro | 1.2 | 0.5 | Real-time (Shot_HeroIntro + overlay MaskAmount 0->1 + NS_Aura_Ember) | Full the first time per match per id; after that Short; click skips after 0.3 s; CPU-vs-CPU always Short; setting Anime=Off skips | Starts from the arena frame; leaves the Zoogi in the Infused look (cracked glowing shell, embers, heat haze), which persists into Battle | none (built-in Micro default) | Needed (M1) |
+| Infuse activation | Awaken: Infuse with Storm Eye (non-affinity Zoogi, or no per-Zoogi row) | Anime_Any_Storm_Infuse_NN | Anime_Any_Storm_Infuse_01 | Micro | 1.2 | 0.5 | Real-time (Shot_HeroIntro + overlay MaskAmount 0->1 + NS_Aura_Storm) | Full the first time per match per id; after that Short; click skips after 0.3 s; CPU-vs-CPU always Short; setting Anime=Off skips | Starts from the arena frame; leaves the Zoogi in the Infused look (electric veins, blue-white core pulse, orbiting arcs), which persists into Battle | none (built-in Micro default) | Needed (M1) |
+| Infuse activation | Awaken: Infuse with Frost Crystal (non-affinity Zoogi, or no per-Zoogi row) | Anime_Any_Frost_Infuse_NN | Anime_Any_Frost_Infuse_01 | Micro | 1.2 | 0.5 | Real-time (Shot_HeroIntro + overlay MaskAmount 0->1 + NS_Aura_Frost) | Full the first time per match per id; after that Short; click skips after 0.3 s; CPU-vs-CPU always Short; setting Anime=Off skips | Starts from the arena frame; leaves the Zoogi in the Infused look (frost-covered shell, cold mist), which persists into Battle | none (built-in Micro default) | Needed (M1) |
+| Infuse activation | Awaken: Infuse with Titan Core (non-affinity Zoogi, or no per-Zoogi row) | Anime_Any_Titan_Infuse_NN | Anime_Any_Titan_Infuse_01 | Micro | 1.2 | 0.5 | Real-time (Shot_HeroIntro + overlay MaskAmount 0->1 + NS_Aura_Titan) | Full the first time per match per id; after that Short; click skips after 0.3 s; CPU-vs-CPU always Short; setting Anime=Off skips | Starts from the arena frame; leaves the Zoogi in the Infused look (stone plates, heavier, dust), which persists into Battle | none (built-in Micro default) | Needed (M1) |
+| Infuse activation | Awaken: Infuse with Void Shard (non-affinity Zoogi, or no per-Zoogi row) | Anime_Any_Void_Infuse_NN | Anime_Any_Void_Infuse_01 | Micro | 1.2 | 0.5 | Real-time (Shot_HeroIntro + overlay MaskAmount 0->1 + NS_Aura_Void) | Full the first time per match per id; after that Short; click skips after 0.3 s; CPU-vs-CPU always Short; setting Anime=Off skips | Starts from the arena frame; leaves the Zoogi in the Infused look (dark glassy shell, orbiting rings, distorted core), which persists into Battle | none (built-in Micro default) | Needed (M1) |
+| Infuse activation (affinity) | Awaken: Hotstreak infuses Ember (affinity, approved by Evan Oct 4) | Anime_Hotstreak_Ember_Infuse_NN | Anime_Hotstreak_Ember_Infuse_01 | Standard | 2.5 | 1.0 | Level Sequence (live-actor binding) | Full once per match; then Short (1.0 s); click skips after 0.3 s; CPU-vs-CPU Short | Uses Hotstreak's live mesh with the Ember overlay already applied; ends on the exact Awaken frame | Anime_Any_Ember_Infuse_01 | Needed (M2) |
+| Infuse activation (affinity) | Awaken: Bolt infuses Storm (affinity, approved by Evan Oct 4) | Anime_Bolt_Storm_Infuse_NN | Anime_Bolt_Storm_Infuse_01 | Standard | 2.5 | 1.0 | Level Sequence (live-actor binding) | Full once per match; then Short (1.0 s); click skips after 0.3 s; CPU-vs-CPU Short | Uses Bolt's live mesh with the Storm overlay already applied; ends on the exact Awaken frame | Anime_Any_Storm_Infuse_01 | Placeholder |
+| Infuse activation (affinity) | Awaken: Lars infuses Storm (affinity, approved by Evan Oct 4) | Anime_Lars_Storm_Infuse_NN | Anime_Lars_Storm_Infuse_01 | Standard | 2.5 | 1.0 | Level Sequence (live-actor binding) | Full once per match; then Short (1.0 s); click skips after 0.3 s; CPU-vs-CPU Short | Uses Lars's live mesh with the Storm overlay already applied; ends on the exact Awaken frame | Anime_Any_Storm_Infuse_01 | Placeholder |
+| Infuse activation (affinity) | Awaken: Pinpoint infuses Frost (affinity, approved by Evan Oct 4) | Anime_Pinpoint_Frost_Infuse_NN | Anime_Pinpoint_Frost_Infuse_01 | Standard | 2.5 | 1.0 | Level Sequence (live-actor binding) | Full once per match; then Short (1.0 s); click skips after 0.3 s; CPU-vs-CPU Short | Uses Pinpoint's live mesh with the Frost overlay already applied; ends on the exact Awaken frame | Anime_Any_Frost_Infuse_01 | Placeholder |
+| Infuse activation (affinity) | Awaken: Nightshade infuses Void (affinity, approved by Evan Oct 4) | Anime_Nightshade_Void_Infuse_NN | Anime_Nightshade_Void_Infuse_01 | Standard | 2.5 | 1.0 | Level Sequence (live-actor binding) | Full once per match; then Short (1.0 s); click skips after 0.3 s; CPU-vs-CPU Short | Uses Nightshade's live mesh with the Void overlay already applied; ends on the exact Awaken frame | Anime_Any_Void_Infuse_01 | Placeholder |
+| Infuse activation (affinity) | Awaken: Wraps infuses Titan (affinity, approved by Evan Oct 4) | Anime_Wraps_Titan_Infuse_NN | Anime_Wraps_Titan_Infuse_01 | Standard | 2.5 | 1.0 | Level Sequence (live-actor binding) | Full once per match; then Short (1.0 s); click skips after 0.3 s; CPU-vs-CPU Short | Uses Wraps's live mesh with the Titan overlay already applied; ends on the exact Awaken frame | Anime_Any_Titan_Infuse_01 | Placeholder |
+| Infuse activation (affinity) | Awaken: Wolfgang infuses Frost (affinity, approved by Evan Oct 4) | Anime_Wolfgang_Frost_Infuse_NN | Anime_Wolfgang_Frost_Infuse_01 | Standard | 2.5 | 1.0 | Level Sequence (live-actor binding) | Full once per match; then Short (1.0 s); click skips after 0.3 s; CPU-vs-CPU Short | Uses Wolfgang's live mesh with the Frost overlay already applied; ends on the exact Awaken frame | Anime_Any_Frost_Infuse_01 | Placeholder |
+| Guard activation | Awaken: Guard with Ember Stone | Anime_Any_Ember_Guard_NN | Anime_Any_Ember_Guard_01 | Micro | 0.8 | 0.4 | Real-time (small zoom + guard bubble seal + NS_Guard_Ember) | Full the first time per match per id; after that Short; click skips after 0.3 s; CPU-vs-CPU always Short; setting Anime=Off skips | Guard bubble stays visible (low intensity) until the next opponent attack ends | none (built-in Micro default) | Needed (M1) |
+| Guard activation | Awaken: Guard with Storm Eye | Anime_Any_Storm_Guard_NN | Anime_Any_Storm_Guard_01 | Micro | 0.8 | 0.4 | Real-time (small zoom + guard bubble seal + NS_Guard_Storm) | Full the first time per match per id; after that Short; click skips after 0.3 s; CPU-vs-CPU always Short; setting Anime=Off skips | Guard bubble stays visible (low intensity) until the next opponent attack ends | none (built-in Micro default) | Needed (M1) |
+| Guard activation | Awaken: Guard with Frost Crystal | Anime_Any_Frost_Guard_NN | Anime_Any_Frost_Guard_01 | Micro | 0.8 | 0.4 | Real-time (small zoom + guard bubble seal + NS_Guard_Frost) | Full the first time per match per id; after that Short; click skips after 0.3 s; CPU-vs-CPU always Short; setting Anime=Off skips | Guard bubble stays visible (low intensity) until the next opponent attack ends | none (built-in Micro default) | Needed (M1) |
+| Guard activation | Awaken: Guard with Titan Core | Anime_Any_Titan_Guard_NN | Anime_Any_Titan_Guard_01 | Micro | 0.8 | 0.4 | Real-time (small zoom + guard bubble seal + NS_Guard_Titan) | Full the first time per match per id; after that Short; click skips after 0.3 s; CPU-vs-CPU always Short; setting Anime=Off skips | Guard bubble stays visible (low intensity) until the next opponent attack ends | none (built-in Micro default) | Needed (M1) |
+| Guard activation | Awaken: Guard with Void Shard | Anime_Any_Void_Guard_NN | Anime_Any_Void_Guard_01 | Micro | 0.8 | 0.4 | Real-time (small zoom + guard bubble seal + NS_Guard_Void) | Full the first time per match per id; after that Short; click skips after 0.3 s; CPU-vs-CPU always Short; setting Anime=Off skips | Guard bubble stays visible (low intensity) until the next opponent attack ends | none (built-in Micro default) | Needed (M1) |
+| Guard block | Opponent attack contacts a guarded Zoogi (Guard consumed) | Anime_Any_<Artifact>_GuardBlock_NN | Anime_Any_Titan_GuardBlock_01 | Micro | 0.8 | 0.3 | Real-time (hit-stop 0.08 s + shield-break NS_Guard_<Artifact>) | Full twice per match per artifact, then Short; never interrupts the roll more than 0.3 s once Short | Frozen impact frame (world snapshot); bubble shatters; restore and continue the roll | Anime_Any_Any_GuardBlock_01 | Needed (M1) |
+| Powered hit | Battle: first contact of a Ember Stone-infused shot (not crit) | Anime_<Zoogi>_Ember_PoweredHit_NN | Anime_Any_Ember_PoweredHit_01 | Micro | 1.0 | 0.4 | Real-time (freeze + Shot_TargetCU + NS_Impact_Ember + white impact frame) | Full the first time per match per id; after that Short; click skips after 0.3 s; CPU-vs-CPU always Short; setting Anime=Off skips | Result already applied (velocities set) before playing; snapshot/restore; trail and aura still on | Anime_Any_Ember_PoweredHit_01 -> built-in Micro default | Needed (M1) |
+| Powered hit | Battle: first contact of a Storm Eye-infused shot (not crit) | Anime_<Zoogi>_Storm_PoweredHit_NN | Anime_Any_Storm_PoweredHit_01 | Micro | 1.0 | 0.4 | Real-time (freeze + Shot_TargetCU + NS_Impact_Storm + white impact frame) | Full the first time per match per id; after that Short; click skips after 0.3 s; CPU-vs-CPU always Short; setting Anime=Off skips | Result already applied (velocities set) before playing; snapshot/restore; trail and aura still on | Anime_Any_Storm_PoweredHit_01 -> built-in Micro default | Needed (M1) |
+| Powered hit | Battle: first contact of a Frost Crystal-infused shot (not crit) | Anime_<Zoogi>_Frost_PoweredHit_NN | Anime_Any_Frost_PoweredHit_01 | Micro | 1.0 | 0.4 | Real-time (freeze + Shot_TargetCU + NS_Impact_Frost + white impact frame) | Full the first time per match per id; after that Short; click skips after 0.3 s; CPU-vs-CPU always Short; setting Anime=Off skips | Result already applied (velocities set) before playing; snapshot/restore; trail and aura still on | Anime_Any_Frost_PoweredHit_01 -> built-in Micro default | Needed (M1) |
+| Powered hit | Battle: first contact of a Titan Core-infused shot (not crit) | Anime_<Zoogi>_Titan_PoweredHit_NN | Anime_Any_Titan_PoweredHit_01 | Micro | 1.0 | 0.4 | Real-time (freeze + Shot_TargetCU + NS_Impact_Titan + white impact frame) | Full the first time per match per id; after that Short; click skips after 0.3 s; CPU-vs-CPU always Short; setting Anime=Off skips | Result already applied (velocities set) before playing; snapshot/restore; trail and aura still on | Anime_Any_Titan_PoweredHit_01 -> built-in Micro default | Needed (M1) |
+| Powered hit | Battle: first contact of a Void Shard-infused shot (not crit) | Anime_<Zoogi>_Void_PoweredHit_NN | Anime_Any_Void_PoweredHit_01 | Micro | 1.0 | 0.4 | Real-time (freeze + Shot_TargetCU + NS_Impact_Void + white impact frame) | Full the first time per match per id; after that Short; click skips after 0.3 s; CPU-vs-CPU always Short; setting Anime=Off skips | Result already applied (velocities set) before playing; snapshot/restore; trail and aura still on | Anime_Any_Void_PoweredHit_01 -> built-in Micro default | Needed (M1) |
+| Critical | Powered Ember Stone hit with impact speed >= 90% of its launch speed and cut <= 5 deg (crit rule approved by Evan Oct 4, tightened Oct 4) | Anime_<Zoogi>_Ember_Critical_NN | Anime_Any_Ember_Critical_01 | Standard | 3.0 | 1.2 | Level Sequence (+ optional alpha video overlay = Hybrid) | Full once per match per id; then Short; click skips after 0.3 s | Played in Resolve after the outcome is final, or at the frozen impact frame; same overlay/aura state as in the arena | Anime_Any_Ember_PoweredHit_01 | Needed (M2) |
+| Critical | Powered Storm Eye hit with impact speed >= 90% of its launch speed and cut <= 5 deg (crit rule approved by Evan Oct 4, tightened Oct 4) | Anime_<Zoogi>_Storm_Critical_NN | Anime_Any_Storm_Critical_01 | Standard | 3.0 | 1.2 | Level Sequence (+ optional alpha video overlay = Hybrid) | Full once per match per id; then Short; click skips after 0.3 s | Played in Resolve after the outcome is final, or at the frozen impact frame; same overlay/aura state as in the arena | Anime_Any_Storm_PoweredHit_01 | Needed (M2) |
+| Critical | Powered Frost Crystal hit with impact speed >= 90% of its launch speed and cut <= 5 deg (crit rule approved by Evan Oct 4, tightened Oct 4) | Anime_<Zoogi>_Frost_Critical_NN | Anime_Any_Frost_Critical_01 | Standard | 3.0 | 1.2 | Level Sequence (+ optional alpha video overlay = Hybrid) | Full once per match per id; then Short; click skips after 0.3 s | Played in Resolve after the outcome is final, or at the frozen impact frame; same overlay/aura state as in the arena | Anime_Any_Frost_PoweredHit_01 | Needed (M2) |
+| Critical | Powered Titan Core hit with impact speed >= 90% of its launch speed and cut <= 5 deg (crit rule approved by Evan Oct 4, tightened Oct 4) | Anime_<Zoogi>_Titan_Critical_NN | Anime_Any_Titan_Critical_01 | Standard | 3.0 | 1.2 | Level Sequence (+ optional alpha video overlay = Hybrid) | Full once per match per id; then Short; click skips after 0.3 s | Played in Resolve after the outcome is final, or at the frozen impact frame; same overlay/aura state as in the arena | Anime_Any_Titan_PoweredHit_01 | Needed (M2) |
+| Critical | Powered Void Shard hit with impact speed >= 90% of its launch speed and cut <= 5 deg (crit rule approved by Evan Oct 4, tightened Oct 4) | Anime_<Zoogi>_Void_Critical_NN | Anime_Any_Void_Critical_01 | Standard | 3.0 | 1.2 | Level Sequence (+ optional alpha video overlay = Hybrid) | Full once per match per id; then Short; click skips after 0.3 s | Played in Resolve after the outcome is final, or at the frozen impact frame; same overlay/aura state as in the arena | Anime_Any_Void_PoweredHit_01 | Needed (M2) |
+| Critical (affinity) | Hotstreak crits with an infused Ember | Anime_Hotstreak_Ember_Critical_NN | Anime_Hotstreak_Ember_Critical_01 | Special | 5.0 | 1.5 | Hybrid (Sequence + video overlay) | Full once per match; then Short; skippable after 0.3 s | Hotstreak's live mesh and Ember state; in/out frames real-time | Anime_Any_Ember_Critical_01 | Needed (M2) |
+| Critical (affinity) | Bolt crits with an infused Storm | Anime_Bolt_Storm_Critical_NN | Anime_Bolt_Storm_Critical_01 | Special | 5.0 | 1.5 | Hybrid (Sequence + video overlay) | Full once per match; then Short; skippable after 0.3 s | Bolt's live mesh and Storm state; in/out frames real-time | Anime_Any_Storm_Critical_01 | Placeholder |
+| Critical (affinity) | Lars crits with an infused Storm | Anime_Lars_Storm_Critical_NN | Anime_Lars_Storm_Critical_01 | Special | 5.0 | 1.5 | Hybrid (Sequence + video overlay) | Full once per match; then Short; skippable after 0.3 s | Lars's live mesh and Storm state; in/out frames real-time | Anime_Any_Storm_Critical_01 | Placeholder |
+| Critical (affinity) | Pinpoint crits with an infused Frost | Anime_Pinpoint_Frost_Critical_NN | Anime_Pinpoint_Frost_Critical_01 | Special | 5.0 | 1.5 | Hybrid (Sequence + video overlay) | Full once per match; then Short; skippable after 0.3 s | Pinpoint's live mesh and Frost state; in/out frames real-time | Anime_Any_Frost_Critical_01 | Placeholder |
+| Critical (affinity) | Nightshade crits with an infused Void | Anime_Nightshade_Void_Critical_NN | Anime_Nightshade_Void_Critical_01 | Special | 5.0 | 1.5 | Hybrid (Sequence + video overlay) | Full once per match; then Short; skippable after 0.3 s | Nightshade's live mesh and Void state; in/out frames real-time | Anime_Any_Void_Critical_01 | Placeholder |
+| Critical (affinity) | Wraps crits with an infused Titan | Anime_Wraps_Titan_Critical_NN | Anime_Wraps_Titan_Critical_01 | Special | 5.0 | 1.5 | Hybrid (Sequence + video overlay) | Full once per match; then Short; skippable after 0.3 s | Wraps's live mesh and Titan state; in/out frames real-time | Anime_Any_Titan_Critical_01 | Placeholder |
+| Critical (affinity) | Wolfgang crits with an infused Frost | Anime_Wolfgang_Frost_Critical_NN | Anime_Wolfgang_Frost_Critical_01 | Special | 5.0 | 1.5 | Hybrid (Sequence + video overlay) | Full once per match; then Short; skippable after 0.3 s | Wolfgang's live mesh and Frost state; in/out frames real-time | Anime_Any_Frost_Critical_01 | Placeholder |
+| Per-Zoogi non-affinity variants | Any Zoogi x any artifact without an affinity link (e.g. Bolt + Ember) | Anime_<Zoogi>_<Artifact>_<Event>_NN | Anime_Bolt_Ember_PoweredHit_01 | (same as event) | (same) | (same) | (same as the generic row) | (same as the generic row) | Only authored if it adds something; otherwise not authored | Anime_Any_<Artifact>_<Event>_01 | Placeholder (not authored; uses the fallback) |
+| KO | Resolve: a rival Zoogi is knocked off (unpowered shot) | Anime_Any_Any_KO_NN | Anime_Any_Any_KO_01 | Standard | 2.5 | 0.8 | Level Sequence (or a test MP4 for the Media pipeline check) | Full the first 2 KOs per match, then Short; CPU-vs-CPU Short | After the score is committed; replays from the stored ledger (fall path), then restores the respawned state | existing KNOCKOUT! callout (real-time) | Needed (M1, as Media pipeline test) |
+| KO (powered) | Resolve: KO caused by an infused shot | Anime_<Zoogi>_<Artifact>_KO_NN | Anime_Any_Void_KO_01 | Standard | 3.0 | 1.0 | Level Sequence | Same as KO | Edge burst tinted with the artifact colour | Anime_Any_Any_KO_01 | Placeholder |
+| Combo | Resolve: 2+ Zoogi KOs (or 1 KO + 3 orbs) from one shot | Anime_<Zoogi>_Any_Combo_NN | Anime_Any_Any_Combo_01 | Special | 4.5 | 1.5 | Hybrid | Full once per match, then Short | Played after all KOs are committed; shows the combo count | Anime_Any_Any_KO_01 | Placeholder |
+| Miss | Battle: infused shot touches no Zoogi or orb before settle (artifact wasted) | Anime_Any_<Artifact>_Miss_NN | Anime_Any_Any_Miss_01 | Micro | 0.6 | 0 | Real-time (aura fizzle + small sigh camera dip) | Played the first time per match only; afterwards a HUD text only | Infused state ends; overlay fades out | none (HUD feed only) | Placeholder |
+| Status apply | Resolve: Burned applied (source: Ember) | Anime_Any_Status_Burned_NN | Anime_Any_Status_Burned_01 | Micro | 0.7 | 0 | Real-time (status icon pop + material tint on the victim) | First time per match per status only; then icon only | Victim keeps the status tint until it expires | HUD icon only | Needed (M1, real-time icon) |
+| Status apply | Resolve: Shocked applied (source: Storm) | Anime_Any_Status_Shocked_NN | Anime_Any_Status_Shocked_01 | Micro | 0.7 | 0 | Real-time (status icon pop + material tint on the victim) | First time per match per status only; then icon only | Victim keeps the status tint until it expires | HUD icon only | Needed (M1, real-time icon) |
+| Status apply | Resolve: Frozen applied (source: Frost) | Anime_Any_Status_Frozen_NN | Anime_Any_Status_Frozen_01 | Micro | 0.7 | 0 | Real-time (status icon pop + material tint on the victim) | First time per match per status only; then icon only | Victim keeps the status tint until it expires | HUD icon only | Needed (M1, real-time icon) |
+| Status apply | Resolve: Bound applied (source: Wraps Bandage Bind / Titan affinity) | Anime_Any_Status_Bound_NN | Anime_Any_Status_Bound_01 | Micro | 0.7 | 0 | Real-time (status icon pop + material tint on the victim) | First time per match per status only; then icon only | Victim keeps the status tint until it expires | HUD icon only | Placeholder |
+| Status apply | Resolve: Stunned applied (source: Static Shock / Shadow Stun) | Anime_Any_Status_Stunned_NN | Anime_Any_Status_Stunned_01 | Micro | 0.7 | 0 | Real-time (status icon pop + material tint on the victim) | First time per match per status only; then icon only | Victim keeps the status tint until it expires | HUD icon only | Placeholder |
+| Save | Awaken: Save | (none) | (none) | - | 0 | 0 | UI only (card slides to the hand) | - | - | - | Not an anime event |
+| Ultimate (future) | Reserved: e.g. affinity Critical + KO in the same shot, or a future meter | Anime_<Zoogi>_Ultimate_NN | Anime_Hotstreak_Ultimate_01 | Ultimate | 9.0 | 2.0 | Pre-rendered video (Media Framework), Hybrid in/out | Full once per match per Zoogi; then Short (2 s); skippable after 0.5 s | Freeze -> flash -> video -> flash -> restored arena; last frames tinted to the arena | Anime_<Zoogi>_<Artifact>_Critical_01 | Placeholder (post-milestone) |
+
+## Status counts
+
+- Needed: 27
+- Placeholder: 17
+- Placeholder (not authored; uses the fallback): 1
+- Not an anime event: 1
+- Placeholder (post-milestone): 1
+
+## Video cut-ins in the build now (Oct 4)
+
+The rows above are the authoring plan. Today the game plays three short video cut-ins, cut from Evan's own Zoogi Roll videos with their title text cropped out. Each cut-in is shown as a large framed card (74% of the screen width) over the frozen arena, with a white flash on impact events. All clips live in `Content/Anime/Movies/` and are listed in `Movies.csv`, which the game reads at start-up.
+
+| Clip | Length | Source (crop) | Plays for |
+|---|---|---|---|
+| `Anime_Any_Any_Infuse_01.mp4` | 2.0 s | map-select video 7.3-9.3 s (464x261 at y=470) | Every Infuse, any Zoogi and any artifact |
+| `Anime_Any_Any_Critical_01.mp4` | 2.0 s | main-bg video 15.0-17.0 s (464x261 at y=440) | Every Critical |
+| `Anime_Any_Any_KO_01.mp4` | 2.5 s | splash video 9.1-11.6 s (416x234 at y=330) | Every KO |
+| `Menu_Background.mp4` | 20.5 s, looped | main-bg video, full length | Main menu backdrop. It is cover-cropped and slightly darkened; `-ZoogiMenuArena` brings back the old live-arena backdrop |
+
+**Lookup.** For an event id `Anime_<Zoogi>_<Artifact>_<Event>_NN`, the game tries these clips in order and uses the first one that exists:
+1. the exact id
+2. `Anime_Any_<Artifact>_<Event>`
+3. `Anime_<Zoogi>_Any_<Event>`
+4. `Anime_Any_Any_<Event>`
+
+Dropping a better-matching mp4 into the folder (and adding it to `Movies.csv`) overrides the generic clip with no code change.
+
+**When a clip plays:**
+- Only when that event plays at Full length. That is the first time per id per match, and only in matches with a human player; CPU-only matches always use Short.
+- On screen for the clip's own length, clamped to 1.5-3 s.
+- Guard, GuardBlock and PoweredHit have no clip yet, so they keep the real-time Micro version.
+- `-ZoogiNoAnimeMovies` turns all video cut-ins off.

@@ -1,0 +1,102 @@
+[/Script/EngineSettings.GameMapsSettings]
+GameDefaultMap=/Game/Maps/Meadow.Meadow
+EditorStartupMap=/Game/Maps/Meadow.Meadow
+GlobalDefaultGameMode=/Script/ZoogiRoll.ZoogiGameMode
+
+[/Script/Engine.RendererSettings]
+r.DefaultFeature.AutoExposure=False
+r.DefaultFeature.MotionBlur=False
+r.AntiAliasingMethod=4
+r.DynamicGlobalIlluminationMethod=1
+r.ReflectionMethod=1
+r.Shadow.Virtual.Enable=1
+r.GenerateMeshDistanceFields=True
+r.DefaultFeature.Bloom=True
+
+[/Script/WindowsTargetPlatform.WindowsTargetSettings]
+DefaultGraphicsRHI=DefaultGraphicsRHI_DX12
+
+[/Script/Engine.PhysicsSettings]
+bSubstepping=True
+MaxSubstepDeltaTime=0.008333
+MaxSubsteps=8
+bEnableEnhancedDeterminism=False
+DefaultGravityZ=-981.0
+BounceThresholdVelocity=50.0
+FrictionCombineMode=Average
+RestitutionCombineMode=Average
+
+[/Script/Engine.Engine]
+; framed HUD (-ZoogiFramedHUD): constrains the player view rect to the arena window; identical to the stock client when the frame is off
+GameViewportClientClassName=/Script/ZoogiRoll.ZoogiViewportClient
++ActiveGameNameRedirects=(OldGameName="TP_Blank",NewGameName="/Script/ZoogiRoll")
+
+[/Script/AndroidFileServerEditor.AndroidFileServerRuntimeSettings]
+bEnablePlugin=False
+bAllowNetworkConnection=True
+SecurityToken=AE469E5247B5CE196DC51DB557BCF31A
+bIncludeInShipping=False
+bAllowExternalStartInShipping=False
+bCompileAFSProject=False
+bUseCompression=False
+bLogFiles=False
+bReportStats=False
+ConnectionType=USBOnly
+bUseManualIPAddress=False
+ManualIPAddress=
+
+[CoreRedirects]
++EnumRedirects=(OldName="/Script/ZoogiRoll.EZoogiElement",NewName="/Script/ZoogiRoll.EZoogiArtifactElement")
+
+[/Script/IOSRuntimeSettings.IOSRuntimeSettings]
+; Oct 17 (ZOOGI/Evan): portrait AND landscape allowed so the game can switch at runtime (menus portrait, battle landscape); upside-down off
+; Oct 26 (Evan): wide-screen MODE SELECTION -> landscape only (same as Android SensorLandscape); bundle id = the Android package name
+bSupportsPortraitOrientation=False
+BundleIdentifier=com.zoogiroll.arena
+BundleDisplayName=Zoogi Roll
+bSupportsUpsideDownOrientation=False
+bSupportsLandscapeLeftOrientation=True
+bSupportsLandscapeRightOrientation=True
+RemoteServerName=TX544.macincloud.com
+RSyncUsername=user294974
+SSHPrivateKeyOverridePath=C:/dev/k_t.key
+bAutomaticSigning=False
+IOSTeamID=7VL2B99BBP
+MobileProvision=ZoogiRoll.mobileprovision
+bGeneratedSYMFile=False
+
+[/Script/AndroidRuntimeSettings.AndroidRuntimeSettings]
+; Android 13+ never grants WRITE_EXTERNAL_STORAGE: with this on, Shipping doesn't ask for it at startup (the splash quit on it)
+bUseExternalFilesDir=True
+; Oct 17 (ZOOGI/Evan): sensor = portrait + landscape (runtime switching: menus portrait, battle landscape); MaxAspectRatio 2.4 so tall 9:20 phones are not letterboxed
+Orientation=SensorLandscape
+MaxAspectRatio=2.400000
+; Oct 20 (Evan): sideloaded tablet APK - one installable file (data inside the APK), 64-bit ARM, Android 10+
+PackageName=com.zoogiroll.arena
+ApplicationDisplayName=Zoogi Roll
+StoreVersion=1
+VersionDisplayName=0.1
+MinSDKVersion=29
+TargetSDKVersion=34
+bPackageDataInsideApk=True
+bBuildForArm64=True
+bBuildForX8664=False
+bFullScreen=True
+bEnableGooglePlaySupport=False
+bSupportsVulkan=True
+bBuildForES31=True
+
+[/Script/AndroidPlatformEditor.AndroidSDKSettings]
+SDKPath=(Path="C:/Users/skybi/AppData/Local/Android/Sdk")
+NDKPath=(Path="C:/Users/skybi/AppData/Local/Android/Sdk/ndk/27.2.12479018")
+JavaPath=(Path="C:/Program Files/Microsoft/jdk-17.0.20.101-hotspot")
+SDKAPILevelOverride=
+NDKAPILevelOverride=
+
+[/Script/MacTargetPlatform.XcodeProjectSettings]
+; Oct 26 (Evan/Claude): iPhone TestFlight build - team 7VL2B99BBP, App Store distribution signing, manual profile
+CodeSigningTeam=7VL2B99BBP
+CodeSigningPrefix=com.zoogiroll
+BundleIdentifier=com.zoogiroll.arena
+IOSSigningIdentity=Apple Distribution
+bUseAutomaticCodeSigning=False

@@ -1,0 +1,12 @@
+# Nov 11 (Claude): every build (even B245) closes at launch -> check the Mac's signing identity + provisioning profiles + the last app's embedded profile.
+import subprocess, time
+SSH = ['ssh', '-i', 'C:/dev/k_t.key', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=30', 'user294974@TX544.macincloud.com']
+cmd = r'''echo "== now: $(date -u)"; echo "== identities"; security find-identity -v -p codesigning 2>&1 | head -20
+echo "== profiles"; for f in ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision ~/Library/Developer/Xcode/UserData/Provisioning\ Profiles/*.mobileprovision; do [ -f "$f" ] || continue; security cms -D -i "$f" > /tmp/p.plist 2>/dev/null; echo "$(basename "$f") | $(/usr/libexec/PlistBuddy -c 'Print :Name' /tmp/p.plist) | exp $(/usr/libexec/PlistBuddy -c 'Print :ExpirationDate' /tmp/p.plist) | $(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' /tmp/p.plist) | get-task-allow $(/usr/libexec/PlistBuddy -c 'Print :Entitlements:get-task-allow' /tmp/p.plist 2>/dev/null) | devices $(/usr/libexec/PlistBuddy -c 'Print :ProvisionedDevices' /tmp/p.plist 2>/dev/null | grep -c -- '-')"; done
+echo "== certs expiry"; security find-certificate -a -c "Apple Distribution" -p 2>/dev/null | openssl x509 -noout -subject -enddate 2>&1 | head; security find-certificate -a -c "iPhone Distribution" -p 2>/dev/null | openssl x509 -noout -subject -enddate 2>&1 | head
+echo "== archives"; ls -dt ~/Library/Developer/Xcode/Archives/*/*.xcarchive 2>/dev/null | head -3
+A=$(ls -dt ~/Library/Developer/Xcode/Archives/*/*.xcarchive 2>/dev/null | head -1); APP=$(ls -d "$A"/Products/Applications/*.app 2>/dev/null | head -1); echo "app: $APP"
+[ -n "$APP" ] && { codesign -dvv "$APP" 2>&1 | head -15; security cms -D -i "$APP/embedded.mobileprovision" > /tmp/e.plist 2>/dev/null; /usr/libexec/PlistBuddy -c 'Print :Name' /tmp/e.plist; /usr/libexec/PlistBuddy -c 'Print :ExpirationDate' /tmp/e.plist; /usr/libexec/PlistBuddy -c 'Print :Entitlements' /tmp/e.plist | head -20; du -sh "$APP"; /usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$APP/Info.plist"; /usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Info.plist"; ls -la "$APP" | head -30; }
+echo "== build log tail"; grep -n "warning: .*sign\|error\|Provisioning" ~/zr/build250.log | tail -15'''
+r = subprocess.run(SSH + [cmd], capture_output=True, timeout=300)
+open(r'C:\dev\ios\sigcheck.txt', 'w', encoding='utf-8', errors='replace').write(r.stdout.decode(errors='replace') + '\n--stderr--\n' + r.stderr.decode(errors='replace'))

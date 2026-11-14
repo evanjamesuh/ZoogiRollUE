@@ -1,0 +1,27 @@
+{
+ "tag": "FROZRR2",
+ "lod_suffix": [
+  "_LOD1",
+  "_LOD2"
+ ],
+ "screen": [
+  1.0,
+  0.5,
+  0.25
+ ],
+ "mat_dir": "/Game/Frozen/RR2/Materials",
+ "mat_search": [],
+ "sets": [
+  {
+   "src": "C:/Users/skybi/staging/frozen/meshes",
+   "dest": "/Game/Frozen/RR2/Meshes"
+  }
+ ],
+ "report": "frozen_rr2_import.json",
+ "require": [
+  "/Game/Frozen/RR2/Meshes/SM_Frozen_ResonancePillar.SM_Frozen_ResonancePillar",
+  "/Game/Frozen/RR2/Meshes/SM_Frozen_IceObelisk_s0.SM_Frozen_IceObelisk_s0",
+  "/Game/Frozen/RR2/Meshes/SM_FrozenOrbPocket.SM_FrozenOrbPocket",
+  "/Game/Frozen/RR2/Meshes/SM_Frozen_CrystalBumper.SM_Frozen_CrystalBumper"
+ ]
+}

@@ -1,0 +1,15 @@
+# Nov 8 b180 (Claude): Meadow old look + v3 ring + crowd, building blast, breakable spread rocks, airborne redirect dive, F6 anywhere
+import subprocess, time, os
+H = r'C:\dev\ios\gob120_hb.txt'
+def hb(s): open(H, 'a').write(time.strftime('%H:%M:%S ') + '180 ' + s + '\n')
+hb('B start')
+py = r"C:\Program Files\Epic Games\UE_5.6\Engine\Binaries\ThirdParty\Python3\Win64\python.exe"
+while os.path.exists(r'C:\dev\unreal.lock'): time.sleep(15)
+ok = False
+for attempt in range(3):
+    subprocess.run([py, r"C:\dev\ios\p5run.py", "earth_meadow"])
+    if 'BUILD_RC=0' in open(r'C:\dev\ios\p5_status.txt').read(): ok = True; break
+    hb('build failed, attempt %d' % (attempt + 1)); time.sleep(90)
+if not ok:
+    open(r'C:\dev\ios\b180ios_status.txt', 'w').write('SKIPPED: editor build failed\n'); hb('BUILD FAILED'); raise SystemExit
+hb('B done')

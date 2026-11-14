@@ -1,0 +1,46 @@
+# Unreal Engine
+Binaries/
+DerivedDataCache/
+Intermediate/
+Saved/
+Build/
+.vs/
+.vscode/
+.idea/
+*.sln
+*.suo
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.opendb
+*.xcodeproj
+*.xcworkspace
+Plugins/*/Binaries/
+Plugins/*/Intermediate/
+# Packaged builds
+Packaged/
+Windows/
+# Local tools output
+Logs/
+*.log
+SourceArt/
+
+# Third-party source pack (free Iceland_Environment mountains, copied from the launcher vault cache, 1.2 GB).
+# Only the derived meshes in Content/Env/Arenas/FrozenMountains are tracked/cooked.
+Content/Iceland_Environment/
+
+# Fab marketplace packs (licensed for shipped product only - keep out of public remotes).
+# Heavies never-cook on Android via Config/Android/AndroidGame.ini.
+# Lighter approved packs may be local-only until LFS-private; derived/cooked refs stay tracked.
+Content/Animated_Nebulas_Starter_Pack/
+Content/Nebula_VDB/
+Content/Vefects/
+Content/_SplineVFX/
+Content/Fluid_Orbs/
+Content/ArrowTrail/Demo/
+Content/ArrowTrail/Map/
+# Fab packs bought Nov 2 (Hovl Stylized Toon VFX 3, Gabriel Aguiar Meteor Rain) - licensed, local-only like the packs above.
+Content/StylizedToonVFX3/
+Content/MeteorRain/
+# Recursive Samples/Samples/... copy of PixelStreaming2 (paths too long for git)
+/Samples/

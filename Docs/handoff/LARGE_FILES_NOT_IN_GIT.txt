@@ -1,0 +1,2 @@
+Files over 95 MB - copy these from the desktop PC by hand (same path under the project folder):
+   105.7 MB  Content/Anime/Movies/Episode_01_TheFrozenRing.mp4

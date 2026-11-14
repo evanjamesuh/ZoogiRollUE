@@ -1,0 +1,3 @@
+import subprocess
+r = subprocess.run(['ssh', '-i', 'C:/dev/k_t.key', '-o', 'BatchMode=yes', 'user294974@TX544.macincloud.com', 'head -105 ~/zr/build30.log; ls -la ~/UE5/Builds/EVAN/C/dev/ZoogiRollUnreal-combined/Source/ZoogiRoll/Private/ZoogiP5Style.cpp ~/UE5/Builds/EVAN/C/dev/ZoogiRollUnreal-combined/Source/ZoogiRoll/Private/ZoogiGameMode.cpp; tail -40 ~/zr/ubt_mac.txt; strings ~/UE5/Builds/EVAN/C/dev/ZoogiRollUnreal-combined/Binaries/IOS/ZoogiRoll-IOS-Shipping 2>/dev/null | grep -c "P5 RESULTS"; ls -la ~/UE5/Builds/EVAN/C/dev/ZoogiRollUnreal-combined/Binaries/IOS/'], capture_output=True, timeout=120)
+open(r'C:\dev\ios\chk30.txt', 'w').write(r.stdout.decode(errors='replace') + r.stderr.decode(errors='replace'))

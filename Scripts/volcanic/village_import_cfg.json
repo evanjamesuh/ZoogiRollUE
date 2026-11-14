@@ -1,0 +1,26 @@
+{
+  "tag": "VILLAGE2",
+  "report": "village_import2.json",
+  "lod_suffix": [
+    "_LOD1",
+    "_LOD2"
+  ],
+  "screen": [
+    1.0,
+    0.4,
+    0.15
+  ],
+  "mat_dir": "/Game/Env/Volcanic/V13",
+  "mat_search": [
+    "/Game/Env/Volcanic/V13",
+    "/Game/Env/Obstacles/volcanic/SM_VolcanicObs_MagmaVent/SM_VolcanicObs_MagmaVent/Materials"
+  ],
+  "sets": [
+    {
+      "src": "C:/dev/ZoogiRollUnreal-combined/Import/VolcanicVillage/meshes",
+      "dest": "/Game/Env/Volcanic/V13/Meshes",
+      "collision": false
+    }
+  ],
+  "require": []
+}

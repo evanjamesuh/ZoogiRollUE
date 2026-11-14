@@ -1,0 +1,116 @@
+# b108a: SKILL LAB off the skill list -> a black P5 button on home; lab = no player, orbs re-racked, < NAME > + PLAY + RESET,
+# swipe orbits the camera; ZoogiSkills::ClearField; bigger skill tap radius (Grok: targets missed on the tablet)
+import os, shutil
+exec(open(os.path.expanduser('~/mnt/dev/ios/patch_b77.py')).read().split("P = 'Source/ZoogiRoll/Private/'")[0])
+R = os.path.expanduser('~/mnt/dev/ZoogiRollUnreal-p5style/Source/ZoogiRoll/')
+shutil.copy(os.path.expanduser('~/mnt/dev/ios/lab/ZoogiSkillLab.h'), R + 'Public/ZoogiSkillLab.h')
+shutil.copy(os.path.expanduser('~/mnt/dev/ios/lab/ZoogiSkillLab.cpp'), R + 'Private/ZoogiSkillLab.cpp')
+P = 'Source/ZoogiRoll/Private/'
+# ---- the skill list: no SKILL LAB card
+ed('Source/ZoogiRoll/Public/ZoogiSkills.h', [('	ZOOGIROLL_API TArray<FName> AllSkillIds();',
+ '	ZOOGIROLL_API TArray<FName> AllSkillIds();\n	/** b108 SKILL LAB RESET: every skill leftover off the field (walls, mines, shields, buffs, bolts, wolves, timed hits, Fab effects) */\n	ZOOGIROLL_API void ClearField(AZoogiGameMode* G);')])
+ed(P + 'ZoogiSkills.cpp', [
+ ('			{ TEXT("bolt_balls"), EAim::Self, 0.f, 1, TEXT("") },\n			{ TEXT("skill_lab"), EAim::Self, 0.f, 1, TEXT("") } }; // b107: opens the SKILL LAB',
+  '			{ TEXT("bolt_balls"), EAim::Self, 0.f, 1, TEXT("") } }; // b108: SKILL LAB is a home button now, not a skill'),
+ ('		if (Id == FName(TEXT("skill_lab"))) { if (!Caster->bCPU) ZoogiSkillLab::OpenLab(G); Reset(); return; } // b107: the SKILL LAB card\n', ''),
+ ('#include "ZoogiEpic.h"\n', '#include "ZoogiEpic.h"\n#include "EngineUtils.h"\n'),
+ ('				AActor* Best = nullptr; float BestD = 110.f;',
+  '				int32 VpX = 0, VpY = 0; if (PC) PC->GetViewportSize(VpX, VpY);\n				AActor* Best = nullptr; float BestD = FMath::Max(110.f, 0.11f * (float)FMath::Min(VpX, VpY)); // b108 (Grok, tablet): a finger-sized radius'),
+ ('''		GStems.Reset(); GBoltShots.Reset(); GBolts.Reset();
+	}''', '''		GStems.Reset(); GBoltShots.Reset(); GBolts.Reset();
+	}
+	void ClearField(AZoogiGameMode* G)
+	{
+		for (FWall& Wl : Walls) { if (AActor* A = Wl.Collider.Get()) A->Destroy(); for (const TWeakObjectPtr<AZoogiFabFX>& F : Wl.Fx) if (AZoogiFabFX* X = F.Get()) X->Destroy(); }
+		for (FMine& M : Mines) if (AZoogiFabFX* F = M.Fx.Get()) F->Destroy();
+		for (FBuff& Bf : Buffs) if (AZoogiBall* B = Bf.B.Get()) if (B->Sphere && Bf.SavedMass > 0.f) B->Sphere->SetMassOverrideInKg(NAME_None, Bf.SavedMass, true);
+		for (FShield& S0 : Shields) { if (AZoogiBall* B = S0.B.Get()) if (B->Sphere && S0.SavedMass > 0.f) B->Sphere->SetMassOverrideInKg(NAME_None, S0.SavedMass, true); DropShieldFx(S0); }
+		Walls.Reset(); Mines.Reset(); Craters.Reset(); Buffs.Reset(); Shields.Reset(); Events.Reset();
+		if (Picking()) Reset();
+		BoltClearAll(TEXT("lab reset"));
+		GWolfArmed.Reset();
+		if (G)
+		{
+			AZoogiIceBarrier::DestroyAll(G->GetWorld());
+			if (UZoogiWolfPackSys* WP = UZoogiWolfPackSys::Get(G)) if (WP->PackActive()) WP->ForceClear();
+			if (UWorld* W = G->GetWorld()) for (TActorIterator<AZoogiFabFX> It(W); It; ++It) It->Destroy();
+		}
+		UE_LOG(LogZoogi, Log, TEXT("SKILL field cleared"));
+	}'''),
+])
+# Cards.csv: drop the skill_lab row
+cp = R + '../../Content/Data/Cards.csv'
+b = open(cp, 'rb').read(); nl = b'\r\n' if b'\r\n' in b else b'\n'
+lines = b.split(nl); n0 = len(lines); lines = [l for l in lines if not l.startswith(b'skill_lab,')]
+assert len(lines) == n0 - 1; open(cp, 'wb').write(nl.join(lines))
+ed(P + 'ZoogiCardSubsystem.cpp', [('		TArray<FName> Saved = SQ();', '		TArray<FName> Saved = SQ();\n		Saved.Remove(FName(TEXT("skill_lab"))); // b108: the lab is a home button now')])
+# ---- the lab match: solo, no bots; fresh orbs on demand
+ed('Source/ZoogiRoll/Public/ZoogiGameMode.h', [('	void PublicPopup(const FString& Text, const FVector& World, const FLinearColor& Color) { AddPopup(Text, World, Color); }',
+ '	void PublicPopup(const FString& Text, const FVector& World, const FLinearColor& Color) { AddPopup(Text, World, Color); }\n	/** b108 SKILL LAB: a full fresh set of orbs */\n	void LabFreshOrbs();')])
+ed(P + 'ZoogiGameMode.cpp', [
+ ('#include "ZoogiOrb.h"\n', '#include "ZoogiOrb.h"\n#include "ZoogiSkillLab.h"\n'),
+ ('void AZoogiGameMode::ClassicStartTraining()\n{', 'void AZoogiGameMode::LabFreshOrbs()\n{\n	for (AZoogiOrb* O : Orbs) if (O) O->Destroy();\n	Orbs.Reset();\n	SpawnOrbs();\n}\n\nvoid AZoogiGameMode::ClassicStartTraining()\n{'),
+ ('		const int32 Bots = FMath::Clamp(ZoogiControls::TrainBots(), 0, FMath::Max(0, MenuPlayers.Num() - 1));',
+  '		const int32 Bots = ZoogiSkillLab::Pending() ? 0 : FMath::Clamp(ZoogiControls::TrainBots(), 0, FMath::Max(0, MenuPlayers.Num() - 1)); // b108: the lab has no bots'),
+])
+# ---- no match HUD over the lab
+ed(P + 'ZoogiHUD.cpp', [
+ ('#include "ZoogiHUD.h"\n', '#include "ZoogiHUD.h"\n#include "ZoogiSkillLab.h"\n'),
+ ('	ZoogiAimArrow::Draw(Canvas, G, PlayerOwner);', '	if (!ZoogiSkillLab::Open()) ZoogiAimArrow::Draw(Canvas, G, PlayerOwner); // b108: not in the lab'),
+ ('	if (bNoHUD && G->Phase != EZoogiPhase::Menu) { UpdateAwakenWidget(G, true); return; }', '	if ((bNoHUD || ZoogiSkillLab::Open()) && G->Phase != EZoogiPhase::Menu) { UpdateAwakenWidget(G, true); return; } // b108: the lab draws its own'),
+])
+ed(P + 'ZoogiPowers.cpp', [
+ ('#include "ZoogiGameMode.h"\n', '#include "ZoogiGameMode.h"\n#include "ZoogiSkillLab.h"\n'),
+ ('	if (bRoyaleMode) return false; // Oct 28: 2v2 gets the SUPERPOWER (Wolf Pack) / REACTION buttons too', '	if (bRoyaleMode || ZoogiSkillLab::Open()) return false; // Oct 28: 2v2 gets the SUPERPOWER (Wolf Pack) / REACTION buttons too; b108: not in the lab'),
+])
+ed(P + 'ZoogiP5Command.cpp', [
+ ('#include "ZoogiP5Command.h"\n', '#include "ZoogiP5Command.h"\n#include "ZoogiSkillLab.h"\n'),
+ ('		if (UGameplayStatics::IsGamePaused(World)) { W.SetVisibility(EVisibility::Collapsed); GShowing = false; return true; } // b79: nothing over the pause menu',
+  '		if (UGameplayStatics::IsGamePaused(World) || ZoogiSkillLab::Open()) { W.SetVisibility(EVisibility::Collapsed); GShowing = false; return true; } // b79: nothing over the pause menu; b108: or the lab'),
+])
+ed(P + 'ZoogiArenaHUDWidget.cpp', [
+ ('#include "ZoogiArenaHUDWidget.h"\n', '#include "ZoogiArenaHUDWidget.h"\n#include "ZoogiSkillLab.h"\n'),
+ ('G->Balls.Num() > 0 && !G->IsRoyaleMatch(); // Battle Royale draws its own HUD', 'G->Balls.Num() > 0 && !G->IsRoyaleMatch() && !ZoogiSkillLab::Open(); // Battle Royale draws its own HUD; b108: so does the lab'),
+])
+# ---- the home button
+ed('Source/ZoogiRoll/Public/ZoogiMenuRoot.h', [('	void StartMapCard(int32 Index);', '	void StartMapCard(int32 Index);\n	/** b108: the home screen SKILL LAB button */\n	void StartSkillLab();')])
+ed(P + 'ZoogiModeSelect.cpp', [
+ ('#include "ZoogiMenuRoot.h"\n', '#include "ZoogiMenuRoot.h"\n#include "ZoogiSkillLab.h"\n'),
+ ('void UZoogiMenuRoot::StartMapCard(int32 Index)\n{', '''void UZoogiMenuRoot::StartSkillLab()
+{
+	AZoogiGameMode* G = GM();
+	if (!G) return;
+	bMapSelect = false; bTrainingMaps = false; SetFrontBattle(false);
+	UE_LOG(LogZoogi, Log, TEXT("SKILL LAB -> solo lab match"));
+	Fire("Mode", 0);
+	ZoogiSkillLab::RequestLab();
+	G->ClassicStartTraining();
+}
+
+void UZoogiMenuRoot::StartMapCard(int32 Index)
+{'''),
+])
+ed(P + 'ZoogiFront.cpp', [
+ ('''	void ShowRewards(const FString& Title, FName Chest, const TArray<FZoogiFrontReward>& R)''', '''	void SkillLab()
+	{	// b108 (Evan): the black P5 SKILL LAB button
+		Sfx(TEXT("UiConfirm"), 0.9f);
+		UE_LOG(LogZoogi, Log, TEXT("FRONT SKILL LAB"));
+		TWeakObjectPtr<UZoogiMenuRoot> M = Menu;
+		UWorld* W = Ctx.IsValid() ? Ctx->GetWorld() : nullptr;
+		ZoogiP5::PlayWipe(W, [M]() { if (M.IsValid()) M->StartSkillLab(); }, Ink, TEXT("SKILL LAB"));
+	}
+	void ShowRewards(const FString& Title, FName Chest, const TArray<FZoogiFrontReward>& R)'''),
+ ('''		Slab(Out, G, L + 3, TEXT("INVENTORY"), FVector2D(10.f, RY + 20.f), FVector2D(470.f, 210.f), Paper, Mag(), 72.f, [Self]() { Self->Go(1); });''',
+  '''		Slab(Out, G, L + 3, TEXT("INVENTORY"), FVector2D(10.f, RY + 20.f), FVector2D(470.f, 210.f), Paper, Mag(), 72.f, [Self]() { Self->Go(1); });
+		Slab(Out, G, L + 3, TEXT("SKILL LAB"), FVector2D(10.f, RY - 190.f), FVector2D(470.f, 150.f), Ink, Mag(), 64.f, [Self]() { Self->SkillLab(); }); // b108'''),
+ ('''		Slab(Out, G, L, TEXT("NEWS"), FVector2D(40.f, 262.f), FVector2D(180.f, 86.f), Ink, Mag(), 40.f, [Self]() { Self->OpenPop(SZoogiFront::EPop::News); });''',
+  '''		Slab(Out, G, L, TEXT("NEWS"), FVector2D(40.f, 262.f), FVector2D(180.f, 86.f), Ink, Mag(), 40.f, [Self]() { Self->OpenPop(SZoogiFront::EPop::News); });
+		Slab(Out, G, L, TEXT("SKILL LAB"), FVector2D(40.f, 384.f), FVector2D(180.f, 86.f), Ink, Mag(), 30.f, [Self]() { Self->SkillLab(); }); // b108'''),
+])
+# NEWS: B108 on top, B104 out
+fp = R + 'Private/ZoogiFront.cpp'; raw = open(fp, 'rb').read(); bom = raw[:3] == b'\xef\xbb\xbf'; s = raw.decode('utf-8-sig'); nl = '\r\n' if '\r\n' in s else '\n'
+i = s.index('\t\t\t{ TEXT("B107")'); j = s.index('\t\t\t{ TEXT("B104")'); k = s.index(nl, j) + len(nl)
+row = '\t\t\t{ TEXT("B108"), TEXT("SKILL LAB BUTTON"), TEXT("SKILL LAB is a black button on the home screen now (not a skill). Just the effect and the orbs: pick with the arrows, PLAY, RESET cleans the field, swipe to turn the camera.") },' + nl
+s = s[:i] + row + s[i:j] + s[k:]
+open(fp, 'wb').write((b'\xef\xbb\xbf' if bom else b'') + s.encode('utf-8'))
+print('b108a ok')

@@ -1,0 +1,139 @@
+// cardui: drag-to-assign card hand for the cards-mode Standby (opt-in: -ZoogiCardHandUI, needs cards mode on).
+// Bottom-center fanned hand; hover = 1.3x, lift, straighten, neighbors spread, tooltip; drag = the card stays in the hand,
+// a segmented arrow follows the cursor and the acting Zoogi glows in the card color with an effect preview; release on
+// it = AZoogiGameMode::MenuAction("CardToggle", slot) (the same select call the Phase 4 Standby panel uses: the card
+// system validates, nothing is spent at select); CONFIRM = MenuAction("CardCommit") (validates again, then spends once);
+// CLEAR = MenuAction("CardClear"). Draw / discard / assign are animations of the card system's own piles.
+// With the flag on, the Phase 4 Canvas card panel is hidden (UZoogiAwakenWidget asks IsEnabled); keys 1-5 / A / Enter /
+// Backspace keep working. The ArrowTrail forecast ribbon stays the aim preview; the drag arrow is only card -> target.
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Blueprint/UserWidget.h"
+#include "ZoogiUIStyle.h"
+#include "ZoogiCardHandWidget.generated.h"
+
+class AZoogiGameMode;
+class UZoogiCardWidget;
+class UCanvasPanel;
+class UButton;
+class UTextBlock;
+class UTexture2D;
+struct FZoogiCardPlayerState;
+
+UCLASS()
+class ZOOGIROLL_API UZoogiCardHandWidget : public UUserWidget
+{
+	GENERATED_BODY()
+public:
+	/** True when -ZoogiCardHandUI is on the command line and the card system is active this match. */
+	static bool IsEnabled(const AZoogiGameMode* G);
+	/** GameMode hook: creates the widget on the first local player controller (retries until one exists). */
+	static void Spawn(AZoogiGameMode* G);
+
+	// card widget -> hand
+	void CardHover(UZoogiCardWidget* C, bool bOn);
+	bool CardPress(UZoogiCardWidget* C, const FPointerEvent& Ev);
+	void CardDragMove(UZoogiCardWidget* C, const FPointerEvent& Ev);
+	void CardRelease(UZoogiCardWidget* C, const FPointerEvent& Ev, bool bCancel);
+	void CancelDrag(const TCHAR* Why);
+	bool IsDragging(const UZoogiCardWidget* C) const { return C && Dragging.Get() == C; }
+
+	// Oct 15 playtest test hooks (-ZoogiPlaytest1)
+	/** Instance ids of the cards shown in the tray row right now (hand state, visible), in row order. */
+	TArray<int32> TrayInstanceIds() const;
+	/** Visual rects (widget px) of the tray row cards, in row order. */
+	TArray<FBox2D> TrayCardRects() const;
+	FVector2D GetViewSize() const { return ViewSize; }
+	bool IsInteractive() const { return bInteractive; }
+	static UZoogiCardHandWidget* Find(const UWorld* World);
+	/** Framed HUD: CONFIRM / CLEAR rects (this widget's local px) - the framed HUD lays its own press-firing hit buttons
+	 *  over them (Oct 15 playtest: this layer's buttons were missing from Slate's hit grid, so presses fell to the game). */
+	bool FramedBtnRects(FBox2D& Confirm, bool& bConfirm, FBox2D& Clear, bool& bClear) const { Confirm = ConfirmR; Clear = ClearR; bConfirm = bFramedBtns && bConfirmLive; bClear = bFramedBtns && bClearLive; return bFramedBtns; }
+	void PressConfirm() { if (bConfirmLive) OnConfirm(); }
+	void PressClear() { if (bClearLive) OnClear(); }
+
+protected:
+	virtual TSharedRef<SWidget> RebuildWidget() override;
+	virtual void NativeTick(const FGeometry& Geo, float Dt) override;
+	virtual FReply NativeOnMouseButtonDown(const FGeometry& Geo, const FPointerEvent& Ev) override; // touch: tap-to-target while a card is armed
+	virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& Geo, const FSlateRect& Cull, FSlateWindowElementList& Out, int32 Layer, const FWidgetStyle& Style, bool bParentEnabled) const override;
+
+private:
+	enum class EVis : uint8 { Hand, ToTarget, Assigned, ToDiscard };
+	struct FVis
+	{
+		TWeakObjectPtr<UZoogiCardWidget> W;
+		EVis State = EVis::Hand;
+		FVector2D Pos = FVector2D::ZeroVector;
+		float Angle = 0.f, Scale = 1.f, Opacity = 1.f;
+		// active flight (draw / to target / to discard / back to hand)
+		bool bFly = false;
+		float T = 0.f, Delay = 0.f, Dur = 0.3f;
+		FVector2D From = FVector2D::ZeroVector, To = FVector2D::ZeroVector;
+		float FromAngle = 0.f, FromScale = 1.f, ToScale = 1.f, ToAngle = 0.f, Lift = 120.f;
+		bool bToLayout = false; // flight ends at the live hand slot
+	};
+	struct FReact { FVector2D Pos; float T = 0.f; FLinearColor Color; FString Label; };
+
+	void AssignTo(UZoogiCardWidget* C); // the one select path (drag-drop and tap-tap)
+	UFUNCTION() void OnConfirm();
+	UFUNCTION() void OnClear();
+	UZoogiCardWidget* MakeCard(int32 InstanceId, FName CardId);
+	UTexture2D* ArtFor(FName CardId);
+	void Fly(FVis& V, const FVector2D& To, float Dur, float Delay, float ToScale, float ToAngle, float Lift, bool bToLayout);
+	void DiscardAll(const FZoogiCardPlayerState* S);
+	FVector2D GravePos() const;           // the discard portal (grave light) in widget px
+	static constexpr float GraveScale = 0.22f;
+	void TickPlaytest1(AZoogiGameMode* G, float Dt);
+	int32 AwAutoKey = -1;                 // (player, turn) the Choose-your-Awaken view auto-opened for
+	float AwAutoT = 0.f;
+	bool bAwView = false;
+	int32 PtStep = 0; float PtT = 0.f; int32 PtTurns = 0; FString PtShots; TSet<int32> PtGone; int32 PtFails = 0, PtPasses = 0, PtLastTurn = -1;
+	void UpdateTarget(AZoogiGameMode* G);
+	bool OverTarget() const;
+	FVector2D Local(const FPointerEvent& Ev) const;
+	static FLinearColor TypeColor(uint8 Type);
+
+	UPROPERTY() TObjectPtr<UCanvasPanel> Root;
+	UPROPERTY() TObjectPtr<UButton> ConfirmBtn;
+	FBox2D ConfirmR = FBox2D(ForceInit), ClearR = FBox2D(ForceInit);
+	bool bFramedBtns = false, bConfirmLive = false, bClearLive = false;
+	UPROPERTY() TObjectPtr<UButton> ClearBtn;
+	UPROPERTY() TObjectPtr<UTextBlock> ConfirmText;
+	UPROPERTY() TObjectPtr<UButton> AwakenBtn;   // Oct 14 urgent: cards-mode Awaken request lives in the tray (was keyboard A only)
+	UPROPERTY() TObjectPtr<UTextBlock> AwakenText;
+	UFUNCTION() void OnAwaken();
+	UPROPERTY() TArray<TObjectPtr<UZoogiCardWidget>> AllCards;
+	UPROPERTY() TMap<FName, TObjectPtr<UTexture2D>> ArtCache;
+	TSet<FName> ArtTried;
+
+	TMap<int32, FVis> Vis;        // by card instance id
+	TMap<int32, TSet<int32>> KnownHand; // Oct 14: per player, instance ids already shown (kept cards rise back instead of a draw)
+	TMap<int32, int32> KnownTurnFor;
+	TArray<int32> HandOrder;      // instance ids in hand-slot order (Hand state only)
+	int32 KeyPlayer = -1, KeyTurn = -1;
+	bool bShown = false, bInteractive = false, bShownPlayedLog = false;
+	TWeakObjectPtr<UZoogiCardWidget> Hovered, Dragging;
+	TWeakObjectPtr<UZoogiCardWidget> Armed; // touch: tapped card waiting for a tap on the target
+	FVector2D PressPos = FVector2D::ZeroVector;
+	float PressHeld = 0.f;                  // long-press (>= 0.4 s, no move) shows the tooltip
+	FVector2D Cursor = FVector2D::ZeroVector;
+	FGeometry CachedGeo;
+	FVector2D ViewSize = FVector2D(1920.f, 1080.f);
+	float Time = 0.f;
+	// framed HUD (v2): the fan sits fully inside the bottom tray, bigger; tooltip goes in the tray beside the fan
+	float FramedFanL = -1.f, FramedTrayTop = 0.f;
+	TArray<FReact> Reacts;
+
+	// display copies (refreshed each tick, painted in NativePaint)
+	int32 EnergyShown = 0, EnergyMax = 5, DrawCount = 0, DiscardCount = 0, LastLoggedEnergy = -999;
+	bool bEnergyVisible = false;
+	ZoogiUIStyle::FBarJuice EnergyJuice; // uistyle: Card Energy counter juice (display only)
+	FVector2D TargetPos = FVector2D::ZeroVector;
+	float TargetR = 60.f;
+	bool bTargetOnScreen = false;
+	FString TargetName, DragPreview, HoverTip, HoverTitle;
+	bool bDragValid = false;
+	FLinearColor DragColor = FLinearColor::White;
+};

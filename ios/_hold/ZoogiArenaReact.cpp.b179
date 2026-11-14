@@ -1,0 +1,376 @@
+// b142: arena responses to knock-outs - see ZoogiArenaReact.h.
+#include "ZoogiArenaReact.h"
+#include "ZoogiRoll.h"
+#include "ZoogiGameMode.h"
+#include "ZoogiArena.h"
+#include "ZoogiBall.h"
+#include "ZoogiOrb.h"
+#include "ZoogiObstacle.h"
+#include "ZoogiFX.h"
+#include "ZoogiTypes.h"
+#include "ZoogiEpic.h"
+#include "ZoogiHaptics.h"
+#include "ZoogiFeel.h"
+#include "ZoogiFrozenFun.h"
+#include "ZoogiSkillLab.h"
+#include "ZoogiFabFX.h"
+#include "Components/SphereComponent.h"
+#include "Components/PrimitiveComponent.h"
+#include "Containers/Ticker.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
+#include "GameFramework/WorldSettings.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
+
+namespace ZoogiArenaReact
+{
+	namespace
+	{
+		bool ReactFlag(const TCHAR* N) { return FParse::Param(FCommandLine::Get(), N); }
+		const FName KoPlayerId(TEXT("ko_player")), KoOrbId(TEXT("ko_orb"));
+
+		struct FReactFly { TWeakObjectPtr<AZoogiBall> B; TWeakObjectPtr<UWorld> W; FVector P = FVector::ZeroVector, V = FVector::ZeroVector; float T = 0.f, Dur = 1.1f, Spark = 0.f; FLinearColor Tint = FLinearColor::White; };
+		TArray<FReactFly> GReactFlies;
+		FTSTicker::FDelegateHandle GReactFlyTick;
+
+		bool ReactFlyStep(float RealDt)
+		{
+			for (int32 i = GReactFlies.Num() - 1; i >= 0; --i)
+			{
+				FReactFly& F = GReactFlies[i];
+				AZoogiBall* B = F.B.Get(); UWorld* W = F.W.Get();
+				if (!B || !W || !B->bOut || !B->Sphere) { GReactFlies.RemoveAt(i); continue; }
+				const float Dil = W->GetWorldSettings() ? W->GetWorldSettings()->TimeDilation : 1.f;
+				const float Dt = FMath::Min(RealDt, 0.05f) * Dil;
+				F.T += Dt;
+				F.P += F.V * Dt;
+				F.V *= FMath::Exp(-0.75f * Dt); // drifts out, slowing a little (no gravity)
+				B->KeepVisibleWhileOut();
+				if (B->IsHidden()) B->SetActorHiddenInGame(false);
+				B->Sphere->SetWorldLocation(F.P, false, nullptr, ETeleportType::TeleportPhysics);
+				B->AddActorWorldRotation(FRotator(260.f * Dt, 420.f * Dt, 180.f * Dt)); // the tumble
+				if ((F.Spark -= Dt) <= 0.f) { F.Spark = 0.07f; AZoogiFX::Spawn(W, F.P, F.Tint, 45.f, 0.35f, false, 6.f); }
+				if (F.T >= F.Dur)
+				{
+					PlayerKOBlast(W, F.P, F.Tint);
+					ZoogiUtil::PlaySfx(W, TEXT("CritBoom"), 0.7f, 0.9f);
+					B->SetActorHiddenInGame(true);
+					UE_LOG(LogZoogi, Log, TEXT("COSMOS zero-g: P%d floated out to (%.0f, %.0f, %.0f) r%.0f and blew up"), B->PlayerIndex + 1, F.P.X, F.P.Y, F.P.Z, FVector2D(F.P.X, F.P.Y).Size());
+					GReactFlies.RemoveAt(i);
+				}
+			}
+			if (GReactFlies.Num() == 0) { GReactFlyTick.Reset(); return false; }
+			return true;
+		}
+
+		// ---- stands
+		struct FReactStand { int32 Mode = 0; FVector Hit = FVector::ZeroVector, N = FVector::ZeroVector, Dir = FVector::ForwardVector; double T0 = 0.0, Eta = 0.0, Until = 0.0; };
+		TMap<TWeakObjectPtr<AZoogiBall>, FReactStand> GReactStand;
+		TArray<FBox> GReactStandBoxes; TWeakObjectPtr<AZoogiArena> GReactStandArena;
+
+		void ReactCollectStands(AZoogiGameMode* G)
+		{
+			if (GReactStandArena.Get() == G->Arena.Get()) return;
+			GReactStandArena = G->Arena; GReactStandBoxes.Reset();
+			for (TActorIterator<AActor> It(G->GetWorld()); It; ++It)
+			{
+				TInlineComponentArray<UPrimitiveComponent*> Prims(*It);
+				for (UPrimitiveComponent* P : Prims)
+					if (P && P->ComponentHasTag(TEXT("ZStand")) && P->GetCollisionEnabled() != ECollisionEnabled::NoCollision) GReactStandBoxes.Add(P->Bounds.GetBox());
+			}
+			UE_LOG(LogZoogi, Log, TEXT("STANDS: %d grandstand colliders found (theme %d)"), GReactStandBoxes.Num(), G->Arena ? (int32)G->Arena->GetTheme() : -1);
+		}
+
+		void ReactCrash(AZoogiGameMode* G, AZoogiBall* B, const FVector& At, FReactStand& S)
+		{
+			UWorld* W = G->GetWorld();
+			const double Now = W->GetTimeSeconds();
+			const FVector C = G->Arena ? G->Arena->GetActorLocation() : FVector::ZeroVector;
+			// the stands take the hit
+			AZoogiFX::Spawn(W, At, FLinearColor(0.9f, 0.95f, 1.f), 300.f, 0.6f, true, 10.f);
+			AZoogiFX::Niagara(W, TEXT("NS_Burst_Gold"), At, FRotator::ZeroRotator, 1.3f);
+			AZoogiFX::Stylized(W, TEXT("Smoke_v2"), At, 0.7f);
+			ZoogiEpic::Hit(G, ZoogiEpic::EHit::Big);
+			ZoogiHaptics::Kick(0.7f, W, TEXT("stands_crash"));
+			ZoogiUtil::PlaySfx(G, TEXT("CritBoom"), 0.75f, 0.8f);
+			ZoogiFeel::TryCrowd(G, 1.f, true);
+			ZoogiShow::Event(W, ZoogiShow::EEvent::BigScore, At, 3.f); // the crowd jumps + roars, fireworks
+			// the CROWD TOKEN: +1 crystal (no cap)
+			const int32 Pi = B->PlayerIndex;
+			if (Pi >= 0 && Pi < 4 && G->AwakenChargeOn()) G->AwakenCharge[Pi] += 1;
+			G->PublicPopup(TEXT("STANDS CRASH!  +1 CROWD TOKEN"), At + FVector(0.f, 0.f, 170.f), FLinearColor(1.f, 0.82f, 0.25f));
+			G->PublicFeed(FString::Printf(TEXT("P%d %s  smashed into the stands - the crowd throws it back  +1 crystal"), Pi + 1, *B->Def.Name), FLinearColor(1.f, 0.82f, 0.25f));
+			// the crowd throws it back onto the court (a lob that lands inside the court on the same side)
+			const FVector L = B->BallLocation();
+			FVector In = FVector(C.X - L.X, C.Y - L.Y, 0.f); if (!In.Normalize()) In = FVector::ForwardVector;
+			const float KR = G->Arena ? G->Arena->GetKnockoffRadius() : ZoogiConst::KnockoffRadius;
+			const FVector Tg = C - In * (KR * 0.55f) + FVector(0.f, 0.f, ZoogiConst::ZoogiRadius);
+			const float Tf = 1.6f, Gz = W->GetGravityZ();
+			FVector Vel = (Tg - L) / Tf; Vel.Z = (Tg.Z - L.Z) / Tf - 0.5f * Gz * Tf;
+			if (B->Sphere) { B->Sphere->SetPhysicsLinearVelocity(Vel); B->Sphere->SetPhysicsAngularVelocityInDegrees(FVector::ZeroVector); }
+			S.Mode = 2; S.T0 = Now; S.Until = Now + 3.5;
+			G->TakeShotDelayed(TEXT("stands_crash"), 0.15f);
+			UE_LOG(LogZoogi, Log, TEXT("STANDS crash P%d at (%.0f, %.0f, %.0f) - not out: crowd token (crystals %d), thrown back (%.0f cm/s)"), Pi + 1, At.X, At.Y, At.Z, Pi >= 0 && Pi < 4 ? G->AwakenCharge[Pi] : -1, Vel.Size());
+		}
+	}
+
+	bool CosmicEdgeOut(AZoogiGameMode* G, AZoogiBall* B, const FVector& L)
+	{
+		static const bool bOff = ReactFlag(TEXT("ZoogiCosmicGravity"));
+		if (bOff || !G || !B || !G->Arena || G->Arena->GetTheme() != EZoogiArena::Cosmic || G->bRoyaleMode) return false;
+		static TMap<TWeakObjectPtr<AZoogiBall>, double> GOnCourt;
+		const double Now = G->GetWorld()->GetTimeSeconds();
+		const FVector2D P(L.X, L.Y);
+		if (!G->Arena->IsOffCourt(P)) { GOnCourt.FindOrAdd(B) = Now; return false; }
+		const double* Last = GOnCourt.Find(B);
+		if (!Last || Now - *Last > 4.0) return false; // never on the court lately (pad flight, spawn)
+		const FVector2D C(G->Arena->GetActorLocation().X, G->Arena->GetActorLocation().Y);
+		return (P - C).Size() > G->Arena->GetKnockoffRadius() + 10.f;
+	}
+
+	void StartFlyOut(AZoogiGameMode* G, AZoogiBall* B, const FVector& V, const FLinearColor& Tint)
+	{
+		if (!G || !B) return;
+		FReactFly F; F.B = B; F.W = G->GetWorld(); F.P = B->BallLocation(); F.Tint = Tint;
+		FVector V2(V.X, V.Y, 0.f);
+		const FVector Out = FVector(F.P.X - G->Arena->GetActorLocation().X, F.P.Y - G->Arena->GetActorLocation().Y, 0.f).GetSafeNormal();
+		if (V2.Size() < 700.f || FVector::DotProduct(V2.GetSafeNormal(), Out) < 0.3f) V2 = (V2.GetSafeNormal() + Out * 2.f).GetSafeNormal() * FMath::Max(700.f, V2.Size());
+		V2 = V2.GetClampedToMaxSize(2200.f);
+		F.V = V2 + FVector(0.f, 0.f, 70.f); // a gentle drift up: no gravity pulls it down
+		F.P.Z = FMath::Max(F.P.Z, G->Arena->GetActorLocation().Z + ZoogiConst::ZoogiRadius);
+		GReactFlies.Add(F);
+		if (!GReactFlyTick.IsValid()) GReactFlyTick = FTSTicker::GetCoreTicker().AddTicker(FTickerDelegate::CreateStatic(&ReactFlyStep));
+		UE_LOG(LogZoogi, Log, TEXT("COSMOS zero-g: P%d floats out at %.0f cm/s (no fall), blast in %.1f s"), B->PlayerIndex + 1, V2.Size(), F.Dur);
+	}
+
+	void PlayerKOBlast(UWorld* W, const FVector& At, const FLinearColor& Tint)
+	{
+		if (!W) return;
+		FLinearColor Col(1.f, 0.3f, 0.25f), T2 = Tint, Lc;
+		if (ZoogiSkillLab::TintFor(KoPlayerId, Lc)) { Col = Lc; T2 = Lc; }
+		const float Sz = ZoogiSkillLab::BlastSizeFor(KoPlayerId);
+		AZoogiFX::BigBlastShake(W, 1.5f * Sz); // b171 (Evan): every knockout blast shakes the screen
+		AZoogiFX::Spawn(W, At, Col, 220.f * Sz, 0.7f, false, 7.f);
+		AZoogiFX::Niagara(W, TEXT("NS_Burst_Red"), At, FRotator::ZeroRotator, 1.4f * Sz);
+		AZoogiFX::ShockwaveByMag(W, At, 30000.f, &T2, true, true);
+		// b83: the pack's purple cartoon blast + ray streaks (-ZoogiOldKOBlast = b55 v3); b142: the lab's PLAYER KNOCKOUT pick replaces it
+		static const bool bOld = ReactFlag(TEXT("ZoogiOldKOBlast"));
+		const TCHAR* Bx = ZoogiSkillLab::BlastFor(KoPlayerId);
+		if (bOld) AZoogiFX::Stylized(W, TEXT("Big_Explosion_v3"), At, 0.7f * Sz);
+		else if (!Bx) { AZoogiFX::Stylized(W, TEXT("Big_Explosion_v2"), At, 1.0f * Sz); AZoogiFX::Stylized(W, TEXT("Mid_Explosion_v2"), At, 0.9f * Sz); }
+		else if (*Bx) AZoogiFX::Stylized(W, Bx, At, 1.0f * Sz);
+		static const bool bNoWorld = ReactFlag(TEXT("ZoogiNoKORocks")); // b178b (Evan 19:29: "add the rock effect back to the knockout explosion"); -ZoogiNoKORocks = off
+		if (!bNoWorld) AZoogiFabFX::Play(W, TEXT("/Game/EarthbenderV1/Particles/NiagaraSystems/NS_Earthbender_V04.NS_Earthbender_V04"), At - FVector(0, 0, 40.f), 1.3f * Sz, 3.f);
+	}
+
+	void OrbOutBlast(UWorld* W, const FVector& At, bool bStar)
+	{
+		if (!W) return;
+		FLinearColor Col = bStar ? FLinearColor(1.f, 0.75f, 0.2f) : FLinearColor(0.5f, 0.85f, 1.f), Lc;
+		if (ZoogiSkillLab::TintFor(KoOrbId, Lc)) Col = Lc;
+		const float Sz = ZoogiSkillLab::BlastSizeFor(KoOrbId);
+		AZoogiFX::Spawn(W, At, Col, 160.f * Sz, 0.6f, false, 7.f);
+		AZoogiFX::Niagara(W, bStar ? TEXT("NS_Burst_Gold") : TEXT("NS_Burst_Blue"), At, FRotator::ZeroRotator, Sz);
+		const TCHAR* Bx = ZoogiSkillLab::BlastFor(KoOrbId);
+		if (Bx && *Bx) AZoogiFX::Stylized(W, Bx, At, 0.5f * Sz);
+	}
+
+	bool FallOut(AZoogiGameMode* G, const FVector& L)
+	{
+		static float Fo = -2.f; if (Fo < -1.f) { Fo = 0.f; FParse::Value(FCommandLine::Get(), TEXT("ZoogiFallOut="), Fo); }
+		if (Fo <= 0.f || !G || !G->Arena || G->Arena->GetTheme() == EZoogiArena::Ancient) return false;
+		return L.Z < -Fo && G->Arena->IsOffCourt(FVector2D(L.X, L.Y));
+	}
+
+	void KOShowTick(AZoogiGameMode* G)
+	{
+		if (!G || !G->Arena) return;
+		static const bool bLine = ReactFlag(TEXT("ZoogiKOLine")), bShow = ReactFlag(TEXT("ZoogiKOShow"));
+		static TWeakObjectPtr<AZoogiArena> GLined;
+		if (bLine && GLined.Get() != G->Arena)
+		{
+			GLined = G->Arena;
+			float Cap = 600.f; FParse::Value(FCommandLine::Get(), TEXT("ZoogiFlightCap="), Cap);
+			const float Edge = G->Arena->DistanceToEdge(FVector2D::ZeroVector, FVector2D(1.f, 0.f));
+			auto Ring = [&](float R, const FLinearColor& Col, bool bDash, float Wd)
+			{
+				const int32 N = 160;
+				for (int32 i = 0; i < N; ++i)
+				{
+					if (bDash && (i % 2)) continue;
+					const float A0 = 2.f * PI * i / N, A1 = 2.f * PI * (i + 1) / N, Am = (A0 + A1) * 0.5f;
+					const float SegL = R * (A1 - A0) * (bDash ? 0.8f : 1.05f);
+					UStaticMeshComponent* M = NewObject<UStaticMeshComponent>(G->Arena);
+					M->SetStaticMesh(ZoogiUtil::BasicShape(TEXT("Cube")));
+					M->SetMaterial(0, ZoogiUtil::GlowMID(G->Arena, Col, 3.f));
+					M->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+					M->SetCastShadow(false);
+					M->RegisterComponent();
+					M->SetWorldLocationAndRotation(FVector(FMath::Cos(Am) * R, FMath::Sin(Am) * R, 4.f), FRotator(0.f, FMath::RadiansToDegrees(Am) + 90.f, 0.f));
+					M->SetWorldScale3D(FVector(SegL / 100.f, Wd / 100.f, 0.03f));
+				}
+			};
+			Ring(Edge, FLinearColor::White, true, 22.f);
+			Ring(Edge + Cap, FLinearColor(1.f, 0.1f, 0.1f), false, 30.f);
+			UE_LOG(LogZoogi, Log, TEXT("KO LINE: court edge r%.0f (white), out line r%.0f (red, +%.0f cm)"), Edge, Edge + Cap, Cap);
+		}
+		if (!bShow) return;
+		static int32 Stage = 0; static double T0 = 0.0; static int32 NShot = 0; static TWeakObjectPtr<AZoogiBall> GB;
+		const double Now = G->GetWorld()->GetTimeSeconds();
+		if (Stage == 0 && G->Phase == EZoogiPhase::Aiming && Now > 6.0) { Stage = 1; T0 = Now; }
+		if (Stage == 1 && G->Phase != EZoogiPhase::Aiming) Stage = 2; // the shot went before the aim frame
+		if (Stage == 1 && Now - T0 > 1.5) { G->TakeShot(TEXT("koshow_aim_view")); Stage = 2; }
+		if (Stage == 2 && G->Phase == EZoogiPhase::Rolling)
+		{
+			AZoogiBall* B = G->Balls.IsValidIndex(G->ActivePlayer) ? G->Balls[G->ActivePlayer] : nullptr;
+			if (B && B->Sphere && !B->bOut)
+			{
+				FVector2D D(B->BallLocation().X, B->BallLocation().Y); if (D.SizeSquared() < 1.f) D = FVector2D(1.f, 0.f); D.Normalize();
+				const float Edge = G->Arena->DistanceToEdge(FVector2D::ZeroVector, D);
+				const FVector P(D.X * (Edge - 260.f), D.Y * (Edge - 260.f), B->BallLocation().Z);
+				B->Sphere->SetWorldLocation(P, false, nullptr, ETeleportType::TeleportPhysics);
+				B->Sphere->SetPhysicsLinearVelocity(FVector(D.X, D.Y, 0.f) * 1500.f + FVector(0.f, 0.f, 220.f));
+				GB = B; Stage = 3; T0 = Now; NShot = 0;
+				UE_LOG(LogZoogi, Log, TEXT("KO SHOW: P%d pushed off the ring toward (%.2f, %.2f), edge r%.0f"), B->PlayerIndex + 1, D.X, D.Y, Edge);
+			}
+		}
+		if (Stage == 3)
+		{
+			if (Now - T0 >= 0.15 * NShot && NShot < 18) { G->TakeShot(FString::Printf(TEXT("koshow_%02d"), NShot)); ++NShot; }
+			if (NShot >= 18) Stage = 4;
+		}
+	}
+
+	bool FlightCapOut(AZoogiGameMode* G, AZoogiBall* B, const FVector& L)
+	{	// b149b: off the court and 6 m past its last spot on it = out, unless a building / wall is right ahead (it hits that first)
+		static const bool bOff = ReactFlag(TEXT("ZoogiNoFlightCap"));
+		static float Cap = -1.f; if (Cap < 0.f) { Cap = 600.f; FParse::Value(FCommandLine::Get(), TEXT("ZoogiFlightCap="), Cap); }
+		if (bOff || !G || !B || !G->Arena || !B->Sphere) return false;
+		static TMap<TWeakObjectPtr<AZoogiBall>, FVector> GLastOn;
+		const FVector2D P(L.X, L.Y);
+		if (!G->Arena->IsOffCourt(P) && L.Z > ZoogiConst::FallOutZ) { GLastOn.Add(B, L); return false; }
+		const FVector* On = GLastOn.Find(B);
+		if (!On) return false;
+		const float Gone = FVector::Dist2D(L, *On);
+		if (Gone < Cap) return false;
+		const FVector V = B->GetBallVelocity(); const FVector V2(V.X, V.Y, 0.f);
+		if (V2.Size() > 150.f)
+		{
+			FCollisionQueryParams Q(SCENE_QUERY_STAT(ZoogiFlightCap), false);
+			for (AZoogiBall* Zb : G->Balls) if (Zb) Q.AddIgnoredActor(Zb);
+			for (AZoogiOrb* O : G->Orbs) if (O) Q.AddIgnoredActor(O);
+			FCollisionObjectQueryParams Ob; Ob.AddObjectTypesToQuery(ECC_WorldStatic); Ob.AddObjectTypesToQuery(ECC_WorldDynamic);
+			FHitResult H;
+			const float Ahead = FMath::Clamp(V2.Size() * 0.4f, 250.f, 900.f);
+			if (G->GetWorld()->SweepSingleByObjectType(H, L, L + V2.GetSafeNormal() * Ahead, FQuat::Identity, Ob, FCollisionShape::MakeSphere(ZoogiConst::ZoogiRadius * 0.8f), Q) && !H.bStartPenetrating)
+				return false; // about to slam into a building / wall / crowd: let it hit
+		}
+		UE_LOG(LogZoogi, Log, TEXT("FLIGHT CAP: P%d is %.0f cm past the court (cap %.0f, z %.0f) - out"), B->PlayerIndex + 1, Gone, Cap, L.Z);
+		GLastOn.Remove(B);
+		return true;
+	}
+
+	bool StandsCheck(AZoogiGameMode* G, AZoogiBall* B, const FVector& L)
+	{
+		static const bool bOff = ReactFlag(TEXT("ZoogiNoStandsSave"));
+		if (bOff || !G || !B || !G->Arena || G->bRoyaleMode || !B->Sphere) return false;
+		UWorld* W = G->GetWorld();
+		const double Now = W->GetTimeSeconds();
+		static bool bStandsTestDone = false;
+		if (!bStandsTestDone && B->PlayerIndex == 0 && Now > 8.0 && G->Phase == EZoogiPhase::Rolling && G->ActivePlayer == 0 && ReactFlag(TEXT("ZoogiStandsTest")) && G->Arena->GetTheme() == EZoogiArena::Frozen)
+		{	// b142 test: fling P1 at the nearest grandstand
+			bStandsTestDone = true;
+			ReactCollectStands(G);
+			float BestD = 1e9f; FVector Tg = FVector::ZeroVector;
+			for (const FBox& Bx : GReactStandBoxes) { const float D = FVector::Dist2D(Bx.GetCenter(), L); if (D < BestD) { BestD = D; Tg = Bx.GetCenter(); } }
+			if (BestD < 1e8f)
+			{
+				const FVector Ctr = G->Arena->GetActorLocation();
+				const FVector Dir = FVector(Tg.X - Ctr.X, Tg.Y - Ctr.Y, 0.f).GetSafeNormal();
+				B->Sphere->SetWorldLocation(Ctr + Dir * 2180.f + FVector(0.f, 0.f, ZoogiConst::ZoogiRadius + 20.f), false, nullptr, ETeleportType::TeleportPhysics);
+				B->Sphere->SetPhysicsLinearVelocity(Dir * 2200.f + FVector(0.f, 0.f, 320.f));
+				UE_LOG(LogZoogi, Log, TEXT("STANDS TEST: P1 flung at the grandstand %.0f cm away"), BestD);
+				G->TakeShotDelayed(TEXT("stands_fling"), 0.5f);
+			}
+		}
+		FReactStand* S = GReactStand.Find(B);
+		if (S && S->Mode == 2)
+		{	// being thrown back by the crowd: no ring-out until it is back on the court (or it really falls)
+			if (L.Z < ZoogiConst::FallOutZ || Now > S->Until) { GReactStand.Remove(B); return false; }
+			if (Now - S->T0 > 0.5 && !G->Arena->IsOffCourt(FVector2D(L.X, L.Y))) { GReactStand.Remove(B); return false; }
+			return true;
+		}
+		if (S && S->Mode == 1)
+		{	// flying into the stands
+			if (L.Z < ZoogiConst::FallOutZ) { GReactStand.Remove(B); return false; }
+			const FVector V = B->GetBallVelocity();
+			if (FVector::Dist(L, S->Hit) < ZoogiConst::ZoogiRadius + 70.f || FVector::DotProduct(V.GetSafeNormal2D(), S->Dir) < 0.2f || Now > S->Eta)
+				ReactCrash(G, B, S->Hit, *S);
+			return true;
+		}
+		const FVector C = G->Arena->GetActorLocation();
+		const FVector2D R2(L.X - C.X, L.Y - C.Y);
+		// the solid stands of the b53 arenas: a Zoogi that reached them
+		if (AZoogiArena::StandBlockR > 0.f && L.Z > -120.f && R2.Size() > AZoogiArena::StandBlockR)
+		{
+			FReactStand& Ns = GReactStand.FindOrAdd(B);
+			ReactCrash(G, B, L, Ns);
+			return true;
+		}
+		// Frozen: the islet bleachers ahead of a Zoogi flying off the court
+		if (G->Arena->GetTheme() != EZoogiArena::Frozen || L.Z < C.Z - 150.f || !G->Arena->IsOffCourt(FVector2D(L.X, L.Y))) return false;
+		const FVector V = B->GetBallVelocity();
+		const FVector V2(V.X, V.Y, 0.f);
+		if (V2.Size() < 350.f || FVector::DotProduct(V2.GetSafeNormal(), FVector(R2.X, R2.Y, 0.f).GetSafeNormal()) < 0.15f) return false;
+		ReactCollectStands(G);
+		const FVector Dir = V2.GetSafeNormal();
+		const float Len = FMath::Clamp(V2.Size() * 1.3f, 500.f, 2600.f);
+		float BestT = 1e9f; FVector BestHit = FVector::ZeroVector;
+		for (const FBox& Bx : GReactStandBoxes)
+		{
+			const FBox Ex = Bx.ExpandBy(ZoogiConst::ZoogiRadius);
+			FVector Hp, Hn; float Ht = 0.f;
+			const FVector A = L, Bb = L + Dir * Len;
+			if (FMath::LineExtentBoxIntersection(Ex, A, Bb, FVector::ZeroVector, Hp, Hn, Ht) && Ht < BestT) { BestT = Ht; BestHit = Hp; }
+		}
+		if (BestT > 1.f) return false;
+		FReactStand& Ns = GReactStand.FindOrAdd(B);
+		Ns = FReactStand(); Ns.Mode = 1; Ns.Hit = BestHit; Ns.Dir = Dir; Ns.T0 = Now; Ns.Eta = Now + (BestT * Len) / FMath::Max(300.f, V2.Size()) + 0.35;
+		UE_LOG(LogZoogi, Log, TEXT("STANDS: P%d is flying into the stands (%.0f cm ahead) - not out"), B->PlayerIndex + 1, BestT * Len);
+		return true;
+	}
+
+	void OpenCosmicRim(AZoogiArena* A)
+	{
+		static const bool bOff = ReactFlag(TEXT("ZoogiCosmicRimSolid"));
+		if (bOff || !A || A->GetTheme() != EZoogiArena::Cosmic) return;
+		int32 No = 0, Nr = 0;
+		for (AZoogiObstacle* O : A->GetObstacles())
+		{
+			if (!O) continue;
+			const FString Nm = O->ObsName.ToString();
+			if (!Nm.StartsWith(TEXT("DeflectorWing")) && !Nm.StartsWith(TEXT("BankArc")) && !Nm.StartsWith(TEXT("ReentryPipe"))) continue;
+			O->Triggers.Reset();
+			O->SetActorEnableCollision(false);
+			O->SetActorHiddenInGame(true);
+			++No;
+		}
+		const float KR = A->GetKnockoffRadius();
+		const FVector Ac = A->GetActorLocation();
+		TInlineComponentArray<UPrimitiveComponent*> Prims(A);
+		for (UPrimitiveComponent* P : Prims)
+		{
+			if (!P || P->GetCollisionEnabled() == ECollisionEnabled::NoCollision) continue;
+			const FBoxSphereBounds Bd = P->Bounds;
+			const float Rc = FVector2D(Bd.Origin.X - Ac.X, Bd.Origin.Y - Ac.Y).Size();
+			if (Rc > KR * 0.75f && Rc < KR * 1.3f && Bd.SphereRadius < 450.f && Bd.Origin.Z > Ac.Z - 60.f)
+			{
+				P->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+				P->SetVisibility(false);
+				++Nr;
+			}
+		}
+		UE_LOG(LogZoogi, Log, TEXT("COSMOS rim opened: %d edge obstacles (wings / bank arcs / re-entry pipes) and %d rim bumpers no longer bounce things back in"), No, Nr);
+	}
+}

@@ -1,0 +1,332 @@
+// b180: Earthbender map events - see ZoogiEarthEvents.h
+#include "ZoogiEarthEvents.h"
+#include "ZoogiRoll.h"
+#include "ZoogiGameMode.h"
+#include "ZoogiArena.h"
+#include "ZoogiBall.h"
+#include "ZoogiOrb.h"
+#include "ZoogiTypes.h"
+#include "ZoogiFX.h"
+#include "ZoogiFabFX.h"
+#include "ZoogiHaptics.h"
+#include "ZoogiActionFun.h"
+#include "ZoogiSkills.h"
+#include "ZoogiRedirect.h"
+#include "Engine/World.h"
+#include "TimerManager.h"
+#include "Engine/Canvas.h"
+#include "Engine/StaticMesh.h"
+#include "Engine/StaticMeshActor.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/SphereComponent.h"
+#include "CanvasItem.h"
+#include "CollisionQueryParams.h"
+#include "GameFramework/PlayerController.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
+
+void ZoogiFunCanvasText(UCanvas* C, const FString& S, float X, float Y, float Px, const FLinearColor& Col, int32 Align, int32 Which);
+
+namespace ZoogiEarthEvents
+{
+	namespace
+	{
+		enum class EK : uint8 { Shift, Tremor, Cataclysm };
+		struct FEv { const TCHAR* Name; int32 V; EK K; bool bWall; };
+		struct FSet { TArray<FEv> Ev; FLinearColor Col = FLinearColor::White; bool bSnow = false; };
+
+		FString FxPath(int32 V) { return FString::Printf(TEXT("/Game/EarthbenderV1/Particles/NiagaraSystems/NS_Earthbender_V%02d.NS_Earthbender_V%02d"), V, V); }
+
+		const FSet& SetFor(const AZoogiGameMode* G)
+		{
+			static TMap<int32, FSet> M;
+			if (M.Num() == 0)
+			{
+				auto Add = [](int32 Key, FLinearColor Col, bool bSnow, TArray<FEv> Ev) { FSet Fs; Fs.Ev = MoveTemp(Ev); Fs.Col = Col; Fs.bSnow = bSnow; M.Add(Key, MoveTemp(Fs)); };
+				const FLinearColor Slate(0.55f, 0.6f, 0.8f), Jade(0.4f, 0.9f, 0.75f), Sap(0.25f, 0.45f, 1.f), Obs(0.55f, 0.4f, 0.75f), Sand(0.95f, 0.78f, 0.5f), Gold(1.f, 0.8f, 0.25f), Rune(0.3f, 0.75f, 1.f), Snow(0.85f, 0.95f, 1.f);
+				Add((int32)EZoogiArena::Meadow, Jade, false, { { TEXT("JADE WALL"), 10, EK::Shift, true }, { TEXT("JADE COLUMNS"), 36, EK::Shift, true }, { TEXT("MOSS TOWER"), 13, EK::Shift, false },
+					{ TEXT("JADE BOULDER"), 6, EK::Tremor, false }, { TEXT("BOULDER FOUNTAIN"), 8, EK::Tremor, false }, { TEXT("BOULDER FOUNTAIN"), 8, EK::Cataclysm, false } });
+				Add((int32)EZoogiArena::Frozen, Snow, true, { { TEXT("SNOWCAP PILLAR"), 11, EK::Shift, false }, { TEXT("SAPPHIRE BLOCK"), 21, EK::Shift, false },
+					{ TEXT("SAPPHIRE BURST"), 20, EK::Tremor, false }, { TEXT("FROSTROCK GROVE"), 14, EK::Cataclysm, false } });
+				Add((int32)EZoogiArena::Volcanic, Obs, false, { { TEXT("OBSIDIAN WALL"), 16, EK::Shift, true }, { TEXT("OBSIDIAN SPIKE"), 15, EK::Shift, false },
+					{ TEXT("OBSIDIAN CLUSTER"), 17, EK::Tremor, false }, { TEXT("ROCK GEYSER"), 33, EK::Tremor, false }, { TEXT("OBSIDIAN BURST"), 18, EK::Cataclysm, false } });
+				Add((int32)EZoogiArena::Cosmic, Obs, false, { { TEXT("STARBURST SPIKES"), 32, EK::Shift, false },
+					{ TEXT("SHATTER STAR"), 46, EK::Tremor, false }, { TEXT("OBSIDIAN STAR"), 39, EK::Tremor, false }, { TEXT("EARTH FLASH"), 40, EK::Cataclysm, false } });
+				Add(100, Rune, false, { { TEXT("RUNE WALL"), 26, EK::Shift, true }, { TEXT("RUNE PILLAR"), 25, EK::Shift, false }, { TEXT("RUNE MONOLITH"), 27, EK::Shift, false },
+					{ TEXT("RUNE PILLAR"), 25, EK::Tremor, false }, { TEXT("CRATER RING"), 34, EK::Cataclysm, false } }); // the Underrealm
+				Add((int32)EZoogiArena::Arabian, Sand, false, { { TEXT("SANDSTONE RUINS"), 38, EK::Shift, true }, { TEXT("SANDSTONE SPIRE"), 3, EK::Shift, false }, { TEXT("TOPPLED COLUMNS"), 29, EK::Shift, true },
+					{ TEXT("DESERT RUBBLE"), 5, EK::Tremor, false }, { TEXT("LANDSLIDE"), 31, EK::Cataclysm, false } });
+				Add((int32)EZoogiArena::Tomb, Gold, false, { { TEXT("GOLD WALL"), 24, EK::Shift, true }, { TEXT("GOLD COLUMN"), 35, EK::Shift, false },
+					{ TEXT("GOLD RUSH"), 22, EK::Tremor, false }, { TEXT("GOLD NUGGET"), 23, EK::Tremor, false }, { TEXT("STONE CAGE"), 43, EK::Cataclysm, false } });
+				Add((int32)EZoogiArena::Neon, Rune, false, { { TEXT("SLAB ROW"), 9, EK::Shift, true }, { TEXT("SLAB SLAM"), 47, EK::Tremor, false }, { TEXT("RIFT CRACK"), 48, EK::Cataclysm, false } });
+				const TArray<FEv> Train = { { TEXT("STONE BARRICADE"), 4, EK::Shift, true }, { TEXT("GRANITE BLOCK"), 12, EK::Shift, false },
+					{ TEXT("BOULDER BLOCK"), 2, EK::Tremor, false }, { TEXT("BOULDER PILE"), 50, EK::Cataclysm, false } };
+				Add((int32)EZoogiArena::Training, Slate, false, Train);
+				Add((int32)EZoogiArena::Teaser, Slate, false, Train);
+				Add((int32)EZoogiArena::Ancient, Sap, false, { { TEXT("STONE TEETH"), 28, EK::Shift, true }, { TEXT("SAPPHIRE PILLAR"), 19, EK::Shift, false },
+					{ TEXT("ROCK BURST"), 7, EK::Tremor, false }, { TEXT("RUBBLE STORM"), 42, EK::Cataclysm, false } });
+			}
+			int32 Key = G && G->Arena ? (int32)G->Arena->GetTheme() : 0;
+			if (Key == (int32)EZoogiArena::Cosmic && ZoogiUnderrealm::On()) Key = 100;
+			static const FSet Empty;
+			const FSet* Fs = M.Find(Key);
+			return Fs ? *Fs : Empty;
+		}
+
+		struct FWarn { FVector P = FVector::ZeroVector; float Rad = 300.f; double T0 = 0.0, FireAt = 0.0; int32 V = 0; FString Name; bool bFired = false; };
+		struct FState
+		{
+			TWeakObjectPtr<AZoogiGameMode> G; int32 Seed = 0x7fffffff; AActor* FirstBall = nullptr;
+			int32 Round = -1, TremorTurn = -1, Shifts = 0; bool bCata = false;
+			TArray<TWeakObjectPtr<AActor>> Rocks; TArray<FVector> RockAt;
+			TArray<FWarn> Warns; float FloorZ = 0.f, CourtR = 1500.f; FVector Ctr = FVector::ZeroVector;
+		};
+		FState S;
+		FRandomStream R(11);
+
+		bool On(const AZoogiGameMode* G)
+		{
+			static const bool bOff = FParse::Param(FCommandLine::Get(), TEXT("ZoogiNoEarthEvents"));
+			return !bOff && G && G->Arena && !G->bRoyaleMode && !G->bComboMode && SetFor(G).Ev.Num() > 0;
+		}
+		double Now(const AZoogiGameMode* G) { return G && G->GetWorld() ? G->GetWorld()->GetTimeSeconds() : 0.0; } // game time: frozen while a pick waits
+		float GroundZ(const AZoogiGameMode* G, const FVector& P)
+		{
+			UWorld* W = G->GetWorld(); FHitResult H; FCollisionQueryParams Q(SCENE_QUERY_STAT(ZoogiEarth), false);
+			for (const AZoogiBall* B : G->Balls) if (B) Q.AddIgnoredActor(B);
+			for (const AZoogiOrb* O : G->Orbs) if (O) Q.AddIgnoredActor(O);
+			for (const TWeakObjectPtr<AActor>& Rk : S.Rocks) if (Rk.IsValid()) Q.AddIgnoredActor(Rk.Get());
+			if (W && W->LineTraceSingleByChannel(H, FVector(P.X, P.Y, S.FloorZ + 500.f), FVector(P.X, P.Y, S.FloorZ - 500.f), ECC_WorldStatic, Q)) return H.ImpactPoint.Z;
+			return S.FloorZ;
+		}
+		bool FreeSpot(const AZoogiGameMode* G, float MinR, float MaxR, float Clear, FVector& Out)
+		{
+			for (int32 Try = 0; Try < 40; ++Try)
+			{
+				const float A = R.FRandRange(0.f, 2.f * PI), Rr = S.CourtR * R.FRandRange(MinR, MaxR);
+				const FVector P(S.Ctr.X + FMath::Cos(A) * Rr, S.Ctr.Y + FMath::Sin(A) * Rr, S.FloorZ);
+				bool bOk = true;
+				for (const AZoogiBall* B : G->Balls) if (B && !B->bOut && (FVector::Dist2D(B->BallLocation(), P) < Clear + 120.f || FVector::Dist2D(B->SpawnLocation, P) < 380.f)) bOk = false;
+				for (const AZoogiOrb* O : G->Orbs) if (O && !O->bOut && FVector::Dist2D(O->OrbLocation(), P) < Clear * 0.6f) bOk = false;
+				for (const FVector& Rk : S.RockAt) if (FVector::Dist2D(Rk, P) < 520.f) bOk = false;
+				if (bOk) { Out = FVector(P.X, P.Y, GroundZ(G, P)); return true; }
+			}
+			return false;
+		}
+		void Knock(AZoogiGameMode* G, const FVector& P, float Rad, float Speed, float Up)
+		{	// nobody's credit (like the volcano): a Zoogi thrown off by the ground itself is a fall, not someone's KO
+			for (AZoogiBall* B : G->Balls)
+			{
+				if (!B || B->bOut || !B->Sphere || !B->Sphere->IsSimulatingPhysics()) continue;
+				const FVector D = B->BallLocation() - P; const float Dd = D.Size2D(); if (Dd > Rad) continue;
+				B->Sphere->WakeAllRigidBodies();
+				B->Sphere->SetPhysicsLinearVelocity(B->Sphere->GetPhysicsLinearVelocity() + D.GetSafeNormal2D() * Speed * (1.f - 0.5f * Dd / Rad) + FVector(0, 0, Up));
+				B->LastHitPlayer = -1;
+			}
+			for (AZoogiOrb* O : G->Orbs)
+			{
+				if (!O || O->bOut || !O->Sphere || !O->Sphere->IsSimulatingPhysics()) continue;
+				const FVector D = O->OrbLocation() - P; const float Dd = D.Size2D(); if (Dd > Rad) continue;
+				O->Sphere->WakeAllRigidBodies();
+				O->Sphere->SetPhysicsLinearVelocity(O->Sphere->GetPhysicsLinearVelocity() + D.GetSafeNormal2D() * Speed * 0.8f * (1.f - 0.5f * Dd / Rad) + FVector(0, 0, Up * 0.7f));
+				O->LastHitBy = -1;
+			}
+		}
+		AActor* Rock(AZoogiGameMode* G, const FVector& At, float Yaw, float H, bool bSnow)
+		{	// a rock that stays: the pack's rock (or snow rock) model + an invisible solid cylinder the marbles bounce off
+			UWorld* W = G->GetWorld();
+			FActorSpawnParameters Sp; Sp.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			AStaticMeshActor* A = W->SpawnActor<AStaticMeshActor>(AStaticMeshActor::StaticClass(), FTransform(FRotator(0.f, Yaw, 0.f), At), Sp);
+			if (!A) return nullptr;
+			A->SetMobility(EComponentMobility::Movable);
+			UStaticMeshComponent* Col = A->GetStaticMeshComponent();
+			Col->SetStaticMesh(ZoogiUtil::BasicShape(TEXT("Cylinder")));
+			Col->SetVisibility(false); Col->SetHiddenInGame(true);
+			Col->SetCollisionProfileName(TEXT("BlockAll"));
+			Col->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+			Col->SetRelativeScale3D(FVector(1.5f, 1.5f, H / 100.f)); Col->SetRelativeLocation(FVector(0, 0, H * 0.5f));
+			const int32 Nm = bSnow ? 2 + R.RandRange(0, 2) : R.RandRange(0, 8);
+			const FString Fixed = bSnow ? FString::Printf(TEXT("/Game/EarthbenderV1/Models/SM_Free_Snow_Model_%d.SM_Free_Snow_Model_%d"), Nm, Nm) : FString::Printf(TEXT("/Game/EarthbenderV1/Models/SM_Free_Rock_Model_%d.SM_Free_Rock_Model_%d"), Nm, Nm);
+			if (UStaticMesh* Rm = LoadObject<UStaticMesh>(nullptr, *Fixed, nullptr, LOAD_NoWarn | LOAD_Quiet))
+			{
+				UStaticMeshComponent* Vis = NewObject<UStaticMeshComponent>(A);
+				Vis->SetStaticMesh(Rm); Vis->SetCollisionEnabled(ECollisionEnabled::NoCollision); Vis->SetupAttachment(A->GetRootComponent());
+				const FBox Bb = Rm->GetBoundingBox(); const float Mh = FMath::Max(1.f, Bb.GetSize().Z), Mw = FMath::Max(1.f, FMath::Max(Bb.GetSize().X, Bb.GetSize().Y));
+				const float Ks = FMath::Min(H * 1.05f / Mh, 210.f / Mw);
+				Vis->SetRelativeScale3D(FVector(Ks)); Vis->SetRelativeLocation(FVector(0, 0, -Bb.Min.Z * Ks - 10.f));
+				Vis->SetRelativeRotation(FRotator(R.FRandRange(-6.f, 6.f), R.FRandRange(0.f, 360.f), R.FRandRange(-6.f, 6.f)));
+				Vis->RegisterComponent();
+			}
+			else { Col->SetVisibility(true); Col->SetHiddenInGame(false); } // no model: the cylinder shows
+			S.Rocks.Add(A); S.RockAt.Add(At);
+			// a cap so the court never clogs: the oldest rock crumbles away
+			static const int32 Cap = [] { int32 C = 7; FParse::Value(FCommandLine::Get(), TEXT("ZoogiEarthRockCap="), C); return C; }();
+			while (S.Rocks.Num() > Cap)
+			{
+				if (AActor* Old = S.Rocks[0].Get()) { AZoogiFX::Spawn(W, Old->GetActorLocation(), FLinearColor(0.6f, 0.55f, 0.5f), 200.f, 0.5f, true, 9.f); Old->Destroy(); }
+				S.Rocks.RemoveAt(0); S.RockAt.RemoveAt(0);
+			}
+			return A;
+		}
+		void Callout(AZoogiGameMode* G, const FString& Big, const FString& Sub, const FLinearColor& Col)
+		{
+			if (UZoogiFunSys* F = UZoogiFunSys::Get(G)) F->PublicCallout(Big, Sub, Col, 1.8f, 1.1f);
+		}
+		void Erupt(AZoogiGameMode* G, const FEv& E, const FVector& At, float Scl, float KnockR)
+		{
+			UWorld* W = G->GetWorld();
+			AZoogiFabFX::Play(W, *FxPath(E.V), At, Scl, 8.f);
+			AZoogiFX::Spawn(W, At + FVector(0, 0, 6.f), SetFor(G).Col, KnockR, 0.5f, true, 10.f);
+			ZoogiUtil::PlaySfx(G, TEXT("Rumble"), 0.9f, 0.85f); ZoogiUtil::PlaySfx(G, TEXT("RockSmash"), 1.f, 0.9f);
+			TWeakObjectPtr<AZoogiGameMode> WG = G;
+			FTimerHandle Th; W->GetTimerManager().SetTimer(Th, [WG]() { if (AZoogiGameMode* Gm = WG.Get()) ZoogiUtil::PlaySfx(Gm, TEXT("Debris"), 0.7f, 1.f); }, 0.4f, false);
+			ZoogiHaptics::Kick(0.7f, W, TEXT("earth_event"));
+			Knock(G, At, KnockR, 950.f, 420.f);
+		}
+		void DoShift(AZoogiGameMode* G, bool bCata)
+		{
+			const FSet& Set = SetFor(G);
+			TArray<const FEv*> Pool; for (const FEv& E : Set.Ev) if (E.K == (bCata ? EK::Cataclysm : EK::Shift)) Pool.Add(&E);
+			if (!Pool.Num()) return;
+			const FEv& E = *Pool[R.RandRange(0, Pool.Num() - 1)];
+			if (bCata)
+			{	// the big one: a huge burst from the centre ring + 3 rocks around it
+				const FVector C(S.Ctr.X, S.Ctr.Y, GroundZ(G, S.Ctr));
+				Erupt(G, E, C + FVector(S.CourtR * 0.42f, 0.f, 0.f).RotateAngleAxis(R.FRandRange(0.f, 360.f), FVector::UpVector), 2.2f, S.CourtR * 0.55f);
+				int32 N = 0; FVector P;
+				for (int32 k = 0; k < 6 && N < 3; ++k) if (FreeSpot(G, 0.38f, 0.62f, 300.f, P)) { Rock(G, P, R.FRandRange(0.f, 360.f), 240.f, Set.bSnow); ++N; }
+				Callout(G, FString::Printf(TEXT("CATACLYSM: %s!"), E.Name), TEXT("THE FINAL ROUND - THE ARENA BREAKS"), Set.Col);
+				ZoogiUtil::PlaySfx(G, TEXT("EpicBig"), 1.f, 0.8f);
+				ZoogiHaptics::Kick(1.f, G->GetWorld(), TEXT("earth_cataclysm"));
+				if (!G->ShotDir.IsEmpty()) { G->TakeShotDelayed(TEXT("earth_cataclysm_a"), 0.6f); G->TakeShotDelayed(TEXT("earth_cataclysm_b"), 1.6f); }
+				UE_LOG(LogZoogi, Log, TEXT("EARTH cataclysm %s (V%02d), %d rocks"), E.Name, E.V, N);
+				return;
+			}
+			FVector P;
+			if (!FreeSpot(G, 0.32f, 0.78f, 320.f, P)) { UE_LOG(LogZoogi, Log, TEXT("EARTH shift: no free spot")); return; }
+			const float Yaw = (P - S.Ctr).Rotation().Yaw + 90.f; // walls run around the court (tangent)
+			Erupt(G, E, P, E.bWall ? 1.1f : 1.3f, 300.f);
+			TWeakObjectPtr<AZoogiGameMode> WG = G; const FEv Ec = E; const bool bSnow = Set.bSnow;
+			FTimerHandle Th;
+			G->GetWorld()->GetTimerManager().SetTimer(Th, [WG, Ec, P, Yaw, bSnow]()
+			{
+				AZoogiGameMode* Gm = WG.Get(); if (!Gm) return;
+				if (Ec.bWall) { const FVector T = FRotator(0.f, Yaw, 0.f).Vector(); for (int32 k = -1; k <= 1; ++k) Rock(Gm, P + T * 190.f * k, Yaw, 170.f, bSnow); }
+				else Rock(Gm, P, Yaw, 260.f, bSnow);
+			}, 0.45f, false);
+			++S.Shifts;
+			Callout(G, FString::Printf(TEXT("COURT SHIFT: %s"), E.Name), TEXT("THE ROCK STAYS FOR THE REST OF THE MATCH"), Set.Col);
+			if (!G->ShotDir.IsEmpty()) { static int32 Ns = 0; ++Ns; G->TakeShotDelayed(FString::Printf(TEXT("earth_shift_%d_a"), Ns), 0.5f); G->TakeShotDelayed(FString::Printf(TEXT("earth_shift_%d_b"), Ns), 1.5f); }
+			UE_LOG(LogZoogi, Log, TEXT("EARTH shift %s (V%02d) at (%.0f, %.0f)"), E.Name, E.V, P.X, P.Y);
+		}
+	}
+
+	void Clear()
+	{
+		for (const TWeakObjectPtr<AActor>& A : S.Rocks) if (AActor* X = A.Get()) X->Destroy();
+		const TWeakObjectPtr<AZoogiGameMode> G = S.G;
+		S = FState(); S.G = G;
+	}
+
+	void Tick(AZoogiGameMode* G, float RealDt)
+	{
+		if (!G || !G->GetWorld()) return;
+		AActor* First = G->Balls.Num() ? G->Balls[0].Get() : nullptr;
+		if (S.G.Get() != G || G->Phase == EZoogiPhase::Menu || G->Phase == EZoogiPhase::Forming || S.Seed != G->GameSeed || S.FirstBall != First)
+		{	// a new match (or the menu): the court starts clean
+			if (S.Rocks.Num() || S.Round >= 0) Clear();
+			S.G = G; S.Seed = G->GameSeed; S.FirstBall = First;
+			if (G->Phase == EZoogiPhase::Menu || G->Phase == EZoogiPhase::Forming) return;
+		}
+		if (!On(G)) return;
+		if (S.Round < 0)
+		{
+			S.Ctr = G->Arena->GetActorLocation(); S.CourtR = G->Arena->GetKnockoffRadius();
+			float Zs = 0.f; int32 N = 0; for (const AZoogiBall* B : G->Balls) if (B && !B->bOut) { Zs += B->BallLocation().Z - ZoogiConst::ZoogiRadius; ++N; }
+			S.FloorZ = N ? Zs / N : S.Ctr.Z;
+			R.Initialize(GetTypeHash(G->GameSeed) ^ 0xEA27);
+			S.Round = 0;
+		}
+		// start of a round (its first aim): COURT SHIFT - or, at the final round, the CATACLYSM
+		if (G->Phase == EZoogiPhase::Aiming && G->RoundNumber != S.Round && G->PhaseTime > 0.6f)
+		{
+			S.Round = G->RoundNumber;
+			const bool bFinal = G->RoundNumber >= G->MenuRounds && G->MenuRounds > 1;
+			if (bFinal && !S.bCata) { S.bCata = true; DoShift(G, true); }
+			else DoShift(G, false);
+		}
+		// TREMOR: now and then during a roll - a warning circle first
+		static const bool bTest = FParse::Param(FCommandLine::Get(), TEXT("ZoogiEarthEventsTest"));
+		if (G->Phase == EZoogiPhase::Rolling && S.TremorTurn != G->TurnCounter)
+		{
+			S.TremorTurn = G->TurnCounter;
+			const FSet& Set = SetFor(G);
+			TArray<const FEv*> Pool; for (const FEv& E : Set.Ev) if (E.K == EK::Tremor) Pool.Add(&E);
+			const bool bVolc = G->Arena->GetTheme() == EZoogiArena::Volcanic; // the volcano has its meteors too
+			if (Pool.Num() && (bTest || R.FRand() < (bVolc ? 0.12f : 0.22f)))
+			{
+				const FEv& E = *Pool[R.RandRange(0, Pool.Num() - 1)];
+				FWarn Wv; Wv.V = E.V; Wv.Name = E.Name; Wv.Rad = 300.f;
+				FVector P;
+				// near a Zoogi (they have to react), but not right under the roller's nose
+				const AZoogiBall* Tg = nullptr; TArray<const AZoogiBall*> In; for (const AZoogiBall* B : G->Balls) if (B && !B->bOut) In.Add(B);
+				if (In.Num()) Tg = In[R.RandRange(0, In.Num() - 1)];
+				if (Tg) { const FVector Off = FRotator(0.f, R.FRandRange(0.f, 360.f), 0.f).Vector() * R.FRandRange(80.f, 260.f); P = Tg->BallLocation() + Off; }
+				else if (!FreeSpot(G, 0.2f, 0.75f, 0.f, P)) P = S.Ctr;
+				if (FVector::Dist2D(P, S.Ctr) > S.CourtR * 0.85f) P = S.Ctr + (P - S.Ctr).GetSafeNormal2D() * S.CourtR * 0.8f;
+				Wv.P = FVector(P.X, P.Y, GroundZ(G, P) + 2.f);
+				Wv.T0 = Now(G); Wv.FireAt = Wv.T0 + 1.5;
+				S.Warns.Add(Wv);
+				ZoogiUtil::PlaySfx(G, TEXT("Rumble"), 0.6f, 1.1f);
+				ZoogiHaptics::Kick(0.3f, G->GetWorld(), TEXT("earth_tremor_warn"));
+				UE_LOG(LogZoogi, Log, TEXT("EARTH tremor %s warned at (%.0f, %.0f)"), E.Name, P.X, P.Y);
+			}
+		}
+		for (int32 i = S.Warns.Num() - 1; i >= 0; --i)
+		{
+			FWarn& Wv = S.Warns[i];
+			if (!Wv.bFired && Now(G) >= Wv.FireAt)
+			{
+				Wv.bFired = true;
+				FEv E{ *Wv.Name, Wv.V, EK::Tremor, false };
+				Erupt(G, E, Wv.P, 1.2f, Wv.Rad);
+				if (!G->ShotDir.IsEmpty()) { static int32 Nt = 0; if (Nt++ < 3) G->TakeShotDelayed(FString::Printf(TEXT("earth_tremor_%d"), Nt), 0.4f); }
+			}
+			if (Now(G) > Wv.FireAt + 1.0) S.Warns.RemoveAt(i);
+		}
+	}
+
+	void Draw(AZoogiGameMode* G, UCanvas* C, APlayerController* PC)
+	{
+		if (!G || !C || !PC || !S.Warns.Num() || S.G.Get() != G) return;
+		const double Nw = Now(G), Nr = FPlatformTime::Seconds();
+		const float U = FMath::Min(C->ClipX, C->ClipY) / 1080.f;
+		const FLinearColor Col = SetFor(G).Col;
+		for (const FWarn& Wv : S.Warns)
+		{
+			if (Wv.bFired) continue;
+			const float K = FMath::Clamp((float)((Nw - Wv.T0) / (Wv.FireAt - Wv.T0)), 0.f, 1.f);
+			const float Pulse = 0.6f + 0.4f * FMath::Abs(FMath::Sin((float)Nr * 14.f));
+			auto Ring = [&](float Rr, float Th, const FLinearColor& Cl)
+			{
+				FVector2D Prev; bool bHave = false;
+				for (int32 k = 0; k <= 40; ++k)
+				{
+					const float A = 2.f * PI * k / 40.f; FVector2D Sp;
+					if (PC->ProjectWorldLocationToScreen(Wv.P + FVector(FMath::Cos(A) * Rr, FMath::Sin(A) * Rr, 0.f), Sp, true))
+					{ if (bHave) { FCanvasLineItem L(Prev, Sp); L.LineThickness = Th; L.SetColor(Cl); C->DrawItem(L); } Prev = Sp; bHave = true; }
+					else bHave = false;
+				}
+			};
+			Ring(Wv.Rad + 16.f, 15.f * U, FLinearColor(0.02f, 0.02f, 0.03f, 0.9f));
+			Ring(Wv.Rad, 8.f * U, FLinearColor(Col.R, Col.G, Col.B, Pulse));
+			Ring(Wv.Rad * (1.f - K) + 20.f, 5.f * U, FLinearColor(1.f, 0.85f, 0.2f, 0.95f));
+			FVector2D Sp;
+			if (PC->ProjectWorldLocationToScreen(Wv.P + FVector(0, 0, 40.f), Sp, true))
+			{
+				ZoogiFunCanvasText(C, TEXT("!"), Sp.X, Sp.Y - 30.f * U, 60.f * U, FLinearColor(1.f, 0.6f, 0.1f), 1, 0);
+				ZoogiFunCanvasText(C, TEXT("TREMOR!"), Sp.X, Sp.Y + 26.f * U, 26.f * U, FLinearColor::White, 1, 0);
+			}
+		}
+	}
+}

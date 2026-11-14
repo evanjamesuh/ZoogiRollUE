@@ -1,0 +1,3050 @@
+{
+  "map": "volcanic",
+  "scale": 1.3,
+  "knockout_world_cm": 2015.0,
+  "village": {
+    "date": "2026-10-22",
+    "note": "Lava-people stacked-platform village. VisualOnly/NoCollision/NoCamBlock. Shared orb MIs on MagmaOrb/EnergyOrb (HOLD lifted). Stadium reserved zones enforced.",
+    "mesh_dir": "meshes/village",
+    "instance_count": 66,
+    "emissive": "forge/vent M_VentWarningGlow emissiveFactor \u22640.9; other props \u22641.0",
+    "figures": false
+  },
+  "instances": [
+    {
+      "id": "Village_A_Core1",
+      "mesh": "SM_VolcanicVillage_ChimneyTall_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        1289.0,
+        2764.2,
+        -160.0
+      ],
+      "yaw": 245,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "A",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "A basalt chimney core",
+      "rel": {
+        "yaw": 65.0,
+        "r_cm": 3050.0,
+        "z_cm": -160.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_ChimneyTall_v13",
+        "SM_VolcanicVillage_ChimneyTall_v13_LOD1",
+        "SM_VolcanicVillage_ChimneyTall_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_ChimneyTall_v13"
+      }
+    },
+    {
+      "id": "Village_A_Core1_Deck0",
+      "mesh": "SM_VolcanicVillage_RingDeck_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        1289.0,
+        2764.2,
+        -160.0
+      ],
+      "yaw": 65,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "A",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "A ring deck L0",
+      "rel": {
+        "yaw": 65.0,
+        "r_cm": 3050.0,
+        "z_cm": -160.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RingDeck_v13",
+        "SM_VolcanicVillage_RingDeck_v13_LOD1",
+        "SM_VolcanicVillage_RingDeck_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RingDeck_v13"
+      }
+    },
+    {
+      "id": "Village_A_Core1_Deck1",
+      "mesh": "SM_VolcanicVillage_RingDeck_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        1289.0,
+        2764.2,
+        160.0
+      ],
+      "yaw": 65,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "A",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "A ring deck L1",
+      "rel": {
+        "yaw": 65.0,
+        "r_cm": 3050.0,
+        "z_cm": 160.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RingDeck_v13",
+        "SM_VolcanicVillage_RingDeck_v13_LOD1",
+        "SM_VolcanicVillage_RingDeck_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RingDeck_v13"
+      }
+    },
+    {
+      "id": "Village_A_Core1_Deck2",
+      "mesh": "SM_VolcanicVillage_RingDeck_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        1289.0,
+        2764.2,
+        480.0
+      ],
+      "yaw": 65,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "A",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "A ring deck L2",
+      "rel": {
+        "yaw": 65.0,
+        "r_cm": 3050.0,
+        "z_cm": 480.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RingDeck_v13",
+        "SM_VolcanicVillage_RingDeck_v13_LOD1",
+        "SM_VolcanicVillage_RingDeck_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RingDeck_v13"
+      }
+    },
+    {
+      "id": "Village_A_Core2",
+      "mesh": "SM_VolcanicVillage_ChimneyTall_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        798.3,
+        3202.0,
+        -160.0
+      ],
+      "yaw": 256,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "A",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "A basalt chimney core",
+      "rel": {
+        "yaw": 76.0,
+        "r_cm": 3300.0,
+        "z_cm": -160.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_ChimneyTall_v13",
+        "SM_VolcanicVillage_ChimneyTall_v13_LOD1",
+        "SM_VolcanicVillage_ChimneyTall_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_ChimneyTall_v13"
+      }
+    },
+    {
+      "id": "Village_A_Core2_Deck0",
+      "mesh": "SM_VolcanicVillage_RingDeck_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        798.3,
+        3202.0,
+        -160.0
+      ],
+      "yaw": 76,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "A",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "A ring deck L0",
+      "rel": {
+        "yaw": 76.0,
+        "r_cm": 3300.0,
+        "z_cm": -160.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RingDeck_v13",
+        "SM_VolcanicVillage_RingDeck_v13_LOD1",
+        "SM_VolcanicVillage_RingDeck_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RingDeck_v13"
+      }
+    },
+    {
+      "id": "Village_A_Core2_Deck1",
+      "mesh": "SM_VolcanicVillage_RingDeck_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        798.3,
+        3202.0,
+        160.0
+      ],
+      "yaw": 76,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "A",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "A ring deck L1",
+      "rel": {
+        "yaw": 76.0,
+        "r_cm": 3300.0,
+        "z_cm": 160.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RingDeck_v13",
+        "SM_VolcanicVillage_RingDeck_v13_LOD1",
+        "SM_VolcanicVillage_RingDeck_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RingDeck_v13"
+      }
+    },
+    {
+      "id": "Village_A_Core2_Deck2",
+      "mesh": "SM_VolcanicVillage_RingDeck_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        798.3,
+        3202.0,
+        480.0
+      ],
+      "yaw": 76,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "A",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "A ring deck L2",
+      "rel": {
+        "yaw": 76.0,
+        "r_cm": 3300.0,
+        "z_cm": 480.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RingDeck_v13",
+        "SM_VolcanicVillage_RingDeck_v13_LOD1",
+        "SM_VolcanicVillage_RingDeck_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RingDeck_v13"
+      }
+    },
+    {
+      "id": "Village_A_Hut1",
+      "mesh": "SM_VolcanicVillage_RoundHut_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        1242.4125718815462,
+        2938.0666487320323,
+        520.0
+      ],
+      "yaw": 195.0,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "A",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "A round hut",
+      "rel": {
+        "yaw": 67.08,
+        "r_cm": 3190.0,
+        "z_cm": 520.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RoundHut_v13",
+        "SM_VolcanicVillage_RoundHut_v13_LOD1",
+        "SM_VolcanicVillage_RoundHut_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RoundHut_v13"
+      }
+    },
+    {
+      "id": "Village_A_Hut2",
+      "mesh": "SM_VolcanicVillage_RoundHut_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        1109.2466837441766,
+        2773.6204721237295,
+        520.0
+      ],
+      "yaw": 267.0,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "A",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "A round hut",
+      "rel": {
+        "yaw": 68.2,
+        "r_cm": 2987.2,
+        "z_cm": 520.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RoundHut_v13",
+        "SM_VolcanicVillage_RoundHut_v13_LOD1",
+        "SM_VolcanicVillage_RoundHut_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RoundHut_v13"
+      }
+    },
+    {
+      "id": "Village_A_Hut3",
+      "mesh": "SM_VolcanicVillage_RoundHut_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        719.393193577966,
+        3363.78292833385,
+        520.0
+      ],
+      "yaw": 206.0,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "A",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "A round hut",
+      "rel": {
+        "yaw": 77.93,
+        "r_cm": 3439.8,
+        "z_cm": 520.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RoundHut_v13",
+        "SM_VolcanicVillage_RoundHut_v13_LOD1",
+        "SM_VolcanicVillage_RoundHut_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RoundHut_v13"
+      }
+    },
+    {
+      "id": "Village_A_Hut4",
+      "mesh": "SM_VolcanicVillage_RoundHut_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        620.0517476265173,
+        3176.948841827188,
+        520.0
+      ],
+      "yaw": 278.0,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "A",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "A round hut",
+      "rel": {
+        "yaw": 78.96,
+        "r_cm": 3236.9,
+        "z_cm": 520.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RoundHut_v13",
+        "SM_VolcanicVillage_RoundHut_v13_LOD1",
+        "SM_VolcanicVillage_RoundHut_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RoundHut_v13"
+      }
+    },
+    {
+      "id": "Village_A_Forge1",
+      "mesh": "SM_VolcanicVillage_ForgePit_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        1153.0538319445025,
+        2827.5927392611047,
+        -140.0
+      ],
+      "yaw": 65,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "A",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "A forge pit ember\u22640.9",
+      "rel": {
+        "yaw": 67.82,
+        "r_cm": 3053.7,
+        "z_cm": -140.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_ForgePit_v13",
+        "SM_VolcanicVillage_ForgePit_v13_LOD1",
+        "SM_VolcanicVillage_ForgePit_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_ForgePit_v13"
+      }
+    },
+    {
+      "id": "Village_A_Forge2",
+      "mesh": "SM_VolcanicVillage_ForgePit_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        1153.0538319445025,
+        2700.807260738895,
+        -140.0
+      ],
+      "yaw": 65,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "A",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "A forge pit ember\u22640.9",
+      "rel": {
+        "yaw": 66.88,
+        "r_cm": 2936.6,
+        "z_cm": -140.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_ForgePit_v13",
+        "SM_VolcanicVillage_ForgePit_v13_LOD1",
+        "SM_VolcanicVillage_ForgePit_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_ForgePit_v13"
+      }
+    },
+    {
+      "id": "Village_A_Vent1",
+      "mesh": "SM_VolcanicVillage_Vent_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        1488.2389396183491,
+        2746.768851450468,
+        -150.0
+      ],
+      "yaw": 65,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "A",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "A vent glow\u22640.9",
+      "rel": {
+        "yaw": 61.55,
+        "r_cm": 3124.0,
+        "z_cm": -150.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_Vent_v13",
+        "SM_VolcanicVillage_Vent_v13_LOD1",
+        "SM_VolcanicVillage_Vent_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_Vent_v13"
+      }
+    },
+    {
+      "id": "Village_A_Vent2",
+      "mesh": "SM_VolcanicVillage_Vent_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        1430.4213562373095,
+        2622.7786437626905,
+        -150.0
+      ],
+      "yaw": 65,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "A",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "A vent glow\u22640.9",
+      "rel": {
+        "yaw": 61.39,
+        "r_cm": 2987.5,
+        "z_cm": -150.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_Vent_v13",
+        "SM_VolcanicVillage_Vent_v13_LOD1",
+        "SM_VolcanicVillage_Vent_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_Vent_v13"
+      }
+    },
+    {
+      "id": "Village_A_Vent3",
+      "mesh": "SM_VolcanicVillage_Vent_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        1306.4311485495316,
+        2564.961060381651,
+        -150.0
+      ],
+      "yaw": 65,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "A",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "A vent glow\u22640.9",
+      "rel": {
+        "yaw": 63.01,
+        "r_cm": 2878.5,
+        "z_cm": -150.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_Vent_v13",
+        "SM_VolcanicVillage_Vent_v13_LOD1",
+        "SM_VolcanicVillage_Vent_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_Vent_v13"
+      }
+    },
+    {
+      "id": "Village_A_BridgeIntra",
+      "mesh": "SM_VolcanicVillage_BridgeMed_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        1043.65,
+        2983.1,
+        190.0
+      ],
+      "yaw": 138.26,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "A",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "A rope/wood bridge intra",
+      "rel": {
+        "yaw": 70.72,
+        "r_cm": 3160.4,
+        "z_cm": 190.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_BridgeMed_v13",
+        "SM_VolcanicVillage_BridgeMed_v13_LOD1",
+        "SM_VolcanicVillage_BridgeMed_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_BridgeMed_v13"
+      }
+    },
+    {
+      "id": "Village_B_Core1",
+      "mesh": "SM_VolcanicVillage_ChimneyTall_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -877.1,
+        2868.9,
+        -160.0
+      ],
+      "yaw": 287,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "B",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "B basalt chimney core",
+      "rel": {
+        "yaw": 107.0,
+        "r_cm": 3000.0,
+        "z_cm": -160.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_ChimneyTall_v13",
+        "SM_VolcanicVillage_ChimneyTall_v13_LOD1",
+        "SM_VolcanicVillage_ChimneyTall_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_ChimneyTall_v13"
+      }
+    },
+    {
+      "id": "Village_B_Core1_Deck0",
+      "mesh": "SM_VolcanicVillage_RingDeck_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -877.1,
+        2868.9,
+        -160.0
+      ],
+      "yaw": 107,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "B",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "B ring deck L0",
+      "rel": {
+        "yaw": 107.0,
+        "r_cm": 3000.0,
+        "z_cm": -160.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RingDeck_v13",
+        "SM_VolcanicVillage_RingDeck_v13_LOD1",
+        "SM_VolcanicVillage_RingDeck_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RingDeck_v13"
+      }
+    },
+    {
+      "id": "Village_B_Core1_Deck1",
+      "mesh": "SM_VolcanicVillage_RingDeck_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -877.1,
+        2868.9,
+        160.0
+      ],
+      "yaw": 107,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "B",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "B ring deck L1",
+      "rel": {
+        "yaw": 107.0,
+        "r_cm": 3000.0,
+        "z_cm": 160.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RingDeck_v13",
+        "SM_VolcanicVillage_RingDeck_v13_LOD1",
+        "SM_VolcanicVillage_RingDeck_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RingDeck_v13"
+      }
+    },
+    {
+      "id": "Village_B_Core1_Deck2",
+      "mesh": "SM_VolcanicVillage_RingDeck_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -877.1,
+        2868.9,
+        480.0
+      ],
+      "yaw": 107,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "B",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "B ring deck L2",
+      "rel": {
+        "yaw": 107.0,
+        "r_cm": 3000.0,
+        "z_cm": 480.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RingDeck_v13",
+        "SM_VolcanicVillage_RingDeck_v13_LOD1",
+        "SM_VolcanicVillage_RingDeck_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RingDeck_v13"
+      }
+    },
+    {
+      "id": "Village_B_Core2",
+      "mesh": "SM_VolcanicVillage_ChimneyTall_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -1525.8,
+        2869.6,
+        -160.0
+      ],
+      "yaw": 298,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "B",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "B basalt chimney core",
+      "rel": {
+        "yaw": 118.0,
+        "r_cm": 3250.0,
+        "z_cm": -160.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_ChimneyTall_v13",
+        "SM_VolcanicVillage_ChimneyTall_v13_LOD1",
+        "SM_VolcanicVillage_ChimneyTall_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_ChimneyTall_v13"
+      }
+    },
+    {
+      "id": "Village_B_Core2_Deck0",
+      "mesh": "SM_VolcanicVillage_RingDeck_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -1525.8,
+        2869.6,
+        -160.0
+      ],
+      "yaw": 118,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "B",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "B ring deck L0",
+      "rel": {
+        "yaw": 118.0,
+        "r_cm": 3250.0,
+        "z_cm": -160.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RingDeck_v13",
+        "SM_VolcanicVillage_RingDeck_v13_LOD1",
+        "SM_VolcanicVillage_RingDeck_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RingDeck_v13"
+      }
+    },
+    {
+      "id": "Village_B_Core2_Deck1",
+      "mesh": "SM_VolcanicVillage_RingDeck_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -1525.8,
+        2869.6,
+        160.0
+      ],
+      "yaw": 118,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "B",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "B ring deck L1",
+      "rel": {
+        "yaw": 118.0,
+        "r_cm": 3250.0,
+        "z_cm": 160.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RingDeck_v13",
+        "SM_VolcanicVillage_RingDeck_v13_LOD1",
+        "SM_VolcanicVillage_RingDeck_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RingDeck_v13"
+      }
+    },
+    {
+      "id": "Village_B_Core2_Deck2",
+      "mesh": "SM_VolcanicVillage_RingDeck_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -1525.8,
+        2869.6,
+        480.0
+      ],
+      "yaw": 118,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "B",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "B ring deck L2",
+      "rel": {
+        "yaw": 118.0,
+        "r_cm": 3250.0,
+        "z_cm": 480.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RingDeck_v13",
+        "SM_VolcanicVillage_RingDeck_v13_LOD1",
+        "SM_VolcanicVillage_RingDeck_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RingDeck_v13"
+      }
+    },
+    {
+      "id": "Village_B_Hut1",
+      "mesh": "SM_VolcanicVillage_RoundHut_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -1028.0607022301763,
+        2966.935026302705,
+        520.0
+      ],
+      "yaw": 237.0,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "B",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "B round hut",
+      "rel": {
+        "yaw": 109.11,
+        "r_cm": 3140.0,
+        "z_cm": 520.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RoundHut_v13",
+        "SM_VolcanicVillage_RoundHut_v13_LOD1",
+        "SM_VolcanicVillage_RoundHut_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RoundHut_v13"
+      }
+    },
+    {
+      "id": "Village_B_Hut2",
+      "mesh": "SM_VolcanicVillage_RoundHut_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -975.1350263027049,
+        2717.939297769824,
+        520.0
+      ],
+      "yaw": 327.0,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "B",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "B round hut",
+      "rel": {
+        "yaw": 109.74,
+        "r_cm": 2887.6,
+        "z_cm": 520.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RoundHut_v13",
+        "SM_VolcanicVillage_RoundHut_v13_LOD1",
+        "SM_VolcanicVillage_RoundHut_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RoundHut_v13"
+      }
+    },
+    {
+      "id": "Village_B_Hut3",
+      "mesh": "SM_VolcanicVillage_RoundHut_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -1692.6930938220216,
+        2937.0291868148643,
+        520.0
+      ],
+      "yaw": 248.0,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "B",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "B round hut",
+      "rel": {
+        "yaw": 119.96,
+        "r_cm": 3389.9,
+        "z_cm": 520.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RoundHut_v13",
+        "SM_VolcanicVillage_RoundHut_v13_LOD1",
+        "SM_VolcanicVillage_RoundHut_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RoundHut_v13"
+      }
+    },
+    {
+      "id": "Village_B_Hut4",
+      "mesh": "SM_VolcanicVillage_RoundHut_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -1593.229186814864,
+        2702.706906177978,
+        520.0
+      ],
+      "yaw": 338.0,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "B",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "B round hut",
+      "rel": {
+        "yaw": 120.52,
+        "r_cm": 3137.4,
+        "z_cm": 520.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RoundHut_v13",
+        "SM_VolcanicVillage_RoundHut_v13_LOD1",
+        "SM_VolcanicVillage_RoundHut_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RoundHut_v13"
+      }
+    },
+    {
+      "id": "Village_B_Vent1",
+      "mesh": "SM_VolcanicVillage_Vent_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -717.3728979905414,
+        2989.26300463041,
+        -150.0
+      ],
+      "yaw": 107,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "B",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "B vent glow\u22640.9",
+      "rel": {
+        "yaw": 103.49,
+        "r_cm": 3074.1,
+        "z_cm": -150.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_Vent_v13",
+        "SM_VolcanicVillage_Vent_v13_LOD1",
+        "SM_VolcanicVillage_Vent_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_Vent_v13"
+      }
+    },
+    {
+      "id": "Village_B_Vent2",
+      "mesh": "SM_VolcanicVillage_Vent_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -677.3740930490852,
+        2858.4328087514114,
+        -150.0
+      ],
+      "yaw": 107,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "B",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "B vent glow\u22640.9",
+      "rel": {
+        "yaw": 103.33,
+        "r_cm": 2937.6,
+        "z_cm": -150.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_Vent_v13",
+        "SM_VolcanicVillage_Vent_v13_LOD1",
+        "SM_VolcanicVillage_Vent_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_Vent_v13"
+      }
+    },
+    {
+      "id": "Village_B_BridgeIntra",
+      "mesh": "SM_VolcanicVillage_BridgeMed_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -1201.45,
+        2869.25,
+        190.0
+      ],
+      "yaw": 179.94,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "B",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "B rope/wood bridge intra",
+      "rel": {
+        "yaw": 112.72,
+        "r_cm": 3110.6,
+        "z_cm": 190.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_BridgeMed_v13",
+        "SM_VolcanicVillage_BridgeMed_v13_LOD1",
+        "SM_VolcanicVillage_BridgeMed_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_BridgeMed_v13"
+      }
+    },
+    {
+      "id": "Village_B_GateFrame",
+      "mesh": "SM_VolcanicGateFrame_Intact_v13",
+      "location": [
+        -1087.4870463118677,
+        2804.578224960998,
+        -150.0
+      ],
+      "yaw": 107,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "B",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "B cluster portal (reuse GateFrame)",
+      "rel": {
+        "yaw": 111.19,
+        "r_cm": 3008.0,
+        "z_cm": -150.0
+      },
+      "lods_v13": [
+        "SM_VolcanicGateFrame_Intact_v13",
+        "SM_VolcanicGateFrame_Intact_v13_LOD1",
+        "SM_VolcanicGateFrame_Intact_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicGateFrame_Intact_v13"
+      }
+    },
+    {
+      "id": "Village_AB_Bridge",
+      "mesh": "SM_VolcanicVillage_BridgeMed_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        205.95,
+        2816.55,
+        190.0
+      ],
+      "yaw": 177.23,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "AB",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "A\u2013B approach bridge stop<r3900",
+      "rel": {
+        "yaw": 85.82,
+        "r_cm": 2824.1,
+        "z_cm": 190.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_BridgeMed_v13",
+        "SM_VolcanicVillage_BridgeMed_v13_LOD1",
+        "SM_VolcanicVillage_BridgeMed_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_BridgeMed_v13"
+      }
+    },
+    {
+      "id": "Village_C_Core1",
+      "mesh": "SM_VolcanicVillage_ChimneyTall_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -3119.3,
+        -438.4,
+        -160.0
+      ],
+      "yaw": 368,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "C",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "C basalt chimney core",
+      "rel": {
+        "yaw": 188.0,
+        "r_cm": 3150.0,
+        "z_cm": -160.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_ChimneyTall_v13",
+        "SM_VolcanicVillage_ChimneyTall_v13_LOD1",
+        "SM_VolcanicVillage_ChimneyTall_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_ChimneyTall_v13"
+      }
+    },
+    {
+      "id": "Village_C_Core1_Deck0",
+      "mesh": "SM_VolcanicVillage_RingDeck_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -3119.3,
+        -438.4,
+        -160.0
+      ],
+      "yaw": 188,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "C",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "C ring deck L0",
+      "rel": {
+        "yaw": 188.0,
+        "r_cm": 3150.0,
+        "z_cm": -160.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RingDeck_v13",
+        "SM_VolcanicVillage_RingDeck_v13_LOD1",
+        "SM_VolcanicVillage_RingDeck_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RingDeck_v13"
+      }
+    },
+    {
+      "id": "Village_C_Core1_Deck1",
+      "mesh": "SM_VolcanicVillage_RingDeck_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -3119.3,
+        -438.4,
+        160.0
+      ],
+      "yaw": 188,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "C",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "C ring deck L1",
+      "rel": {
+        "yaw": 188.0,
+        "r_cm": 3150.0,
+        "z_cm": 160.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RingDeck_v13",
+        "SM_VolcanicVillage_RingDeck_v13_LOD1",
+        "SM_VolcanicVillage_RingDeck_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RingDeck_v13"
+      }
+    },
+    {
+      "id": "Village_C_Hut1",
+      "mesh": "SM_VolcanicVillage_RoundHut_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -3239.7435091445946,
+        -572.1660685859309,
+        200.0
+      ],
+      "yaw": 318.0,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "C",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "C round hut",
+      "rel": {
+        "yaw": 190.02,
+        "r_cm": 3289.9,
+        "z_cm": 200.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RoundHut_v13",
+        "SM_VolcanicVillage_RoundHut_v13_LOD1",
+        "SM_VolcanicVillage_RoundHut_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RoundHut_v13"
+      }
+    },
+    {
+      "id": "Village_C_Hut2",
+      "mesh": "SM_VolcanicVillage_RoundHut_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -2943.233431867915,
+        -475.82410434719674,
+        200.0
+      ],
+      "yaw": 438.0,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "C",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "C round hut",
+      "rel": {
+        "yaw": 189.18,
+        "r_cm": 2981.4,
+        "z_cm": 200.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RoundHut_v13",
+        "SM_VolcanicVillage_RoundHut_v13_LOD1",
+        "SM_VolcanicVillage_RoundHut_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RoundHut_v13"
+      }
+    },
+    {
+      "id": "Village_C_Hut3",
+      "mesh": "SM_VolcanicVillage_RoundHut_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -3174.9230589874905,
+        -267.2098270668723,
+        200.0
+      ],
+      "yaw": 558.0,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "C",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "C round hut",
+      "rel": {
+        "yaw": 184.81,
+        "r_cm": 3186.1,
+        "z_cm": 200.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RoundHut_v13",
+        "SM_VolcanicVillage_RoundHut_v13_LOD1",
+        "SM_VolcanicVillage_RoundHut_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RoundHut_v13"
+      }
+    },
+    {
+      "id": "Village_C_Forge1",
+      "mesh": "SM_VolcanicVillage_ForgePit_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -3098.42403485599,
+        -586.9402103112355,
+        -140.0
+      ],
+      "yaw": 188,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "C",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "C forge pit ember\u22640.9",
+      "rel": {
+        "yaw": 190.73,
+        "r_cm": 3153.5,
+        "z_cm": -140.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_ForgePit_v13",
+        "SM_VolcanicVillage_ForgePit_v13_LOD1",
+        "SM_VolcanicVillage_ForgePit_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_ForgePit_v13"
+      }
+    },
+    {
+      "id": "Village_C_Vent1",
+      "mesh": "SM_VolcanicVillage_Vent_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -3213.1943125571784,
+        -261.81048142821464,
+        -150.0
+      ],
+      "yaw": 188,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "C",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "C vent glow\u22640.9",
+      "rel": {
+        "yaw": 184.66,
+        "r_cm": 3223.8,
+        "z_cm": -150.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_Vent_v13",
+        "SM_VolcanicVillage_Vent_v13_LOD1",
+        "SM_VolcanicVillage_Vent_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_Vent_v13"
+      }
+    },
+    {
+      "id": "Village_C_Bridge1",
+      "mesh": "SM_VolcanicVillage_BridgeShort_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -3421.6,
+        239.3,
+        180.0
+      ],
+      "yaw": 266,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "C",
+        "VillageTall"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "C short bridge",
+      "rel": {
+        "yaw": 176.0,
+        "r_cm": 3430.0,
+        "z_cm": 180.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_BridgeShort_v13",
+        "SM_VolcanicVillage_BridgeShort_v13_LOD1",
+        "SM_VolcanicVillage_BridgeShort_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_BridgeShort_v13"
+      }
+    },
+    {
+      "id": "Village_D_Core1",
+      "mesh": "SM_VolcanicVillage_ChimneyLow_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -1408.4,
+        -2648.8,
+        -160.0
+      ],
+      "yaw": 422,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "D",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "D basalt chimney core",
+      "rel": {
+        "yaw": 242.0,
+        "r_cm": 3000.0,
+        "z_cm": -160.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_ChimneyLow_v13",
+        "SM_VolcanicVillage_ChimneyLow_v13_LOD1",
+        "SM_VolcanicVillage_ChimneyLow_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_ChimneyLow_v13"
+      }
+    },
+    {
+      "id": "Village_D_Core1_Deck0",
+      "mesh": "SM_VolcanicVillage_RingPadLow_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -1408.4,
+        -2648.8,
+        -160.0
+      ],
+      "yaw": 242,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "D",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "D ring deck L0",
+      "rel": {
+        "yaw": 242.0,
+        "r_cm": 3000.0,
+        "z_cm": -160.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RingPadLow_v13",
+        "SM_VolcanicVillage_RingPadLow_v13_LOD1",
+        "SM_VolcanicVillage_RingPadLow_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RingPadLow_v13"
+      }
+    },
+    {
+      "id": "Village_D_Core2",
+      "mesh": "SM_VolcanicVillage_ChimneyLow_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -665.3,
+        -3130.1,
+        -160.0
+      ],
+      "yaw": 438,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "D",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "D basalt chimney core",
+      "rel": {
+        "yaw": 258.0,
+        "r_cm": 3200.0,
+        "z_cm": -160.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_ChimneyLow_v13",
+        "SM_VolcanicVillage_ChimneyLow_v13_LOD1",
+        "SM_VolcanicVillage_ChimneyLow_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_ChimneyLow_v13"
+      }
+    },
+    {
+      "id": "Village_D_Core2_Deck0",
+      "mesh": "SM_VolcanicVillage_RingPadLow_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -665.3,
+        -3130.1,
+        -160.0
+      ],
+      "yaw": 258,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "D",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "D ring deck L0",
+      "rel": {
+        "yaw": 258.0,
+        "r_cm": 3200.0,
+        "z_cm": -160.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RingPadLow_v13",
+        "SM_VolcanicVillage_RingPadLow_v13_LOD1",
+        "SM_VolcanicVillage_RingPadLow_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RingPadLow_v13"
+      }
+    },
+    {
+      "id": "Village_D_Forge1",
+      "mesh": "SM_VolcanicVillage_ForgePit_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -1275.957861071161,
+        -2719.2207344178837,
+        -140.0
+      ],
+      "yaw": 242,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "D",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "D forge pit ember\u22640.9",
+      "rel": {
+        "yaw": 244.86,
+        "r_cm": 3003.7,
+        "z_cm": -140.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_ForgePit_v13",
+        "SM_VolcanicVillage_ForgePit_v13_LOD1",
+        "SM_VolcanicVillage_ForgePit_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_ForgePit_v13"
+      }
+    },
+    {
+      "id": "Village_D_Forge2",
+      "mesh": "SM_VolcanicVillage_ForgePit_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -1269.322421814982,
+        -2592.6090109876136,
+        -140.0
+      ],
+      "yaw": 242,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "D",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "D forge pit ember\u22640.9",
+      "rel": {
+        "yaw": 243.91,
+        "r_cm": 2886.7,
+        "z_cm": -140.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_ForgePit_v13",
+        "SM_VolcanicVillage_ForgePit_v13_LOD1",
+        "SM_VolcanicVillage_ForgePit_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_ForgePit_v13"
+      }
+    },
+    {
+      "id": "Village_D_Vent1",
+      "mesh": "SM_VolcanicVillage_Vent_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -1606.4536137483142,
+        -2620.965379807987,
+        -150.0
+      ],
+      "yaw": 242,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "D",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "D vent glow\u22640.9",
+      "rel": {
+        "yaw": 238.49,
+        "r_cm": 3074.1,
+        "z_cm": -150.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_Vent_v13",
+        "SM_VolcanicVillage_Vent_v13_LOD1",
+        "SM_VolcanicVillage_Vent_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_Vent_v13"
+      }
+    },
+    {
+      "id": "Village_D_Vent2",
+      "mesh": "SM_VolcanicVillage_Vent_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -1542.2261212717717,
+        -2500.1710349045215,
+        -150.0
+      ],
+      "yaw": 242,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "D",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "D vent glow\u22640.9",
+      "rel": {
+        "yaw": 238.33,
+        "r_cm": 2937.6,
+        "z_cm": -150.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_Vent_v13",
+        "SM_VolcanicVillage_Vent_v13_LOD1",
+        "SM_VolcanicVillage_Vent_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_Vent_v13"
+      }
+    },
+    {
+      "id": "Village_D_Vent3",
+      "mesh": "SM_VolcanicVillage_Vent_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -1415.3798993405003,
+        -2448.921834596181,
+        -150.0
+      ],
+      "yaw": 242,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "D",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "D vent glow\u22640.9",
+      "rel": {
+        "yaw": 239.97,
+        "r_cm": 2828.5,
+        "z_cm": -150.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_Vent_v13",
+        "SM_VolcanicVillage_Vent_v13_LOD1",
+        "SM_VolcanicVillage_Vent_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_Vent_v13"
+      }
+    },
+    {
+      "id": "Village_D_Vent4",
+      "mesh": "SM_VolcanicVillage_Vent_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -1285.2677049348683,
+        -2491.1978492786557,
+        -150.0
+      ],
+      "yaw": 242,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "D",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "D vent glow\u22640.9",
+      "rel": {
+        "yaw": 242.71,
+        "r_cm": 2803.2,
+        "z_cm": -150.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_Vent_v13",
+        "SM_VolcanicVillage_Vent_v13_LOD1",
+        "SM_VolcanicVillage_Vent_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_Vent_v13"
+      }
+    },
+    {
+      "id": "Village_D_BridgeIntra",
+      "mesh": "SM_VolcanicVillage_BridgeMed_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -1036.85,
+        -2889.45,
+        -130.0
+      ],
+      "yaw": -32.93,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "D",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "D rope/wood bridge intra",
+      "rel": {
+        "yaw": 250.26,
+        "r_cm": 3069.9,
+        "z_cm": -130.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_BridgeMed_v13",
+        "SM_VolcanicVillage_BridgeMed_v13_LOD1",
+        "SM_VolcanicVillage_BridgeMed_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_BridgeMed_v13"
+      }
+    },
+    {
+      "id": "Village_D_Walk",
+      "mesh": "SM_VolcanicVillage_BridgeShort_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        -1036.85,
+        -2889.45,
+        -135.0
+      ],
+      "yaw": -32.93,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "D",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "D low rope walk",
+      "rel": {
+        "yaw": 250.26,
+        "r_cm": 3069.9,
+        "z_cm": -135.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_BridgeShort_v13",
+        "SM_VolcanicVillage_BridgeShort_v13_LOD1",
+        "SM_VolcanicVillage_BridgeShort_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_BridgeShort_v13"
+      }
+    },
+    {
+      "id": "Village_E_Core1",
+      "mesh": "SM_VolcanicVillage_ChimneyLow_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        1798.1,
+        -4450.5,
+        -160.0
+      ],
+      "yaw": 472,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "E",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "E basalt chimney core",
+      "rel": {
+        "yaw": 292.0,
+        "r_cm": 4800.0,
+        "z_cm": -160.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_ChimneyLow_v13",
+        "SM_VolcanicVillage_ChimneyLow_v13_LOD1",
+        "SM_VolcanicVillage_ChimneyLow_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_ChimneyLow_v13"
+      }
+    },
+    {
+      "id": "Village_E_Core1_Deck0",
+      "mesh": "SM_VolcanicVillage_RingPadLow_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        1798.1,
+        -4450.5,
+        -160.0
+      ],
+      "yaw": 292,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "E",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "E ring deck L0",
+      "rel": {
+        "yaw": 292.0,
+        "r_cm": 4800.0,
+        "z_cm": -160.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RingPadLow_v13",
+        "SM_VolcanicVillage_RingPadLow_v13_LOD1",
+        "SM_VolcanicVillage_RingPadLow_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RingPadLow_v13"
+      }
+    },
+    {
+      "id": "Village_E_Core2",
+      "mesh": "SM_VolcanicVillage_ChimneyLow_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        2867.9,
+        -4095.8,
+        -160.0
+      ],
+      "yaw": 485,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "E",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "E basalt chimney core",
+      "rel": {
+        "yaw": 305.0,
+        "r_cm": 5000.0,
+        "z_cm": -160.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_ChimneyLow_v13",
+        "SM_VolcanicVillage_ChimneyLow_v13_LOD1",
+        "SM_VolcanicVillage_ChimneyLow_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_ChimneyLow_v13"
+      }
+    },
+    {
+      "id": "Village_E_Core2_Deck0",
+      "mesh": "SM_VolcanicVillage_RingPadLow_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        2867.9,
+        -4095.8,
+        -160.0
+      ],
+      "yaw": 305,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "E",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "E ring deck L0",
+      "rel": {
+        "yaw": 305.0,
+        "r_cm": 5000.0,
+        "z_cm": -160.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RingPadLow_v13",
+        "SM_VolcanicVillage_RingPadLow_v13_LOD1",
+        "SM_VolcanicVillage_RingPadLow_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RingPadLow_v13"
+      }
+    },
+    {
+      "id": "Village_E_Hut1",
+      "mesh": "SM_VolcanicVillage_RoundHutLow_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        1957.0305667146067,
+        -4535.00488130146,
+        -120.0
+      ],
+      "yaw": 422.0,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "E",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "E round hut",
+      "rel": {
+        "yaw": 293.34,
+        "r_cm": 4939.3,
+        "z_cm": -120.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RoundHutLow_v13",
+        "SM_VolcanicVillage_RoundHutLow_v13_LOD1",
+        "SM_VolcanicVillage_RoundHutLow_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RoundHutLow_v13"
+      }
+    },
+    {
+      "id": "Village_E_Hut2",
+      "mesh": "SM_VolcanicVillage_RoundHutLow_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        3041.7666487320325,
+        -4142.3874281184535,
+        -120.0
+      ],
+      "yaw": 435.0,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "E",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "E round hut",
+      "rel": {
+        "yaw": 306.29,
+        "r_cm": 5139.2,
+        "z_cm": -120.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_RoundHutLow_v13",
+        "SM_VolcanicVillage_RoundHutLow_v13_LOD1",
+        "SM_VolcanicVillage_RoundHutLow_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_RoundHutLow_v13"
+      }
+    },
+    {
+      "id": "Village_E_Forge1",
+      "mesh": "SM_VolcanicVillage_ForgePit_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        1937.177578185018,
+        -4394.309010987613,
+        -140.0
+      ],
+      "yaw": 292,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "E",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "E forge pit ember\u22640.9",
+      "rel": {
+        "yaw": 293.79,
+        "r_cm": 4802.4,
+        "z_cm": -140.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_ForgePit_v13",
+        "SM_VolcanicVillage_ForgePit_v13_LOD1",
+        "SM_VolcanicVillage_ForgePit_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_ForgePit_v13"
+      }
+    },
+    {
+      "id": "Village_E_Vent1",
+      "mesh": "SM_VolcanicVillage_Vent_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        1649.471034904521,
+        -4584.326121271772,
+        -150.0
+      ],
+      "yaw": 292,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "E",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "E vent glow\u22640.9",
+      "rel": {
+        "yaw": 289.79,
+        "r_cm": 4872.0,
+        "z_cm": -150.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_Vent_v13",
+        "SM_VolcanicVillage_Vent_v13_LOD1",
+        "SM_VolcanicVillage_Vent_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_Vent_v13"
+      }
+    },
+    {
+      "id": "Village_E_Vent2",
+      "mesh": "SM_VolcanicVillage_Vent_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        1598.2218345961808,
+        -4457.4798993405,
+        -150.0
+      ],
+      "yaw": 292,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "E",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "E vent glow\u22640.9",
+      "rel": {
+        "yaw": 289.73,
+        "r_cm": 4735.3,
+        "z_cm": -150.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_Vent_v13",
+        "SM_VolcanicVillage_Vent_v13_LOD1",
+        "SM_VolcanicVillage_Vent_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_Vent_v13"
+      }
+    },
+    {
+      "id": "Village_E_BridgeIntra",
+      "mesh": "SM_VolcanicVillage_BridgeMed_v13",
+      "mesh_dir": "meshes/village",
+      "location": [
+        2333.0,
+        -4273.15,
+        -130.0
+      ],
+      "yaw": 18.34,
+      "scale": [
+        1.3,
+        1.3,
+        1.3
+      ],
+      "pieceType": "Prop",
+      "tags": [
+        "Prop",
+        "Village",
+        "VisualOnly",
+        "NoCamBlock",
+        "NoCollision",
+        "NonDestructible",
+        "E",
+        "VillageLow"
+      ],
+      "collision": "none (visual only)",
+      "collision_profile": "NoCollision",
+      "cast_camera_block": false,
+      "destructible": false,
+      "batch": "village",
+      "note": "E rope/wood bridge intra",
+      "rel": {
+        "yaw": 298.63,
+        "r_cm": 4868.5,
+        "z_cm": -130.0
+      },
+      "lods_v13": [
+        "SM_VolcanicVillage_BridgeMed_v13",
+        "SM_VolcanicVillage_BridgeMed_v13_LOD1",
+        "SM_VolcanicVillage_BridgeMed_v13_LOD2"
+      ],
+      "states": {
+        "Intact": "SM_VolcanicVillage_BridgeMed_v13"
+      }
+    }
+  ]
+}
