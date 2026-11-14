@@ -1,0 +1,215 @@
+# Scenes. who = blue (Frosti) | bolt | hotstreak | tavi | vex | moss | orin | sera | luma (Lumi) | nightshade | wraps | pinpoint | lars | dark | shadow (an unnamed silhouette, "???") | narrator | title
+# fx (comma list): flash, shake, black (the world cuts to black), red, cold (tints), crack (the screen cracks), env=<Arena>
+# sfx ('+' list): a sound in Content/Audio (S_<Name>), Name:volume, or vo_<line> for Content/Audio/VO/S_VO_<line>.
+scene|who|line|fx|sfx
+s1_morning|title|EPISODE 1: THE FROZEN RING|flash|StingFrost+CritBoom
+s1_morning|narrator|Meadow Hollow. Dawn. In six hours, the Frozen Ring Championship begins.||
+s1_morning|bolt|FROSTI! Wake up, wake up, WAKE UP! It came! The letter came!|shake|Dash+HitClick
+s1_morning|blue|...Bolt. The sun isn't even up.||
+s1_morning|bolt|"Frosti and Bolt of Meadow Hollow: you are invited to the Final." THE FINAL, Frosti!|flash|Zap
+s1_morning|blue|Us? We're rookies. Who even sent that?||
+s1_morning|bolt|Doesn't say. It's sealed with a little crystal of ice. Fancy!||
+s1_morning|narrator|The crystal hums. Only Frosti can hear it.|cold|StingFrost:0.6
+s1_morning|shadow|...find me...|black|Inhale+ClimaxRumble:0.5
+s1_morning|blue|Did you hear that?|shake|
+s1_morning|bolt|Hear what? Come on. One practice roll before we go. Loser buys snacks!|flash|Clack
+s1_spar_win|bolt|Okay, OKAY. You're good. Don't let it go to your head.||
+s1_spar_win|blue|Snacks are on you.||
+s1_spar_win|bolt|To the Frozen Ring, champ. Let's go make history.|flash|CrowdWave1
+# Oct 30 (Evan: "chop the episode up and tailor the game play to it"): Episode 1 now plays the buzzy film in four parts
+# (who=film, line=Content/Anime/Movies id). The final is Frosti vs Vex 1v1; the collapse is Frosti + Vex together.
+s1_arrival|title|THE FROZEN RING|flash|StingFrost+CritBoom
+s1_arrival|narrator|Forty thousand fans. One ring of ancient ice, floating over nothing at all.||CrowdWave2
+s1_arrival|luma|HELLOOOO FROZEN RING! It's your girl LUMI, live, loud and on ICE!|flash,shake|Zap+CrowdWave1
+s1_arrival|luma|It's the Championship Final! Rookies FROSTI and BOLT against the defending champions, VEX and HOTSTREAK!||Clack
+s1_arrival|vex|Rookies. They let rookies into the Final now?||
+s1_arrival|hotstreak|Two rookies, one round. I'll be home for dinner.||Explosion:0.3
+s1_arrival|bolt|You got this, Frosti! Show him the frozen comet!||CrowdWave1
+s1_arrival|vex|Then he can start by falling off.|shake|HitCrack
+s1_arrival|blue|We'll see who falls.||
+s1_arrival|narrator|A shadow sweeps across the ice. Forty thousand fans go silent.|cold,shake|ArcWhoosh+Rumble:0.7
+s1_arrival|luma|No. Way. Folks, that is DRACORIA! Queen of the Frozen Ring! She has not flown in a hundred years!|flash,shake|CritBoom+CrowdWave2
+s1_arrival|bolt|A DRAGON?! Nobody said there was a DRAGON!|shake|Dash
+s1_arrival|blue|The crystal from the letter... it's humming again. She's looking right at me.|cold|StingFrost:0.6
+s1_arrival|vex|Watch the sky, rookie. Her ice breath doesn't care whose turn it is.||
+s1_arrival|narrator|Dracoria lands on her islet, folds her wings, and watches. Waiting.|cold|RockSmash:0.6
+s1_arrival|narrator|In the royal box, Master Orin, founder of the Rings, has not blinked once.||
+s1_arrival|narrator|And under the ice, something very old opens one eye.|red|StingVoid:0.7+ClimaxRumble:0.6
+s1_arrival|luma|Zoogis, take your places! Let's! ROLL!|flash,shake|CrowdWave2+Clack
+s1_arrival|film|Story_EP1_P1||
+s1_shatter|luma|MATCH POINT! The ring belongs to the ice! FROSTI AND BOLT ARE YOUR NEW CHAMPIONS!|flash|Win+CrowdWave1
+s1_shatter|vex|...Lucky shot.||
+s1_shatter|hotstreak|Rematch. Soon. Count on it.||
+s1_shatter|bolt|That wasn't luck, Vex! That was MY best friend!||
+s1_shatter|narrator|The trophy rises. In its heart burns the Frost Core, the light that holds the ring together.||StingFrost
+s1_shatter|film|Story_EP1_P2||
+s1_shatter|dark|Thank you, champions. Your cheering woke me.|red,shake|ClimaxRumble+StingVoid
+s1_shatter|luma|Wh-what is THAT? That is NOT on the run sheet!||
+s1_shatter|dark|A thousand years under the ice. I remember every single one.|red|StingVoid:0.8
+s1_shatter|orin|No. It cannot be. Everyone, off the ring! NOW!|shake|GuardClang
+s1_shatter|blue|Vex! Grab my hand! We jump together!|shake|Dash
+s1_shatter|film|Story_EP1_P3||
+s1_shatter|dark|Run, little champions. Let's see how you roll when the floor is falling.|red|StingVoid
+s1_shatter|narrator|In the stands, Nightshade's eyes flare red. He drops onto the breaking ice between them and the edge.|red,shake|ClimaxRumble
+s1_shatter|nightshade|The master says you stay.||StingVoid:0.6
+s1_end|film|Story_EP1_P4||
+s1_end|narrator|The Frozen Ring falls into the dark. Frosti and Vex made it out. Barely.||Fall
+s1_end|nightshade|...Where am I? Why is everything so cold?||
+s1_end|orin|The Shadow reached into his heart. He can do that to any Zoogi who is afraid. Remember it.|cold|StingTitan:0.6
+s1_end|bolt|Frosti... what WAS that thing?||
+s1_end|orin|He was the First Champion. The strongest Zoogi who ever rolled.||
+s1_end|blue|Was?||
+s1_end|orin|We sealed him beneath the Rings. Five rings, five cores, five locks. I helped bury him.|cold|StingTitan
+s1_end|vex|And now he's stealing the cores. One lock down. Four to go.||
+s1_end|vex|The next one is the Ember Core. In the Caldera. My home.|red|StingEmber
+s1_end|vex|You caught me back there, rookie. Don't make it a habit. This is my fight.||Dash
+s1_end|blue|...We're following her.||
+s1_end|bolt|Obviously.|flash|Clack
+s1_end|title|TO BE CONTINUED|flash|StingVoid+CritBoom
+# Oct 30 (build 37): Episode 2 plays the buzzy "Ember Rising" film in four parts; Bolt (not Moss) fights the dunes with Frosti.
+s2_dunes|title|EPISODE 2: EMBER RISING|flash|StingEmber+CritBoom
+s2_dunes|narrator|The Sunscorch Dunes. Three days of sand between Frosti and the Caldera.||
+s2_dunes|bolt|Three days of sand, Frosti. My circuits are cooking.||
+s2_dunes|blue|Vex went this way. We keep rolling.||
+s2_dunes|bolt|Sure. Totally normal desert. Except... the sand is moving wrong.||RockCrack
+s2_dunes|film|Story_EP2_P1||
+s2_dunes|narrator|A wrapped figure claws up out of the dunes. Wraps, champion of the sands. His eyes burn red.|red,shake|StingVoid+ClimaxRumble
+s2_dunes|wraps|The sand belongs to him now. So do you.||RockCrack
+s2_dunes|bolt|Shadows! He's making copies of himself. Back to back, Frosti!|flash|GuardClang
+s2_dunes_win|bolt|They crumble into sand when they lose. Good. That means they CAN lose.||RockShatter
+s2_dunes_win|wraps|...The red is gone. Thank you, little ones. He went toward the volcano.||
+s2_dunes_win|blue|You think Vex is okay out here alone?||
+s2_dunes_win|bolt|Vex? She acts like stone. She's really lava. You'll see.||StingEmber:0.7
+s2_caldera|narrator|The Ember Caldera. A city built inside a living volcano. Vex's home.||Explosion:0.4
+s2_caldera|film|Story_EP2_P2||
+s2_caldera|vex|I told you not to follow me.||
+s2_caldera|blue|And I told you we'd see who falls.||
+s2_caldera|vex|My family has guarded the Ember Core for nine generations. I won't let a rookie walk into the Heart.||
+s2_caldera|vex|You want in? Get past the gate. Hotstreak guards it.|flash,shake|StingEmber+Clack
+s2_caldera|hotstreak|Told you. Rematch.||Explosion:0.4
+s2_caldera|bolt|He's serious, Frosti.||
+s2_caldera|blue|So am I.||Arm
+s2_bond|hotstreak|...Nobody gets past me. Nobody.||
+s2_bond|vex|...You don't roll like a rookie.||
+s2_bond|blue|And you don't roll like someone who wants to fight alone.||
+s2_bond|vex|My mother guarded this core. One night she walked into the Heart and never came out.|cold|
+s2_bond|vex|Everyone said she fell. I think she saw something.||
+s2_bond|blue|Then let's go see it. Together.||
+s2_bond|vex|...Fine. But I lead.|flash|StingEmber
+s2_bond|narrator|Deep below, the Caldera Heart rumbles. Something is already inside.|red,shake|ClimaxRumble
+s2_bond|film|Story_EP2_P3||
+s2_end|narrator|They win the fight. They lose the core.|black|Inhale
+s2_end|dark|You fight well, flame-child. Your mother fought well too.|red|StingVoid
+s2_end|dark|She found the truth. Ask your old Master what the Rings really are.||
+s2_end|film|Story_EP2_P4||
+s2_end|vex|...Orin knew. He KNEW.||
+s2_end|bolt|Frosti, look. A rune on the wall. A spiral. That's the mark of the Sunken Archive.||
+s2_end|blue|Sera's archive. If anyone knows the truth, it's her.||
+s2_end|title|TO BE CONTINUED|flash|StingVoid+CritBoom
+# b151 (Evan: "I didn't see anime clips playing between levels in episode 3"): the four EP3 film parts were all in the last mission's scenes - now one before each level and one at the end, like EP1 / EP2.
+s3_archive|title|EPISODE 3: STORM SEASON|flash|StingStorm+CritBoom
+s3_archive|narrator|The Sunken Archive. Every Ring battle ever rolled is carved into these walls.||
+s3_archive|film|Story_EP3_P1||
+s3_archive|sera|You came for the truth. The truth is heavy. Can you carry it?||
+s3_archive|blue|We have to.||
+s3_archive|sera|Look at the founding wall. Five founders. Five rings. And one Zoogi in chains beneath them.|cold|StingTitan
+s3_archive|bolt|Is that... Master Orin? Holding the chains?||
+s3_archive|sera|It is. The Rings were never a game. They are a cage. Every cheer, every roll, drains the one inside.||ClimaxRumble:0.5
+s3_archive|blue|So every match we ever won... kept him locked up.||
+s3_archive|sera|Now you see why the Rune Seal is guarded. I must test your heart before I give it.|flash|StingStorm
+s3_trial_win|sera|Your heart is loud. But it is kind. Take the Seal.||Win
+s3_trial_win|narrator|A spiral of light settles into Frosti's hand.||AwakenCharge
+s3_trial_win|luma|FROSTI! Are you getting this?! I need you at the Neon Circuit, NOW!|flash|Zap
+s3_broadcast|film|Story_EP3_P2||
+s3_broadcast|luma|Okay, Neon Circuit, we are LIVE and... wait. Why is my signal red?|red|Zap
+s3_broadcast|dark|People of the Rings. I am the one you cheered into chains.|black,shake|StingVoid+ClimaxRumble
+s3_broadcast|dark|Your champion knows the truth now. Ask him why he still fights for the cage.||
+s3_broadcast|bolt|Frosti, don't listen to him--|crack|HitCrack
+s3_broadcast|narrator|The lights die. Bolt screams. And then there is nothing.|black,flash|Explosion+Fall
+s3_broadcast|blue|BOLT!|shake|CritBoom
+s3_broadcast|narrator|Out of the dark roll Pinpoint and Lars. Their eyes burn red.|red|StingVoid:0.7
+s3_broadcast|luma|Pinpoint? Lars? They're shadow-touched! Roll, Frosti! I'll keep every camera on you!||CrowdWave2
+s3_neon_win|luma|Blackout Brawl winner: FROSTI! ...but where's Bolt?||Win
+s3_neon_win|pinpoint|...My head. Frosti? We were... fighting you?||
+s3_neon_win|narrator|On the floor lies a spark of yellow lightning, slowly turning grey.||
+s3_neon_win|sera|He took Bolt into the storm over Meadow Hollow. Your home.|cold|StingStorm
+s3_neon_win|blue|Then that's where I'm going.|flash|Dash
+s3_storm|narrator|Meadow Hollow. The sky is black. The grass lies flat under the wind.||StingStorm
+s3_storm|film|Story_EP3_P3||
+s3_storm|bolt|Hey, Frosti. Took you long enough.|red|
+s3_storm|blue|Bolt? Your eyes...||
+s3_storm|bolt|He showed me everything. A thousand years in the ice. Because they were SCARED of him.|shake|ClimaxRumble
+s3_storm|bolt|And you'd put him right back. Wouldn't you, champ?||
+s3_storm|blue|I don't know what I'd do. But I know I'm bringing you home.||
+s3_storm|bolt|Then come and get me. Loser buys snacks.|flash,shake|StingVoid+Clack
+s3_freed|narrator|Frosti presses the Rune Seal to Bolt's chest. The shadow tears out of him like smoke.|flash|AwakenCharge+StingStorm
+s3_freed|film|Story_EP3_P4||
+s3_freed|bolt|...Frosti? Did I... did I win?||
+s3_freed|blue|No. Snacks are on you.||
+s3_freed|bolt|Heh. Worth it.||Win
+s3_freed|orin|It is time I told you all of it.||
+s3_freed|orin|We sealed him because he was stronger than all five of us together. Not because he had done anything wrong.|cold|StingTitan
+s3_freed|orin|I have been afraid for a thousand years. I am done being afraid.||
+s3_freed|orin|The last ring waits at the end of the sky. I will take you there.|flash|StingVoid
+s3_freed|title|TO BE CONTINUED|flash|StingVoid+CritBoom
+s4_ascent|title|EPISODE 4: VOID CALLING|flash|StingVoid+CritBoom
+s4_ascent|narrator|The Skyward Plateau. The last stair before the sky runs out.||
+s4_ascent|orin|The Titan Core is my lock. Mine to guard. He will come for it here.||StingTitan
+s4_ascent|vex|Then let him come. Bolt and I hold the left side.||
+s4_ascent|luma|Every camera I own is pointed up. The whole world is watching, Frosti.|flash|CrowdWave1
+s4_ascent|narrator|The sky splits open. Out of the storm roll Tavi and Moss, the Plateau's own guardians, eyes burning red.|red,shake|ClimaxRumble+StingVoid
+s4_ascent|moss|Step aside, old master. The gate is his now.||RockCrack
+s4_ascent|orin|Frosti. Roll with me.||GuardClang
+s4_gate_win|tavi|Master Orin? I... I'm sorry. I couldn't stop it.||
+s4_gate_win|orin|The gate holds. ...No. It opens.||RockCrack
+s4_gate_win|narrator|The Titan Core rises out of the stone and flies into the sky, as if something is calling it home.|flash,crack|StingTitan+Launch
+s4_gate_win|orin|He has all five. The cage is open. Go, Frosti. Finish what I started.||
+s4_void|narrator|The Void Ring. A ring of stars at the end of the sky. Five stolen cores burn above it like a crown.||StingVoid
+s4_void|dark|You came. All the way to the end of the sky.|red|
+s4_void|dark|The cage is broken, little champion. Now the Rings will learn what it is to be forgotten.||ClimaxRumble
+s4_void|blue|You were wronged. I know. But if you tear everything down, you're just building a new cage.||
+s4_void|dark|Pretty words. Let's see if they can roll.|flash,shake|StingVoid+Clack
+s4_void|bolt|Together, Frosti. Like always.||
+s4_last|narrator|The shadows fall away. Only he remains.||
+s4_last|dark|Enough. Just you and me. The way this was always going to end.|black|Inhale
+s4_last|blue|Just you and me.|flash|StingFrost
+s4_end|narrator|The last roll stops at the very edge of the ring.||
+s4_end|dark|...So. Seal me again. That is how this story goes.||
+s4_end|blue|No. That's how THEIR story went.||
+s4_end|narrator|Frosti lifts the Rune Seal... and breaks it.|flash,crack|RockShatter+AwakenCharge
+s4_end|narrator|The five cores scatter into the sky as light. No cage. No locks. Just the Rings, and everyone who loves them.|flash|StingFrost+StingEmber
+s4_end|dark|...Why?||
+s4_end|blue|Because you deserved a match you could walk away from.||
+s4_end|dark|...Then I will watch the next one. From the stands.||CrowdWave1
+s4_end|luma|Folks, I... I don't have words. For once. That's the show.||
+s4_end|bolt|So, champ. Who's buying snacks?|flash|Win
+s4_end|title|THE END ... FOR NOW|flash|StingVoid+CritBoom
+s5_dark|title|EPISODE 5: RING GUARD|flash|StingFrost+CritBoom
+s5_dark|narrator|One week after the Void Ring. The five cores are free... and every Ring in the world has gone dark.||ClimaxRumble
+s5_dark|bolt|Champ. I can't roll. I push and nothing happens. It's like the floor forgot us.||
+s5_dark|sera|The cores powered the Rings. Free cores, sleeping Rings. Until they choose to come home, no Zoogi rolls anywhere.||
+s5_dark|luma|And it gets worse, folks. Something is climbing out of the dark arenas. Empty armour. Purple eyes. No one inside.|red|StingVoid
+s5_dark|dark|Hollows. The shadows I left behind. They have no master now... so they take whatever is not guarded.||
+s5_dark|orin|Then we guard it. Long before the Rings, Zoogis stood on two feet. Come. The Ring Guard armoury has waited a thousand years.|flash|StingTitan+GuardClang
+s5_dark|narrator|Stone doors grind open. Suits of armour, one for every Zoogi - each helmet shaped like the face that wears it.||RockCrack
+s5_dark|orin|Armour in your colours. Your own face on your shoulders. You fight on foot now. First: prove you can. Last one standing.||
+s5_trials_win|tavi|Okay. Okay! Walking is weird, but that was AWESOME.||
+s5_trials_win|orin|You stand like a guard, Frosti. The armour is yours.|flash|StingTitan
+s5_trials_win|moss|Reports from the Caldera. Vex is training his own squad. He says the Ember gate does not need "rookies in tin".||
+s5_squads|narrator|Ember Caldera. The lava has cooled to black glass. Two suits of red armour wait on the far side.||StingEmber
+s5_squads|vex|So the old stone gave you a suit too. Cute. Hotstreak and I held this gate before you could roll in a straight line.||
+s5_squads|blue|Then show me. Your squad against mine. First to twenty. Winner leads the line at the Archive.||
+s5_squads|hotstreak|Finally. Somebody say go.|flash|CritBoom
+s5_squads_win|vex|...Tch. Fine. You lead. But I'm on your left side, rookie, and I am not carrying you.||
+s5_squads_win|sera|Frosti! The Sunken Archive - the founding wall is where the cores were born. The Hollows are coming for it. All of them.|red,shake|StingVoid+ClimaxRumble
+s5_line|narrator|The Sunken Archive. One doorway. One guard, a soldier of the old Ring Guard at his side, and a turret older than the Rings.||
+s5_line|sera|Five waves, by my count. If the wall falls, the cores never come home.||
+s5_line|dark|I made these things. I will not cheer for them. Hold the line, little champion. I am watching. From the stands.||
+s5_line|blue|Nobody gets past me.|flash|StingFrost+GuardClang
+s5_end|narrator|The last Hollow falls. The armour is empty. It always was.||
+s5_end|narrator|Above the founding wall, five lights drift down out of the sky... and settle into the stone, one by one.|flash|StingFrost+StingEmber
+s5_end|sera|They came back. Not caged. They CHOSE to come back.||AwakenCharge
+s5_end|bolt|Champ! The floor! I can feel the floor! WE CAN ROLL!|flash|CrowdWave1
+s5_end|orin|Keep the armour, Frosti. A Ring that is worth rolling on is worth standing guard over.||StingTitan
+s5_end|luma|Rings are live, the Guard is on duty, and I am BACK on the air! What a week!||Win
+s5_end|title|THE RING GUARD STANDS|flash|StingVoid+CritBoom

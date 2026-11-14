@@ -1,0 +1,19 @@
+# Battles. mode = classic | combo (2v2: P1+P2 vs P3+P4) | royale. players = roster ids, first = you, '*' = CPU.
+# tier = Easy | Normal | Hard | Expert. win_scene plays after a win; lose_* is the line shown on MISSION FAILED.
+# b151 (Evan): BLACKOUT BRAWL was the transform battle-royale brawl - now classic turns like the rest of the story.
+id|title|mode|env|players|tier|rounds|win_scene|lose_speaker|lose_line|reward
+m1_spar|BEST FRIENDS, BEST RIVALS|classic|Training|blue,bolt*|Easy|4|s1_spar_win|bolt|Ha! Snacks are on YOU, champ. Run it back?|TRAINING COMPLETE
+m1_final|CHAMPIONSHIP FINAL|combo|Frozen|blue,bolt*,vex*,hotstreak*|Normal|3|s1_shatter|vex|Like I said, rookie. The floor fights back.|CHAMPIONS OF THE FROZEN RING
+m1_escape|THE RING COLLAPSES|combo|Frozen|blue,vex*,nightshade*,darkzoogy*|Normal|3|s1_end|dark|Fall, little champion. Everyone falls.|EPISODE 2 UNLOCKED + FULL EPISODE 1 FILM
+m2_dunes|SHADOWS IN THE SAND|combo|Arabian|blue,bolt*,wraps*,darkzoogy*|Normal|3|s2_dunes_win|bolt|Up! Aim for the edge of the shadow, not the middle!|BOLT HAS YOUR BACK
+m2_rival|THE CALDERA GATE|classic|Volcanic|blue,hotstreak*|Hard|4|s2_bond|hotstreak|Go home, rookie. This flame is ours to protect.|THE CALDERA GATE OPENS
+m2_boss|FIRST CLASH WITH THE DARK|combo|Volcanic|blue,vex*,darkzoogy*,darkzoogy*|Hard|3|s2_end|dark|Again you fall. Again they cage what they fear.|EPISODE 3 UNLOCKED: STORM SEASON
+m3_archive|THE RUNE TRIAL|classic|Tomb|blue,sera*|Normal|4|s3_trial_win|sera|Your heart is loud. Breathe, and roll again.|SERA'S RUNE SEAL
+m3_neon|BLACKOUT BRAWL|classic|Neon|blue,pinpoint*,lars*,darkzoogy*|Normal|3|s3_neon_win|luma|Lights out, Frosti! Get up, the crowd is still watching!|LUMI JOINS THE BROADCAST
+m3_tavi|A FRIEND IN THE DARK|classic|Meadow|blue,bolt*|Hard|4|s3_freed|bolt|See? You can't save everyone, Frosti.|EPISODE 4 UNLOCKED: VOID CALLING
+m4_gate|HOLD THE UNDERGATE|combo|Underrealm|blue,orin*,tavi*,moss*|Hard|3|s4_gate_win|orin|Again. Stone does not break on the first blow.|MASTER ORIN'S TRUST
+m4_final|VOID CALLING|combo|Cosmic|blue,bolt*,darkzoogy*,darkzoogy*|Expert|3|s4_last|dark|They all fall. Every champion falls.|THE CORES ANSWER
+m4_last|RESONANCE|classic|Cosmic|blue,darkzoogy*|Expert|4|s4_end|dark|...So you are just like them.|EPISODE 5 UNLOCKED: RING GUARD
+m5_trials|THE RING GUARD TRIALS|shooter2|Training|blue,tavi*,moss*,vex*|Normal|1|s5_trials_win|orin|Armour does not make a guard. Stand up. Again.|RING GUARD ARMOUR
+m5_squads|SQUAD AGAINST SQUAD|shooter3|Volcanic|blue,tavi*,vex*,hotstreak*|Hard|1|s5_squads_win|vex|Two cores of pride, rookie. You only brought one.|VEX AND HOTSTREAK JOIN THE GUARD
+m5_line|HOLD THE LINE|shooter1|Tomb|blue,darkzoogy*,darkzoogy*,darkzoogy*|Expert|1|s5_end|sera|The wall is cracking! Frosti, get up, the Archive needs you!|THE RINGS WAKE UP

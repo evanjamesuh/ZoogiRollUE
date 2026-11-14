@@ -1,0 +1,8 @@
+# Zoogi Roll STORY MODE (Oct 30, written by Claude with Evan's go-ahead: "complete autonomy"). '|' separated, '#' = comment.
+# The first non-comment line is the header. element = Frost | Ember | Storm | Void (colour + stinger). bg / hero = Content/Data/MenuArt keys (episode art, cover face). film = Content/Anime/Movies id of the full episode film, unlocked when the episode is cleared.
+id|ep|title|subtitle|element|bg|hero|film
+ep1|EPISODE 1|THE FROZEN RING|A championship. A shattered sky. A shadow that remembers.|Frost|frozen_background|blue|Story_EP1_Full
+ep2|EPISODE 2|EMBER RISING|A rival's pride. A family flame. The first clash with the dark.|Ember|lava_background|vex|Story_EP2_Full
+ep3|EPISODE 3|STORM SEASON|The truth beneath the Rings. A friend lost in the storm.|Storm|meadows_background|bolt|Story_EP3_Full
+ep4|EPISODE 4|VOID CALLING|Five stolen cores. One last ring at the end of the sky.|Void|cosmos_background|void_frosti|
+ep5|EPISODE 5|RING GUARD|The cores are free. The Rings are dark. The fight goes on foot.|Storm|meadows_background|blue|

@@ -1,0 +1,17 @@
+# deck_id,card_id (one row per copy). Evan Oct 14: 15 cards, max 2 copies.
+deck_id,card_id
+starter,storm
+starter,storm
+starter,heavy_roll
+starter,heavy_roll
+starter,guard
+starter,guard
+starter,precision
+starter,bank_strike
+starter,titan
+starter,orb_relay
+starter,recovery_roll
+starter,crystal_collapse
+starter,precision
+starter,ember
+starter,anchor_guard

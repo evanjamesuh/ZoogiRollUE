@@ -1,0 +1,9 @@
+# Card pairs a combo-planning CPU tier (CPUTiers.csv combo_plan=1) values together in one Standby. Decision data only.
+card_a,card_b,bonus
+heavy_roll,double_impact,30
+titan,heavy_roll,25
+precision,bank_strike,25
+storm,precision,15
+ember,heavy_roll,20
+orb_magnet,orb_relay,20
+guard,anchor_guard,-30

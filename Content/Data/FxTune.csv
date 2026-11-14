@@ -1,0 +1,31 @@
+# Zoogi Roll effect tuning (b71). One row per Niagara effect (the file name without the folder). Multipliers: 1 = as authored.
+# Size = overall scale, Height = extra vertical stretch, Duration = how long it stays, TintR/G/B = colour (0,0,0 = leave as is).
+# Edit and save - the game re-reads this file within a second (editor); phone builds pick it up on the next TestFlight build.
+System,Size,Height,Duration,TintR,TintG,TintB
+NS_Apple,1,1,1,0,0,0
+NS_Apple_bombs,1.5,1,1,0,0,0
+NS_Apple_of_Eden,1,1,1,0,0,0
+NS_Energy_buff,1.67,1,1,0,0,0
+NS_Energy_shockwave,1,1,1,0,0,0
+NS_Fire_meteors,1.33,1,1,0,0,0
+NS_Magic_ray,2,1,1,0,0,0
+NS_Magic_rays_attack,1.29,1,1,0,0,0
+NS_Meteor_hit,1.6,1,1,0,0,0
+NS_Meteor_hit_2,1.6,1,1,0,0,0
+NS_Sword_AoE,1.43,1,1,0,0,0
+NS_Sword_crater,1.43,1,1,0,0,0
+NS_Water_cannon,1.5,1,1,0,0,0
+NS_Water_hit,2,1.3,1,0,0,0
+NS_Wood_shield,1,1,1,0,0,0
+NS_MeteorRainV01,1.68,1,1.33,0,0,0
+NS_MeteorRainV02,1.68,1,1.33,0,0,0
+NS_MeteorRainV03,1.68,1,1.33,0,0,0
+NS_MeteorRainV04,1.68,1,1.33,0,0,0
+NS_MeteorRainV05,1.68,1,1.33,0,0,0
+NS_MeteorRainV06,1.68,1,1.33,0,0,0
+NS_MeteorRainV07,1.68,1,1.33,0,0,0
+NS_MeteorRainV08,1.68,1,1.33,0,0,0
+NS_MeteorRainV09,1.68,1,1.33,0,0,0
+NS_MeteorRainV10,1.68,1,1.33,0,0,0
+NS_MeteorRainV11,1.68,1,1.33,0,0,0
+NS_MeteorRainV12,1.68,1,1.33,0,0,0

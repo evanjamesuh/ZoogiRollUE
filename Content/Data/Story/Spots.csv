@@ -1,0 +1,18 @@
+# Tap-to-travel stops, in order (each unlocks when the one before it is cleared). env = the 3D arena shown behind the scene:
+# Meadow | Frozen | Volcanic | Cosmic | Arabian | Tomb | Neon | Training | Teaser | Underrealm (b178: the Cosmic court dressed as the Shadow Realm). scene / mission ids are in Dialogue.csv / Missions.csv.
+chapter|id|label|sub|env|scene|mission
+ep1|ep1_a|ZOOGI LEAGUE COURT|Meadow Hollow: one practice roll before the Final|Training|s1_morning|m1_spar
+ep1|ep1_b|THE FROZEN RING|The Championship Final|Frozen|s1_arrival|m1_final
+ep1|ep1_c|THE COLLAPSE|Frosti and Vex: survive the fall, together|Frozen||m1_escape
+ep2|ep2_a|SUNSCORCH DUNES|Three days of sand, and something following|Arabian|s2_dunes|m2_dunes
+ep2|ep2_b|EMBER CALDERA|Vex's home. Vex's pride.|Volcanic|s2_caldera|m2_rival
+ep2|ep2_c|THE CALDERA HEART|First clash with the dark|Volcanic||m2_boss
+ep3|ep3_a|SUNKEN ARCHIVE|Sera and the founding wall|Tomb|s3_archive|m3_archive
+ep3|ep3_b|NEON CIRCUIT|Lumi's broadcast goes dark|Neon|s3_broadcast|m3_neon
+ep3|ep3_c|MEADOW IN THE STORM|A friend in the dark|Meadow|s3_storm|m3_tavi
+ep4|ep4_a|THE UNDERREALM|Hold the gate beneath the world|Underrealm|s4_ascent|m4_gate
+ep4|ep4_b|THE VOID RING|Where the stolen cores burn|Cosmic|s4_void|m4_final
+ep4|ep4_c|RESONANCE|One last roll|Cosmic||m4_last
+ep5|ep5_a|THE RING GUARD ARMOURY|Master Orin's trials: last one standing|Training|s5_dark|m5_trials
+ep5|ep5_b|EMBER CALDERA|Squad against squad: Vex wants a rematch|Volcanic|s5_squads|m5_squads
+ep5|ep5_c|THE SUNKEN ARCHIVE|Hold the line against the Void Hollows|Tomb|s5_line|m5_line

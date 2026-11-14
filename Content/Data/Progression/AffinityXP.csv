@@ -1,0 +1,6 @@
+# Affinity XP per match for the Zoogi the player controlled (participation, battles, character achievements).
+source,xp,per_match_cap
+participation,10,1
+win,5,1
+ko,3,4
+signature_hit,2,3

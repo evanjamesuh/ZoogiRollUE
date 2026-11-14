@@ -1,0 +1,12 @@
+# Mastery level curve per element (Evan Q5/Q12). cumulative_xp = total XP to reach the level; level_gems = one-time gem bonus on reaching it.
+level,cumulative_xp,level_gems
+1,0,0
+2,150,10
+3,450,15
+4,800,20
+5,1200,30
+6,2000,40
+7,2900,50
+8,4000,60
+9,5400,80
+10,7000,150

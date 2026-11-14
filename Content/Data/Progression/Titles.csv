@@ -1,0 +1,9 @@
+# The 7 titles (Evan Q14). Earned via achievements (Achievements.csv reward_title). Noncompetitive: display only.
+id,name,source
+arena_rookie,Arena Rookie,A_FIRST_MATCH
+rolling_challenger,Rolling Challenger,A_WINS_10
+marble_master,Marble Master,A_MASTERY_5
+elemental_specialist,Elemental Specialist,A_MASTERY_ALL5
+arena_champion,Arena Champion,A_WINS_50
+master_strategist,Master Strategist,A_EXPERT_WINS_10
+zoogi_legend,Zoogi Legend,A_AFFINITY_MAX

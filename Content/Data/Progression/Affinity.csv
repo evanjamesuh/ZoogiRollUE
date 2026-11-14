@@ -1,0 +1,8 @@
+# Zoogi Affinity (Evan Q9): independent per-Zoogi track. Rewards are cosmetic only (emote / victory pose / profile animation / intro / VFX).
+# reward_kind + reward_id are claimed once per Zoogi per level; {zoogi} is replaced by the Zoogi id.
+level,cumulative_xp,reward_kind,reward_id
+1,0,,
+2,100,emote,emote_{zoogi}_wave
+3,300,victory_pose,pose_{zoogi}
+4,600,profile_animation,profile_{zoogi}
+5,1000,intro,intro_{zoogi}
