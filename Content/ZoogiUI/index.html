@@ -1,0 +1,509 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0b0f19">
+<title>Zoogi Roll Arena UI</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- Shared SVG defs -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="gGold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff3b4"/><stop offset=".35" stop-color="#f2c45a"/>
+      <stop offset=".7" stop-color="#a86c1c"/><stop offset="1" stop-color="#f6d77a"/>
+    </linearGradient>
+    <linearGradient id="gGoldH" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#7a5a26"/><stop offset=".5" stop-color="#f6e2a0"/><stop offset="1" stop-color="#7a5a26"/>
+    </linearGradient>
+    <linearGradient id="gStone" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2f323b"/><stop offset=".55" stop-color="#22252c"/><stop offset="1" stop-color="#181a20"/>
+    </linearGradient>
+    <linearGradient id="gStoneCenter" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#363a45"/><stop offset="1" stop-color="#1e2128"/>
+    </linearGradient>
+    <linearGradient id="gCrystal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e6fbff"/><stop offset=".4" stop-color="#6fd0ff"/>
+      <stop offset=".7" stop-color="#2f86f0"/><stop offset="1" stop-color="#173f9e"/>
+    </linearGradient>
+    <filter id="fNoise" x="0" y="0" width="100%" height="100%">
+      <feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="4"/>
+      <feColorMatrix values="0 0 0 0 .5  0 0 0 0 .5  0 0 0 0 .55  0 0 0 .22 0"/>
+      <feComposite in2="SourceGraphic" operator="in"/>
+    </filter>
+    <filter id="fGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <symbol id="iCrystal" viewBox="0 0 24 44">
+      <path d="M12 0 L23 15 L19 38 L12 44 L5 38 L1 15 Z" fill="url(#gCrystal)" stroke="#bdf2ff" stroke-width="1.2"/>
+      <path d="M12 0 L12 44 M1 15 L12 22 L23 15 M5 38 L12 22 L19 38" fill="none" stroke="#e8fcff" stroke-opacity=".55" stroke-width=".9"/>
+    </symbol>
+    <symbol id="iStar4" viewBox="0 0 100 100">
+      <path d="M50 0 C54 34 66 46 100 50 C66 54 54 66 50 100 C46 66 34 54 0 50 C34 46 46 34 50 0 Z"/>
+    </symbol>
+    <symbol id="iLock" viewBox="0 0 32 36">
+      <path d="M8 16 V10 a8 8 0 0 1 16 0 V16" fill="none" stroke="#f6d27a" stroke-width="4"/>
+      <rect x="3" y="15" width="26" height="20" rx="3" fill="url(#gGold)" stroke="#5a3a0c" stroke-width="1.5"/>
+      <circle cx="16" cy="23" r="3" fill="#4a2c08"/><rect x="14.6" y="24" width="2.8" height="6" rx="1" fill="#4a2c08"/>
+    </symbol>
+    <symbol id="iLockW" viewBox="0 0 32 36">
+      <path d="M9 16 V11 a7 7 0 0 1 14 0 V16" fill="none" stroke="#c9ced9" stroke-width="3.5"/>
+      <rect x="5" y="15" width="22" height="18" rx="3" fill="#c9ced9"/>
+      <circle cx="16" cy="23" r="2.6" fill="#1e2434"/><rect x="14.8" y="24" width="2.4" height="5" rx="1" fill="#1e2434"/>
+    </symbol>
+    <symbol id="iChevBig" viewBox="0 0 40 50">
+      <path d="M30 3 L8 25 L30 47" fill="none" stroke="url(#gGold)" stroke-width="9" stroke-linejoin="miter"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div id="viewport">
+  <div id="letterbox"></div>
+
+  <main id="stage" aria-live="off">
+
+    <!-- ================= SHARED TOP BAR =================
+         UMG: WBP_TopBar  (Canvas slot 0,0 · 941×150) -->
+    <header id="topbar" data-umg="WBP_TopBar">
+      <button class="avatar" data-ui="TopBar.Avatar" aria-label="Profile">
+        <svg class="ring" viewBox="0 0 140 138" aria-hidden="true">
+          <g fill="url(#gGold)" stroke="#5a3a0c" stroke-width="1.2">
+            <path d="M68 2 L76 18 L60 18 Z"/><path d="M68 136 L76 120 L60 120 Z"/>
+            <path d="M0 70 L16 62 L16 78 Z"/><path d="M136 70 L120 62 L120 78 Z"/>
+            <path d="M19 21 L35 26 L24 37 Z"/><path d="M117 21 L101 26 L112 37 Z"/>
+            <path d="M19 119 L35 114 L24 103 Z"/>
+          </g>
+          <circle cx="68" cy="70" r="55" fill="#0d1018"/>
+          <circle cx="68" cy="70" r="52" fill="none" stroke="url(#gGold)" stroke-width="7"/>
+          <circle cx="68" cy="70" r="56" fill="none" stroke="#5a3a0c" stroke-width="1.5"/>
+          <circle cx="68" cy="70" r="48" fill="none" stroke="#3a2508" stroke-width="1.5"/>
+        </svg>
+        <img class="face" src="assets/ui/avatar.png" alt="">
+        <img class="crown" src="assets/ui/crown-badge.png" alt="">
+      </button>
+
+      <div class="gf nameplate glow" style="--x:140px;--y:18px;--w:266px;--h:100px" data-ui="TopBar.NamePlate">
+        <div class="nm" id="playerName">Player123</div>
+        <div class="lv">Lv. <span id="playerLevel">28</span></div>
+        <div class="xp" style="top:63px"><i id="xpFill" style="--v:70%"></i></div>
+      </div>
+
+      <div class="gf pill steel" style="--x:418px;--y:34px;--w:190px;--h:55px" data-ui="TopBar.Gems">
+        <span class="val" id="gemVal" style="left:70px">1,240</span>
+        <button class="plus" style="left:148px" data-ui="TopBar.GemsPlus" aria-label="Buy gems"></button>
+      </div>
+      <img class="cur a" src="assets/icons/gem.png" alt="" style="--x:420px;--y:28px;--w:60px;--h:72px;z-index:2;filter:drop-shadow(0 2px 3px rgba(0,0,0,.6))">
+
+      <div class="gf pill steel" style="--x:614px;--y:34px;--w:196px;--h:55px" data-ui="TopBar.Coins">
+        <img class="cur" src="assets/icons/coin.png" alt="" style="left:5px;width:48px;height:48px">
+        <span class="val" id="coinVal" style="left:66px">56,320</span>
+        <button class="plus" style="left:160px" data-ui="TopBar.CoinsPlus" aria-label="Buy coins"></button>
+      </div>
+
+      <div class="gf pill steel" style="--x:826px;--y:26px;--w:140px;--h:70px" data-ui="TopBar.Actions">
+        <button class="iconbtn" style="left:13px;top:15px" data-ui="TopBar.Bell" aria-label="Notifications"><img src="assets/icons/bell.png" alt=""></button>
+        <button class="iconbtn" style="left:69px;top:15px" data-ui="TopBar.Settings" aria-label="Settings"><img src="assets/icons/gear.png" alt=""></button>
+      </div>
+      <span class="badge" id="notifBadge">3</span>
+    </header>
+
+    <img id="logo" src="assets/ui/logo.png" alt="Zoogi Roll Arena" data-umg="IMG_Logo">
+
+    <!-- ================= DECK =================  UMG: WBP_DeckBuilder -->
+    <section class="screen" id="scr-deck" data-umg="WBP_DeckBuilder" data-logo-y="98" aria-label="Deck builder">
+      <img class="bg" src="assets/bg/deck.jpg" alt="">
+
+      <div class="gf deckpanel stone glow" style="--x:27px;--y:380px;--w:888px;--h:355px"></div>
+      <div class="deckscroll" id="deckGrid" role="list" aria-label="Cards in deck"></div>
+
+      <div class="deckhead">
+        <button class="arrow l" data-ui="Deck.PrevDeck" aria-label="Previous deck"><svg><use href="#iChevBig"/></svg></button>
+        <div class="plate"></div>
+        <span class="pipd" style="left:43px"></span><span class="pipd" style="left:688px"></span>
+        <span class="dia"></span>
+        <div class="name disp goldtxt" id="deckName" spellcheck="false">My Deck 1</div>
+        <button class="pen" id="deckRename" data-ui="Deck.Rename" aria-label="Rename deck">
+          <svg viewBox="0 0 28 32"><path d="M20 3 L26 9 L10 25 L3 28 L6 21 Z" fill="url(#gGold)" stroke="#5a3a0c" stroke-width="1.2"/><path d="M17 6 L23 12" stroke="#5a3a0c" stroke-width="1.5"/></svg>
+        </button>
+        <svg class="cnt-ico" viewBox="0 0 40 38" aria-hidden="true">
+          <rect x="15" y="3" width="20" height="30" rx="3" fill="#b8862e" transform="rotate(12 25 18)"/>
+          <rect x="9" y="4" width="20" height="30" rx="3" fill="#d9a640" transform="rotate(4 19 19)"/>
+          <rect x="3" y="5" width="20" height="30" rx="3" fill="url(#gGold)" stroke="#5a3a0c"/>
+        </svg>
+        <div class="cnt disp goldtxt"><span id="deckCount">5</span>/<span id="deckMax">5</span></div>
+        <button class="arrow r" data-ui="Deck.NextDeck" aria-label="Next deck"><svg style="transform:scaleX(-1)"><use href="#iChevBig"/></svg></button>
+      </div>
+
+      <div id="filters" role="toolbar" aria-label="Card categories"></div>
+
+      <div class="gf collpanel stone glow" style="--x:20px;--y:882px;--w:902px;--h:390px"></div>
+      <span class="stud gold" style="--x:24px;--y:889px"></span><span class="stud gold" style="--x:917px;--y:889px"></span>
+      <div id="collGrid" role="list" aria-label="Card collection"></div>
+
+      <div class="gf detail stone glow" style="--x:19px;--y:1277px;--w:903px;--h:225px" data-ui="Deck.Detail">
+        <img class="splash" id="dSplash" src="assets/cards/storm-splash.jpg" alt="">
+        <div class="card" id="dCard" style="--x:20px;--y:14px;--w:211px;--h:203px;--c:12px;--b:5px">
+          <img class="art" id="dArt" src="assets/cards/storm-detail.jpg" alt="" style="bottom:47px">
+          <span class="lb" style="height:41px;left:44px"></span>
+          <span class="ti" style="width:44px;height:44px;left:6px;bottom:4px"><img id="dTypeIco" src="assets/icons/type-storm.png" alt=""></span>
+          <span class="nm" id="dCardName" style="font-size:24px;left:50px;bottom:14px">Storm</span>
+          <span class="cost" style="width:50px;height:50px;left:-4px;top:-4px"><b id="dCost1" style="font-size:33px">2</b></span>
+        </div>
+        <img class="ti2" id="dIco" src="assets/icons/detail-swirl.png" alt="">
+        <div class="ttl disp" id="dTitle">Storm</div>
+        <div class="tagpill" id="dTag" style="left:431px;top:19px"><img src="assets/icons/tag-technique.png" alt=""><span>Technique</span></div>
+        <p class="desc" id="dDesc" style="margin:0">Unleash a swirling tempest that hits all enemy Zoogies, dealing damage and pushing them back.</p>
+        <div class="gf stat" style="--x:255px;--y:151px;--w:172px;--h:57px"><img id="dS1i" src="assets/icons/stat-area.png" alt=""><div class="k" id="dS1k">Area Damage</div><div class="v" id="dS1v">250% Power</div></div>
+        <div class="gf stat" style="--x:441px;--y:151px;--w:160px;--h:57px"><img id="dS2i" src="assets/icons/stat-knockback.png" alt=""><div class="k" id="dS2k">Knockback</div><div class="v" id="dS2v">Medium</div></div>
+        <div class="energy" style="left:712px;top:19px;width:166px;height:87px">
+          <div class="k disp">Energy Cost</div>
+          <span class="cost"><b id="dCost2">2</b></span>
+        </div>
+      </div>
+
+      <button class="cta" style="--x:188px;--y:1517px;--w:568px;--h:133px" data-ui="Deck.Save" id="btnSaveDeck">
+        <span class="gem l"><img src="assets/ui/cta-gem-left.png" alt=""></span>
+        <span class="gem r"><img src="assets/ui/cta-gem-right.png" alt=""></span>
+        <span class="stud t"></span><span class="stud b"></span>
+        <span class="lbl"><span class="disp goldtxt">Save Deck</span></span>
+      </button>
+    </section>
+
+    <!-- ================= ARENA =================  UMG: WBP_ArenaSelect -->
+    <section class="screen" id="scr-arena" data-umg="WBP_ArenaSelect" data-logo-y="92" aria-label="Arena selection">
+      <img class="bg" src="assets/bg/arena.jpg" alt="">
+      <div class="plate" style="--x:255px;--y:318px;--w:432px;--h:66px;--fs:30px">
+        <span class="pip l"></span><span class="t disp goldtxt">Arena Selection</span><span class="pip r"></span>
+      </div>
+
+      <div class="gf featured glow" style="--x:22px;--y:402px;--w:900px;--h:416px" data-ui="Arena.Featured">
+        <img class="img" id="fImg" src="assets/arenas/skyfall-featured.jpg" alt="">
+        <div class="info">
+          <svg class="star" viewBox="0 0 24 24" style="left:25px;top:7px"><path d="M12 1l3.2 6.8 7.3.9-5.4 5 1.4 7.3L12 17.4 5.5 21l1.4-7.3-5.4-5 7.3-.9z" fill="url(#gGold)" stroke="#6b4a0c"/></svg>
+          <div class="kick disp" style="left:58px;top:10px">Featured Arena</div>
+          <div class="nm disp goldtxt" id="fName" style="left:23px;top:42px">Skyfall Isles</div>
+          <p class="desc" id="fDesc" style="margin:0;left:23px;top:84px">Majestic floating islands where the wind guides the bravest Zoogies.</p>
+          <div class="rule" style="top:165px"></div>
+          <div id="fFeats"></div>
+        </div>
+      </div>
+      <span class="stud" style="--x:205px;--y:405px"></span>
+      <span class="stud" style="--x:24px;--y:405px"></span><span class="stud" style="--x:918px;--y:405px"></span>
+
+      <div id="arenaGrid" role="radiogroup" aria-label="Arenas"></div>
+
+      <button class="gf backbtn glow" style="--x:26px;--y:1540px;--w:98px;--h:92px" data-ui="Arena.Back" aria-label="Back">
+        <svg viewBox="0 0 40 50"><use href="#iChevBig"/></svg>
+      </button>
+      <button class="cta" style="--x:172px;--y:1505px;--w:598px;--h:140px;--fs:50px" data-ui="Arena.Select" id="btnSelectArena">
+        <span class="gem l"><img src="assets/ui/cta-gem-left.png" alt=""></span>
+        <span class="gem r"><img src="assets/ui/cta-gem-right.png" alt=""></span>
+        <span class="stud t"></span><span class="stud b"></span>
+        <span class="lbl"><span class="disp goldtxt">Select Arena<svg viewBox="0 0 40 50" style="width:30px;height:40px;margin-left:10px;vertical-align:-4px;transform:scaleX(-1)"><use href="#iChevBig"/></svg></span></span>
+      </button>
+    </section>
+
+    <!-- ================= STORY =================  UMG: WBP_StoryEpisodes -->
+    <section class="screen" id="scr-story" data-umg="WBP_StoryEpisodes" data-logo-y="97" aria-label="Story episodes">
+      <img class="bg" src="assets/bg/story.jpg" alt="">
+      <div class="plate" style="--x:228px;--y:328px;--w:484px;--h:68px;--fs:33px;--is:52px">
+        <img class="ico" src="assets/icons/title-book.png" alt=""><span class="t disp goldtxt">Story Episodes</span>
+      </div>
+
+      <div class="gf chapter glow" style="--x:20px;--y:400px;--w:902px;--h:298px" data-ui="Story.Chapter">
+        <img class="hero" id="chHero" src="assets/story/chapter-skyfall.jpg" alt="">
+        <div class="kick disp" id="chKick">Chapter 1</div>
+        <div class="nm disp" id="chName">Skyfall Isles</div>
+        <p class="desc" id="chDesc" style="margin:0">A new horizon awaits! Join Sera and the Zoogies as they discover the floating isles and the secrets that lie beyond the clouds.</p>
+      </div>
+      <button class="bbtn" style="--x:45px;--y:605px;--w:340px;--h:72px;--p:22px;--fs:25px" data-ui="Story.Watch" id="btnWatch">
+        <span class="play"></span><span class="disp" id="watchLbl" style="color:#fff">Watch Episode 1</span>
+      </button>
+
+      <div id="epRow" role="radiogroup" aria-label="Episodes"></div>
+      <div class="eptrack"></div>
+      <div id="epNodes"></div>
+
+      <div class="gf sechead glow" style="--x:22px;--y:930px;--w:896px;--h:50px;--ix:16px;--tx:95px">
+        <img class="ico" src="assets/icons/sec-replays.png" alt=""><span class="t disp">Replays</span>
+      </div>
+      <button class="bbtn seeall" style="--x:758px;--y:938px;--w:142px;--h:35px" data-ui="Story.Replays.SeeAll"><span class="disp">See All</span><span class="chev" style="width:8px;height:8px;color:#fff"></span></button>
+      <div id="replays"></div>
+
+      <div class="gf sechead glow" style="--x:22px;--y:1232px;--w:896px;--h:48px;--ix:16px;--tx:95px">
+        <img class="ico" src="assets/icons/sec-highlights.png" alt=""><span class="t disp">Highlights</span>
+      </div>
+      <button class="bbtn seeall" style="--x:758px;--y:1238px;--w:142px;--h:35px" data-ui="Story.Highlights.SeeAll"><span class="disp">See All</span><span class="chev" style="width:8px;height:8px;color:#fff"></span></button>
+      <div id="highlights"></div>
+
+      <div class="gf sechead glow" style="--x:22px;--y:1440px;--w:896px;--h:48px;--ix:16px;--tx:95px">
+        <img class="ico" src="assets/icons/sec-cinematics.png" alt=""><span class="t disp">Cinematics</span>
+      </div>
+      <button class="bbtn seeall" style="--x:758px;--y:1446px;--w:142px;--h:35px" data-ui="Story.Cinematics.SeeAll"><span class="disp">See All</span><span class="chev" style="width:8px;height:8px;color:#fff"></span></button>
+      <div id="cinematics"></div>
+    </section>
+
+    <!-- ================= SHOP =================  UMG: WBP_Shop -->
+    <section class="screen" id="scr-shop" data-umg="WBP_Shop" data-logo-y="98" aria-label="Shop">
+      <img class="bg" src="assets/bg/shop.jpg" alt="">
+      <div class="plate" style="--x:270px;--y:334px;--w:402px;--h:70px;--fs:42px;--is:50px">
+        <span class="pip l"></span><img class="ico" src="assets/icons/title-cart.png" alt=""><span class="t disp goldtxt" style="font-weight:800">Shop</span><span class="pip r"></span>
+      </div>
+
+      <div id="shopTabs" role="tablist" aria-label="Shop categories"></div>
+      <span class="stud" style="--x:471px;--y:528px"></span>
+
+      <div class="gf shopfeat glow" style="--x:22px;--y:535px;--w:902px;--h:468px" data-ui="Shop.Featured">
+        <img class="hero" id="sHero" src="assets/shop/celestial-sera.jpg" alt="">
+        <div class="ribbon"><span class="disp" id="sRibbon">Featured</span></div>
+        <img class="emb" id="sEmb" src="assets/icons/epic-emblem.png" alt="" style="left:21px">
+        <div class="nm disp goldtxt" id="sName">Celestial<br>Sera</div>
+        <div class="raritytag" id="sRarity" style="left:31px;top:149px;width:142px">Epic Skin</div>
+        <p class="desc" id="sDesc" style="margin:0">A radiant spirit that illuminates every arena with starlight.</p>
+        <div id="sPerks"></div>
+        <div id="sThumbs" role="tablist" aria-label="Previews"></div>
+        <button class="bbtn pricebtn" style="--x:396px;--y:367px;--w:224px;--h:78px;--p:24px" data-ui="Shop.Featured.Price" id="sPriceBtn">
+          <img class="gemi" src="assets/icons/gem.png" alt=""><span class="disp" id="sPrice" style="font-family:var(--serif)">1,200</span>
+        </button>
+        <button class="bbtn gold buybtn" style="--x:610px;--y:367px;--w:282px;--h:78px;--p:28px" data-ui="Shop.Featured.Buy" id="sBuyBtn">
+          <span class="disp" id="sBuyLbl">Buy Now</span>
+        </button>
+      </div>
+      <span class="stud" style="--x:471px;--y:1003px"></span>
+
+      <div class="gf sechead glow" style="--x:22px;--y:1010px;--w:896px;--h:48px;--ix:14px;--tx:66px;--fs:23px">
+        <img class="ico" src="assets/icons/sec-popular.png" alt=""><span class="t disp">Popular Items</span>
+      </div>
+      <button class="bbtn seeall" style="--x:755px;--y:1018px;--w:160px;--h:35px" data-ui="Shop.Popular.SeeAll"><span class="disp">See All</span><span class="chev" style="width:8px;height:8px;color:#fff"></span></button>
+      <div id="popular"></div>
+
+      <div class="gf sechead glow" style="--x:22px;--y:1312px;--w:896px;--h:50px;--ix:14px;--tx:66px;--fs:23px">
+        <img class="ico" src="assets/icons/sec-bundles.png" alt=""><span class="t disp">Cosmetic Bundles</span>
+      </div>
+      <button class="bbtn seeall" style="--x:755px;--y:1321px;--w:160px;--h:35px" data-ui="Shop.Bundles.SeeAll"><span class="disp">See All</span><span class="chev" style="width:8px;height:8px;color:#fff"></span></button>
+      <div id="bundles"></div>
+    </section>
+
+    <!-- ================= SETTINGS =================  UMG: WBP_Settings -->
+    <section class="screen" id="scr-settings" data-umg="WBP_Settings" data-logo-y="98" aria-label="Settings">
+      <img class="bg" src="assets/bg/settings.jpg" alt="">
+      <div class="plate" style="--x:252px;--y:336px;--w:436px;--h:64px;--fs:40px;--is:46px">
+        <span class="pip l"></span><img class="ico" src="assets/icons/title-gear.png" alt=""><span class="t disp goldtxt" style="font-weight:800">Settings</span><span class="pip r"></span>
+      </div>
+      <div id="setSections"></div>
+      <button class="cta" style="--x:175px;--y:1503px;--w:590px;--h:142px;--fs:46px" data-ui="Settings.Save" id="btnSaveSettings">
+        <span class="gem l"><img src="assets/ui/cta-gem-left.png" alt=""></span>
+        <span class="gem r"><img src="assets/ui/cta-gem-right.png" alt=""></span>
+        <span class="stud t"></span><span class="stud b"></span>
+        <span class="lbl"><span class="disp goldtxt">Save Settings</span></span>
+      </button>
+    </section>
+
+    <!-- ================= TITLE =================  UMG: WBP_Title -->
+    <section class="screen" id="scr-title" data-umg="WBP_Title" aria-label="Title">
+      <img class="bg" src="assets/title/bg.jpg" alt="Zoogi Roll Arena">
+      <button class="tapzone" id="btnTapStart" data-ui="Title.TapToStart" aria-label="Tap to start"></button>
+      <span class="tapglow"></span>
+      <span class="tap">Tap to Start</span>
+    </section>
+
+    <!-- ================= LOADING =================  UMG: WBP_Loading -->
+    <section class="screen" id="scr-loading" data-umg="WBP_Loading" aria-label="Loading">
+      <img class="bg" id="ldBg" src="assets/load/frozen.jpg" alt="">
+      <div class="trough" id="ldTrough" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Loading"><i class="fill" id="ldFill"></i></div>
+    </section>
+
+    <!-- ================= BOARD BATTLE (4 players) =================  UMG: WBP_BoardBattle -->
+    <section class="screen" id="scr-board" data-umg="WBP_BoardBattle" aria-label="Board battle">
+      <img class="bg" src="assets/board/bg.jpg" alt="">
+      <button class="gear" data-ui="Board.Settings" aria-label="Settings"><svg viewBox="0 0 24 24"><path fill="#5fb0ff" d="M19.4 13a7.5 7.5 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.7 7.7 0 0 0-1.7-1L14.9 3h-4l-.4 2.7a7.7 7.7 0 0 0-1.7 1l-2.5-1-2 3.5L6.4 11a7.5 7.5 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.7 7.7 0 0 0 1.7 1l.4 2.7h4l.4-2.7a7.7 7.7 0 0 0 1.7-1l2.5 1 2-3.5zM12.9 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg></button>
+
+      <div class="phases" id="kPhases" role="tablist" aria-label="Turn phases">
+        <svg class="cap l" viewBox="0 0 40 50"><use href="#iChevBig"/></svg>
+        <svg class="cap r" viewBox="0 0 40 50"><use href="#iChevBig"/></svg>
+      </div>
+
+      <div class="plate" style="--x:307px;--y:179px;--w:329px;--h:40px;--fs:24px">
+        <span class="stud" style="--x:24px;--y:20px"></span><span class="t disp" id="kArena" style="color:#f4f7ff">Frozen Ring</span><span class="stud" style="--x:305px;--y:20px"></span>
+      </div>
+      <div class="roundpill"><span class="orbd" style="left:22px"></span>Round <span id="kRound" style="margin:0 .25em">1</span>/ <span id="kRounds" style="margin-left:.25em">8</span><span class="orbd" style="right:22px"></span></div>
+
+      <div id="kPanels"></div>
+
+      <div class="boardzone" id="kBoard" data-ui="Board.Aim" aria-label="Tap the arena to aim"></div>
+      <svg class="aim" id="kAim" aria-hidden="true">
+        <defs><marker id="arrowR" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#ff4a3d"/></marker></defs>
+        <line id="kAimLine" x1="350" y1="932" x2="424" y2="904" stroke="#ff4a3d" stroke-width="5" stroke-dasharray="10 7" stroke-linecap="round" marker-end="url(#arrowR)" filter="drop-shadow(0 0 2px #fff)"/>
+      </svg>
+      <div id="kMarbles"></div>
+
+      <div class="gf dockstone steel stone" style="--x:150px;--y:1268px;--w:640px;--h:404px;--c:18px;--b:4px;--fill:linear-gradient(180deg,#262b36,#151920)"></div>
+      <span class="stud lg" style="--x:470px;--y:1270px"></span>
+
+      <button class="gf kdeck glow" style="--x:23px;--y:1280px;--w:114px;--h:190px" data-ui="Board.Deck" aria-label="Deck">
+        <span class="back"><img src="assets/ui/cta-gem-left.png" alt=""></span>
+        <span class="n" id="kDeckN">24</span>
+      </button>
+      <span class="lbl" style="position:absolute;left:23px;width:114px;top:1477px;text-align:center;font:800 17px/1 var(--sans);color:#fff;text-shadow:0 2px 2px #000">DECK</span>
+
+      <div id="kHand" role="radiogroup" aria-label="Hand"></div>
+
+      <div class="gf kdisc glow" style="--x:790px;--y:1277px;--w:120px;--h:176px" data-ui="Board.Discard">
+        <svg viewBox="0 0 24 44" style="top:18px;width:44px;height:72px"><use href="#iCrystal"/></svg>
+        <span class="n" style="top:106px"><span id="kDisc1">0</span>/5</span>
+        <span class="lbl" style="top:144px">DISCARD</span>
+      </div>
+
+      <div class="gf kdetail" style="--x:153px;--y:1480px;--w:487px;--h:173px">
+        <span class="th"><img id="kdImg" src="assets/battle/card-storm.jpg" alt=""></span>
+        <span class="ttl" id="kdTitle">Storm</span>
+        <span class="btag" id="kdTag">Control</span>
+        <p class="ds" id="kdDesc">Create a whirling gust that knocks nearby opponents away and disrupts their roll.</p>
+      </div>
+      <div class="activateWrap">
+        <div class="acost"><svg viewBox="0 0 24 44"><use href="#iCrystal"/></svg><span id="kdCost">2</span></div>
+        <button class="btnActivate" id="kActivate" type="button" data-ui="Board.Activate"><span>Activate</span></button>
+        <svg class="topgem" viewBox="0 0 40 30" aria-hidden="true"><path d="M20 0 L32 15 L20 30 L8 15Z" fill="url(#gGold)" stroke="#6b4e1c"/></svg>
+      </div>
+
+      <div class="gf kdisc glow" style="--x:657px;--y:1483px;--w:83px;--h:174px" data-ui="Board.Discard2">
+        <svg viewBox="0 0 24 44" style="top:14px;width:30px;height:24px;opacity:.9"><use href="#iCrystal"/></svg>
+        <svg viewBox="0 0 24 44" style="top:40px;width:36px;height:60px"><use href="#iCrystal"/></svg>
+        <span class="n" style="top:108px;font-size:28px"><span id="kDisc2">0</span>/5</span>
+        <span class="lbl" style="top:142px;font-size:13px">DISCARD</span>
+      </div>
+
+      <div class="awakenWrap">
+        <div class="rays" aria-hidden="true"></div>
+        <svg class="sparkle" viewBox="0 0 100 100" aria-hidden="true"><use href="#iStar4" width="100" height="100" fill="#fff6d0"/></svg>
+        <button class="btnAwaken" id="kAwaken" type="button" aria-label="Awaken" data-ui="Board.Awaken">
+          <span class="orb" aria-hidden="true"><span class="band"></span>
+            <svg class="ostar" viewBox="0 0 100 100"><use href="#iStar4" width="100" height="100" fill="url(#gGold)"/></svg>
+          </span>
+          <span class="alabel">Awaken</span>
+        </button>
+        <div class="awk-pips" id="kAwkPips"></div>
+      </div>
+
+      <div class="banner goldtxt" id="kBanner"></div>
+      <div class="boardveil" id="kVeil"></div>
+    </section>
+
+    <!-- ================= BATTLE HUD =================  UMG: WBP_BattleHUD -->
+    <section class="screen" id="scr-battle" data-umg="WBP_BattleHUD" aria-label="Battle">
+      <div class="arena" role="img" aria-label="Arena"></div>
+
+      <div class="b-top">
+        <svg viewBox="0 0 941 220" preserveAspectRatio="none" aria-hidden="true">
+          <rect x="0" y="0" width="941" height="150" fill="url(#gStone)"/>
+          <path d="M0 0 H332 V140 Q332 168 312 182 Q298 198 268 200 H44 Q16 200 6 184 L0 176 Z" fill="url(#gStone)"/>
+          <path d="M941 0 H609 V140 Q609 168 629 182 Q643 198 673 200 H897 Q925 200 935 184 L941 176 Z" fill="url(#gStone)"/>
+          <path d="M0 0 H332 V140 Q332 168 312 182 Q298 198 268 200 H44 Q16 200 6 184 L0 176 Z" filter="url(#fNoise)" fill="#fff"/>
+          <path d="M941 0 H609 V140 Q609 168 629 182 Q643 198 673 200 H897 Q925 200 935 184 L941 176 Z" filter="url(#fNoise)" fill="#fff"/>
+          <path d="M18 196 Q34 202 60 200 H268 Q298 198 312 182 Q332 168 332 140 V20" fill="none" stroke="#5b5f6a" stroke-width="3"/>
+          <path d="M923 196 Q907 202 881 200 H673 Q643 198 629 182 Q609 168 609 140 V20" fill="none" stroke="#5b5f6a" stroke-width="3"/>
+          <path d="M0 0 H30 Q20 40 26 96 Q32 150 20 212 Q8 196 0 180 Z" fill="#8a6a34" stroke="url(#gGold)" stroke-width="3" opacity=".85"/>
+          <path d="M941 0 H911 Q921 40 915 96 Q909 150 921 212 Q933 196 941 180 Z" fill="#8a6a34" stroke="url(#gGold)" stroke-width="3" opacity=".85"/>
+          <path d="M322 28 L346 10 H594 L618 28 L626 46 L606 60 L604 104 L586 116 H354 L336 104 L334 60 L314 46 Z" fill="url(#gStoneCenter)" stroke="#5e6270" stroke-width="3"/>
+          <path d="M346 10 H594" stroke="url(#gGoldH)" stroke-width="2.5"/>
+          <path d="M454 10 L470 -2 L486 10 L470 22 Z" fill="url(#gGold)"/>
+          <path d="M352 118 H588 Q606 118 608 136 V164 Q604 190 576 192 H364 Q336 190 332 164 V136 Q334 118 352 118 Z" fill="#14161c" stroke="#3d414c" stroke-width="3"/>
+        </svg>
+        <div id="bUnits"></div>
+        <section class="episode" aria-label="Episode progress">
+          <h2 class="ep-title goldtxt">Episode</h2>
+          <div class="ep-gauge" id="bGauge" aria-hidden="true"></div>
+          <div class="ep-count">
+            <span class="crystals" aria-hidden="true"><svg><use href="#iCrystal"/></svg><svg><use href="#iCrystal"/></svg><svg><use href="#iCrystal"/></svg></span>
+            <span class="ep-num"><b id="bEp">3</b><small>/ <span id="bEpMax">6</span></small></span>
+          </div>
+        </section>
+      </div>
+
+      <div class="combo" id="bCombo" aria-label="Combo">
+        <span class="combo-word">Combo</span><span class="combo-num" id="bComboNum">12</span>
+      </div>
+      <button class="pause" id="bPause" type="button" aria-label="Pause" aria-pressed="false" data-ui="Battle.Pause">
+        <span class="ico-pause"><i></i><i></i></span>
+        <svg class="ico-play" viewBox="0 0 24 24"><path d="M7 4l14 8-14 8z" fill="#fff"/></svg>
+      </button>
+      <div class="timer" aria-label="Time remaining">
+        <svg viewBox="0 0 20 28" aria-hidden="true">
+          <path d="M2 2h16M2 26h16" stroke="#e8c877" stroke-width="3" stroke-linecap="round"/>
+          <path d="M4 3c0 7 5 8 5 11s-5 4-5 11h12c0-7-5-8-5-11s5-4 5-11z" fill="#20242c" stroke="#d8dbe2" stroke-width="1.4"/>
+          <path d="M6 24c1-3 3-4 4-4s3 1 4 4z M7 7h6c-1 2-2 3-3 4-1-1-2-2-3-4z" fill="#f2c867"/>
+        </svg>
+        <span id="bTimer">01:24</span>
+      </div>
+
+      <section class="dock">
+        <div class="rollBanner">
+          <svg class="rchev l" viewBox="0 0 60 52" aria-hidden="true"><path d="M30 6 L10 26 L30 46 M50 6 L30 26 L50 46" fill="none" stroke="#9cc4ff" stroke-width="5"/><path d="M30 6 L10 26 L30 46 M50 6 L30 26 L50 46" fill="none" stroke="#2c56c8" stroke-width="2"/></svg>
+          <div class="rplate"><span id="bRollLbl">Roll Active</span></div>
+          <svg class="rchev r" viewBox="0 0 60 52" aria-hidden="true"><path d="M30 6 L50 26 L30 46 M10 6 L30 26 L10 46" fill="none" stroke="#9cc4ff" stroke-width="5"/><path d="M30 6 L50 26 L30 46 M10 6 L30 26 L10 46" fill="none" stroke="#2c56c8" stroke-width="2"/></svg>
+          <div class="rollbar" role="progressbar" aria-valuemin="0" aria-valuemax="100"><i id="bRollFill" style="width:63%"></i></div>
+        </div>
+        <div class="stoneb" aria-hidden="true">
+          <svg viewBox="0 0 941 600" preserveAspectRatio="none">
+            <path d="M0 70 L34 52 L70 64 L96 40 L150 38 L178 60 L230 66 L262 58 L300 72 L640 72 L690 56 L740 62 L784 44 L830 40 L872 58 L912 50 L941 66 V600 H0 Z" fill="url(#gStone)"/>
+            <path d="M0 70 L34 52 L70 64 L96 40 L150 38 L178 60 L230 66 L262 58 L300 72 L640 72 L690 56 L740 62 L784 44 L830 40 L872 58 L912 50 L941 66 V600 H0 Z" fill="#fff" filter="url(#fNoise)"/>
+            <path d="M0 70 L34 52 L70 64 L96 40 L150 38 L178 60 L230 66 L262 58 L300 72 L640 72 L690 56 L740 62 L784 44 L830 40 L872 58 L912 50 L941 66" fill="none" stroke="#6b6f7a" stroke-width="3"/>
+            <path d="M0 330 H941" stroke="#121419" stroke-width="2" opacity=".6"/>
+            <path d="M0 590 H941" stroke="#0e1014" stroke-width="20"/>
+            <path d="M360 580 L420 540 H520 L580 580" fill="#2a2d35" stroke="url(#gGoldH)" stroke-width="3"/>
+            <path d="M470 500 L496 536 L470 572 L444 536 Z" fill="url(#gGold)" stroke="#5c431a" stroke-width="2"/>
+          </svg>
+        </div>
+        <img class="deco" src="assets/battle/deco-tl.png" alt="" style="left:0;top:56px;width:190px">
+        <img class="deco" src="assets/battle/deco-tr.png" alt="" style="right:0;top:56px;width:181px">
+        <img class="deco" src="assets/battle/deco-bl.png" alt="" style="left:0;top:623px;width:330px">
+        <img class="deco" src="assets/battle/deco-br.png" alt="" style="right:0;top:640px;width:251px">
+        <div class="bcards" id="bCards" role="radiogroup" aria-label="Ability cards"></div>
+        <div class="bdetail">
+          <div class="panel-bg" aria-hidden="true"></div>
+          <div class="bthumb"><img id="bdImg" src="assets/battle/card-storm.jpg" alt=""></div>
+          <h3 id="bdTitle">Storm</h3>
+          <span class="btag" id="bdTag">Control</span>
+          <p id="bdDesc">Create a whirling gust that knocks nearby opponents away and disrupts their roll.</p>
+        </div>
+        <div class="activateWrap">
+          <div class="acost"><svg viewBox="0 0 24 44"><use href="#iCrystal"/></svg><span id="bdCost">2</span></div>
+          <button class="btnActivate" id="bActivate" type="button" data-ui="Battle.Activate"><span>Activate</span></button>
+          <svg class="topgem" viewBox="0 0 40 30" aria-hidden="true"><path d="M20 0 L32 15 L20 30 L8 15Z" fill="url(#gGold)" stroke="#6b4e1c"/><path d="M0 15 H8 M32 15 H40" stroke="url(#gGoldH)" stroke-width="3"/></svg>
+        </div>
+        <div class="awakenWrap">
+          <div class="rays" aria-hidden="true"></div>
+          <svg class="sparkle" viewBox="0 0 100 100" aria-hidden="true"><use href="#iStar4" width="100" height="100" fill="#fff6d0"/></svg>
+          <button class="btnAwaken" id="bAwaken" type="button" aria-label="Awaken" data-ui="Battle.Awaken">
+            <span class="orb" aria-hidden="true"><span class="band"></span>
+              <svg class="ostar" viewBox="0 0 100 100"><use href="#iStar4" width="100" height="100" fill="url(#gGold)"/><path d="M50 24 L60 50 L50 76 L40 50Z" fill="#a98cff"/><path d="M50 24 L60 50 L50 50Z" fill="#e6dcff"/></svg>
+            </span>
+            <span class="alabel">Awaken</span>
+          </button>
+          <div class="awk-pips" id="bAwkPips"></div>
+        </div>
+      </section>
+      <div class="pauseveil" id="bVeil"></div>
+    </section>
+
+    <!-- modal + toast (shared) -->
+    <div id="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+      <div class="gf stone glow" style="--x:120px;--y:620px;--w:701px;--h:360px">
+        <div class="ttl disp goldtxt" id="mTitle" style="top:36px">Confirm</div>
+        <div class="msg" id="mMsg" style="top:96px"></div>
+        <button class="bbtn dark" style="--x:70px;--y:250px;--w:260px;--h:70px" id="mNo"><span class="disp">Cancel</span></button>
+        <button class="bbtn" style="--x:371px;--y:250px;--w:260px;--h:70px" id="mYes"><span class="disp">Confirm</span></button>
+      </div>
+    </div>
+    <div id="toast" role="status" aria-live="polite"></div>
+  </main>
+</div>
+
+<nav id="devnav" aria-label="Screen switcher"></nav>
+
+<script src="script.js"></script>
+</body>
+</html>
